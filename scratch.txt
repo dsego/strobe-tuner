@@ -1,0 +1,46 @@
+
+
+
+broji frejmove? npr. 4 bloka od 512 semplova, koliko puta freq od 440HZ stane u to, 44100/440=100.227
+mozda ne treba spremati sve semplove ili resemplirati?
+
+ 512   512   512   512
+|-----|-----|-----|-----|
+
+ 100.227
+|----|----|----|----|----|
+               |----|       <---- prikazati ovaj blok koji se ponavlja svako 100.227 semplova, taj oversemplirati?
+                                  to sto nije na cijeli sempl, nema veze, mozemo frejm counter "oversemplirati"
+                                  npr. za svakih 512 semplova racunam da je proslo 512000 podsamplova, a treba mi 100227
+
+
+4 * 512 = 2048
+20 * 100.227 = 2004.540  -  20. frejm prikazujemo
+
+sto s latencijom?
+koliko blokova treba spremiti?
+
+
+
+
+--------
+
+
+
+N(FIR) = atten / (22 * (f_stop - f_pass))
+
+eg. atten = 48db, fs=1000, taps = 48 / 22( 350/1000 - 250/1000 ) = 21.8, lowpass  22 taps filter
+
+interpolated filters?
+
+
+matched filter for detection or goertzel filter/sliding dft?
+
+
+
+FIR using FFT
+Q - number of taps
+FFT size N = ~= 4 * Q
+
+multiplication can be performed on the scrambled H(m) & X(m) sequences
+use inverse FFT that expects bit-reversed input data
