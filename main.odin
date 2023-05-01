@@ -1,7 +1,8 @@
 package main
 
 import "core:fmt"
-import "core:os"
+// import "core:os"
+import "core:math"
 import "core:runtime"
 
 import rl "vendor:raylib"
@@ -25,23 +26,38 @@ audio_capture_callback :: proc "cdecl" (device: ^ma.device, output, input: rawpt
 
     // Capture samples and write to a ring buffer.
     for {
-        frames_to_process := frames_left
+        frames_to_write := frames_left
 
-        result := ma.pcm_rb_acquire_write(&ringbuffer, &frames_to_process, &data_ptr)
+        result := ma.pcm_rb_acquire_write(&ringbuffer, &frames_to_write, &data_ptr)
         if result != ma.result.SUCCESS {
+            ma.log_post(
+                ma.device_get_log(device),
+                u32(ma.log_level.LOG_LEVEL_ERROR),
+                "Failed to acquire capture PCM frames from ring buffer."
+            )
             break
         }
 
-        if frames_to_process == 0 do break
+        if frames_to_write == 0 {
+            if ma.pcm_rb_pointer_distance(&ringbuffer) == i32(ma.pcm_rb_get_subbuffer_size(&ringbuffer)) {
+                break // Overrun
+            }
+        }
 
-        ma.copy_pcm_frames(data_ptr, input, u64(frames_to_process), ma.format.f32, 1)
+        ma.copy_pcm_frames(data_ptr, input, u64(frames_to_write), ma.format.f32, 1)
 
-        result = ma.pcm_rb_commit_write(&ringbuffer, frames_to_process, data_ptr)
+        result = ma.pcm_rb_commit_write(&ringbuffer, frames_to_write, data_ptr)
         if result != ma.result.SUCCESS {
+            ma.log_post(
+                ma.device_get_log(device),
+                u32(ma.log_level.LOG_LEVEL_ERROR),
+                "Failed to commit capture PCM frames to ring buffer."
+            )
             break
         }
 
-        frames_left -= frames_to_process
+        frames_left -= frames_to_write
+        if frames_left <= 0 do break
     }
 
 }
@@ -65,7 +81,7 @@ init_audio_capture :: proc() {
         return
     }
 
-    result = ma.pcm_rb_init(ma.format.f32, 1, 4096, nil, nil, &ringbuffer)
+    result = ma.pcm_rb_init(ma.format.f32, 1, 96000, nil, nil, &ringbuffer)
     if result != ma.result.SUCCESS {
         fmt.println("Failed to initialize ring buffer!")
         return
@@ -86,33 +102,62 @@ main :: proc() {
 
     for !rl.WindowShouldClose() {
         draw_screen()
+        // break
     }
 }
 
 read_samples :: proc() {
     data_ptr : rawptr
-    frame_count := u32(SIZE)
+    // frames_left := u32(SIZE)
+    // fmt.println("READ SAMPLES")
+
+    // for {
+    frames_left := u32(SIZE)
+    // frames_available : u32
+
+    // for {
+    frames_available := ma.pcm_rb_available_read(&ringbuffer)
+
+    // fmt.println("available", frames_available)
+    if frames_available < u32(SIZE) do return
+    //     // to_skip := math.floor_div(frames_available, 2 * SIZE)
+    //     if frames_available < 2 * SIZE do break
+
+    //     ma.pcm_rb_seek_read(&ringbuffer, 2 * SIZE)
+    // }
+
     for {
-        result := ma.pcm_rb_acquire_read(&ringbuffer, &frame_count, &data_ptr)
-
-        if result != ma.result.SUCCESS do break
-        if frame_count == 0 do break
-
-        ma.copy_pcm_frames(raw_data(samples[:]), data_ptr, u64(frame_count), ma.format.f32, 1)
-
-        result = ma.pcm_rb_commit_read(&ringbuffer, frame_count, data_ptr)
-
+        frames_to_read := frames_left
+        result := ma.pcm_rb_acquire_read(&ringbuffer, &frames_to_read, &data_ptr)
+        // fmt.println(frames_to_read)
         if result != ma.result.SUCCESS {
+            fmt.println("acquire failed")
             // log
             break
         }
+
+        data := cast([^]f32) data_ptr
+        for i in 0..<frames_to_read {
+            samples[frames_left-i-1] = data[i]
+        }
+
+        result = ma.pcm_rb_commit_read(&ringbuffer, frames_to_read, data_ptr)
+
+        if result != ma.result.SUCCESS {
+            fmt.println("commit failed", result)
+            // log
+            break
+        }
+
+        frames_left -= frames_to_read
+        if frames_left <= 0 do break
     }
+
 }
 
 draw_screen :: proc() {
     rl.BeginDrawing()
     defer rl.EndDrawing()
-
 
     read_samples()
     for _, i in points {
