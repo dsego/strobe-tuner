@@ -12,13 +12,27 @@ import ma "vendor:miniaudio"
 SCREEN_WIDTH :: 1024
 SCREEN_HEIGHT :: 768
 
-SIZE :: 1024
+// SIZE :: 1024
+SIZE :: 4096
 
 samples : [SIZE]f32
 points: [SIZE]rl.Vector2
 
 device: ma.device
 ringbuffer: ma.pcm_rb
+
+
+
+// freq A1 = 55Hz
+target_size := 48000.0 / 55.0
+target_size_ceil := u32(math.ceil(target_size))
+
+
+delta := 0.0
+frame_counter := 0.0
+frame_counter_integer := u32(0)
+drift := 0.0
+
 
 audio_capture_callback :: proc "cdecl" (device: ^ma.device, output, input: rawptr, frame_count: u32) {
     data_ptr : rawptr
@@ -107,24 +121,48 @@ main :: proc() {
 }
 
 read_samples :: proc() {
+
+
     data_ptr : rawptr
     // frames_left := u32(SIZE)
     // fmt.println("READ SAMPLES")
 
     // for {
-    frames_left := u32(SIZE)
+    frames_left := u32(target_size_ceil)
     // frames_available : u32
 
     // for {
     frames_available := ma.pcm_rb_available_read(&ringbuffer)
 
     // fmt.println("available", frames_available)
-    if frames_available < u32(SIZE) do return
+    if frames_available < u32(target_size_ceil) do return
     //     // to_skip := math.floor_div(frames_available, 2 * SIZE)
     //     if frames_available < 2 * SIZE do break
 
     //     ma.pcm_rb_seek_read(&ringbuffer, 2 * SIZE)
     // }
+
+    frame_counter += target_size
+    frame_counter_integer += target_size_ceil
+
+
+    frame_counter_ceil := u32(math.ceil(frame_counter))
+    delta := frame_counter_integer - frame_counter_ceil
+
+    // adjust frame counter sample rate
+    frame_counter_integer -= delta
+    frames_left = u32(target_size_ceil - delta)
+
+
+    // TODO: wrap around to avoid overflow
+    // frame_counter = frame_counter, frame_counter_ceil
+
+
+    // correct for sub-sample drift
+
+    // fmt.println(frames_left, target_size)
+    drift = f64(frame_counter_integer) - frame_counter
+    // fmt.println(frame_counter, frame_counter_ceil, drift)
 
     for {
         frames_to_read := frames_left
@@ -144,7 +182,7 @@ read_samples :: proc() {
         result = ma.pcm_rb_commit_read(&ringbuffer, frames_to_read, data_ptr)
 
         if result != ma.result.SUCCESS {
-            fmt.println("commit failed", result)
+            // fmt.println("commit failed", result, frames_to_read)
             // log
             break
         }
@@ -160,10 +198,10 @@ draw_screen :: proc() {
     defer rl.EndDrawing()
 
     read_samples()
-    for _, i in points {
-        points[i] = {f32(i), SCREEN_HEIGHT/2 + samples[i] * 100}
+    for i in 0..<target_size_ceil {
+        points[i] = {f32(i) - f32(drift), SCREEN_HEIGHT/2 + samples[i] * 100}
     }
 
     rl.ClearBackground(rl.BLACK)
-    rl.DrawLineStrip(raw_data(points[:]), SCREEN_WIDTH, rl.PINK)
+    rl.DrawLineStrip(raw_data(points[:]), i32(target_size_ceil), rl.PINK)
 }
