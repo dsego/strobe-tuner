@@ -24,7 +24,8 @@ ringbuffer: ma.pcm_rb
 
 
 // freq A1 = 55Hz
-target_size := 48000.0 / 55.0
+// target_size := 48000.0 / 55.0
+target_size := 48000.0 / 32.70320
 target_size_ceil := u32(math.ceil(target_size))
 
 
@@ -197,9 +198,17 @@ draw_screen :: proc() {
     rl.BeginDrawing()
     defer rl.EndDrawing()
 
+    // stretch samples to fit the screen width
+    resolution := f32(SCREEN_WIDTH) / f32(target_size_ceil)
+    drift_adj := f32(drift) * resolution
+    xpos := f32(0.0)
+
     read_samples()
     for i in 0..<target_size_ceil {
-        points[i] = {f32(i) - f32(drift), SCREEN_HEIGHT/2 + samples[i] * 100}
+        x := f32(xpos) - f32(drift)
+        xpos += resolution
+        y := SCREEN_HEIGHT/2 + samples[i] * 100
+        points[i] = { x, y }
     }
 
     rl.ClearBackground(rl.BLACK)
