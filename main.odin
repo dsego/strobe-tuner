@@ -154,16 +154,12 @@ read_samples :: proc() {
     frame_counter_integer -= delta
     frames_left = u32(target_size_ceil - delta)
 
-
-    // TODO: wrap around to avoid overflow
-    // frame_counter = frame_counter, frame_counter_ceil
-
-
     // correct for sub-sample drift
-
-    // fmt.println(frames_left, target_size)
     drift = f64(frame_counter_integer) - frame_counter
-    // fmt.println(frame_counter, frame_counter_ceil, drift)
+
+    // wrap back around to avoid frame counter from overflowing
+    frame_counter -= math.floor(frame_counter)
+    frame_counter_integer = 1
 
     for {
         frames_to_read := frames_left
