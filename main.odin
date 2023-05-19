@@ -29,6 +29,7 @@ ringbuffer: ma.pcm_rb
 // NOTE: aiming to fetch a number of samples close to the horizontal resolution, eg 1024px.
 // freq A1 = 55Hz
 
+// target_freq := 55.0
 target_freq := 440.0
 target_interval := f64(SAMPLERATE) / target_freq
 frame_counter_real := 0.0
@@ -154,7 +155,7 @@ calculate_framerate:: proc(
     return
 }
 
-read_samples :: proc() -> u32 {
+read_samples :: proc() -> (u32, f64) {
     frames_available := ma.pcm_rb_available_read(&ringbuffer)
 
     next_frame_count, frames_to_skip, frames_to_read := calculate_framerate(
@@ -165,9 +166,9 @@ read_samples :: proc() -> u32 {
 
     frame_counter_real = next_frame_count
 
-    // frame_counter += frames_to_read + frames_to_skip
+    // frame_counter = frames_to_read + frames_to_skip
 
-    // fmt.println(frame_counter_real, frame_counter)
+    // fmt.println(frames_to_skip, frames_to_read)
 
     // skip old samples to pick up slack and catch up with the writer
     if frames_to_skip > 0 do ma.pcm_rb_seek_read(&ringbuffer, frames_to_skip)
@@ -175,22 +176,10 @@ read_samples :: proc() -> u32 {
     // consume one frequency interval of samples
     if frames_to_read > 0 do read_ring_buffer(frames_to_read)
 
-    return frames_to_read
+    // correct for sub-sample drift
+    drift := f64(math.ceil(frame_counter_real)) - frame_counter_real
 
-
-    // drift += frames_to_skip_real - math.floor(frames_to_skip_real)
-
-    // drift -= math.floor(drift)
-    // frames_needed =
-
-    // fmt.println(frames_needed)
-
-
-
-    // // adjust frame counter sample rate
-    // frames_left := frames_needed
-
-
+    return frames_to_read, drift
 }
 
 read_ring_buffer :: proc(frame_count: u32) {
@@ -231,12 +220,13 @@ draw_screen :: proc() {
 
     // stretch samples to fit the screen width
     resolution := f32(SCREEN_WIDTH) / f32(target_interval)
-    // drift_adj := f32(drift) * resolution
     xpos := f32(0.0)
 
-    frame_count := read_samples()
+    frame_count, drift := read_samples()
+    drift_adj := f32(drift) * resolution
+
     for i in 0..<frame_count {
-        x := f32(xpos)  //+ f32(drift)
+        x := xpos - drift_adj  //+ f32(drift)
         xpos += resolution
         y := SCREEN_HEIGHT/2 + samples[i] * 100
         points[i] = { x, y }
