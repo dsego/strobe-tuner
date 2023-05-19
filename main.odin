@@ -12,6 +12,9 @@ import ma "vendor:miniaudio"
 SCREEN_WIDTH :: 1024
 SCREEN_HEIGHT :: 768
 
+// TODO: ability to choose sample rate
+SAMPLERATE :: u32(48000)
+
 // SIZE :: 1024
 SIZE :: 4096
 
@@ -23,17 +26,14 @@ ringbuffer: ma.pcm_rb
 
 
 
+// NOTE: aiming to fetch a number of samples close to the horizontal resolution, eg 1024px.
 // freq A1 = 55Hz
-// target_size := 48000.0 / 55.0
-target_size := 48000.0 / 32.70320
-target_size_ceil := u32(math.ceil(target_size))
 
+target_freq := 440.0
+target_interval := f64(SAMPLERATE) / target_freq
+frame_counter_real := 0.0
 
-delta := 0.0
-frame_counter := 0.0
-frame_counter_integer := u32(0)
-drift := 0.0
-
+frame_counter := u32(0)
 
 audio_capture_callback :: proc "cdecl" (device: ^ma.device, output, input: rawptr, frame_count: u32) {
     data_ptr : rawptr
@@ -74,7 +74,6 @@ audio_capture_callback :: proc "cdecl" (device: ^ma.device, output, input: rawpt
         frames_left -= frames_to_write
         if frames_left <= 0 do break
     }
-
 }
 
 init_audio_capture :: proc() {
@@ -83,6 +82,7 @@ init_audio_capture :: proc() {
     // config.notificationCallback = TODO
     config.capture.format = ma.format.f32
     config.capture.channels = 1
+    config.sampleRate = SAMPLERATE
 
     result := ma.device_init(nil, &config, &device)
     if result != ma.result.SUCCESS {
@@ -117,57 +117,93 @@ main :: proc() {
 
     for !rl.WindowShouldClose() {
         draw_screen()
-        // break
     }
 }
 
-read_samples :: proc() {
+calculate_framerate:: proc(
+    frames_available: u32,
+    frame_count: f64,
+    target_interval: f64,
+) -> (
+    next_frame_count: f64,
+    frames_to_skip,
+    frames_to_read: u32)
+{
+    next_frame_count = frame_count
 
+    frames_to_read = u32(0)
+    frames_to_ingest := u32(0)
+    prev_frames_ceil := u32(math.ceil(frame_count))
 
-    data_ptr : rawptr
-    // frames_left := u32(SIZE)
-    // fmt.println("READ SAMPLES")
+    // skip over N intervals and read one full interval to keep the reading rate consistent
 
-    // for {
-    frames_left := u32(target_size_ceil)
-    // frames_available : u32
+    for frames_to_ingest < frames_available {
+        prev_frame_count := next_frame_count
+        next_frame_count += target_interval
 
-    // for {
+        frames := u32(math.ceil(next_frame_count)) - u32(math.ceil(prev_frame_count))
+        if frames_to_ingest + frames > frames_available {
+            next_frame_count = prev_frame_count
+            break
+        }
+        frames_to_read = frames
+        frames_to_ingest += frames
+    }
+
+    frames_to_skip = frames_to_ingest - frames_to_read
+    return
+}
+
+read_samples :: proc() -> u32 {
     frames_available := ma.pcm_rb_available_read(&ringbuffer)
 
-    // fmt.println("available", frames_available)
-    if frames_available < u32(target_size_ceil) do return
-    //     // to_skip := math.floor_div(frames_available, 2 * SIZE)
-    //     if frames_available < 2 * SIZE do break
+    next_frame_count, frames_to_skip, frames_to_read := calculate_framerate(
+        frames_available,
+        frame_counter_real,
+        target_interval
+    )
 
-    //     ma.pcm_rb_seek_read(&ringbuffer, 2 * SIZE)
-    // }
+    frame_counter_real = next_frame_count
 
-    frame_counter += target_size
-    frame_counter_integer += target_size_ceil
+    // frame_counter += frames_to_read + frames_to_skip
+
+    // fmt.println(frame_counter_real, frame_counter)
+
+    // skip old samples to pick up slack and catch up with the writer
+    if frames_to_skip > 0 do ma.pcm_rb_seek_read(&ringbuffer, frames_to_skip)
+
+    // consume one frequency interval of samples
+    if frames_to_read > 0 do read_ring_buffer(frames_to_read)
+
+    return frames_to_read
 
 
-    frame_counter_ceil := u32(math.ceil(frame_counter))
-    delta := frame_counter_integer - frame_counter_ceil
+    // drift += frames_to_skip_real - math.floor(frames_to_skip_real)
 
-    // adjust frame counter sample rate
-    frame_counter_integer -= delta
-    frames_left = u32(target_size_ceil - delta)
+    // drift -= math.floor(drift)
+    // frames_needed =
 
-    // correct for sub-sample drift
-    drift = f64(frame_counter_integer) - frame_counter
+    // fmt.println(frames_needed)
 
-    // wrap back around to avoid frame counter from overflowing
-    frame_counter -= math.floor(frame_counter)
-    frame_counter_integer = 1
 
+
+    // // adjust frame counter sample rate
+    // frames_left := frames_needed
+
+
+}
+
+read_ring_buffer :: proc(frame_count: u32) {
+    data_ptr : rawptr
+    frames_left := frame_count
+
+    // The ring buffer can return fewer frames than requested if the position is near the end of the buffer.
+    // We want to loop until we get all the needed frames.
     for {
         frames_to_read := frames_left
         result := ma.pcm_rb_acquire_read(&ringbuffer, &frames_to_read, &data_ptr)
-        // fmt.println(frames_to_read)
         if result != ma.result.SUCCESS {
-            fmt.println("acquire failed")
-            // log
+            fmt.println("Failed to acquire read pointer from ring buffer.")
             break
         }
 
@@ -179,34 +215,33 @@ read_samples :: proc() {
         result = ma.pcm_rb_commit_read(&ringbuffer, frames_to_read, data_ptr)
 
         if result != ma.result.SUCCESS {
-            // fmt.println("commit failed", result, frames_to_read)
-            // log
+            fmt.println("Failed to commit read on ring buffer.")
             break
         }
 
         frames_left -= frames_to_read
         if frames_left <= 0 do break
     }
-
 }
 
 draw_screen :: proc() {
+    // fmt.println(drift)
     rl.BeginDrawing()
     defer rl.EndDrawing()
 
     // stretch samples to fit the screen width
-    resolution := f32(SCREEN_WIDTH) / f32(target_size_ceil)
-    drift_adj := f32(drift) * resolution
+    resolution := f32(SCREEN_WIDTH) / f32(target_interval)
+    // drift_adj := f32(drift) * resolution
     xpos := f32(0.0)
 
-    read_samples()
-    for i in 0..<target_size_ceil {
-        x := f32(xpos) - f32(drift)
+    frame_count := read_samples()
+    for i in 0..<frame_count {
+        x := f32(xpos)  //+ f32(drift)
         xpos += resolution
         y := SCREEN_HEIGHT/2 + samples[i] * 100
         points[i] = { x, y }
     }
 
     rl.ClearBackground(rl.BLACK)
-    rl.DrawLineStrip(raw_data(points[:]), i32(target_size_ceil), rl.PINK)
+    rl.DrawLineStrip(raw_data(points[:]), i32(frame_count), rl.PINK)
 }
