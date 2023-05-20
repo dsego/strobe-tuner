@@ -10,7 +10,6 @@ interpolated filters?
 matched filter for detection or goertzel filter/sliding dft?
 
 
-
 FIR using FFT
 Q - number of taps
 FFT size N = ~= 4 * Q
@@ -29,38 +28,3 @@ choice of 48/96hz for better time resolution
 biquad or fir resonator filter per strobe? comb?
 
 
-
-
-48000 / 440 = 109,09090909091
-
-
-frame counter
-
-109,09               110     110
-218,18               219     109
-327,27               328     109
-
-
-436,36               437     109
-545,45               546     109
-654,54               655     109
-763,63               764     109
-872,72               873     109
-981,81               982     109
-1.090,9             1091     109
-1.199,99            1200     109
-
-1.309,08            1310     110
-
-1.418,17            1419     109
-1.527,26            1528     109
-1.636,35            1637     109
-1.745,44            1746     109
-1.854,53            1855     109
-1.963,62            1964     109
-2.072,71            2073     109
-2.181,8             2182     109
-2.290,89            2291     109
-2.399,98            2400     109
-
-2.509,07            2510     110

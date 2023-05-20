@@ -137,7 +137,6 @@ calculate_framerate:: proc(
     prev_frames_ceil := u32(math.ceil(frame_count))
 
     // skip over N intervals and read one full interval to keep the reading rate consistent
-
     for frames_to_ingest < frames_available {
         prev_frame_count := next_frame_count
         next_frame_count += target_interval
@@ -218,18 +217,23 @@ draw_screen :: proc() {
     rl.BeginDrawing()
     defer rl.EndDrawing()
 
-    // stretch samples to fit the screen width
-    resolution := f32(SCREEN_WIDTH) / f32(target_interval)
-    xpos := f32(0.0)
+
+    // xpos := f32(0.0)
+    xpos := f32(10.0)
 
     frame_count, drift := read_samples()
+
+    // stretch samples to fit the screen width
+    resolution := f32(SCREEN_WIDTH) / f32(target_interval)
     drift_adj := f32(drift) * resolution
 
+    // fmt.println(target_interval)
+    x := xpos - drift_adj
+
     for i in 0..<frame_count {
-        x := xpos - drift_adj  //+ f32(drift)
-        xpos += resolution
         y := SCREEN_HEIGHT/2 + samples[i] * 100
         points[i] = { x, y }
+        x += resolution
     }
 
     rl.ClearBackground(rl.BLACK)
