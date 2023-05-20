@@ -23,7 +23,9 @@ points: [SIZE]rl.Vector2
 
 device: ma.device
 ringbuffer: ma.pcm_rb
-
+ctx: ma.context_type
+capture_devices: [^]ma.device_info
+capture_device_count: u32
 
 
 // NOTE: aiming to fetch a number of samples close to the horizontal resolution, eg 1024px.
@@ -34,8 +36,6 @@ target_freq := 440.0
 target_interval := f64(SAMPLERATE) / target_freq
 frame_counter_real := 0.0
 
-frame_counter := u32(0)
-
 audio_capture_callback :: proc "cdecl" (device: ^ma.device, output, input: rawptr, frame_count: u32) {
     data_ptr : rawptr
     frames_left := frame_count
@@ -44,8 +44,7 @@ audio_capture_callback :: proc "cdecl" (device: ^ma.device, output, input: rawpt
     for {
         frames_to_write := frames_left
 
-        result := ma.pcm_rb_acquire_write(&ringbuffer, &frames_to_write, &data_ptr)
-        if result != ma.result.SUCCESS {
+        if ma.pcm_rb_acquire_write(&ringbuffer, &frames_to_write, &data_ptr) != ma.result.SUCCESS {
             ma.log_post(
                 ma.device_get_log(device),
                 u32(ma.log_level.LOG_LEVEL_ERROR),
@@ -62,8 +61,7 @@ audio_capture_callback :: proc "cdecl" (device: ^ma.device, output, input: rawpt
 
         ma.copy_pcm_frames(data_ptr, input, u64(frames_to_write), ma.format.f32, 1)
 
-        result = ma.pcm_rb_commit_write(&ringbuffer, frames_to_write, data_ptr)
-        if result != ma.result.SUCCESS {
+        if ma.pcm_rb_commit_write(&ringbuffer, frames_to_write, data_ptr) != ma.result.SUCCESS {
             ma.log_post(
                 ma.device_get_log(device),
                 u32(ma.log_level.LOG_LEVEL_ERROR),
@@ -85,21 +83,38 @@ init_audio_capture :: proc() {
     config.capture.channels = 1
     config.sampleRate = SAMPLERATE
 
-    result := ma.device_init(nil, &config, &device)
-    if result != ma.result.SUCCESS {
-        fmt.println("Failed to initialize audio device!")
+    if ma.context_init(nil, 0, nil, &ctx) != ma.result.SUCCESS {
+        fmt.println("Failed to initialize audio context.")
         return
     }
 
-    result = ma.device_start(&device)
-    if result != ma.result.SUCCESS {
-        fmt.println("Failed to start audio device!")
+    if ma.context_get_devices(&ctx, nil, nil, &capture_devices, &capture_device_count) != ma.result.SUCCESS {
+        fmt.println("Failed to retrieve device information.")
         return
     }
 
-    result = ma.pcm_rb_init(ma.format.f32, 1, 96000, nil, nil, &ringbuffer)
-    if result != ma.result.SUCCESS {
-        fmt.println("Failed to initialize ring buffer!")
+    fmt.println("\n..................................")
+    fmt.println(" Audio capture devices:")
+    for i := u32(0); i < capture_device_count; i += 1 {
+        fmt.printf("  %v ‣ %s\n", i, capture_devices[i].name)
+    }
+    fmt.println("..................................\n")
+
+    // set BlackHole 2ch device for capture
+    config.capture.pDeviceID = &capture_devices[0].id
+
+    if ma.device_init(&ctx, &config, &device) != ma.result.SUCCESS {
+        fmt.println("Failed to initialize audio device.")
+        return
+    }
+
+    if ma.device_start(&device) != ma.result.SUCCESS {
+        fmt.println("Failed to start audio device.")
+        return
+    }
+
+    if ma.pcm_rb_init(ma.format.f32, 1, 96000, nil, nil, &ringbuffer) != ma.result.SUCCESS {
+        fmt.println("Failed to initialize ring buffer.")
         return
     }
 }
@@ -107,14 +122,17 @@ init_audio_capture :: proc() {
 destroy_audio_capture :: proc() {
     ma.device_stop(&device)
     ma.device_uninit(&device)
+    ma.context_uninit(&ctx)
+    ma.pcm_rb_uninit(&ringbuffer)
 }
 
 main :: proc() {
-    init_audio_capture()
-    defer destroy_audio_capture()
-
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
     rl.SetTargetFPS(60)
+    rl.SetConfigFlags({rl.ConfigFlags.WINDOW_HIGHDPI})
+
+    init_audio_capture()
+    defer destroy_audio_capture()
 
     for !rl.WindowShouldClose() {
         draw_screen()
@@ -163,11 +181,8 @@ read_samples :: proc() -> (u32, f64) {
         target_interval
     )
 
-    frame_counter_real = next_frame_count
-
-    // frame_counter = frames_to_read + frames_to_skip
-
-    // fmt.println(frames_to_skip, frames_to_read)
+    // don't let the counter increase forever, we only need to keep the fractional part
+    frame_counter_real = next_frame_count - math.floor(next_frame_count)
 
     // skip old samples to pick up slack and catch up with the writer
     if frames_to_skip > 0 do ma.pcm_rb_seek_read(&ringbuffer, frames_to_skip)
@@ -176,7 +191,7 @@ read_samples :: proc() -> (u32, f64) {
     if frames_to_read > 0 do read_ring_buffer(frames_to_read)
 
     // correct for sub-sample drift
-    drift := f64(math.ceil(frame_counter_real)) - frame_counter_real
+    drift := f64(1.0) - frame_counter_real
 
     return frames_to_read, drift
 }
@@ -189,8 +204,7 @@ read_ring_buffer :: proc(frame_count: u32) {
     // We want to loop until we get all the needed frames.
     for {
         frames_to_read := frames_left
-        result := ma.pcm_rb_acquire_read(&ringbuffer, &frames_to_read, &data_ptr)
-        if result != ma.result.SUCCESS {
+        if ma.pcm_rb_acquire_read(&ringbuffer, &frames_to_read, &data_ptr) != ma.result.SUCCESS {
             fmt.println("Failed to acquire read pointer from ring buffer.")
             break
         }
@@ -200,10 +214,8 @@ read_ring_buffer :: proc(frame_count: u32) {
             samples[frames_left-i-1] = data[i]
         }
 
-        result = ma.pcm_rb_commit_read(&ringbuffer, frames_to_read, data_ptr)
-
-        if result != ma.result.SUCCESS {
-            fmt.println("Failed to commit read on ring buffer.")
+        if ma.pcm_rb_commit_read(&ringbuffer, frames_to_read, data_ptr) != ma.result.SUCCESS {
+            // fmt.println("Failed to commit read on ring buffer.")
             break
         }
 
@@ -218,13 +230,13 @@ draw_screen :: proc() {
     defer rl.EndDrawing()
 
 
-    // xpos := f32(0.0)
-    xpos := f32(10.0)
+    xpos := f32(20.0)
+    // xpos := f32(10.0)
 
     frame_count, drift := read_samples()
 
     // stretch samples to fit the screen width
-    resolution := f32(SCREEN_WIDTH) / f32(target_interval)
+    resolution := f32(SCREEN_WIDTH-40) / f32(target_interval-1)
     drift_adj := f32(drift) * resolution
 
     // fmt.println(target_interval)
@@ -237,5 +249,6 @@ draw_screen :: proc() {
     }
 
     rl.ClearBackground(rl.BLACK)
+    rl.DrawRectangleLines(20, 20, SCREEN_WIDTH-40, SCREEN_HEIGHT-40, rl.GRAY)
     rl.DrawLineStrip(raw_data(points[:]), i32(frame_count), rl.PINK)
 }

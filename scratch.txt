@@ -19,12 +19,15 @@ use inverse FFT that expects bit-reversed input data
 
 
 
-need to upsample only once?
-
-
 4 strobes
 choice of 48/96hz for better time resolution
 
 biquad or fir resonator filter per strobe? comb?
 
 
+
+filtering freq bands
+
+gain for strobe pattern
+
+note detection
