@@ -7,27 +7,24 @@ eg. atten = 48db, fs=1000, taps = 48 / 22( 350/1000 - 250/1000 ) = 21.8, lowpass
 interpolated filters?
 
 
+32 taps, 48 taps, 64 taps?
+
+
+
 matched filter for detection or goertzel filter/sliding dft?
-
-
-FIR using FFT
-Q - number of taps
-FFT size N = ~= 4 * Q
-
 multiplication can be performed on the scrambled H(m) & X(m) sequences
-use inverse FFT that expects bit-reversed input data
 
 
 
 4 strobes
 choice of 48/96hz for better time resolution
 
-biquad or fir resonator filter per strobe? comb?
+
 
 
 
 filtering freq bands
 
-gain for strobe pattern
+auto gain for strobe pattern
 
 note detection
