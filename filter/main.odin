@@ -131,20 +131,25 @@ main :: proc() {
 
     read_wav()
 
-    num_taps := u32(255)
-    generate_lowpass_impulse(
-        out_impulse=impulse[:num_taps],
-        center_freq=440,
-        cutoff_freq=10,
-        samplerate=44100,
-    )
-    blackman_window(impulse[:num_taps])
+    // num_taps := u32(255)
+    // generate_lowpass_impulse(
+    //     out_impulse=impulse[:num_taps],
+    //     center_freq=440,
+    //     cutoff_freq=10,
+    //     samplerate=44100,
+    // )
+    // blackman_window(impulse[:num_taps])
+
+
+    bq := biquad_init_resonator(110.0/44100.0, 5.0/44100.0)
+
+    fmt.println(bq)
+    biquad_process(&bq, samples[:], samples_filtered[:])
+    // fmt.println(samples_filtered)
 
 
 
-
-
-    run_filter(samples[:], impulse[:num_taps], samples_filtered[:])
+    // run_filter(samples[:], impulse[:num_taps], samples_filtered[:])
 
 
 
