@@ -7,7 +7,7 @@ eg. atten = 48db, fs=1000, taps = 48 / 22( 350/1000 - 250/1000 ) = 21.8, lowpass
 interpolated filters?
 
 
-32 taps, 48 taps, 64 taps?
+
 
 
 
@@ -22,9 +22,17 @@ choice of 48/96hz for better time resolution
 
 
 
-
 filtering freq bands
 
 auto gain for strobe pattern
 
 note detection
+
+
+
+h(k) = ( 1 / N ) (sin(πk K / N) / sin(πk / N))
+
+
+
+lowpass freq response - idft -> impulse response
+bandpass at eg 4Hz -> multiply lowpass coefficients by sinusoid of fs / 4 Hz
