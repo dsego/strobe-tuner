@@ -11,13 +11,15 @@ import ma "vendor:miniaudio"
 import "../pffft"
 
 
-SCREEN_WIDTH :: 1024
-SCREEN_HEIGHT :: 768
+SCREEN_WIDTH :: 1280
+SCREEN_HEIGHT :: 720
 SAMPLERATE :: u32(48000)
-SIZE :: 4096
+SIZE :: 8192
 
 samples: [SIZE]f32
-samples_filtered: [SIZE]f32
+bq_filtered: [4][SIZE]f32
+fir_filtered: [4][SIZE]f32
+buffer: [SIZE]f32
 points: [SIZE]rl.Vector2
 
 impulse: [SIZE]f32
@@ -29,66 +31,14 @@ dft_filter :: proc() {
 
 }
 
-
-
 magnitude :: proc(re: f32, im: f32) -> f32 {
     return math.sqrt(re * re + im * im)
 }
 
-
-
-
-// TODO: kaiser, chebyshev
-// Applies the Blackman window to a set of samples
-blackman_window :: proc(buffer: []f32) {
-    N := f32(len(buffer))
-    for d, i in buffer {
-        k := f32(i)
-        buffer[i] *= (
-            0.42 - 0.5 * math.cos(2.0 * math.PI * k / (N-1)) +
-            0.08 * math.cos(4.0 * math.PI * k / (N-1))
-        )
-    }
-}
-
-
-// For FIR filters, the impulse response is equivalent to filter coefficients
-generate_lowpass_impulse :: proc(
-    out_impulse: []f32
-    center_freq: f32,
-    cutoff_freq: f32,
-    samplerate: f32,
-) {
-
-    // Algebraic expression: h(k) = ( 1 / N ) (sin(πk K / N) / sin(πk / N))
-    K := cutoff_freq
-    N := samplerate
-
-    taps := u32(len(out_impulse))
-
-    // low-pass magnitude response
-    out_impulse[taps/2] = K / N
-    for k := u32(1); k < taps/2; k+=1 {
-        out_impulse[taps/2+k] = math.sin(math.PI * f32(k) * K / N) / (math.PI * f32(k) / N) / N
-        // out_impulse[taps/2+k] = math.sin(math.PI * f32(k) * K / N) / math.sin(math.PI * f32(k) / N) / N
-        out_impulse[taps/2-k] = out_impulse[taps/2+k]
-    }
-    // for k := u32(0); k < taps; k+=1 {
-    //     shifted_sinusoid := math.sin(math.PI * f32(k) * samplerate / center_freq)
-    //     out_impulse[k] *= shifted_sinusoid
-    // }
-
-    // fmt.println(out_impulse[taps/2+1])
-    // fmt.println(out_impulse[taps/2+2])
-}
-
-
-
-
-
-
 read_wav :: proc() {
+    // path: cstring = "./media/ukulele_A3.wav"
     // path: cstring = "./media/acoustic_A1.wav"
+    // path: cstring = "./media/bass_A0.wav"
     path: cstring = "./media/strat_A1.wav"
     config := ma.decoder_config_init(ma.format.f32, 1, 44100)
     if ma.decoder_init_file(path, &config, &decoder) != ma.result.SUCCESS {
@@ -110,9 +60,11 @@ read_wav :: proc() {
 
 run_filter :: proc(samples: []f32, impulse: []f32, out: []f32) {
     taps := len(impulse)
+
+    // naive, can optimize by leveraging symmetry
     for n in taps..<len(samples) {
         for k in 0..<taps {
-            samples_filtered[n] += samples[n-k] * impulse[k]
+            out[n] += samples[n-k] * impulse[k]
         }
     }
 }
@@ -131,26 +83,32 @@ main :: proc() {
 
     read_wav()
 
-    // num_taps := u32(255)
-    // generate_lowpass_impulse(
-    //     out_impulse=impulse[:num_taps],
-    //     center_freq=440,
-    //     cutoff_freq=10,
-    //     samplerate=44100,
-    // )
-    // blackman_window(impulse[:num_taps])
+
+    // setup := pffft.new_setup(N, pffft.transform_t.REAL)
+    // defer pffft.destroy_setup(setup)
+
+    // pffft.transform_ordered(setup, raw_data(impulse[:]), raw_data(freq[:]), nil, pffft.Direction.FORWARD)
+
+    // pffft.transform(setup, input, output, nil, pffft.Direction.FORWARD)
+
+    // pffft.zconvolve_accumulate(setup, dft_a, dft_b, dft_ab, scaling)
 
 
-    bq := biquad_init_resonator(110.0/44100.0, 5.0/44100.0)
-
-    fmt.println(bq)
-    biquad_process(&bq, samples[:], samples_filtered[:])
-    // fmt.println(samples_filtered)
+    // for v, i in samples {
+    //     buffer[i] = samples[i] * math.sin(f32(2.0 * math.PI * f32(i) * 110.0 / 44100.0))
+    // }
 
 
+    /*
+        bq1 := biquad_init_resonator(110.0/44100.0, 5.0/44100.0, 1)
 
-    // run_filter(samples[:], impulse[:num_taps], samples_filtered[:])
+        biquad_process(&bq1, samples[:], bq_filtered[0][:])
 
+
+        bq2 := biquad_init_resonator(220.0/44100.0, 5.0/44100.0, 1)
+
+        biquad_process(&bq2, samples[:], bq_filtered[1][:])
+    */
 
 
 
@@ -170,7 +128,7 @@ main :: proc() {
 
     // setup := pffft.new_setup(N, pffft.transform_t.REAL)
     // defer pffft.destroy_setup(setup)
-    // pffft.transform_ordered(setup, raw_data(impulse[:]), raw_data(freq_response[:]), nil, pffft.direction_t.FORWARD)
+    // pffft.transform_ordered(setup, raw_data(impulse[:]), raw_data(freq_response[:]), nil, pffft.Direction.FORWARD)
 
     // i := 0
     // j := 0
@@ -228,11 +186,15 @@ draw_screen :: proc() {
     rl.BeginDrawing()
     defer rl.EndDrawing()
 
-    frame_count: u32 = 4096
     rl.ClearBackground(rl.BLACK)
 
-    draw_samples(samples[:frame_count], 0, 0, SCREEN_WIDTH, 200, rl.PINK)
+    draw_samples(samples[:SIZE], 0, 0, SCREEN_WIDTH, 100, rl.PINK)
 
-    draw_samples(impulse[:], 0, 210, SCREEN_WIDTH, 200, rl.ORANGE)
-    draw_samples(samples_filtered[:frame_count], 0, 420, SCREEN_WIDTH, 200, rl.ORANGE)
+    draw_samples(buffer[:SIZE], 0, 110, SCREEN_WIDTH, 100, rl.ORANGE)
+    // draw_samples(bq_filtered[0][:SIZE], 0, 110, SCREEN_WIDTH, 100, rl.ORANGE)
+    // draw_samples(bq_filtered[1][:SIZE], 0, 230, SCREEN_WIDTH, 100, rl.SKYBLUE)
+
+
+    // draw_samples(fir_filtered[0][:SIZE], 0, 340, SCREEN_WIDTH, 100, rl.YELLOW)
+    // draw_samples(fir_filtered[1][:SIZE], 0, 450, SCREEN_WIDTH, 100, rl.YELLOW)
 }

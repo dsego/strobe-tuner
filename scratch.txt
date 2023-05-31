@@ -1,19 +1,9 @@
 
 
-N(FIR) = atten / (22 * (f_stop - f_pass))
 
-eg. atten = 48db, fs=1000, taps = 48 / 22( 350/1000 - 250/1000 ) = 21.8, lowpass  22 taps filter
-
-interpolated filters?
-
-
-
-
-
-
-matched filter for detection or goertzel filter/sliding dft?
-multiplication can be performed on the scrambled H(m) & X(m) sequences
-
+Frequency Locked Synth??
+https://www.cycfi.com/2017/10/fast-and-efficient-pitch-detection/
+AGC and a Period Trigger (detecting positive and negative peaks.)
 
 
 4 strobes
@@ -22,7 +12,8 @@ choice of 48/96hz for better time resolution
 
 
 
-filtering freq bands
+filtering freq bands  - fir, iir, fsf, goertzel filter?
+
 
 auto gain for strobe pattern
 
@@ -36,3 +27,25 @@ h(k) = ( 1 / N ) (sin(πk K / N) / sin(πk / N))
 
 lowpass freq response - idft -> impulse response
 bandpass at eg 4Hz -> multiply lowpass coefficients by sinusoid of fs / 4 Hz
+
+
+
+
+
+peak filtar na spec. frekvenciji??
+
+______|________ tipa 110Hz / 48000Hz
+
+konvoluirat sa ulaznim signalom i prebacit iz frekv. pomocu IFFT ?
+
+usporedit rezultat sa 3-stage biquad iir filterom 12Hz bandwith
+
+
+----
+
+
+
+popravit framerate da ukljucuje n semplova s lijeve strane?
+
+
+combine peak + notch filter , notch for strong harmonic, eg 110Hz the next harmonics are 220, 440
