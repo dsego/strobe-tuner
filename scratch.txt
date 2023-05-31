@@ -23,29 +23,17 @@ note detection
 
 h(k) = ( 1 / N ) (sin(πk K / N) / sin(πk / N))
 
-
-
-lowpass freq response - idft -> impulse response
-bandpass at eg 4Hz -> multiply lowpass coefficients by sinusoid of fs / 4 Hz
-
-
-
-
-
-peak filtar na spec. frekvenciji??
-
-______|________ tipa 110Hz / 48000Hz
-
-konvoluirat sa ulaznim signalom i prebacit iz frekv. pomocu IFFT ?
-
-usporedit rezultat sa 3-stage biquad iir filterom 12Hz bandwith
-
-
 ----
 
 
 
 popravit framerate da ukljucuje n semplova s lijeve strane?
+framerate - interpolate signal before sending to display
 
 
-combine peak + notch filter , notch for strong harmonic, eg 110Hz the next harmonics are 220, 440
+
+gaussian in freq. domain?
+
+
+
+complex wavelet convolution ? + magnitude filter ???

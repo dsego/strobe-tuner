@@ -20,7 +20,7 @@ foreign lib {
     transform :: proc(setup: rawptr, input: [^]f32, output: [^]f32, work: [^]f32, direction: Direction) ---
     transform_ordered :: proc(setup: rawptr, input: [^]f32, output: [^]f32, work: [^]f32, direction: Direction) ---
     zreorder :: proc(setup, input: [^]f32, output: [^]f32, direction: Direction) ---
-    zconvolve_accumulate :: proc(setup, dft_a: [^]f32, dft_b: [^]f32, dft_ab: [^]f32, scaling: f32) ---
+    zconvolve_accumulate :: proc(setup: rawptr, dft_a: [^]f32, dft_b: [^]f32, dft_ab: [^]f32, scaling: f32) ---
     aligned_malloc :: proc(nb_bytes: uint) -> rawptr ---
     aligned_free :: proc(setup: rawptr) ---
     simd_size :: proc() -> int ---

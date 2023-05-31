@@ -249,7 +249,23 @@ draw_screen :: proc() {
         x += resolution
     }
 
+    PADDING :: 20
+    BOX_HEIGHT :: SCREEN_HEIGHT - PADDING * 2
+    BOX_WIDTH :: SCREEN_WIDTH - PADDING * 2
+
     rl.ClearBackground(rl.BLACK)
-    rl.DrawRectangleLines(20, 20, SCREEN_WIDTH-40, SCREEN_HEIGHT-40, rl.GRAY)
+
+    // Draw grid lines
+    dy := i32(100)
+    for y := i32(0); y < BOX_HEIGHT; y += dy {
+        rl.DrawLine(PADDING, y, BOX_WIDTH+PADDING, y, rl.DARKGRAY)
+    }
+
+    dx := i32(100)
+    for x := i32(0); x < BOX_WIDTH; x += dx {
+        rl.DrawLine(x, PADDING, x, BOX_HEIGHT+PADDING, rl.DARKGRAY)
+    }
+
+    rl.DrawRectangleLines(PADDING, PADDING, BOX_WIDTH, BOX_HEIGHT, rl.GRAY)
     rl.DrawLineStrip(raw_data(points[:]), i32(frame_count), rl.PINK)
 }
