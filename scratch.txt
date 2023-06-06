@@ -27,8 +27,16 @@ h(k) = ( 1 / N ) (sin(πk K / N) / sin(πk / N))
 
 
 
-popravit framerate da ukljucuje n semplova s lijeve strane?
+popravit framerate da ukljucuje n semplova s lijeve strane? - OVO
 framerate - interpolate signal before sending to display
+
+
+
+ms_per_div
+ms per division, or pixels per ms?
+
+
+
 
 
 
@@ -37,3 +45,28 @@ gaussian in freq. domain?
 
 
 complex wavelet convolution ? + magnitude filter ???
+
+
+
+make grid lines match periods in miliseconds
+
+
+make morlet wavelet as gaussian in freq. domain
+make sine filter as sinc in freq. domain
+
+
+DrawTextEx(Font font, const char *text, Vector2 position, float fontSize, float spacing, Color tint)
+DrawLineEx(Vector2 startPos, Vector2 endPos, float thick, Color color)
+
+
+N+M-1 len of convolution
+
+
+
+
+filter app with grid lines based on time in ms -> grid lines and labels for each draw_samples
+load sample of time in ms, able to slide left/right ?
+filtered variant overlayed on top
+
+plus other frequencies
+
