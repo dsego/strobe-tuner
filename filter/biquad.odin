@@ -1,4 +1,4 @@
-package main
+package filter
 
 import "core:math"
 
@@ -6,11 +6,11 @@ import "core:math"
 MAX_BIQUADS :: 10
 Biquad :: struct {
     // delay line z1 = x[n-1], z2 = x[n-2]
-    z1: [4]f64
-    z2: [4]f64
+    z1: [4]f64,
+    z2: [4]f64,
 
     // number of cascading bi-quads
-    cascade_count: u32
+    cascade_count: u32,
 
     a0: f64,
     a1: f64,

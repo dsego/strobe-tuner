@@ -1,5 +1,5 @@
 // https://stackoverflow.com/questions/8835806/c-c-goertzel-algorithm-with-complex-output-or-magnitudephase
-package main
+package filter
 
 import "core:math"
 
