@@ -18,22 +18,19 @@ import "../pffft"
 SCREEN_WIDTH :: 1024
 SCREEN_HEIGHT :: 768
 SAMPLERATE :: 44100
-SIZE :: 4096
 
 
 AppContext :: struct {
-    font: rl.Font
+    font: rl.Font,
+    samples: []f32,
 }
 
 ctx := AppContext{}
 
-// path: cstring = "./media/ukulele_A3.wav"
-// path: cstring = "./media/acoustic_A1.wav"
-// path: cstring = "./media/bass_A0.wav"
-// path: cstring = "./media/strat_A1.wav"
 
 read_wav :: proc(path: cstring, from: u64, to: u64, samples: []f32) {
-    assert(from < to && to < u64(len(samples)))
+    assert(from < to, "`from` should be smaller than `to`")
+    assert(to <= u64(len(samples)), "`to` should be less or equal to samples length")
 
     decoder: ma.decoder
     config := ma.decoder_config_init(ma.format.f32, 1, 44100)
@@ -86,7 +83,12 @@ main :: proc() {
     init_window()
     defer cleanup()
 
-    // read_wav()
+    // path: cstring = "./media/ukulele_A3.wav"
+    // path: cstring = "./media/acoustic_A1.wav"
+    // path: cstring = "./media/bass_A0.wav"
+    path: cstring = "./media/strat_A1.wav"
+    ctx.samples = make([]f32, 4096)
+    read_wav(path=path, from=0, to=4096, samples=ctx.samples[:])
 
     for !rl.WindowShouldClose() {
         draw_screen()
@@ -94,34 +96,51 @@ main :: proc() {
 }
 
 draw_samples :: proc(
+    rect: rl.Rectangle,
     samples: []f32,
-    x1: f32,
-    y1: f32,
-    width: f32,
-    height: f32,
     color: rl.Color,
     gain: f32 = 1.0,
 ) {
     l := len(samples)
-    points: []rl.Vector2
+    points := make([]rl.Vector2, l)
+    defer delete(points)
 
     // stretch samples to fit the box width
-    resolution := f32(width) / f32(l -1)
+    px_per_sample := f32(rect.width) / f32(l -1)
 
-    x := x1
+    x := rect.x
     for i in 0..<l {
-        // stretch to fit the box height and apply gain
-        y := y1 + (height/2) - samples[i] * (height / 2) * gain
+        y := rect.y + (rect.height/2.0) - samples[i] * (rect.height / 2.0) * gain
         points[i] = { x, y }
-        x += resolution
+        x += px_per_sample
     }
     rl.DrawLineStrip(raw_data(points[:]), i32(l), color)
 }
 
-draw_grid :: proc() {
-    // DrawTextEx(Font font, const char *text, Vector2 position, float fontSize, float spacing, Color tint)
-    // DrawLineEx(Vector2 startPos, Vector2 endPos, float thick, Color color)
+
+draw_plot :: proc(using rect: rl.Rectangle, len_samples: int) {
+    // Horizontal lines at 1,0,-1
+    rl.DrawLineEx({x, y}, {x+width, y}, 0.5, rl.GRAY)
+    rl.DrawTextEx(ctx.font, "1", {x-16, y-8}, 16, 0, rl.GRAY)
+
+    rl.DrawLineEx({x, y+height/2}, {x+width, y+height/2}, 0.5, rl.GRAY)
+    rl.DrawTextEx(ctx.font, "0", {x-16, y+height/2-8}, 16, 0, rl.GRAY)
+
+    rl.DrawLineEx({x, y+height}, {x+width, y+height}, 0.5, rl.GRAY)
+    rl.DrawTextEx(ctx.font, "-1", {x-24, y+height-8}, 16, 0, rl.GRAY)
+
+    // Vertical lines every 10ms
+    div_ms :f32 = 10.0
+    len_ms : f32 = 1000.0 * f32(len_samples) / f32(SAMPLERATE)
+    px_per_ms := f32(width) / len_ms
+
+    for d := f32(0); d < len_ms; d += div_ms {
+        px := x + d * px_per_ms
+        rl.DrawLineEx({px, y}, {px, y+height}, 0.5, rl.GRAY)
+        rl.DrawTextEx(ctx.font, fmt.ctprintf("%.0fms", d), {px, y+height+8}, 16, 0, rl.GRAY)
+    }
 }
+
 
 draw_screen :: proc() {
 
@@ -129,7 +148,11 @@ draw_screen :: proc() {
     defer rl.EndDrawing()
 
     rl.ClearBackground(rl.BLACK)
-    rl.DrawTextEx(ctx.font, "free fonts included with raylib", rl.Vector2{250, 20}, 16, 1, rl.LIGHTGRAY);
+
+    // SAMPLERATE
+    rect := rl.Rectangle{50, 50, SCREEN_WIDTH-100, 200}
+    draw_plot(rect, len(ctx.samples))
+    draw_samples(rect, ctx.samples, rl.PINK, 2.0)
 
     // draw_samples(samples[:SIZE], 0, 0, SCREEN_WIDTH, 100, rl.PINK, 2.0)
 
