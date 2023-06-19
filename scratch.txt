@@ -1,4 +1,4 @@
-
+kokkinizita.linuxaudio.org/linuxaudio/zita-resampler/resampler.html
 
 
 Frequency Locked Synth??
@@ -69,4 +69,36 @@ load sample of time in ms, able to slide left/right ?
 filtered variant overlayed on top
 
 plus other frequencies
+
+
+
+
+# pitch detection
+
+Bitstream Autocorrelation for pitch detection
+https://www.cycfi.com/2018/03/fast-and-efficient-pitch-detection-bitstream-autocorrelation/
+
+
+Fast and Efficient Pitch Detection
+https://www.cycfi.com/2017/10/fast-and-efficient-pitch-detection/
+
+
+Envelope detection
+https://delsys.com/amplitude-analysis-root-mean-square-emg-envelope/
+
+
+Auto-correlation using FFT
+https://dsp.stackexchange.com/questions/1919/efficiently-calculating-autocorrelation-using-ffts
+https://dsp.stackexchange.com/questions/10858/autocorrelation-using-fft-of-power-spectrum
+https://stackoverflow.com/questions/3949324/calculate-autocorrelation-using-fft-in-matlab
+
+Pitch detection algos in C++
+https://github.com/sevagh/pitch-detection
+
+Simple frequency estimation methods
+https://gist.github.com/endolith/255291
+
+
+
+
 
