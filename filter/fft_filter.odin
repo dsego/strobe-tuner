@@ -15,7 +15,7 @@ NarrowBandpassFilter :: struct {
     zero_padded: []f32,
     zero_padded_dft: []complex64,
     filter_dft: []complex64,
-    result_dft: []f32,
+    result_dft: []complex64,
 }
 
 filter_init :: proc(size: int, frequency: f32) -> (config: NarrowBandpassFilter = {}) {
@@ -24,14 +24,18 @@ filter_init :: proc(size: int, frequency: f32) -> (config: NarrowBandpassFilter 
     config.zero_padded = make([]f32, size*2)
     config.zero_padded_dft = make([]complex64, size*2)
     config.filter_dft = make([]complex64, size*2)
-    config.result_dft = make([]f32, size*2)
+    config.result_dft = make([]complex64, size*2)
 
     // config.filter_dft fill gaussian
     //   44100/4096
 
-    // config.filter_dft[20] = complex(1, 0)
-    // config.filter_dft[21] = complex(1, 0)
-    // config.filter_dft[22] = complex(1, 0)
+
+    //  sinc function highpass conv. lowpass * blackmann window --> fft
+
+    config.filter_dft[19] = complex(1, 0)
+    config.filter_dft[20] = complex(1, 0)
+    config.filter_dft[21] = complex(1, 0)
+    config.filter_dft[22] = complex(1, 0)
     // config.filter_dft[23] = complex(1, 0)
 
     return
@@ -51,6 +55,9 @@ gaussian :: proc(data: []f32, amp: f32, spread: f32) {
         data[i] = amp * math.exp(-x * x / spread)
     }
 }
+
+
+
 
 filter_process:: proc(config: NarrowBandpassFilter, input: []f32, output: []f32) {
 
@@ -72,6 +79,12 @@ filter_process:: proc(config: NarrowBandpassFilter, input: []f32, output: []f32)
         pffft.Direction.FORWARD
     )
 
+    for _, i in config.zero_padded_dft {
+        config.result_dft[i] = config.zero_padded_dft[i] * config.filter_dft[i]
+    }
+
+
+    // NOTE Both DFTs need to be scrambled for this method
     // pffft.zconvolve_accumulate(
     //     config.pffft_setup,
     //     raw_data(zero_padded_dft[:]),
@@ -80,14 +93,13 @@ filter_process:: proc(config: NarrowBandpassFilter, input: []f32, output: []f32)
     //     1.0
     // )
 
-    // pffft.transform_ordered(
-    //     config.pffft_setup,
-    //     raw_data(result_dft[:]),
-    //     raw_data(output[:]),
-    //     nil,
-    //     pffft.Direction.BACKWARD
-    // )
-
+    pffft.transform_ordered(
+        config.pffft_setup,
+        raw_data(result_dft[:]),
+        raw_data(output[:]),
+        nil,
+        pffft.Direction.BACKWARD
+    )
 }
 
 

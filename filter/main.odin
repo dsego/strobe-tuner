@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:log"
 import "core:os"
 import "core:math"
+import "core:mem"
 import "core:runtime"
 
 import rl "vendor:raylib"
@@ -144,7 +145,7 @@ draw_time_plot :: proc(using rect: rl.Rectangle, len_samples: int, div_ms: f32) 
     rl.DrawLineEx({x, y+height}, {x+width, y+height}, 0.5, rl.GRAY)
     rl.DrawTextEx(ctx.font, "-1", {x-24, y+height-8}, 16, 0, rl.GRAY)
 
-    // Vertical lines every 10ms
+    // Vertical lines every x ms
     len_ms : f32 = 1000.0 * f32(len_samples) / f32(SAMPLERATE)
     px_per_ms := f32(width) / len_ms
 
@@ -155,7 +156,7 @@ draw_time_plot :: proc(using rect: rl.Rectangle, len_samples: int, div_ms: f32) 
     }
 }
 
-draw_freq_plot :: proc(using rect: rl.Rectangle, len_points: int, div_hz: f32) {
+draw_freq_plot :: proc(using rect: rl.Rectangle, len_points: int, div_hz: f32, range_hz: int) {
     // Horizontal lines at 1,0,-1
     rl.DrawLineEx({x, y}, {x+width, y}, 0.5, rl.GRAY)
     rl.DrawTextEx(ctx.font, "1", {x-16, y-8}, 16, 0, rl.GRAY)
@@ -166,11 +167,10 @@ draw_freq_plot :: proc(using rect: rl.Rectangle, len_points: int, div_hz: f32) {
     rl.DrawLineEx({x, y+height}, {x+width, y+height}, 0.5, rl.GRAY)
     rl.DrawTextEx(ctx.font, "-1", {x-24, y+height-8}, 16, 0, rl.GRAY)
 
-    // Vertical lines every 10Hz
-    len_hz : f32 = f32(SAMPLERATE/64)
-    px_per_hz := f32(width) / len_hz
+    // Vertical lines every x Hz
+    px_per_hz := f32(width) / f32(range_hz)
 
-    for d := f32(0); d < len_hz; d += div_hz {
+    for d := f32(0); d < f32(range_hz); d += div_hz {
         px := x + d * px_per_hz
         rl.DrawLineEx({px, y}, {px, y+height}, 0.5, rl.GRAY)
         rl.DrawTextEx(ctx.font, fmt.ctprintf("%.0fHz", d), {px, y+height+8}, 16, 0, rl.GRAY)
@@ -185,19 +185,19 @@ draw_screen :: proc() {
     rl.ClearBackground(rl.BLACK)
 
     // SAMPLERATE
-    rect := rl.Rectangle{50, 50, SCREEN_WIDTH-100, 200}
+    rect := rl.Rectangle{20, 20, SCREEN_WIDTH-40, 200}
     div_ms := f32(1000.0 / 110.0)
     draw_time_plot(rect, len(ctx.samples), div_ms)
     draw_samples(rect, ctx.samples, rl.PINK, 2.0, 5.0)
+    draw_samples(rect, ctx.filtered_samples, rl.GOLD, 1.0/4096.0, 0)
 
     magnitude: [8192]f32
-    for f, i in ctx.filter_config.zero_padded_dft {
-        magnitude[i] = 0.01 * math.sqrt(real(f) * real(f) + imag(f) * imag(f))
+    for f, i in ctx.filter_config.filter_dft {
+        magnitude[i] = math.sqrt(real(f) * real(f) + imag(f) * imag(f))
     }
 
-    rect2 := rl.Rectangle{50, 350, SCREEN_WIDTH-100, 200}
-    draw_freq_plot(rect2, len(magnitude[:256]), 55)
-    draw_samples(rect2, magnitude[:256], rl.LIME, 1.0, 1.0)
-    // draw_samples(rect, ctx.filtered_samples, rl.LIME, 2.0, 5.0)
 
+    rect2 := rl.Rectangle{20, 350, SCREEN_WIDTH-40, 200}
+    draw_freq_plot(rect2, 256, 55, SAMPLERATE/64)
+    draw_samples(rect2, magnitude[:256], rl.LIME, 1.0, 1.0)
 }
