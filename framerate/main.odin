@@ -101,7 +101,7 @@ init_audio_capture :: proc() {
     fmt.println("..................................\n")
 
     // set BlackHole 2ch device for capture
-    // config.capture.pDeviceID = &capture_devices[0].id
+    config.capture.pDeviceID = &capture_devices[0].id
 
     if ma.device_init(&ctx, &config, &device) != ma.result.SUCCESS {
         fmt.println("Failed to initialize audio device.")

@@ -1,3 +1,46 @@
+
+
+Fast and Efficient Pitch Detection: Bitstream Autocorrelation
+https://www.cycfi.com/2018/03/fast-and-efficient-pitch-detection-bitstream-autocorrelation/
+
+Fast and Efficient Pitch Detection: Double Trouble
+https://www.cycfi.com/2017/11/fast-and-efficient-pitch-detection-double-trouble/
+
+Fast and Efficient Pitch Detection
+https://www.cycfi.com/2017/10/fast-and-efficient-pitch-detection/
+
+
+A few simple frequency estimation methods in Python
+https://gist.github.com/endolith/255291
+
+
+Amplitude Analysis: Root-mean-square EMG Envelope
+https://delsys.com/amplitude-analysis-root-mean-square-emg-envelope/
+
+
+Damped Springs
+https://www.ryanjuckett.com/damped-springs/
+
+Gaussian function
+https://en.wikipedia.org/wiki/Gaussian_function
+
+
+filtfilt | Zero-phase digital filtering
+https://nl.mathworks.com/help/signal/ref/filtfilt.html
+
+
+Applied DSP No. 9: The z-Domain and Parametric Filter Design
+https://www.youtube.com/watch?v=xIN5Mnj_MAk&t=371s
+
+
+FIR Filter
+https://github.com/kleydon/FIR-Filter-Demo-Cpp/blob/master/*%20Project/FIR-Filter-Demo/FIRFilter/FIRFilter.cpp#L571
+
+
+=====================================================
+
+
+
 kokkinizita.linuxaudio.org/linuxaudio/zita-resampler/resampler.html
 
 
@@ -101,4 +144,20 @@ https://gist.github.com/endolith/255291
 
 
 
+- lp sinc
+sinc
+blackman
+normalize for unity gain
 
+
+- hp sinc
+blackman window
+multiply sinc by blackman window
+sum of coeffs
+divide by sum to normalize
+Spectrally invert (negate samples, add 1 to center sample)
+
+
+- bp filter
+FIR filter design method calls for high/low frequencies at the half-attenuation point (f - trans/2)
+Convolve high and low-pass filters to get band-pass filter
