@@ -1,5 +1,6 @@
 package filter
 
+import "core:fmt"
 import "core:mem"
 import "core:math"
 
@@ -16,15 +17,17 @@ NarrowBandpassFilter :: struct {
     zero_padded_dft: []complex64,
     filter_dft: []complex64,
     result_dft: []complex64,
+    result_idft: []f32,
 }
 
 filter_init :: proc(size: int, frequency: f32) -> (config: NarrowBandpassFilter = {}) {
-    config.size = size*2
+    config.size = size
     config.pffft_setup = pffft.new_setup(size*2, pffft.Transform.REAL)
     config.zero_padded = make([]f32, size*2)
     config.zero_padded_dft = make([]complex64, size*2)
     config.filter_dft = make([]complex64, size*2)
     config.result_dft = make([]complex64, size*2)
+    config.result_idft = make([]f32, size*2)
 
     // config.filter_dft fill gaussian
     //   44100/4096
@@ -48,27 +51,27 @@ filter_destroy :: proc(config: NarrowBandpassFilter) {
     delete(config.result_dft)
 }
 
-gaussian :: proc(data: []f32, amp: f32, spread: f32) {
-    len := f32(len(data))
-    for d, i in data {
-        x := f32(i) - len/2.0
-        data[i] = amp * math.exp(-x * x / spread)
-    }
-}
-
+// gaussian :: proc(data: []f32, amp: f32, spread: f32) {
+//     len := f32(len(data))
+//     for d, i in data {
+//         x := f32(i) - len/2.0
+//         data[i] = amp * math.exp(-x * x / spread)
+//     }
+// }
 
 
 
 filter_process:: proc(config: NarrowBandpassFilter, input: []f32, output: []f32) {
 
     result_dft := mem.slice_data_cast([]f32, config.result_dft[:])
+    result_idft := mem.slice_data_cast([]f32, config.result_idft[:])
     filter_dft := mem.slice_data_cast([]f32, config.filter_dft[:])
     zero_padded_dft := mem.slice_data_cast([]f32, config.zero_padded_dft[:])
 
     mem.copy(
         raw_data(config.zero_padded[:]),
         raw_data(input[:]),
-        config.size
+        config.size*2
     )
 
     pffft.transform_ordered(
@@ -80,7 +83,8 @@ filter_process:: proc(config: NarrowBandpassFilter, input: []f32, output: []f32)
     )
 
     for _, i in config.zero_padded_dft {
-        config.result_dft[i] = config.zero_padded_dft[i] * config.filter_dft[i]
+        config.result_dft[i] = config.zero_padded_dft[i] // * config.filter_dft[i]
+        // output[i] = input[i]
     }
 
 
@@ -96,10 +100,15 @@ filter_process:: proc(config: NarrowBandpassFilter, input: []f32, output: []f32)
     pffft.transform_ordered(
         config.pffft_setup,
         raw_data(result_dft[:]),
-        raw_data(output[:]),
+        raw_data(result_idft[:]),
         nil,
         pffft.Direction.BACKWARD
     )
+
+    // scale by 1/N
+    for i in 0..<len(output) {
+        output[i] = config.result_idft[i] / f32(config.size)
+    }
 }
 
 

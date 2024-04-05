@@ -17,6 +17,7 @@ import "../pffft"
 SCREEN_WIDTH :: 1024
 SCREEN_HEIGHT :: 768
 SAMPLERATE :: 44100
+SAMPLE_COUNT :: 1024
 
 
 AppContext :: struct {
@@ -47,18 +48,18 @@ read_wav :: proc(path: cstring, from: u64, to: u64, samples: []f32) {
     ma.decoder_read_pcm_frames(&decoder, raw_data(samples[:]), frames_to_read, nil)
 }
 
-run_filter :: proc(samples: []f32, impulse: []f32, out: []f32) {
-    taps := len(impulse)
+// run_filter :: proc(samples: []f32, impulse: []f32, out: []f32) {
+//     taps := len(impulse)
 
-    // naive, can optimize by leveraging symmetry
-    for n in taps..<len(samples) {
-        for k in 0..<taps {
-            out[n] += samples[n-k] * impulse[k]
-        }
-    }
-}
+//     // naive, can optimize by leveraging symmetry
+//     for n in taps..<len(samples) {
+//         for k in 0..<taps {
+//             out[n] += samples[n-k] * impulse[k]
+//         }
+//     }
+// }
 
-init_window :: proc() {
+init :: proc() {
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Filter")
     rl.SetTargetFPS(60)
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
@@ -71,25 +72,31 @@ cleanup :: proc() {
 }
 
 main :: proc() {
-    init_window()
+    init()
     defer cleanup()
 
     // path: cstring = "./media/ukulele_A3.wav"
     // path: cstring = "./media/acoustic_A1.wav"
     // path: cstring = "./media/bass_A0.wav"
     path: cstring = "./media/strat_A1.wav"
-    ctx.samples = make([]f32, 4096)
-    ctx.filtered_samples = make([]f32, 4096)
+    ctx.samples = make([]f32, SAMPLE_COUNT)
+    ctx.filtered_samples = make([]f32, SAMPLE_COUNT)
     defer delete(ctx.samples)
     defer delete(ctx.filtered_samples)
 
-    read_wav(path=path, from=0, to=4096, samples=ctx.samples[:])
+    read_wav(path=path, from=0, to=SAMPLE_COUNT, samples=ctx.samples[:])
 
-
-    ctx.filter_config = filter_init(4096, f32(110)/f32(SAMPLERATE))
+    ctx.filter_config = filter_init(256, f32(110)/f32(SAMPLERATE))
     defer filter_destroy(ctx.filter_config)
 
-    filter_process(ctx.filter_config, ctx.samples, ctx.filtered_samples)
+    slice_len := ctx.filter_config.size / 2
+    for i := 0; i < len(ctx.samples); i += slice_len {
+        filter_process(
+            ctx.filter_config,
+            ctx.samples[i:i+slice_len],
+            ctx.filtered_samples[i:i+slice_len],
+        )
+    }
 
     for !rl.WindowShouldClose() {
         draw_screen()
@@ -101,7 +108,6 @@ draw_samples :: proc(
     samples: []f32,
     color: rl.Color,
     gain: f32 = 1.0,
-    thick: f32 = 1.0
 ) {
     l := len(samples)
     points := make([]rl.Vector2, l)
@@ -188,16 +194,18 @@ draw_screen :: proc() {
     rect := rl.Rectangle{20, 20, SCREEN_WIDTH-40, 200}
     div_ms := f32(1000.0 / 110.0)
     draw_time_plot(rect, len(ctx.samples), div_ms)
-    draw_samples(rect, ctx.samples, rl.PINK, 2.0, 5.0)
-    draw_samples(rect, ctx.filtered_samples, rl.GOLD, 1.0/4096.0, 0)
+    draw_samples(rect, ctx.samples, rl.PINK, 2.0)
 
-    magnitude: [8192]f32
-    for f, i in ctx.filter_config.filter_dft {
-        magnitude[i] = math.sqrt(real(f) * real(f) + imag(f) * imag(f))
-    }
+    rect = rl.Rectangle{20, 40, SCREEN_WIDTH-40, 220}
+    draw_samples(rect, ctx.filtered_samples, rl.GOLD, 1.0)
+
+    // magnitude: [8192]f32
+    // for f, i in ctx.filter_config.filter_dft {
+    //     magnitude[i] = math.sqrt(real(f) * real(f) + imag(f) * imag(f))
+    // }
 
 
-    rect2 := rl.Rectangle{20, 350, SCREEN_WIDTH-40, 200}
-    draw_freq_plot(rect2, 256, 55, SAMPLERATE/64)
-    draw_samples(rect2, magnitude[:256], rl.LIME, 1.0, 1.0)
+    // rect2 := rl.Rectangle{20, 350, SCREEN_WIDTH-40, 200}
+    // draw_freq_plot(rect2, 256, 55, SAMPLERATE/64)
+    // draw_samples(rect2, magnitude[:256], rl.LIME, 1.0, 1.0)
 }

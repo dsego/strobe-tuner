@@ -32,7 +32,10 @@ capture_device_count: u32
 // freq A1 = 55Hz
 
 // target_freq := 55.0
-target_freq := 440.0
+// target_freq := 65.406
+// target_freq := 82.407
+target_freq := 49.00
+// target_freq := 440.0
 target_interval := f64(SAMPLERATE) / target_freq
 frame_counter_real := 0.0
 
@@ -102,6 +105,9 @@ init_audio_capture :: proc() {
 
     // set BlackHole 2ch device for capture
     config.capture.pDeviceID = &capture_devices[0].id
+
+    // Internal Mic
+    // config.capture.pDeviceID = &capture_devices[1].id
 
     if ma.device_init(&ctx, &config, &device) != ma.result.SUCCESS {
         fmt.println("Failed to initialize audio device.")
@@ -244,7 +250,7 @@ draw_screen :: proc() {
 
     for i in 0..<frame_count {
         // note that y is flipped (negative)
-        y := SCREEN_HEIGHT/2 - samples[i] * 100
+        y := SCREEN_HEIGHT/2 - samples[i] * 1000
         points[i] = { x, y }
         x += resolution
     }
