@@ -91,7 +91,7 @@ main :: proc() {
 
     slice_len := ctx.filter_config.size / 2
     for i := 0; i < len(ctx.samples); i += slice_len {
-        filter_process(
+        filter_test_accumulate(
             ctx.filter_config,
             ctx.samples[i:i+slice_len],
             ctx.filtered_samples[i:i+slice_len],
@@ -196,7 +196,7 @@ draw_screen :: proc() {
     draw_time_plot(rect, len(ctx.samples), div_ms)
     draw_samples(rect, ctx.samples, rl.PINK, 2.0)
 
-    rect = rl.Rectangle{20, 40, SCREEN_WIDTH-40, 220}
+    rect = rl.Rectangle{20, 20, SCREEN_WIDTH-40, 200}
     draw_samples(rect, ctx.filtered_samples, rl.GOLD, 1.0)
 
     // magnitude: [8192]f32

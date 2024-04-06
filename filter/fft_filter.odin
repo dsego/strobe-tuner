@@ -13,8 +13,9 @@ import "../pffft"
 NarrowBandpassFilter :: struct {
     size: int,
     pffft_setup: rawptr,
-    zero_padded: []f32,
-    zero_padded_dft: []complex64,
+    zero_padded_input: []f32,
+    input_dft: []complex64,
+    result_dft_ordered: []complex64,
     filter_dft: []complex64,
     result_dft: []complex64,
     result_idft: []f32,
@@ -23,8 +24,9 @@ NarrowBandpassFilter :: struct {
 filter_init :: proc(size: int, frequency: f32) -> (config: NarrowBandpassFilter = {}) {
     config.size = size
     config.pffft_setup = pffft.new_setup(size*2, pffft.Transform.REAL)
-    config.zero_padded = make([]f32, size*2)
-    config.zero_padded_dft = make([]complex64, size*2)
+    config.zero_padded_input = make([]f32, size*2)
+    config.input_dft = make([]complex64, size*2)
+    config.result_dft_ordered = make([]complex64, size*2)
     config.filter_dft = make([]complex64, size*2)
     config.result_dft = make([]complex64, size*2)
     config.result_idft = make([]f32, size*2)
@@ -35,10 +37,26 @@ filter_init :: proc(size: int, frequency: f32) -> (config: NarrowBandpassFilter 
 
     //  sinc function highpass conv. lowpass * blackmann window --> fft
 
-    config.filter_dft[19] = complex(1, 0)
-    config.filter_dft[20] = complex(1, 0)
-    config.filter_dft[21] = complex(1, 0)
-    config.filter_dft[22] = complex(1, 0)
+
+    // Lowpass filter time domain coefficients: h (k) =  1/N  *  ( sin(πkK / N) / sin(πk / N) ),
+    //  -fs/2  to fs/2 freq range
+    // sinc sin(x) / x shape
+
+
+    // Bandpass from lowpass by shifting the freq response to center about fc
+    // -> multiply response coefficients by sinusoid fc
+
+    // half band?
+
+    for i in 0..<len(config.filter_dft) {
+        config.filter_dft[i] = complex(0, 0)
+    }
+
+
+    // config.filter_dft[19] = complex(1, 0)
+    // config.filter_dft[20] = complex(1, 0)
+    // config.filter_dft[21] = complex(1, 0)
+    // config.filter_dft[22] = complex(1, 0)
     // config.filter_dft[23] = complex(1, 0)
 
     return
@@ -46,9 +64,12 @@ filter_init :: proc(size: int, frequency: f32) -> (config: NarrowBandpassFilter 
 
 filter_destroy :: proc(config: NarrowBandpassFilter) {
     pffft.destroy_setup(config.pffft_setup)
-    delete(config.zero_padded)
+    delete(config.zero_padded_input)
+    delete(config.input_dft)
+    delete(config.result_dft_ordered)
     delete(config.filter_dft)
     delete(config.result_dft)
+    delete(config.result_idft)
 }
 
 // gaussian :: proc(data: []f32, amp: f32, spread: f32) {
@@ -61,45 +82,46 @@ filter_destroy :: proc(config: NarrowBandpassFilter) {
 
 
 
-filter_process:: proc(config: NarrowBandpassFilter, input: []f32, output: []f32) {
-
+filter_test_accumulate:: proc(config: NarrowBandpassFilter, input: []f32, output: []f32) {
     result_dft := mem.slice_data_cast([]f32, config.result_dft[:])
     result_idft := mem.slice_data_cast([]f32, config.result_idft[:])
     filter_dft := mem.slice_data_cast([]f32, config.filter_dft[:])
-    zero_padded_dft := mem.slice_data_cast([]f32, config.zero_padded_dft[:])
+    input_dft := mem.slice_data_cast([]f32, config.input_dft[:])
+    result_dft_ordered := mem.slice_data_cast([]f32, config.result_dft_ordered[:])
 
     mem.copy(
-        raw_data(config.zero_padded[:]),
+        raw_data(config.zero_padded_input[:]),
         raw_data(input[:]),
         config.size*2
     )
 
-    pffft.transform_ordered(
+    pffft.transform(
         config.pffft_setup,
-        raw_data(config.zero_padded[:]),
-        raw_data(zero_padded_dft[:]),
+        raw_data(config.zero_padded_input[:]),
+        raw_data(input_dft[:]),
         nil,
         pffft.Direction.FORWARD
     )
 
-    for _, i in config.zero_padded_dft {
-        config.result_dft[i] = config.zero_padded_dft[i] // * config.filter_dft[i]
-        // output[i] = input[i]
-    }
+    // Both FFTs need to be scrambled for this method
+    pffft.zconvolve_accumulate(
+        config.pffft_setup,
+        raw_data(input_dft[:]),
+        raw_data(filter_dft[:]),
+        raw_data(result_dft[:]),
+        1.0
+    )
 
-
-    // NOTE Both DFTs need to be scrambled for this method
-    // pffft.zconvolve_accumulate(
-    //     config.pffft_setup,
-    //     raw_data(zero_padded_dft[:]),
-    //     raw_data(filter_dft[:]),
-    //     raw_data(result_dft[:]),
-    //     1.0
-    // )
+    pffft.zreorder(
+        config.pffft_setup,
+        raw_data(filter_dft),
+        raw_data(result_dft_ordered),
+        pffft.Direction.FORWARD
+    )
 
     pffft.transform_ordered(
         config.pffft_setup,
-        raw_data(result_dft[:]),
+        raw_data(result_dft_ordered[:]),
         raw_data(result_idft[:]),
         nil,
         pffft.Direction.BACKWARD
@@ -112,3 +134,83 @@ filter_process:: proc(config: NarrowBandpassFilter, input: []f32, output: []f32)
 }
 
 
+// Test FFT processing: convert to FFT, multiply FFT by allpass filter in freq domain
+//  and convert back to the time domain.
+filter_test_zreorder:: proc(config: NarrowBandpassFilter, input: []f32, output: []f32) {
+    result_dft := mem.slice_data_cast([]f32, config.result_dft[:])
+    result_idft := mem.slice_data_cast([]f32, config.result_idft[:])
+    filter_dft := mem.slice_data_cast([]f32, config.filter_dft[:])
+    input_dft := mem.slice_data_cast([]f32, config.input_dft[:])
+    result_dft_ordered := mem.slice_data_cast([]f32, config.result_dft_ordered[:])
+
+    mem.copy(
+        raw_data(config.zero_padded_input[:]),
+        raw_data(input[:]),
+        config.size*2
+    )
+
+    pffft.transform(
+        config.pffft_setup,
+        raw_data(config.zero_padded_input[:]),
+        raw_data(input_dft[:]),
+        nil,
+        pffft.Direction.FORWARD
+    )
+
+    pffft.zreorder(
+        config.pffft_setup,
+        raw_data(input_dft),
+        raw_data(result_dft_ordered),
+        pffft.Direction.FORWARD
+    )
+
+    pffft.transform_ordered(
+        config.pffft_setup,
+        raw_data(result_dft_ordered[:]),
+        raw_data(result_idft[:]),
+        nil,
+        pffft.Direction.BACKWARD
+    )
+
+    // scale by 1/N
+    for i in 0..<len(output) {
+        output[i] = config.result_idft[i] / f32(config.size)
+    }
+}
+
+
+// Test overlap FFT processing without applying a filter  (input -> FFT -> IFFT -> output).
+// The resulting output should be identical to input.
+filter_test_convert:: proc(config: NarrowBandpassFilter, input: []f32, output: []f32) {
+    result_dft := mem.slice_data_cast([]f32, config.result_dft[:])
+    result_idft := mem.slice_data_cast([]f32, config.result_idft[:])
+    filter_dft := mem.slice_data_cast([]f32, config.filter_dft[:])
+    input_dft := mem.slice_data_cast([]f32, config.input_dft[:])
+
+    mem.copy(
+        raw_data(config.zero_padded_input[:]),
+        raw_data(input[:]),
+        config.size*2
+    )
+
+    pffft.transform_ordered(
+        config.pffft_setup,
+        raw_data(config.zero_padded_input[:]),
+        raw_data(input_dft[:]),
+        nil,
+        pffft.Direction.FORWARD
+    )
+
+    pffft.transform_ordered(
+        config.pffft_setup,
+        raw_data(input_dft[:]),
+        raw_data(result_idft[:]),
+        nil,
+        pffft.Direction.BACKWARD
+    )
+
+    // scale by 1/N
+    for i in 0..<len(output) {
+        output[i] = config.result_idft[i] / f32(config.size)
+    }
+}
