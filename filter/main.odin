@@ -86,15 +86,15 @@ main :: proc() {
 
     read_wav(path=path, from=0, to=SAMPLE_COUNT, samples=ctx.samples[:])
 
-    ctx.filter_config = filter_init(256, f32(110)/f32(SAMPLERATE))
+    filter_size := 256
+    ctx.filter_config = filter_init(filter_size, f32(110)/f32(SAMPLERATE))
     defer filter_destroy(ctx.filter_config)
 
-    slice_len := ctx.filter_config.size / 2
-    for i := 0; i < len(ctx.samples); i += slice_len {
+    for i := 0; i < len(ctx.samples); i += filter_size / 2 {
         filter_test_accumulate(
             ctx.filter_config,
-            ctx.samples[i:i+slice_len],
-            ctx.filtered_samples[i:i+slice_len],
+            ctx.samples[i:],
+            ctx.filtered_samples[i:],
         )
     }
 

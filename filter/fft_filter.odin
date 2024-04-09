@@ -10,7 +10,26 @@ import "../pffft"
 // multiply FFTs and do inverse transform
 
 
+// TBD overlap add vs save scheme?
+
+
+// Overlap-add method
+
+
+
+
+
+
 NarrowBandpassFilter :: struct {
+
+    // FFT size >= block size + filter size - 1
+    filter_size: int,
+    block_size: int,
+    fft_size: int,
+
+
+
+
     size: int,
     pffft_setup: rawptr,
     zero_padded_input: []f32,
@@ -49,9 +68,10 @@ filter_init :: proc(size: int, frequency: f32) -> (config: NarrowBandpassFilter 
     // half band?
 
     for i in 0..<len(config.filter_dft) {
-        config.filter_dft[i] = complex(0, 0)
+        config.filter_dft[i] = complex(1, 0)
     }
 
+    // fmt.println(config.filter_dft)
 
     // config.filter_dft[19] = complex(1, 0)
     // config.filter_dft[20] = complex(1, 0)
@@ -114,7 +134,7 @@ filter_test_accumulate:: proc(config: NarrowBandpassFilter, input: []f32, output
 
     pffft.zreorder(
         config.pffft_setup,
-        raw_data(filter_dft),
+        raw_data(result_dft),
         raw_data(result_dft_ordered),
         pffft.Direction.FORWARD
     )
@@ -128,7 +148,7 @@ filter_test_accumulate:: proc(config: NarrowBandpassFilter, input: []f32, output
     )
 
     // scale by 1/N
-    for i in 0..<len(output) {
+    for i in 0..<config.size / 2 {
         output[i] = config.result_idft[i] / f32(config.size)
     }
 }
@@ -173,7 +193,7 @@ filter_test_zreorder:: proc(config: NarrowBandpassFilter, input: []f32, output: 
     )
 
     // scale by 1/N
-    for i in 0..<len(output) {
+    for i in 0..<config.size / 2 {
         output[i] = config.result_idft[i] / f32(config.size)
     }
 }
@@ -210,7 +230,7 @@ filter_test_convert:: proc(config: NarrowBandpassFilter, input: []f32, output: [
     )
 
     // scale by 1/N
-    for i in 0..<len(output) {
+    for i in 0..<config.size / 2 {
         output[i] = config.result_idft[i] / f32(config.size)
     }
 }
