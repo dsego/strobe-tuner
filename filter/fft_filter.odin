@@ -90,16 +90,25 @@ filter_init :: proc(
 
     config.pffft_setup = pffft.new_setup(config.fft_size, pffft.Transform.REAL)
 
+
+
     // Low-pass filter
     // h(K) = 1/N * (sin(πkK/N) / sin(πk/N))
     // K passband samples between -N/2 & N/2, N = samplerate, k = time
 
-    passband_freq :: 10000.0
+    // TODO:
+    //      pass band - multiply
+    // N-taps =  atten / 22 * (f-stop - f-pass)
+
+
+
+
+    passband_freq :: 200.0
     SAMPLERATE :: 44100.0
 
     // Append N - Q zero-valued samples to the end of the impulse
     for i in 0..<impulse_response_size {
-        config.padded_impulse_response[i] = (
+        config.padded_impulse_response[i] = blackmann_window(f32(i), f32(impulse_response_size)) * (
             math.sin(math.PI * f32(i) * passband_freq / SAMPLERATE) / math.sin(math.PI * f32(i) /SAMPLERATE)
         ) / SAMPLERATE
     }
@@ -154,10 +163,6 @@ filter_process :: proc(
     // Read inputs block by block
     for i := 0; i < len(input) - block_size; i += block_size
     {
-        if i == 0 {
-            // continue
-        }
-
         fmt.println("........Processing block", i, i+block_size)
 
         // Zero pad M samples
@@ -218,7 +223,12 @@ filter_process :: proc(
         }
 
         copy(overlap, ifft_result[block_size:])
-
-        // assert(len(overlap[:]) == len(ifft_result[block_size:]))
     }
+}
+
+
+blackmann_window :: proc (k: f32, size: f32) -> f32 {
+    shift : f32 = math.PI
+    l : f32 = shift + 2.0 * math.PI * k / (2.0 * size - 1.0)
+    return 0.42 - 0.5 * math.cos(l) + 0.08 * math.cos(2.0 * l)
 }

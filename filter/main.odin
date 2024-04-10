@@ -11,13 +11,10 @@ import rl "vendor:raylib"
 import ma "vendor:miniaudio"
 
 
-import "../pffft"
-
-
 SCREEN_WIDTH :: 1024
 SCREEN_HEIGHT :: 768
 SAMPLERATE :: 44100
-SAMPLE_COUNT :: 1024
+SAMPLE_COUNT :: 2048
 
 
 AppContext :: struct {
@@ -84,12 +81,14 @@ main :: proc() {
     defer delete(ctx.samples)
     defer delete(ctx.filtered_samples)
 
-    // read_wav(path=path, from=0, to=SAMPLE_COUNT, samples=ctx.samples)
-    for i in 0..<SAMPLE_COUNT {
-        ctx.samples[i] = 0.3 * math.sin(2.0 * math.PI * 440.0 * f32(i) / SAMPLERATE)
-    }
+    read_wav(path=path, from=0, to=SAMPLE_COUNT, samples=ctx.samples)
+    // for i in 0..<SAMPLE_COUNT {
+    //     ctx.samples[i] =
+    //         0.5 * math.sin(2.0 * math.PI * 220.0 * f32(i) / SAMPLERATE) +
+    //         0.3 * math.sin(2.0 * math.PI * 440.0 * f32(i) / SAMPLERATE)
+    // }
 
-    ctx.filter_config = filter_init(impulse_response_size=100)
+    ctx.filter_config = filter_init(impulse_response_size=200)
     defer filter_destroy(ctx.filter_config)
     filter_process(
         ctx.filter_config,
@@ -204,18 +203,24 @@ draw_screen :: proc() {
     draw_samples(rect, ctx.samples, rl.SKYBLUE, 1.0)
 
     // draw_samples(rect, ctx.filtered_samples, rl.GOLD, 1.0)
-    draw_samples(rect, ctx.filtered_samples, rl.GOLD, 1.0)
+    draw_samples(rect, ctx.filtered_samples, rl.GOLD, 10.0)
 
-    magnitude: [256]f32
+    magnitude: [512]f32
     for f, i in ctx.filter_config.padded_impulse_response_fft_ordered {
         magnitude[i] = math.sqrt(real(f) * real(f) + imag(f) * imag(f))
     }
+    // blackmann : [500]f32
+
+    // for i in 0..<len(blackmann) {
+    //     blackmann[i] = blackmann_window(f32(i), 500)
+    // }
 
 
     rect2 := rl.Rectangle{20, 350, SCREEN_WIDTH-40, 200}
     draw_freq_plot(rect2, 256, 55, SAMPLERATE/64)
-    draw_samples(rect2, magnitude[:], rl.LIME, 1.0)
-    draw_samples(rect2, ctx.filter_config.padded_impulse_response, rl.PINK, 2.0)
+    draw_samples(rect2, magnitude[:], rl.LIME, 4.0)
+    // draw_samples(rect2, ctx.filter_config.padded_impulse_response, rl.PINK, 2.0)
+    // draw_samples(rect2, blackmann[:], rl.PINK, 1.0)
 }
 
 
