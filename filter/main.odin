@@ -73,9 +73,9 @@ main :: proc() {
     defer cleanup()
 
     // path: cstring = "./media/ukulele_A3.wav"
-    // path: cstring = "./media/acoustic_A1.wav"
+    path: cstring = "./media/acoustic_A1.wav"
     // path: cstring = "./media/bass_A0.wav"
-    path: cstring = "./media/strat_A1.wav"
+    // path: cstring = "./media/strat_A1.wav"
     ctx.samples = make([]f32, SAMPLE_COUNT)
     ctx.filtered_samples = make([]f32, SAMPLE_COUNT)
     defer delete(ctx.samples)
@@ -203,7 +203,7 @@ draw_screen :: proc() {
     draw_samples(rect, ctx.samples, rl.SKYBLUE, 1.0)
 
     // draw_samples(rect, ctx.filtered_samples, rl.GOLD, 1.0)
-    draw_samples(rect, ctx.filtered_samples, rl.GOLD, 10.0)
+    draw_samples(rect, ctx.filtered_samples, rl.GOLD, 100.0)
 
     // magnitude: [512]f32
     // for f, i in ctx.filter_config.padded_impulse_response_fft_ordered {

@@ -102,9 +102,6 @@ filter_init :: proc(
     //      pass band - multiply by sine
 
 
-
-
-
     passband_freq :: 55.0
     SAMPLERATE :: 44100.0
 
