@@ -24,7 +24,7 @@ AppContext :: struct {
     font: rl.Font,
     samples: []f32,
     filtered_samples: []f32,
-    filter_config: NarrowBandpassFilter,
+    filter_config: FilterConfig,
 }
 
 ctx := AppContext{}
@@ -45,7 +45,7 @@ read_wav :: proc(path: cstring, from: u64, to: u64, samples: []f32) {
     frames_to_read : u64 = to - from
 
     ma.decoder_seek_to_pcm_frame(&decoder, 1000)
-    ma.decoder_read_pcm_frames(&decoder, raw_data(samples[:]), frames_to_read, nil)
+    ma.decoder_read_pcm_frames(&decoder, raw_data(samples), frames_to_read, nil)
 }
 
 // run_filter :: proc(samples: []f32, impulse: []f32, out: []f32) {
@@ -84,19 +84,18 @@ main :: proc() {
     defer delete(ctx.samples)
     defer delete(ctx.filtered_samples)
 
-    read_wav(path=path, from=0, to=SAMPLE_COUNT, samples=ctx.samples[:])
-
-    filter_size := 256
-    ctx.filter_config = filter_init(filter_size, f32(110)/f32(SAMPLERATE))
-    defer filter_destroy(ctx.filter_config)
-
-    for i := 0; i < len(ctx.samples); i += filter_size / 2 {
-        filter_test_accumulate(
-            ctx.filter_config,
-            ctx.samples[i:],
-            ctx.filtered_samples[i:],
-        )
+    // read_wav(path=path, from=0, to=SAMPLE_COUNT, samples=ctx.samples)
+    for i in 0..<SAMPLE_COUNT {
+        ctx.samples[i] = 0.3 * math.sin(2.0 * math.PI * 440.0 * f32(i) / SAMPLERATE)
     }
+
+    ctx.filter_config = filter_init(impulse_response_size=100)
+    defer filter_destroy(ctx.filter_config)
+    filter_process(
+        ctx.filter_config,
+        ctx.samples,
+        ctx.filtered_samples,
+    )
 
     for !rl.WindowShouldClose() {
         draw_screen()
@@ -124,13 +123,13 @@ draw_samples :: proc(
         points[i] = { x, y }
         x += px_per_sample
     }
-    rl.DrawLineStrip(raw_data(points[:]), i32(l), color)
+    rl.DrawLineStrip(raw_data(points), i32(l), color)
 
     // TODO:
     //  if pixel frequency > sample frequency, connect with lines
     //  if pixel freq < sample freq, calculate min-max sample in group & draw vertical line
 
-    // rl.DrawTriangleStrip(raw_data(points[:]), i32(l), color)
+    // rl.DrawTriangleStrip(raw_data(points), i32(l), color)
 
     // for px in 0..<rect.width {
         // get the avg of samples
@@ -160,7 +159,15 @@ draw_time_plot :: proc(using rect: rl.Rectangle, len_samples: int, div_ms: f32) 
         rl.DrawLineEx({px, y}, {px, y+height}, 0.5, rl.GRAY)
         rl.DrawTextEx(ctx.font, fmt.ctprintf("%.0fms", d), {px, y+height+8}, 16, 0, rl.GRAY)
     }
+
+    // Debug - add FFT window borders
+    px_per_sample := width / f32(len_samples)
+    step := px_per_sample * 157.0
+    minor_step := px_per_sample * 99.0
+    rl.DrawLineEx({x+step, y}, {x+step, y+height}, 0.5, rl.VIOLET)
+    rl.DrawLineEx({x+step+minor_step, y}, {x+step+minor_step, y+height}, 0.5, rl.VIOLET)
 }
+
 
 draw_freq_plot :: proc(using rect: rl.Rectangle, len_points: int, div_hz: f32, range_hz: int) {
     // Horizontal lines at 1,0,-1
@@ -191,21 +198,24 @@ draw_screen :: proc() {
     rl.ClearBackground(rl.BLACK)
 
     // SAMPLERATE
-    rect := rl.Rectangle{20, 20, SCREEN_WIDTH-40, 200}
+    rect := rl.Rectangle{20, 20, SCREEN_WIDTH-40, 300}
     div_ms := f32(1000.0 / 110.0)
     draw_time_plot(rect, len(ctx.samples), div_ms)
-    draw_samples(rect, ctx.samples, rl.PINK, 2.0)
+    draw_samples(rect, ctx.samples, rl.SKYBLUE, 1.0)
 
-    rect = rl.Rectangle{20, 20, SCREEN_WIDTH-40, 200}
+    // draw_samples(rect, ctx.filtered_samples, rl.GOLD, 1.0)
     draw_samples(rect, ctx.filtered_samples, rl.GOLD, 1.0)
 
-    // magnitude: [8192]f32
-    // for f, i in ctx.filter_config.filter_dft {
-    //     magnitude[i] = math.sqrt(real(f) * real(f) + imag(f) * imag(f))
-    // }
+    magnitude: [256]f32
+    for f, i in ctx.filter_config.padded_impulse_response_fft_ordered {
+        magnitude[i] = math.sqrt(real(f) * real(f) + imag(f) * imag(f))
+    }
 
 
-    // rect2 := rl.Rectangle{20, 350, SCREEN_WIDTH-40, 200}
-    // draw_freq_plot(rect2, 256, 55, SAMPLERATE/64)
-    // draw_samples(rect2, magnitude[:256], rl.LIME, 1.0, 1.0)
+    rect2 := rl.Rectangle{20, 350, SCREEN_WIDTH-40, 200}
+    draw_freq_plot(rect2, 256, 55, SAMPLERATE/64)
+    draw_samples(rect2, magnitude[:], rl.LIME, 1.0)
+    draw_samples(rect2, ctx.filter_config.padded_impulse_response, rl.PINK, 2.0)
 }
+
+

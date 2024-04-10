@@ -1,5 +1,9 @@
 package pffft
 
+
+// Building pffft:
+//    clang pffft.c pffft.h -c -O2 -Os -fPIC
+//    ar rcs pffft.a pffft.o
 foreign import lib "pffft.a"
 
 Direction :: enum {

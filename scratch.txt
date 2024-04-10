@@ -18,15 +18,6 @@ Amplitude Analysis: Root-mean-square EMG Envelope
 https://delsys.com/amplitude-analysis-root-mean-square-emg-envelope/
 
 
-Damped Springs
-https://www.ryanjuckett.com/damped-springs/
-
-Gaussian function
-https://en.wikipedia.org/wiki/Gaussian_function
-
-
-filtfilt | Zero-phase digital filtering
-https://nl.mathworks.com/help/signal/ref/filtfilt.html
 
 
 Applied DSP No. 9: The z-Domain and Parametric Filter Design
