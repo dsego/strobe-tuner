@@ -66,6 +66,8 @@ FilterConfig :: struct {
 filter_init :: proc(
     impulse_response_size: int,
 ) -> (config: FilterConfig = {}) {
+    // Taps needed:
+    //      N-taps =  attenuation / 22 * (f-stop - f-pass)
 
     // FIR filter's impulse response is Q
     config.impulse_response_size = impulse_response_size
@@ -97,20 +99,25 @@ filter_init :: proc(
     // K passband samples between -N/2 & N/2, N = samplerate, k = time
 
     // TODO:
-    //      pass band - multiply
-    // N-taps =  atten / 22 * (f-stop - f-pass)
+    //      pass band - multiply by sine
 
 
 
 
-    passband_freq :: 200.0
+
+    passband_freq :: 55.0
     SAMPLERATE :: 44100.0
 
     // Append N - Q zero-valued samples to the end of the impulse
     for i in 0..<impulse_response_size {
-        config.padded_impulse_response[i] = blackmann_window(f32(i), f32(impulse_response_size)) * (
-            math.sin(math.PI * f32(i) * passband_freq / SAMPLERATE) / math.sin(math.PI * f32(i) /SAMPLERATE)
-        ) / SAMPLERATE
+        config.padded_impulse_response[i] = (
+            blackmann_window(f32(i), f32(impulse_response_size)) *
+            math.sin(math.PI * f32(i) * passband_freq / SAMPLERATE) *
+            (
+                math.sin(math.PI * f32(i) * passband_freq / SAMPLERATE) / math.sin(math.PI * f32(i) /SAMPLERATE)
+            ) / SAMPLERATE
+
+        )
     }
     config.padded_impulse_response[0] = passband_freq / SAMPLERATE
 

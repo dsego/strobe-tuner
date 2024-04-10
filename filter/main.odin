@@ -88,7 +88,7 @@ main :: proc() {
     //         0.3 * math.sin(2.0 * math.PI * 440.0 * f32(i) / SAMPLERATE)
     // }
 
-    ctx.filter_config = filter_init(impulse_response_size=200)
+    ctx.filter_config = filter_init(impulse_response_size=400)
     defer filter_destroy(ctx.filter_config)
     filter_process(
         ctx.filter_config,
@@ -205,10 +205,10 @@ draw_screen :: proc() {
     // draw_samples(rect, ctx.filtered_samples, rl.GOLD, 1.0)
     draw_samples(rect, ctx.filtered_samples, rl.GOLD, 10.0)
 
-    magnitude: [512]f32
-    for f, i in ctx.filter_config.padded_impulse_response_fft_ordered {
-        magnitude[i] = math.sqrt(real(f) * real(f) + imag(f) * imag(f))
-    }
+    // magnitude: [512]f32
+    // for f, i in ctx.filter_config.padded_impulse_response_fft_ordered {
+    //     magnitude[i] = math.sqrt(real(f) * real(f) + imag(f) * imag(f))
+    // }
     // blackmann : [500]f32
 
     // for i in 0..<len(blackmann) {
@@ -216,9 +216,9 @@ draw_screen :: proc() {
     // }
 
 
-    rect2 := rl.Rectangle{20, 350, SCREEN_WIDTH-40, 200}
-    draw_freq_plot(rect2, 256, 55, SAMPLERATE/64)
-    draw_samples(rect2, magnitude[:], rl.LIME, 4.0)
+    // rect2 := rl.Rectangle{20, 350, SCREEN_WIDTH-40, 200}
+    // draw_freq_plot(rect2, 256, 55, SAMPLERATE/64)
+    // draw_samples(rect2, magnitude[:], rl.LIME, 4.0)
     // draw_samples(rect2, ctx.filter_config.padded_impulse_response, rl.PINK, 2.0)
     // draw_samples(rect2, blackmann[:], rl.PINK, 1.0)
 }

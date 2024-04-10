@@ -1,5 +1,16 @@
 
 
+Ignore filter for now
+
+
+try autocorrelation and freq locking
+
+
+
+
+
+----------------
+
 Fast and Efficient Pitch Detection: Bitstream Autocorrelation
 https://www.cycfi.com/2018/03/fast-and-efficient-pitch-detection-bitstream-autocorrelation/
 
