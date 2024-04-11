@@ -35,6 +35,10 @@
     10. Optimize N to minimize computation workload, N >= M + Q - 1
 
 
+    TODO:
+
+    Can we improve the performance by zero padding (upsampling) the response FFT?
+
 */
 
 

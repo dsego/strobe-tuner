@@ -68,6 +68,8 @@ main :: proc() {
     samples := make([]f32, SAMPLE_COUNT)
     defer delete(samples)
 
+    // read_wav(path=path, from=0, to=SAMPLE_COUNT, samples=samples)
+
     samples_1 := make([]f32, SAMPLE_COUNT)
     defer delete(samples_1)
 
@@ -93,12 +95,6 @@ main :: proc() {
     band_4 := make([]f32, SAMPLE_COUNT)
     defer delete(band_4)
 
-    res_1 := biquad_resonator(55.0 / SAMPLERATE, 20.0 / SAMPLERATE)
-    res_2 := biquad_resonator(110.0 / SAMPLERATE, 40.0 / SAMPLERATE)
-    res_3 := biquad_resonator(220.0 / SAMPLERATE, 50.0 / SAMPLERATE)
-    res_4 := biquad_resonator(440.0 / SAMPLERATE, 100.0 / SAMPLERATE)
-
-    // read_wav(path=path, from=0, to=SAMPLE_COUNT, samples=samples)
 
     phase := f32(0.0)
 
@@ -128,11 +124,16 @@ main :: proc() {
             )
         }
 
+        res_1 := biquad_resonator(55.0 / SAMPLERATE, 5.0 / SAMPLERATE)
+        res_2 := biquad_resonator(110.0 / SAMPLERATE, 20.0 / SAMPLERATE)
+        res_3 := biquad_resonator(220.0 / SAMPLERATE, 50.0 / SAMPLERATE)
+        res_4 := biquad_resonator(440.0 / SAMPLERATE, 100.0 / SAMPLERATE)
+
+
         biquad_process(&res_1, samples, band_1)
         biquad_process(&res_2, samples, band_2)
         biquad_process(&res_3, samples, band_3)
         biquad_process(&res_4, samples, band_4)
-
 
 
         rect := rl.Rectangle{20, 20, SCREEN_WIDTH-40, 100}
@@ -143,7 +144,7 @@ main :: proc() {
         rect = rl.Rectangle{20, 150, SCREEN_WIDTH-40, 100}
         draw_time_plot(rect, len(samples), div_ms)
         draw_samples(rect, samples_1, rl.VIOLET, 1.0)
-        draw_samples(rect, band_1, rl.GOLD, 1.0)
+        draw_samples(rect, band_1, rl.GOLD, 5.0)
 
         rect = rl.Rectangle{20, 300, SCREEN_WIDTH-40, 100}
         draw_time_plot(rect, len(samples), div_ms)

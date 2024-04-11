@@ -1,18 +1,5 @@
 
 
-IIR filter phase delay not important??
-
-I only care about phase response of the resonating area
-https://dsego.github.io/pole-zero/
-
-Test this!
-
-construct a signal of 4 sines of different freqs
-apply 4 iir filter, plot one below the other and compare phases
-
-
-
-
 
 -----
 
@@ -21,7 +8,6 @@ FSF filter !!!!
 
 goertzel?
 
-for FFT filter, can we improve the performance by zero padding the fft ??
 
 
 
