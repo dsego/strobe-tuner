@@ -1,11 +1,27 @@
 
 
-Ignore filter for now
+IIR filter phase delay not important??
+
+I only care about phase response of the resonating area
+https://dsego.github.io/pole-zero/
+
+Test this!
+
+construct a signal of 4 sines of different freqs
+apply 4 iir filter, plot one below the other and compare phases
 
 
-try autocorrelation and freq locking
 
 
+
+-----
+
+
+FSF filter !!!!
+
+goertzel?
+
+for FFT filter, can we improve the performance by zero padding the fft ??
 
 
 
@@ -80,24 +96,11 @@ complex wavelet convolution ? + magnitude filter ???
 
 
 
-# pitch detection
 
-Bitstream Autocorrelation for pitch detection
-https://www.cycfi.com/2018/03/fast-and-efficient-pitch-detection-bitstream-autocorrelation/
-
-
-Fast and Efficient Pitch Detection
-https://www.cycfi.com/2017/10/fast-and-efficient-pitch-detection/
 
 
 Envelope detection
 https://delsys.com/amplitude-analysis-root-mean-square-emg-envelope/
-
-
-Auto-correlation using FFT
-https://dsp.stackexchange.com/questions/1919/efficiently-calculating-autocorrelation-using-ffts
-https://dsp.stackexchange.com/questions/10858/autocorrelation-using-fft-of-power-spectrum
-https://stackoverflow.com/questions/3949324/calculate-autocorrelation-using-fft-in-matlab
 
 Pitch detection algos in C++
 https://github.com/sevagh/pitch-detection
@@ -107,16 +110,3 @@ https://gist.github.com/endolith/255291
 
 
 
-
-- lp sinc
-sinc
-blackman
-normalize for unity gain
-
-
-- hp sinc
-blackman window
-multiply sinc by blackman window
-sum of coeffs
-divide by sum to normalize
-Spectrally invert (negate samples, add 1 to center sample)

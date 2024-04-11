@@ -1,4 +1,4 @@
-package ac
+package resonator
 
 import "core:fmt"
 import "core:log"
@@ -10,7 +10,7 @@ import "core:runtime"
 import rl "vendor:raylib"
 import ma "vendor:miniaudio"
 
-import "../pffft"
+import "../resonator"
 
 
 SCREEN_WIDTH :: 1024
@@ -61,50 +61,46 @@ main :: proc() {
     defer cleanup()
 
     // path: cstring = "./media/ukulele_A3.wav"
-    // path: cstring = "./media/acoustic_A1.wav"
+    path: cstring = "./media/acoustic_A1.wav"
     // path: cstring = "./media/bass_A0.wav"
-    path: cstring = "./media/strat_A1.wav"
+    // path: cstring = "./media/strat_A1.wav"
 
     samples := make([]f32, SAMPLE_COUNT)
     defer delete(samples)
 
-    fft := make([]complex64, SAMPLE_COUNT)
-    defer delete(fft)
+    samples_1 := make([]f32, SAMPLE_COUNT)
+    defer delete(samples_1)
 
-    fft_conj_product := make([]complex64, SAMPLE_COUNT)
-    defer delete(fft_conj_product)
+    samples_2 := make([]f32, SAMPLE_COUNT)
+    defer delete(samples_2)
 
-    autocorrelation := make([]f32, SAMPLE_COUNT)
-    defer delete(autocorrelation)
+    samples_3 := make([]f32, SAMPLE_COUNT)
+    defer delete(samples_3)
 
-    read_wav(path=path, from=0, to=SAMPLE_COUNT, samples=samples)
+    samples_4 := make([]f32, SAMPLE_COUNT)
+    defer delete(samples_4)
 
 
-    // Taking the FFT of the segment of interest,
-    // multiplying it by its complex conjugate,
-    // then taking the inverse FFT will give us the cyclic auto-correlation.
+    band_1 := make([]f32, SAMPLE_COUNT)
+    defer delete(band_1)
 
-    pffft_setup := pffft.new_setup(SAMPLE_COUNT, pffft.Transform.REAL)
+    band_2 := make([]f32, SAMPLE_COUNT)
+    defer delete(band_2)
 
-    pffft.transform_ordered(
-        pffft_setup,
-        raw_data(samples),
-        raw_data(mem.slice_data_cast([]f32, fft)),
-        nil,
-        pffft.Direction.FORWARD
-    )
+    band_3 := make([]f32, SAMPLE_COUNT)
+    defer delete(band_3)
 
-    for i in 0..<len(fft) {
-        fft_conj_product[i] = fft[i] * conj(fft[i])
-    }
+    band_4 := make([]f32, SAMPLE_COUNT)
+    defer delete(band_4)
 
-    pffft.transform_ordered(
-        pffft_setup,
-        raw_data(mem.slice_data_cast([]f32, fft_conj_product)),
-        raw_data(autocorrelation),
-        nil,
-        pffft.Direction.BACKWARD
-    )
+    res_1 := biquad_resonator(55.0 / SAMPLERATE, 20.0 / SAMPLERATE)
+    res_2 := biquad_resonator(110.0 / SAMPLERATE, 40.0 / SAMPLERATE)
+    res_3 := biquad_resonator(220.0 / SAMPLERATE, 50.0 / SAMPLERATE)
+    res_4 := biquad_resonator(440.0 / SAMPLERATE, 100.0 / SAMPLERATE)
+
+    // read_wav(path=path, from=0, to=SAMPLE_COUNT, samples=samples)
+
+    phase := f32(0.0)
 
 
     for !rl.WindowShouldClose() {
@@ -113,11 +109,57 @@ main :: proc() {
 
         rl.ClearBackground(rl.BLACK)
 
-        rect := rl.Rectangle{20, 20, SCREEN_WIDTH-40, 300}
+        if rl.IsKeyDown(rl.KeyboardKey.RIGHT) {
+            phase -= math.PI / 8.0
+        }
+        else if rl.IsKeyDown(rl.KeyboardKey.LEFT) {
+            phase += math.PI / 8.0
+        }
+        for i in 0..<SAMPLE_COUNT {
+            samples_1[i] = 0.5 * math.sin(phase + 2.0 * math.PI * 55.0 * f32(i) / SAMPLERATE)
+            samples_2[i] = 0.5 * math.sin(phase + (2.0 * math.PI * 110.0) * f32(i) / SAMPLERATE)
+            samples_3[i] = 0.2 * math.sin(phase + (2.0 * math.PI * 220.0) * f32(i) / SAMPLERATE)
+            samples_4[i] = 0.2 * math.sin(phase + (2.0 * math.PI * 440.0) * f32(i) / SAMPLERATE)
+            samples[i] = (
+                samples_1[i] +
+                samples_2[i] +
+                samples_3[i] +
+                samples_4[i]
+            )
+        }
+
+        biquad_process(&res_1, samples, band_1)
+        biquad_process(&res_2, samples, band_2)
+        biquad_process(&res_3, samples, band_3)
+        biquad_process(&res_4, samples, band_4)
+
+
+
+        rect := rl.Rectangle{20, 20, SCREEN_WIDTH-40, 100}
         div_ms := f32(1000.0 / 110.0)
         draw_time_plot(rect, len(samples), div_ms)
         draw_samples(rect, samples, rl.PINK, 1.0)
-        draw_samples(rect, autocorrelation, rl.GOLD, 1.0/200000)
+
+        rect = rl.Rectangle{20, 150, SCREEN_WIDTH-40, 100}
+        draw_time_plot(rect, len(samples), div_ms)
+        draw_samples(rect, samples_1, rl.VIOLET, 1.0)
+        draw_samples(rect, band_1, rl.GOLD, 1.0)
+
+        rect = rl.Rectangle{20, 300, SCREEN_WIDTH-40, 100}
+        draw_time_plot(rect, len(samples), div_ms)
+        draw_samples(rect, samples_2, rl.VIOLET, 1.0)
+        draw_samples(rect, band_2, rl.GOLD, 1.0)
+
+        rect = rl.Rectangle{20, 450, SCREEN_WIDTH-40, 100}
+        draw_time_plot(rect, len(samples), div_ms)
+        draw_samples(rect, samples_3, rl.VIOLET, 1.0)
+        draw_samples(rect, band_3, rl.GOLD, 1.0)
+
+        rect = rl.Rectangle{20, 600, SCREEN_WIDTH-40, 100}
+        draw_time_plot(rect, len(samples), div_ms)
+        draw_samples(rect, samples_4, rl.VIOLET, 1.0)
+        draw_samples(rect, band_4, rl.GOLD, 1.0)
+
     }
 }
 
