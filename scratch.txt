@@ -27,6 +27,3 @@ popravit framerate da ukljucuje n semplova s lijeve strane? - OVO
 framerate - interpolate signal before sending to display
 
 
-gaussian in freq. domain?
-
-

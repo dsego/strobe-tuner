@@ -62,7 +62,7 @@ main :: proc() {
 
     // path: cstring = "./media/ukulele_A4.wav"
     path: cstring = "./media/acoustic_A2.wav"
-    // path: cstring = "./media/bass_A0.wav"
+    // path: cstring = "./media/bass_A1.wav"
     // path: cstring = "./media/strat_A2.wav"
 
     samples := make([]f32, SAMPLE_COUNT)
@@ -113,9 +113,9 @@ main :: proc() {
         }
         for i in 0..<SAMPLE_COUNT {
             samples_1[i] = 0.5 * math.sin(phase + (2.0 * math.PI * 55.0) * f32(i) / SAMPLERATE)
-            samples_2[i] = 0.5 * math.sin(phase + (2.0 * math.PI * 110.0) * f32(i) / SAMPLERATE)
-            samples_3[i] = 0.2 * math.sin(phase + (2.0 * math.PI * 220.0) * f32(i) / SAMPLERATE)
-            samples_4[i] = 0.2 * math.sin(phase + (2.0 * math.PI * 440.0) * f32(i) / SAMPLERATE)
+            samples_2[i] = 0.5 * math.sin(2*phase + (2.0 * math.PI * 110.0) * f32(i) / SAMPLERATE)
+            samples_3[i] = 0.2 * math.sin(4*phase + (2.0 * math.PI * 220.0) * f32(i) / SAMPLERATE)
+            samples_4[i] = 0.2 * math.sin(8*phase + (2.0 * math.PI * 440.0) * f32(i) / SAMPLERATE)
             samples[i] = (
                 samples_1[i] +
                 samples_2[i] +
