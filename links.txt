@@ -43,4 +43,6 @@ Simple frequency estimation methods
 https://gist.github.com/endolith/255291
 
 
-
+Parabolic interpolation
+https://ccrma.stanford.edu/~jos/SpecAnal/Parabolic_Interpolation.html
+https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html

@@ -38,8 +38,8 @@ main :: proc() {
     init()
     defer cleanup()
 
-    path: cstring = "./media/ukulele_A4.wav"
-    // path: cstring = "./media/acoustic_A2.wav"
+    // path: cstring = "./media/ukulele_A4.wav"
+    path: cstring = "./media/acoustic_A2.wav"
     // path: cstring = "./media/bass_A0.wav"
     // path: cstring = "./media/strat_A2.wav"
 
@@ -49,7 +49,7 @@ main :: proc() {
     helpers.read_wav(path=path, from=2150, frames_to_read=SAMPLE_COUNT, samples=samples)
 
 
-    pitch_config := pitch_init(fft_size=SAMPLE_COUNT)
+    pitch_config := pitch_init(fft_size=SAMPLE_COUNT, samplerate=SAMPLERATE)
     defer pitch_destroy(pitch_config)
 
     pitch_detect(pitch_config, samples)

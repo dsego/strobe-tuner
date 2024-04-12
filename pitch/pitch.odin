@@ -14,14 +14,16 @@ PitchConfig :: struct {
     fft: []complex64,
     fft_conj_product: []complex64,
     autocorrelation: []f32,
+    samplerate: int,
     // padded_samples: []f32,
 }
 
-pitch_init :: proc (fft_size: int) -> (config: PitchConfig = {}) {
+pitch_init :: proc (fft_size: int, samplerate: int) -> (config: PitchConfig = {}) {
     config.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
     config.fft = make([]complex64, fft_size)
     config.fft_conj_product = make([]complex64, fft_size)
     config.autocorrelation = make([]f32, fft_size)
+    config.samplerate = samplerate
     // config.padded_samples = make([]f32, fft_size)
     return
 }
@@ -65,9 +67,10 @@ pitch_detect :: proc (using config: PitchConfig, samples: []f32) -> f32 {
 
     // Find the first maximum peak lag
 
-    lag := f32(0.0)
+    lag := 0
     min := 0
     max := 0
+    estimated_freq := f32(-1)
 
     i := 0
     for i < len(autocorrelation) - 1 {
@@ -89,14 +92,34 @@ pitch_detect :: proc (using config: PitchConfig, samples: []f32) -> f32 {
         }
         fmt.println("Found local max at", i)
 
-        if autocorrelation[i] > 0.5 * autocorrelation[0] {
-            lag = f32(i)
-            fmt.println("Found peak lag", i)
-            fmt.println("Estimated frequency Hz", 44100.0 / f32(i) )
+        // TODO: find out the optimal threshold based on value at zero lag
+        threshold := 0.5 * autocorrelation[0]
+
+        if autocorrelation[i] > threshold {
+            lag = i
+            fmt.println("Found peak at lag", i)
+            estimated_freq = f32(samplerate) / f32(i)
+            fmt.println("Estimated frequency Hz", estimated_freq)
             break
         }
     }
 
+    // Parabolic interpolation to find the more accurate peak location
+    // https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
 
-    return lag
+    /*
+    alpha := autocorrelation[lag-1]
+    beta := autocorrelation[lag]
+    gamma := autocorrelation[lag+1]
+    peak_location := 0.5 * (alpha - gamma) / (alpha - 2.0 * beta + gamma)
+
+
+    improved_lag := f32(lag) + peak_location
+    estimated_freq := f32(samplerate) / improved_lag
+    fmt.println("Interpolated peak location", improved_lag)
+    fmt.println("Estimated frequency improved Hz", estimated_freq)
+
+    */
+
+    return estimated_freq
 }
