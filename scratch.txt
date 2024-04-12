@@ -20,92 +20,13 @@ IIR scaling filter gain  / page 300
 Automatic Gain control AGC - / page 783
 Envelope detection / page 784
 
-
-
-
-
-----------------
-
-Fast and Efficient Pitch Detection: Bitstream Autocorrelation
-https://www.cycfi.com/2018/03/fast-and-efficient-pitch-detection-bitstream-autocorrelation/
-
-Fast and Efficient Pitch Detection: Double Trouble
-https://www.cycfi.com/2017/11/fast-and-efficient-pitch-detection-double-trouble/
-
-Fast and Efficient Pitch Detection
-https://www.cycfi.com/2017/10/fast-and-efficient-pitch-detection/
-
-
-A few simple frequency estimation methods in Python
-https://gist.github.com/endolith/255291
-
-
-Amplitude Analysis: Root-mean-square EMG Envelope
-https://delsys.com/amplitude-analysis-root-mean-square-emg-envelope/
-
-
-
-
-Applied DSP No. 9: The z-Domain and Parametric Filter Design
-https://www.youtube.com/watch?v=xIN5Mnj_MAk&t=371s
-=====================================================
-
-
-
-kokkinizita.linuxaudio.org/linuxaudio/zita-resampler/resampler.html
-
-
-Frequency Locked Synth??
-https://www.cycfi.com/2017/10/fast-and-efficient-pitch-detection/
-AGC and a Period Trigger (detecting positive and negative peaks.)
-
-
-4 strobes
-choice of 48/96hz for better time resolution
-
-
-
-
-filtering freq bands  - fir, iir, fsf, goertzel filter?
-
-
-auto gain for strobe pattern
-
-note detection
-
-
 ----
-
 
 
 popravit framerate da ukljucuje n semplova s lijeve strane? - OVO
 framerate - interpolate signal before sending to display
 
 
-
-
-
 gaussian in freq. domain?
-
-
-
-complex wavelet convolution ? + magnitude filter ???
-
-
-
-
-
-
-
-
-Envelope detection
-https://delsys.com/amplitude-analysis-root-mean-square-emg-envelope/
-
-Pitch detection algos in C++
-https://github.com/sevagh/pitch-detection
-
-Simple frequency estimation methods
-https://gist.github.com/endolith/255291
-
 
 

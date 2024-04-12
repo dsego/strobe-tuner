@@ -61,9 +61,9 @@ main :: proc() {
     defer cleanup()
 
     // path: cstring = "./media/ukulele_A3.wav"
-    path: cstring = "./media/acoustic_A1.wav"
+    path: cstring = "./media/acoustic_A2.wav"
     // path: cstring = "./media/bass_A0.wav"
-    // path: cstring = "./media/strat_A1.wav"
+    // path: cstring = "./media/strat_A2.wav"
 
     samples := make([]f32, SAMPLE_COUNT)
     defer delete(samples)
