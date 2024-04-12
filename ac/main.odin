@@ -1,3 +1,6 @@
+// Testing autocorrelation
+
+
 package ac
 
 import "core:fmt"

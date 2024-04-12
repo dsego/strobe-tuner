@@ -1,12 +1,25 @@
 
 
+how to improve IIR response at low frequency????
+oversample, decimate ??
+
 
 -----
 
 
-FSF filter !!!!
+FSF filter / pg 392
+
+two pole / many zeroes iir filter ?
 
 goertzel?
+
+
+IIR scaling filter gain  / page 300
+
+
+Automatic Gain control AGC - / page 783
+Envelope detection / page 784
+
 
 
 

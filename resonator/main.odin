@@ -112,7 +112,7 @@ main :: proc() {
             phase += math.PI / 8.0
         }
         for i in 0..<SAMPLE_COUNT {
-            samples_1[i] = 0.5 * math.sin(phase + 2.0 * math.PI * 55.0 * f32(i) / SAMPLERATE)
+            samples_1[i] = 0.5 * math.sin(phase + (2.0 * math.PI * 55.0) * f32(i) / SAMPLERATE)
             samples_2[i] = 0.5 * math.sin(phase + (2.0 * math.PI * 110.0) * f32(i) / SAMPLERATE)
             samples_3[i] = 0.2 * math.sin(phase + (2.0 * math.PI * 220.0) * f32(i) / SAMPLERATE)
             samples_4[i] = 0.2 * math.sin(phase + (2.0 * math.PI * 440.0) * f32(i) / SAMPLERATE)
