@@ -46,3 +46,14 @@ https://gist.github.com/endolith/255291
 Parabolic interpolation
 https://ccrma.stanford.edu/~jos/SpecAnal/Parabolic_Interpolation.html
 https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
+
+
+
+Minimal macos window
+
+https://gist.github.com/Lperlind/1bb993a1c0f1acdd49080fd4852f95c5
+
+
+
+MetalKit
+https://developer.apple.com/documentation/metal/using_metal_to_draw_a_view_s_contents

@@ -27,3 +27,54 @@ popravit framerate da ukljucuje n semplova s lijeve strane? - OVO
 framerate - interpolate signal before sending to display
 
 
+--------
+
+should pitch be run frequent and then averaged across blocks to smooth?
+should the ffts overlap?
+
+
+
+
+samplerBuffer ???
+
+
+ints, floats, pointers are atomic?
+
+
+RENDERING
+
+
+prototype ---> raylib
+metal_app/
+    shaders.odin
+    main.odin       // init audio, rendering, run the main loop, pitch detect
+    display.odin    // draw display & strobes, draw note, indicators
+
+core/
+    pitch.odin
+        -> keep buffer for fft
+        -> append new frames and remove old frames (overlap)
+        -> run correlation -> produce a list of frequency estimates
+
+    audio_capture.odin
+        -> send frames to pitch
+    framerate.odin
+    strobe.odin          // read samples --> iir filter, gain, process
+
+
+
+
+read audio from ring buffer
+    -> pitch detection
+        -> set framerate target freq
+        -> set strobe iir filters
+
+    -> framerate -> send samples to strobes
+        -> strobe processing
+
+
+draw window
+    -> draw detected note
+    -> read strobe data -> strobe display
+
+

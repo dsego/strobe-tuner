@@ -41,7 +41,7 @@ Example run:
 */
 
 
-@test
+@(test)
 test_calculate_framerate :: proc(t: ^testing.T) {
     interval := f64(109.09)
 

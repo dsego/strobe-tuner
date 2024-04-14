@@ -203,7 +203,7 @@ draw_screen :: proc() {
     draw_samples(rect, ctx.samples, rl.SKYBLUE, 1.0)
 
     // draw_samples(rect, ctx.filtered_samples, rl.GOLD, 1.0)
-    draw_samples(rect, ctx.filtered_samples, rl.GOLD, 100.0)
+    draw_samples(rect, ctx.filtered_samples, rl.GOLD, 10.0)
 
     // magnitude: [512]f32
     // for f, i in ctx.filter_config.padded_impulse_response_fft_ordered {

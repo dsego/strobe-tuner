@@ -107,7 +107,6 @@ pitch_detect :: proc (using config: PitchConfig, samples: []f32) -> f32 {
     // Parabolic interpolation to find the more accurate peak location
     // https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
 
-    /* COMMENT OUT FOR PARABOLIC INTERPOLATION
     alpha := autocorrelation[lag-1]
     beta := autocorrelation[lag]
     gamma := autocorrelation[lag+1]
@@ -118,8 +117,6 @@ pitch_detect :: proc (using config: PitchConfig, samples: []f32) -> f32 {
     estimated_freq = f32(samplerate) / improved_lag
     fmt.println("Interpolated peak location", improved_lag)
     fmt.println("Estimated frequency improved Hz", estimated_freq)
-    */
-
 
     return estimated_freq
 }

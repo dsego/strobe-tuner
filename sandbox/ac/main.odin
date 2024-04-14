@@ -13,7 +13,7 @@ import "core:runtime"
 import rl "vendor:raylib"
 import ma "vendor:miniaudio"
 
-import "../pffft"
+import "../../pffft"
 
 
 SCREEN_WIDTH :: 1024

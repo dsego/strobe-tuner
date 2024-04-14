@@ -48,7 +48,7 @@ import "core:fmt"
 import "core:mem"
 import "core:math"
 
-import "../pffft"
+import "../../pffft"
 
 
 FilterConfig :: struct {
@@ -106,7 +106,7 @@ filter_init :: proc(
     //      pass band - multiply by sine
 
 
-    passband_freq :: 55.0
+    passband_freq :: 110.0
     SAMPLERATE :: 44100.0
 
     // Append N - Q zero-valued samples to the end of the impulse

@@ -39,9 +39,31 @@ target_freq := 49.00
 target_interval := f64(SAMPLERATE) / target_freq
 frame_counter_real := 0.0
 
+
+log_callback :: proc "c" (pUserData: rawptr, level: u32, pMessage: cstring) {
+    context = runtime.default_context()
+    // switch level {
+    // case ma.log_level.LOG_LEVEL_DEBUG:
+    // case ma.log_level.LOG_LEVEL_INFO:
+    // case ma.log_level.LOG_LEVEL_WARNING:
+    // case ma.log_level.LOG_LEVEL_ERROR:
+    // case: // Ignore everything else
+    // }
+
+    fmt.println(pMessage)
+}
+
 audio_capture_callback :: proc "cdecl" (device: ^ma.device, output, input: rawptr, frame_count: u32) {
     data_ptr : rawptr
     frames_left := frame_count
+
+    // 480 frames
+    // ma.log_postf(
+    //     ma.device_get_log(device),
+    //     u32(ma.log_level.LOG_LEVEL_INFO),
+    //     "frame count: %i",
+    //     frame_count
+    // )
 
     // Capture samples and write to a ring buffer.
     for {
@@ -104,7 +126,7 @@ init_audio_capture :: proc() {
     fmt.println("..................................\n")
 
     // set BlackHole 2ch device for capture
-    config.capture.pDeviceID = &capture_devices[0].id
+    // config.capture.pDeviceID = &capture_devices[0].id
 
     // Internal Mic
     // config.capture.pDeviceID = &capture_devices[1].id
@@ -113,6 +135,9 @@ init_audio_capture :: proc() {
         fmt.println("Failed to initialize audio device.")
         return
     }
+
+    // Set up logging
+    ma.log_register_callback(ma.device_get_log(&device), ma.log_callback_init(log_callback, nil))
 
     if ma.device_start(&device) != ma.result.SUCCESS {
         fmt.println("Failed to start audio device.")
