@@ -1,5 +1,12 @@
 
 
+
+- min & max freq that can be detected (based on fft size and max lag)
+- hide note below signal threshold, based on rms? vu-meter, envelope
+- last note sticks?
+
+
+
 debugging screens activated by key combo
 
 - autocorrelation section -> shows the autocorrelation with marker on selected lag, shows the current note

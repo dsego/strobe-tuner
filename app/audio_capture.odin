@@ -112,6 +112,7 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
     device_config.capture.format = ma.format.f32
     device_config.sampleRate = samplerate
     device_config.capture.channels = 1
+    // device_config.periodSizeInFrames = 1024
 
     if ma.context_init(nil, 0, nil, &ctx) != ma.result.SUCCESS {
         fmt.println("Failed to initialize audio context.")
@@ -125,13 +126,13 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
         &capture_devices,
         &capture_device_count
     ) != ma.result.SUCCESS {
-        ma.context_uninit(&ctx)
+        // ma.context_uninit(&ctx)
         fmt.println("Failed to retrieve device information.")
         return false
     }
 
     // set BlackHole 2ch device for capture
-    // device_config.capture.pDeviceID = &capture_devices[2].id
+    device_config.capture.pDeviceID = &capture_devices[2].id
 
     if ma.device_init(
         &ctx,
@@ -216,40 +217,40 @@ read_ringbuffer :: proc(
     samples: []f32,
     frame_count: u32
 ) -> u32 {
-    // context = runtime.default_context()
-
-    // rb : = config.ringbuffers[ringbuffer_id]
     data_ptr : rawptr
-    frames_left := frame_count
     rb_pt := &ringbuffers[rb_index]
+
+    total_frames_read : u32 = 0
 
     // The ring buffer can return fewer frames than requested if the position is near the end of the buffer.
     // We want to loop until we get all the needed frames.
-    for {
-        frames_to_read := frames_left
-        if ma.pcm_rb_acquire_read(rb_pt, &frames_to_read, &data_ptr) != ma.result.SUCCESS {
-            fmt.println("Failed to acquire read pointer from ring buffer.")
+    for total_frames_read < frame_count {
+
+        frames_to_read: u32 = frame_count - total_frames_read
+
+        acquire_result := ma.pcm_rb_acquire_read(rb_pt, &frames_to_read, &data_ptr)
+        if acquire_result != ma.result.SUCCESS {
+            fmt.println("Failed to acquire read pointer from ring buffer.", ma.result_description(acquire_result))
             break
         }
 
-        data := cast([^]f32) data_ptr
-        for i in 0..<frames_to_read {
-            samples[frames_left-i-1] = data[i]
-        }
+        if frames_to_read == 0 do break // end of ringbuffer
 
-        if ma.pcm_rb_commit_read(rb_pt, frames_to_read, data_ptr) != ma.result.SUCCESS {
-            fmt.println("Failed to commit read on ring buffer.")
+        ma.copy_pcm_frames(raw_data(samples[total_frames_read:]), data_ptr, u64(frames_to_read), ma.format.f32, 1)
+
+        commit_result := ma.pcm_rb_commit_read(rb_pt, frames_to_read, data_ptr)
+
+        // if ringbuffer at end we still want to continue trying to acquire read
+        if commit_result != ma.result.SUCCESS && commit_result != ma.result.AT_END {
+            fmt.println("Failed to commit read on ring buffer.", ma.result_description(commit_result))
             break
         }
 
-        frames_left -= frames_to_read
-        if frames_left <= 0 do break
+        total_frames_read += frames_to_read
     }
 
-    actual_frames_read := frame_count - frames_left
-
     // need to return how many frames we managed to read in case the commit fails
-    return actual_frames_read
+    return total_frames_read
 }
 
 

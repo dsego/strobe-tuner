@@ -8,7 +8,7 @@ import "core:strings"
 
 
 // FFT size for pitch detection
-FFT_SIZE :: 2048
+FFT_SIZE :: 4096
 SAMPLERATE :: 44100
 SCREEN_WIDTH :: 1024
 SCREEN_HEIGHT :: 768
@@ -42,27 +42,33 @@ main :: proc() {
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
     defer rl.CloseWindow()
 
+    // text : string = "ABCDEFG♯"
+    // codepoints := rl.LoadCodepoints(raw_data(text), nil)
+    // defer rl.UnloadCodepoints(codepoints)
+
     font := rl.LoadFontEx("./assets/NotoSansMono-Medium.ttf", 128, nil, 0)
     defer rl.UnloadFont(font)
-
 
     for !rl.WindowShouldClose() {
 
         // Pitch detection, use the first ringbuffer
-        count := read_ringbuffer(0, new_samples, FFT_SIZE/2)
+        new_count := read_ringbuffer(0, new_samples, FFT_SIZE/2)
 
-        // move old samples back to make room for new samples
-        copy(samples, samples[FFT_SIZE/2:])
+        if new_count > 0 {
 
-        // copy over new samples into the freed space
-        copy(samples[FFT_SIZE/2:], new_samples[:FFT_SIZE/2])
+            // move old samples back to make room for new samples
+            copy(samples, samples[new_count:])
 
+            // copy over new samples into the freed space
+            copy(samples[FFT_SIZE-new_count:], new_samples[:new_count])
 
+        }
 
         // TODO: add to delay line (moving average of 5-10 samples)
+        // TODO: no need to run pitch detect if samples haven't changed
         freq := pitch_detect(pitch, samples)
-
         note := find_note(freq)
+
         formatted_note := strings.clone_to_cstring(note.name)
         // fmt.println(note.name, note.semitone_index)
 
