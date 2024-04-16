@@ -1,5 +1,12 @@
 
 
+debugging screens activated by key combo
+
+- autocorrelation section -> shows the autocorrelation with marker on selected lag, shows the current note
+
+
+-----
+
 how to improve IIR response at low frequency????
 oversample, decimate ??
 
@@ -33,8 +40,6 @@ should pitch be run frequent and then averaged across blocks to smooth?
 should the ffts overlap?
 
 
-
-
 samplerBuffer ???
 
 
@@ -51,13 +56,8 @@ metal_app/
     display.odin    // draw display & strobes, draw note, indicators
 
 core/
-    pitch.odin
-        -> keep buffer for fft
-        -> append new frames and remove old frames (overlap)
-        -> run correlation -> produce a list of frequency estimates
 
-    audio_capture.odin
-        -> send frames to pitch
+
     framerate.odin
     strobe.odin          // read samples --> iir filter, gain, process
 

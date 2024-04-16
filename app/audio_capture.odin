@@ -2,18 +2,23 @@ package app
 
 import "core:fmt"
 import "core:math"
+import "core:mem"
 import "core:runtime"
 import ma "vendor:miniaudio"
 
 
-AudioCapture :: struct {
-    device_config: ma.device_config,
-    device: ma.device,
-    ringbuffers: [dynamic]ma.pcm_rb,
-    ctx: ma.context_type,
-    capture_devices: [^]ma.device_info,
-    capture_device_count: u32,
-}
+// Simplify by using a constant number of ringbuffers instead of a dynamic list.
+MAX_RB_COUNT :: 2
+DEFAULT_RB_SIZE :: 96000
+
+
+device_config: ma.device_config
+device: ma.device
+ringbuffers: [MAX_RB_COUNT] ma.pcm_rb
+ctx: ma.context_type
+capture_devices: [^]ma.device_info
+capture_device_count: u32
+
 
 
 @(private)
@@ -38,32 +43,34 @@ notification_callback :: proc "c" (pNotification: ^ma.device_notification) {
 @(private)
 audio_capture_callback :: proc "c" (
     device: ^ma.device,
-    output,
+    output: rawptr,
     input: rawptr,
     frame_count: u32
 ) {
-    config := (cast(^AudioCapture) device.pUserData)^
-    for _, i in config.ringbuffers {
-        write_to_ringbuffer(&config.ringbuffers[i], device, output, input, frame_count)
+    for &rb in ringbuffers {
+        write_to_ringbuffer(&rb, device, output, input, frame_count)
     }
+    // write_to_ringbuffer(&rb, device, output, input, frame_count)
 }
 
 @(private)
 write_to_ringbuffer :: proc "c" (
-    ringbuffer_pt: ^ma.pcm_rb,
+    rb: ^ma.pcm_rb,
     device: ^ma.device,
-    output,
+    output: rawptr,
     input: rawptr,
     frame_count: u32
 ) {
     data_ptr : rawptr
     frames_left := frame_count
 
+    // context = runtime.default_context()
+
     // Capture samples and write to a ring buffer.
     for {
         frames_to_write := frames_left
 
-        if ma.pcm_rb_acquire_write(ringbuffer_pt, &frames_to_write, &data_ptr) != ma.result.SUCCESS {
+        if ma.pcm_rb_acquire_write(rb, &frames_to_write, &data_ptr) != ma.result.SUCCESS {
             ma.log_post(
                 ma.device_get_log(device),
                 u32(ma.log_level.LOG_LEVEL_ERROR),
@@ -73,14 +80,18 @@ write_to_ringbuffer :: proc "c" (
         }
 
         if frames_to_write == 0 {
-            if ma.pcm_rb_pointer_distance(ringbuffer_pt) == i32(ma.pcm_rb_get_subbuffer_size(ringbuffer_pt)) {
+            if ma.pcm_rb_pointer_distance(rb) == i32(ma.pcm_rb_get_subbuffer_size(rb)) {
                 break // Overrun
             }
         }
 
         ma.copy_pcm_frames(data_ptr, input, u64(frames_to_write), ma.format.f32, 1)
+        // fmt.println(frames_to_write)
+        // data := (^f32)(input)
 
-        if ma.pcm_rb_commit_write(ringbuffer_pt, frames_to_write, data_ptr) != ma.result.SUCCESS {
+        // fmt.println(data^)
+
+        if ma.pcm_rb_commit_write(rb, frames_to_write, data_ptr) != ma.result.SUCCESS {
             ma.log_post(
                 ma.device_get_log(device),
                 u32(ma.log_level.LOG_LEVEL_ERROR),
@@ -94,118 +105,129 @@ write_to_ringbuffer :: proc "c" (
     }
 }
 
-init_audio_capture :: proc(samplerate: u32 = 44100) -> (config: ^AudioCapture, ok: bool) {
-    config = new(AudioCapture)
+init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
+    device_config = ma.device_config_init(ma.device_type.capture)
+    device_config.dataCallback = audio_capture_callback
+    device_config.notificationCallback = notification_callback
+    device_config.capture.format = ma.format.f32
+    device_config.sampleRate = samplerate
+    device_config.capture.channels = 1
 
-    config.device_config = ma.device_config_init(ma.device_type.capture)
-    config.device_config.dataCallback = audio_capture_callback
-    config.device_config.notificationCallback = notification_callback
-    config.device_config.capture.format = ma.format.f32
-    config.device_config.sampleRate = samplerate
-    config.device_config.capture.channels = 1
-    config.device_config.pUserData = config
-
-    if ma.context_init(nil, 0, nil, &config.ctx) != ma.result.SUCCESS {
+    if ma.context_init(nil, 0, nil, &ctx) != ma.result.SUCCESS {
         fmt.println("Failed to initialize audio context.")
-        return {}, false
+        return false
     }
 
     if ma.context_get_devices(
-        &config.ctx,
+        &ctx,
         nil,
         nil,
-        &config.capture_devices,
-        &config.capture_device_count
+        &capture_devices,
+        &capture_device_count
     ) != ma.result.SUCCESS {
-        ma.context_uninit(&config.ctx)
+        ma.context_uninit(&ctx)
         fmt.println("Failed to retrieve device information.")
-        return {}, false
+        return false
     }
 
+    // set BlackHole 2ch device for capture
+    // device_config.capture.pDeviceID = &capture_devices[2].id
+
     if ma.device_init(
-        &config.ctx,
-        &config.device_config,
-        &config.device
+        &ctx,
+        &device_config,
+        &device
     ) != ma.result.SUCCESS {
         fmt.println("Failed to initialize audio device.")
-        ma.context_uninit(&config.ctx)
-        return {}, false
+        ma.context_uninit(&ctx)
+        return false
     }
 
     fmt.println("\n..................................")
     fmt.println(" Audio capture devices:")
-    for i := u32(0); i < config.capture_device_count; i += 1 {
-        if config.device.capture.id == config.capture_devices[i].id {
-            fmt.printf("  ‣ [ %v %s ]\n", i, config.capture_devices[i].name)
+    for i := u32(0); i < capture_device_count; i += 1 {
+        if device.capture.id == capture_devices[i].id {
+            fmt.printf("  ‣ [ %v %s ]\n", i, capture_devices[i].name)
         } else {
-            fmt.printf("      %v %s\n", i, config.capture_devices[i].name)
+            fmt.printf("      %v %s\n", i, capture_devices[i].name)
         }
     }
     fmt.println("..................................\n")
 
     // Set up logging
-    ma.log_register_callback(ma.device_get_log(&config.device), ma.log_callback_init(log_callback, nil))
+    ma.log_register_callback(ma.device_get_log(&device), ma.log_callback_init(log_callback, nil))
 
-    if ma.device_start(&config.device) != ma.result.SUCCESS {
-        ma.device_uninit(&config.device)
+
+    if ma.device_start(&device) != ma.result.SUCCESS {
+        ma.device_uninit(&device)
         fmt.println("Failed to start audio device.")
-        return {}, false
+        return false
     }
 
-    return config, true
+    // Init ringbuffers
+    for &rb in ringbuffers {
+        if ma.pcm_rb_init(ma.format.f32, 1, DEFAULT_RB_SIZE, nil, nil, &rb) != ma.result.SUCCESS {
+            fmt.println("Failed to initialize ring buffer.")
+            return false
+        }
+    }
+
+
+    return true
 }
 
-destroy_audio_capture :: proc(config: ^AudioCapture) {
-    ma.device_stop(&config.device)
-    ma.device_uninit(&config.device)
-    ma.context_uninit(&config.ctx)
+destroy_audio_capture :: proc() {
+    ma.device_stop(&device)
+    ma.device_uninit(&device)
+    ma.context_uninit(&ctx)
 
-    for _, i in config.ringbuffers {
-        rb := config.ringbuffers[i]
+    for &rb in ringbuffers {
         ma.pcm_rb_uninit(&rb)
     }
-
-    clear(&config.ringbuffers)
-    free(config)
 }
 
-add_ringbuffer :: proc(config: ^AudioCapture, size: u32 = 96000) -> int {
-    rb: ma.pcm_rb
-    if ma.pcm_rb_init(ma.format.f32, 1, size, nil, nil, &rb) != ma.result.SUCCESS {
-        fmt.println("Failed to initialize ring buffer.")
-        return -1
-    }
-    append(&config.ringbuffers, rb)
+// rb: ma.pcm_rb
 
-    ringbuffer_id := len(config.ringbuffers) - 1
-    return ringbuffer_id
-}
+// NOTE: comment out for now, we can use a static list
+// add_ringbuffer :: proc(config: ^AudioCapture, size: u32 = 96000) -> int {
+//     // rb: ma.pcm_rb
+//     if ma.pcm_rb_init(ma.format.f32, 1, size, nil, nil, &rb) != ma.result.SUCCESS {
+//         fmt.println("Failed to initialize ring buffer.")
+//         return -1
+//     }
+//     // append(&ringbuffers, rb)
+
+//     ringbuffer_id := len(config.ringbuffers) - 1
+//     return ringbuffer_id
+// }
 
 
 advance_ringbuffer :: proc (
-    config: ^AudioCapture,
-    ringbuffer_id: int,
+    rb_index: int,
     frames_to_skip: u32,
 ) {
-    rb : = config.ringbuffers[ringbuffer_id]
-    ma.pcm_rb_seek_read(&rb, frames_to_skip)
+    ma.pcm_rb_seek_read(&ringbuffers[rb_index], frames_to_skip)
 }
 
+
+
 read_ringbuffer :: proc(
-    config: ^AudioCapture,
-    ringbuffer_id: int,
+    rb_index: int,
     samples: []f32,
     frame_count: u32
-) {
-    rb : = config.ringbuffers[ringbuffer_id]
+) -> u32 {
+    // context = runtime.default_context()
+
+    // rb : = config.ringbuffers[ringbuffer_id]
     data_ptr : rawptr
     frames_left := frame_count
+    rb_pt := &ringbuffers[rb_index]
 
     // The ring buffer can return fewer frames than requested if the position is near the end of the buffer.
     // We want to loop until we get all the needed frames.
     for {
         frames_to_read := frames_left
-        if ma.pcm_rb_acquire_read(&rb, &frames_to_read, &data_ptr) != ma.result.SUCCESS {
+        if ma.pcm_rb_acquire_read(rb_pt, &frames_to_read, &data_ptr) != ma.result.SUCCESS {
             fmt.println("Failed to acquire read pointer from ring buffer.")
             break
         }
@@ -215,7 +237,7 @@ read_ringbuffer :: proc(
             samples[frames_left-i-1] = data[i]
         }
 
-        if ma.pcm_rb_commit_read(&rb, frames_to_read, data_ptr) != ma.result.SUCCESS {
+        if ma.pcm_rb_commit_read(rb_pt, frames_to_read, data_ptr) != ma.result.SUCCESS {
             fmt.println("Failed to commit read on ring buffer.")
             break
         }
@@ -223,4 +245,12 @@ read_ringbuffer :: proc(
         frames_left -= frames_to_read
         if frames_left <= 0 do break
     }
+
+    actual_frames_read := frame_count - frames_left
+
+    // need to return how many frames we managed to read in case the commit fails
+    return actual_frames_read
 }
+
+
+
