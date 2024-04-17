@@ -2,7 +2,7 @@ package pitch
 import "core:mem"
 import "core:fmt"
 
-import "../pffft"
+import "../../pffft"
 
 // -------------------------------------------------------------------------------------------------
 //  Pitch detection based on auto-correlation
@@ -37,7 +37,7 @@ pitch_destroy :: proc (config: PitchConfig) {
 
 
 // TODO: compare padded vs unpadded fft
-pitch_detect :: proc (using config: PitchConfig, samples: []f32) -> f32 {
+pitch_detect :: proc (using config: PitchConfig, samples: []f32) -> (f32, f32, f32) {
 
     // Generate the autocorrelation
     //   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,
@@ -66,57 +66,68 @@ pitch_detect :: proc (using config: PitchConfig, samples: []f32) -> f32 {
     )
 
     // Find the first maximum peak lag
-
     lag := 0
-    min := 0
-    max := 0
+    threshold := 0.3 * autocorrelation[0]
     estimated_freq := f32(0)
 
-    i := 0
-    for i < len(autocorrelation) - 1 {
+    i := 1
+
+    len := len(autocorrelation) / 2
+
+    fmt.println("Threshold",  autocorrelation[1]/autocorrelation[0], autocorrelation[2]/autocorrelation[0], autocorrelation[3]/autocorrelation[0])
+    peak_index := 0
+
+    for i < len {
 
         // go down the slope until we reach the local minimum
-        for i < len(autocorrelation) - 1 {
-            if autocorrelation[i+1] > autocorrelation[i] {
-                break
-            }
+        for i < len - 1 && autocorrelation[i+1] < autocorrelation[i] {
             i += 1
         }
+        // fmt.println("local min", i, autocorrelation[i]/autocorrelation[0], threshold/autocorrelation[0])
 
         // go up the slope until we reach the local maximum
-        for i < len(autocorrelation) - 1 {
-            if autocorrelation[i+1] < autocorrelation[i] {
-                break
-            }
+        for i < len - 1 && autocorrelation[i+1] > autocorrelation[i] {
             i += 1
         }
-        fmt.println("Found local max at", i)
 
-        // TODO: find out the optimal threshold based on value at zero lag
-        threshold := 0.5 * autocorrelation[0]
+        // fmt.println("local max", i, autocorrelation[i]/autocorrelation[0], threshold/autocorrelation[0])
 
         if autocorrelation[i] > threshold {
             lag = i
-            fmt.println("Found peak at lag", i)
-            estimated_freq = f32(samplerate) / f32(i)
-            fmt.println("Estimated frequency Hz", estimated_freq)
-            break
+            // trying to find the fundamental when the first harmonic is close,
+            //  even if second the peak is a tiny bi smaller
+            threshold = 0.9 * autocorrelation[i]
+            fmt.println("Found local max at", i)
+            peak_index += 1
         }
+
+        // we don't need to look at other peaks?
+        if peak_index >= 2 do break
+
+        i += 1
+        // if autocorrelation[i] > threshold {
     }
+
+    fmt.println("Found peak at lag", lag, i)
+    estimated_freq = f32(samplerate) / f32(lag)
+    fmt.println("Estimated frequency Hz", estimated_freq)
 
     // Parabolic interpolation to find the more accurate peak location
     // https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
 
-    alpha := autocorrelation[lag-1]
-    beta := autocorrelation[lag]
-    gamma := autocorrelation[lag+1]
-    peak_location := 0.5 * (alpha - gamma) / (alpha - 2.0 * beta + gamma)
-
+    peak_location := f32(0.0)
+    if lag > 0 {
+        alpha := autocorrelation[lag-1]
+        beta := autocorrelation[lag]
+        gamma := autocorrelation[lag+1]
+        peak_location = 0.5 * (alpha - gamma) / (alpha - 2.0 * beta + gamma)
+    }
 
     improved_lag := f32(lag) + peak_location
     estimated_freq = f32(samplerate) / improved_lag
-    fmt.println("Interpolated peak location", improved_lag)
-    fmt.println("Estimated frequency improved Hz", estimated_freq)
+    // fmt.println("Interpolated peak location", improved_lag)
+    // fmt.println("Estimated frequency improved Hz", estimated_freq)
 
-    return estimated_freq
+    normalized_val := autocorrelation[lag] / autocorrelation[0]
+    return estimated_freq, f32(lag), normalized_val
 }

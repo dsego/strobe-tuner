@@ -120,7 +120,7 @@ main :: proc() {
         div_ms := f32(1000.0 / 110.0)
         draw_time_plot(rect, len(samples), div_ms)
         draw_samples(rect, samples, rl.PINK, 1.0)
-        draw_samples(rect, autocorrelation, rl.GOLD, 1.0/200000)
+        draw_samples(rect, autocorrelation, rl.GOLD, 1.0/autocorrelation[0])
     }
 }
 
