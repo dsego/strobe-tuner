@@ -129,7 +129,20 @@ cents_to_note :: proc (cents: f32, pitch_standard: f32 = 440.0) -> (note: Note) 
         index == 10
     )
 
-    note_names: []string = {"C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"}
+    note_names: []string = {
+        "C",
+        "C♯/D♭",
+        "D",
+        "D♯/E♭",
+        "E",
+        "F",
+        "F♯/G♭",
+        "G",
+        "G♯/A♭",
+        "A",
+        "A♯/H♭",
+        "B"
+    }
     note.name = note_names[index]
 
     return note

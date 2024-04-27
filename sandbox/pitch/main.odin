@@ -24,7 +24,7 @@ ctx := AppContext{}
 
 
 init :: proc() {
-    rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Filter")
+    rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Pitch")
     rl.SetTargetFPS(60)
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
     ctx.font = rl.LoadFontEx("./media/JetBrainsMono-Regular.ttf", 64, nil, 0)
@@ -42,14 +42,15 @@ main :: proc() {
     font := rl.LoadFontEx("../assets/NotoSansMono-Medium.ttf", 64, nil, 0)
     defer rl.UnloadFont(font)
 
-    path: cstring = "./media/ukulele_A4.wav"
+    // path: cstring = "./media/ukulele_A4.wav"
     // path: cstring = "./media/acoustic_A2.wav"
     // path: cstring = "./media/bass_G2.wav"
 
     // read in the whole file
     // ability to scrub with right-left arrows
-    // path: cstring = "./media/bass_E1.wav"
+    path: cstring = "./media/bass_E1.wav"
     // path: cstring = "./media/strat_A2.wav"
+    // path: cstring = "./media/bass_D2.wav"
 
     // we want a large buffer of ~2MB to accommodate the whole wav file
     audio_buffer := make([]f32, 2000000)

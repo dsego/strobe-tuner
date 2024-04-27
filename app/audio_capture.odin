@@ -20,6 +20,8 @@ capture_devices: [^]ma.device_info
 capture_device_count: u32
 
 
+Ringbuffer :: ma.pcm_rb
+
 
 @(private)
 log_callback :: proc "c" (pUserData: rawptr, level: u32, pMessage: cstring) {
@@ -132,7 +134,7 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
     }
 
     // set BlackHole 2ch device for capture
-    device_config.capture.pDeviceID = &capture_devices[2].id
+    // device_config.capture.pDeviceID = &capture_devices[2].id
 
     if ma.device_init(
         &ctx,
@@ -210,6 +212,10 @@ advance_ringbuffer :: proc (
     ma.pcm_rb_seek_read(&ringbuffers[rb_index], frames_to_skip)
 }
 
+
+frames_available_in_ringbuffer:: proc (rb_index: int) {
+    return ma.pcm_rb_available_read(&ringbuffer[rb_index])
+}
 
 
 read_ringbuffer :: proc(

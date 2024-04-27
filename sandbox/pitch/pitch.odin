@@ -105,17 +105,16 @@ pitch_detect :: proc (using config: PitchConfig, samples: []f32) -> (f32, f32, f
         if peak_index >= 2 do break
 
         i += 1
-        // if autocorrelation[i] > threshold {
     }
 
-    fmt.println("Found peak at lag", lag, i)
-    estimated_freq = f32(samplerate) / f32(lag)
-    fmt.println("Estimated frequency Hz", estimated_freq)
+    // fmt.println("Found peak at lag", lag, i)
+    // estimated_freq = f32(samplerate) / f32(lag)
+    // fmt.println("Estimated frequency Hz", estimated_freq)
 
     // Parabolic interpolation to find the more accurate peak location
     // https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
 
-    peak_location := f32(0.0)
+    peak_location: f32 = 0
     if lag > 0 {
         alpha := autocorrelation[lag-1]
         beta := autocorrelation[lag]

@@ -36,6 +36,9 @@ main :: proc() {
     new_samples: []f32 = make([]f32, FFT_SIZE)
     defer delete(samples)
 
+    freq : f32 = 261.6256
+    strobe_band := init_strobe(1024, freq/SAMPLERATE)
+    defer destroy_strobe(strobe_band)
 
     rl.SetTargetFPS(60)
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
@@ -51,6 +54,7 @@ main :: proc() {
 
     for !rl.WindowShouldClose() {
 
+        /* DISABLE PITCH DETECTION
         // Pitch detection, use the first ringbuffer
         new_count := read_ringbuffer(0, new_samples, FFT_SIZE/2)
 
@@ -66,10 +70,17 @@ main :: proc() {
 
         // TODO: add to delay line (moving average of 5-10 samples)
         // TODO: no need to run pitch detect if samples haven't changed
-        freq := pitch_detect(pitch, samples)
+        freq, _, _ := pitch_detect(pitch, samples)
+        note := find_note(freq)
+
+        */
+
         note := find_note(freq)
 
         formatted_note := strings.clone_to_cstring(note.name)
+
+
+        // run_strobe(strobe_band, )
         // fmt.println(note.name, note.semitone_index)
 
         // rl.DrawText("A1", 10, 10, 30, rl.PURPLE)

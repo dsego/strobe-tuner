@@ -48,7 +48,7 @@ read_wav :: proc(path: cstring, from: u64, to: u64, samples: []f32) {
 }
 
 init :: proc() {
-    rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Filter")
+    rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Autocorrelation")
     rl.SetTargetFPS(60)
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
     ctx.font = rl.LoadFontEx("./media/JetBrainsMono-Regular.ttf", 64, nil, 0)

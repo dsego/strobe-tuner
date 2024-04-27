@@ -1,12 +1,12 @@
 package app
-
 import "core:mem"
 import "core:fmt"
 
 import "../pffft"
 
-
+// -------------------------------------------------------------------------------------------------
 //  Pitch detection based on auto-correlation
+// -------------------------------------------------------------------------------------------------
 
 PitchConfig :: struct {
     pffft_setup: rawptr,
@@ -18,8 +18,7 @@ PitchConfig :: struct {
     // padded_samples: []f32,
 }
 
-pitch_init :: proc (fft_size: int, samplerate: int) -> (config: ^PitchConfig = {}) {
-    config = new(PitchConfig)
+pitch_init :: proc (fft_size: int, samplerate: int) -> (config: PitchConfig = {}) {
     config.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
     config.fft = make([]complex64, fft_size)
     config.fft_conj_product = make([]complex64, fft_size)
@@ -29,17 +28,17 @@ pitch_init :: proc (fft_size: int, samplerate: int) -> (config: ^PitchConfig = {
     return
 }
 
-pitch_destroy :: proc (config: ^PitchConfig) {
+pitch_destroy :: proc (config: PitchConfig) {
     pffft.destroy_setup(config.pffft_setup)
     delete(config.fft)
     delete(config.fft_conj_product)
     delete(config.autocorrelation)
-    free(config)
 }
 
 
 // TODO: compare padded vs unpadded fft
-pitch_detect :: proc (using config: ^PitchConfig, samples: []f32) -> f32 {
+pitch_detect :: proc (using config: PitchConfig, samples: []f32) -> (f32, f32, f32) {
+
     // Generate the autocorrelation
     //   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,
     //    then taking the inverse FFT will give us the cyclic auto-correlation.
@@ -67,48 +66,58 @@ pitch_detect :: proc (using config: ^PitchConfig, samples: []f32) -> f32 {
     )
 
     // Find the first maximum peak lag
-
     lag := 0
-    min := 0
-    max := 0
+    threshold := 0.3 * autocorrelation[0]
     estimated_freq := f32(0)
 
-    i := 0
-    for i < len(autocorrelation) - 1 {
+    i := 1
+
+    len := len(autocorrelation) / 2
+    peak_index := 0
+
+    for i < len {
 
         // go down the slope until we reach the local minimum
-        for i < len(autocorrelation) - 1 {
-            if autocorrelation[i+1] > autocorrelation[i] do break
+        for i < len - 1 && autocorrelation[i+1] < autocorrelation[i] {
             i += 1
         }
+        // fmt.println("local min", i, autocorrelation[i]/autocorrelation[0], threshold/autocorrelation[0])
 
         // go up the slope until we reach the local maximum
-        for i < len(autocorrelation) - 1 {
-            if autocorrelation[i+1] < autocorrelation[i] do break
+        for i < len - 1 && autocorrelation[i+1] > autocorrelation[i] {
             i += 1
         }
-        // fmt.println("Found local max at", i)
 
-        // TODO: find out the optimal threshold based on value at zero lag
-        threshold := 0.5 * autocorrelation[0]
+        // fmt.println("local max", i, autocorrelation[i]/autocorrelation[0], threshold/autocorrelation[0])
 
         if autocorrelation[i] > threshold {
             lag = i
-            // fmt.println("Found peak at lag", i)
-            estimated_freq = f32(samplerate) / f32(i)
-            fmt.println("Estimated frequency Hz", estimated_freq)
-            break
+            // trying to find the fundamental when the first harmonic is close,
+            //  even if second the peak is a tiny bi smaller
+            threshold = autocorrelation[i]
+            // fmt.println("Found local max at", i)
+            peak_index += 1
         }
+
+        // we don't need to look at other peaks?
+        if peak_index >= 2 do break
+
+        i += 1
     }
+
+    // fmt.println("Found peak at lag", lag, i)
+    // estimated_freq = f32(samplerate) / f32(lag)
+    // fmt.println("Estimated frequency Hz", estimated_freq)
 
     // Parabolic interpolation to find the more accurate peak location
     // https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
+
     peak_location: f32 = 0
-    if lag > 0 && lag < fft_size {
+    if lag > 0 {
         alpha := autocorrelation[lag-1]
         beta := autocorrelation[lag]
         gamma := autocorrelation[lag+1]
-        peak_location := 0.5 * (alpha - gamma) / (alpha - 2.0 * beta + gamma)
+        peak_location = 0.5 * (alpha - gamma) / (alpha - 2.0 * beta + gamma)
     }
 
     improved_lag := f32(lag) + peak_location
@@ -116,5 +125,6 @@ pitch_detect :: proc (using config: ^PitchConfig, samples: []f32) -> f32 {
     // fmt.println("Interpolated peak location", improved_lag)
     // fmt.println("Estimated frequency improved Hz", estimated_freq)
 
-    return estimated_freq
+    normalized_val := autocorrelation[lag] / autocorrelation[0]
+    return estimated_freq, f32(lag), normalized_val
 }

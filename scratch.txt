@@ -1,6 +1,22 @@
 
 
+loop over band inside one frag shader
+
+
+show tone indication, the notes move left & right, the marker is static
+          V
+--|---|---|---|---|--
+  C2  C#2 D2 D#2  E2
+
+
+use image maps instead of fonts
+
+bit stream auto correlation?
+
 auto correlation - test with bass notes, low frequencies
+
+
+the pitch sandbox should show multiple methods in tandem to compare !!!!
 
 ---> TODO if two peaks are close, choose the second one
 
