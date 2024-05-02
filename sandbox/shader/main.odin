@@ -19,35 +19,36 @@ cleanup :: proc() {
 }
 
 vs_code :: `
-    #version 330
+    #version 410
 
     uniform mat4 mvp;
 
     in vec3 vertexPosition;
     in vec2 vertexTexCoord;
-    out vec2 fragTexCoord;
+
+    out vec2 fragCoord;
 
     void main() {
         gl_Position = mvp*vec4(vertexPosition, 1.0);
-        fragTexCoord = vertexPosition.xy;
+        fragCoord = vertexPosition.xy;
+        // fragCoord = vertexTexCoord;
     }
 `
 
 fs_code :: `
-    #version 330
+    #version 410
 
-    uniform float dataBuffer[256];
+    uniform sampler2D textureSampler;
     uniform vec2 resolution;
 
-    in vec2 fragTexCoord;
+    in vec2 fragCoord;
     out vec4 finalColor;
 
     void main()
     {
-        // vec4 tex = texelFetch(dataBuffer, 0);
-        // finalColor = vec4(dataBuffer[0], 0.,0.,1.);
-        vec2 st = fragTexCoord.xy/resolution;
-        finalColor = vec4(st.x, 1.0 - st.y, 0., 1.);
+        // vec2 uv = fragCoord.xy / resolution;
+        vec4 tex = texture(textureSampler, vec2(0., 0.));
+        finalColor = vec4(1., 1., 1., 1.);
     }
 `
 
@@ -61,16 +62,38 @@ main :: proc() {
     shader := rl.LoadShaderFromMemory(vs_code, fs_code)
     defer rl.UnloadShader(shader)
 
+    rl.rlEnableShader(shader.id);
 
-    // SetShaderValue :: proc "c" (shader: Shader, locIndex: ShaderLocationIndex, value: rawptr, uniformType: ShaderUniformDataType)
     data_buffer: []f32 = make([]f32, 256)
     defer delete(data_buffer)
 
-    // image := rl.LoadImage("../assets/gradient.png")
-    // texture := rl.LoadTextureFromImage(image)
-    // texture_location := rl.GetShaderLocation(shader, "dataBuffer")
-    resolution_location := rl.GetShaderLocation(shader, "resolution")
-    data_buffer_location := rl.GetShaderLocation(shader, "dataBuffer")
+
+    for i in 0..<len(data_buffer) {
+        data_buffer[i] = f32(i) / f32(len(data_buffer))
+    }
+
+    texture_id := rl.rlLoadTexture(
+        &data_buffer,
+        width=i32(len(data_buffer)),
+        height=1,
+        format=i32(rl.PixelFormat.UNCOMPRESSED_R32),
+        mipmapCount=0
+    )
+    defer rl.rlUnloadTexture(texture_id)
+
+    rl.rlSetTexture(texture_id)
+    defer rl.rlSetTexture(0)
+
+    rl.rlActiveTextureSlot(10);
+    rl.rlEnableTexture(texture_id)
+    defer rl.rlDisableTexture()
+
+    rl.rlTextureParameters(texture_id, rl.RL_TEXTURE_MIN_FILTER, rl.RL_TEXTURE_FILTER_NEAREST)
+    rl.rlTextureParameters(texture_id, rl.RL_TEXTURE_WRAP_S, rl.RL_TEXTURE_WRAP_CLAMP)
+    rl.rlTextureParameters(texture_id, rl.RL_TEXTURE_WRAP_T, rl.RL_TEXTURE_WRAP_CLAMP)
+
+    uniform_loc_idx := rl.GetShaderLocation(shader, "textureSampler")
+    resolution_loc_idx := rl.GetShaderLocation(shader, "resolution")
 
     resolution := Vector2 {400, 400}
 
@@ -80,23 +103,14 @@ main :: proc() {
 
         rl.ClearBackground(rl.BLACK)
 
-
-        for i in 0..<len(data_buffer) {
-            data_buffer[i] = 0.2 //math.sin(2.0 * math.PI * f32(i))
-        }
-        // rl.SetShaderValueTexture(shader, texture_location, texture)
-
-        rl.SetShaderValue(shader, resolution_location, &resolution, rl.ShaderUniformDataType.VEC2);
-        rl.SetShaderValueV(shader, data_buffer_location, &data_buffer, rl.ShaderUniformDataType.FLOAT, i32(len(data_buffer)));
-
         rl.BeginShaderMode(shader)
         defer rl.EndShaderMode()
-        {
 
-            // rl.DrawTexture(texture, 10, 10, rl.BLUE)
-            // rl.rlSetTexture(texture.id)
-            rl.DrawRectangle(40, 40, 400, 400, { 0, 100, 0, 255 });
-        }
 
+        rl.rlSetUniformSampler(i32(uniform_loc_idx), texture_id)
+        rl.rlSetUniform(i32(resolution_loc_idx), &resolution, i32(rl.ShaderUniformDataType.VEC2), 1)
+        rl.rlSetUniform(i32(uniform_loc_idx), &data_buffer, i32(rl.ShaderUniformDataType.SAMPLER2D), i32(len(data_buffer)))
+
+        rl.DrawRectangle(40, 40, 400, 400, { 0, 100, 0, 255 })
     }
 }
