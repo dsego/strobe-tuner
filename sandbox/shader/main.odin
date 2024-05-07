@@ -46,9 +46,9 @@ fs_code :: `
 
     void main()
     {
-        // vec2 uv = fragCoord.xy / resolution;
-        vec4 tex = texture(textureSampler, vec2(0., 0.));
-        finalColor = vec4(1., 1., 1., 1.);
+        vec2 uv = fragCoord.xy / resolution;
+        vec4 tex = texture(textureSampler, vec2(uv.x, 0.));
+        finalColor = vec4(1., 1., 1., tex.x);
     }
 `
 
@@ -69,7 +69,7 @@ main :: proc() {
 
 
     for i in 0..<len(data_buffer) {
-        data_buffer[i] = f32(i) / f32(len(data_buffer))
+        data_buffer[i] = 0.2 // f32(i) / f32(len(data_buffer))
     }
 
     texture_id := rl.rlLoadTexture(
@@ -81,12 +81,12 @@ main :: proc() {
     )
     defer rl.rlUnloadTexture(texture_id)
 
-    rl.rlSetTexture(texture_id)
-    defer rl.rlSetTexture(0)
-
     rl.rlActiveTextureSlot(10);
     rl.rlEnableTexture(texture_id)
     defer rl.rlDisableTexture()
+
+    rl.rlSetTexture(texture_id)
+    defer rl.rlSetTexture(0)
 
     rl.rlTextureParameters(texture_id, rl.RL_TEXTURE_MIN_FILTER, rl.RL_TEXTURE_FILTER_NEAREST)
     rl.rlTextureParameters(texture_id, rl.RL_TEXTURE_WRAP_S, rl.RL_TEXTURE_WRAP_CLAMP)
@@ -111,6 +111,6 @@ main :: proc() {
         rl.rlSetUniform(i32(resolution_loc_idx), &resolution, i32(rl.ShaderUniformDataType.VEC2), 1)
         rl.rlSetUniform(i32(uniform_loc_idx), &data_buffer, i32(rl.ShaderUniformDataType.SAMPLER2D), i32(len(data_buffer)))
 
-        rl.DrawRectangle(40, 40, 400, 400, { 0, 100, 0, 255 })
+        rl.DrawRectangle(40, 40, 400, 400, {})
     }
 }
