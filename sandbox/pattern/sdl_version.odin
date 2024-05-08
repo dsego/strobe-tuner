@@ -1,4 +1,4 @@
-package shader
+package pattern
 
 import "core:fmt"
 import glm "core:math/linalg/glsl"
