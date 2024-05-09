@@ -14,17 +14,12 @@ SCREEN_WIDTH :: 1024
 SCREEN_HEIGHT :: 768
 
 
-
-@(private)
-draw_screen :: proc() {
-    rl.BeginDrawing()
-    defer rl.EndDrawing()
-
-    rl.ClearBackground(rl.BLACK)
-}
+font: rl.Font
+font_atlas := "ABCDEFGHz♯♭/1234567890."
 
 
 main :: proc() {
+    /*
     ok := init_audio_capture(SAMPLERATE)
     if !ok do return
     defer destroy_audio_capture()
@@ -37,19 +32,21 @@ main :: proc() {
     defer delete(samples)
 
     freq : f32 = 261.6256
-    strobe_band := init_strobe(1024, freq/SAMPLERATE)
+    strobe_band := init_strobe(1024, f64(freq/SAMPLERATE))
     defer destroy_strobe(strobe_band)
+    */
 
     rl.SetTargetFPS(60)
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
     defer rl.CloseWindow()
 
-    // text : string = "ABCDEFG♯"
-    // codepoints := rl.LoadCodepoints(raw_data(text), nil)
-    // defer rl.UnloadCodepoints(codepoints)
 
-    font := rl.LoadFontEx("./assets/NotoSansMono-Medium.ttf", 128, nil, 0)
+    count := i32(0)
+    codepoints := rl.LoadCodepoints(raw_data(font_atlas), &count)
+    defer rl.UnloadCodepoints(codepoints)
+
+    font = rl.LoadFontEx("../assets/NotoSansMono-Medium.ttf", 128, codepoints, count)
     defer rl.UnloadFont(font)
 
     for !rl.WindowShouldClose() {
@@ -74,23 +71,45 @@ main :: proc() {
         note := find_note(freq)
 
         */
-
-        note := find_note(freq)
-
-        formatted_note := strings.clone_to_cstring(note.name)
-
-
-        // run_strobe(strobe_band, )
-        // fmt.println(note.name, note.semitone_index)
-
-        // rl.DrawText("A1", 10, 10, 30, rl.PURPLE)
-        rl.DrawTextEx(font, formatted_note, {20, 20}, 64, 0, rl.PURPLE)
-        formatted_freq := strings.clone_to_cstring(fmt.aprintf("%.1f Hz", freq))
-        rl.DrawTextEx(font, formatted_freq, {20, 100}, 32, 0, rl.PURPLE)
-
-        draw_screen()
+        rl.BeginDrawing()
+        {
+            draw_screen()
+        }
+        rl.EndDrawing()
     }
 }
 
 
+@(private)
+draw_screen :: proc() {
 
+    rl.ClearBackground(rl.BLACK)
+
+
+    // freq : f32 = 293.6648  // D4
+    freq : f32 = 138.5913 // C#
+    // freq : f32 = 261.6256
+    note := find_note(freq)
+
+    sharp : cstring = "♯"
+
+    // fmt.println(note)
+
+    // TODO: make draw_note() method
+    if note.is_accidental {
+        rl.DrawTextEx(font, cstring(&note.name), {20, 20}, 64, 0, rl.PURPLE)
+        rl.DrawTextEx(font, sharp, {50, 20}, 32, 0, rl.PURPLE)
+        rl.DrawTextEx(font, sharp, {50, 20}, 32, 0, rl.PURPLE)
+    } else {
+        rl.DrawTextEx(font, cstring(&note.name), {20, 20}, 64, 0, rl.PURPLE)
+    }
+
+    // run_strobe(strobe_band, )
+    // fmt.println(note.name, note.semitone_index)
+
+    // rl.DrawText("A1", 10, 10, 30, rl.PURPLE)
+
+    formatted_freq := strings.clone_to_cstring(fmt.aprintf("%.1fHz", freq))
+    rl.DrawTextEx(font, formatted_freq, {20, 100}, 32, 0, rl.PURPLE)
+
+}

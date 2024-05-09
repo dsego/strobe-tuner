@@ -213,8 +213,8 @@ advance_ringbuffer :: proc (
 }
 
 
-frames_available_in_ringbuffer:: proc (rb_index: int) {
-    return ma.pcm_rb_available_read(&ringbuffer[rb_index])
+frames_available_in_ringbuffer:: proc (rb_index: int) -> u32 {
+    return ma.pcm_rb_available_read(&ringbuffers[rb_index])
 }
 
 

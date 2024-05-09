@@ -6,11 +6,11 @@ import "core:math"
 import "core:c/libc"
 import "core:unicode/utf8"
 
-
 // Assumes equal temperament
 
+
 Note :: struct {
-    name: string,
+    name: u8, // note name does not include the accidental
     semitone_index: int,  // C = 0, C# = 1, ... B = 11
     is_accidental: bool,
     octave: int,
@@ -107,6 +107,8 @@ test_freq_to_octave :: proc(t: ^testing.T) {
     testing.expect_value(t, octave, 8)
 }
 
+note_names: []u8 = {'C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B'}
+
 cents_to_note :: proc (cents: f32, pitch_standard: f32 = 440.0) -> (note: Note) {
     octave, nearest := cents_to_octave(cents)
 
@@ -129,20 +131,6 @@ cents_to_note :: proc (cents: f32, pitch_standard: f32 = 440.0) -> (note: Note) 
         index == 10
     )
 
-    note_names: []string = {
-        "C",
-        "C♯/D♭",
-        "D",
-        "D♯/E♭",
-        "E",
-        "F",
-        "F♯/G♭",
-        "G",
-        "G♯/A♭",
-        "A",
-        "A♯/H♭",
-        "B"
-    }
     note.name = note_names[index]
 
     return note
@@ -171,5 +159,5 @@ test_find_note :: proc(t: ^testing.T) {
     testing.expect_value(t, note.octave, 4)
     testing.expect_value(t, note.semitone_index, 1)
     testing.expect_value(t, note.is_accidental, true)
-    testing.expect_value(t, note.name, "C♯")
+    testing.expect_value(t, note.name, 'C')
 }

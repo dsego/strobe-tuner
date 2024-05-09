@@ -1,5 +1,8 @@
 package app
 
+import "core:math"
+
+
 calculate_framerate:: proc(
     frames_available: u32,
     frame_count: f64,
@@ -33,7 +36,9 @@ calculate_framerate:: proc(
     return
 }
 
-read_samples :: proc(rb_index: int) -> (u32, f64) {
+read_samples :: proc(rb_index: int, samples: []f32, target_interval: f64) -> (u32, f64) {
+    @(static) frame_counter_real := 0.0
+
     frames_available := frames_available_in_ringbuffer(rb_index)
 
     next_frame_count, frames_to_skip, frames_to_read := calculate_framerate(
