@@ -4,6 +4,7 @@ import "core:math"
 
 
 MAX_BIQUADS :: 10
+
 Biquad :: struct {
     // delay line z1 = x[n-1], z2 = x[n-2]
     z1: [4]f64,
@@ -34,6 +35,22 @@ biquad_process :: proc(bq: ^Biquad, input: []f32, output: []f32) {
         output[i] = f32(y)
     }
 }
+
+biquad_process_sample :: proc(bq: ^Biquad, input: f32) -> (output: f32) {
+    y := f64(0)
+    x := f64(input)
+    // Cascade into multiple bi-quad sections (stages)
+    for stage in 0..<bq.cascade_count {
+        // Transposed direct form II
+        y = f64(x) * bq.a0 + bq.z1[stage]
+        bq.z1[stage] = f64(x) * bq.a1 + bq.z2[stage] - bq.b1 * y
+        bq.z2[stage] = f64(x) * bq.a2 - bq.b2 * y
+        x = y
+    }
+    output = f32(y)
+    return output
+}
+
 
 biquad_resonator :: proc(normalized_freq: f64, normalized_bandwidth: f64, cascade_count: u32 = 1) -> (bq: Biquad) {
     angle := 2.0 * math.PI * normalized_freq

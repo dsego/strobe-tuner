@@ -161,3 +161,14 @@ test_find_note :: proc(t: ^testing.T) {
     testing.expect_value(t, note.is_accidental, true)
     testing.expect_value(t, note.name, 'C')
 }
+
+
+@(test)
+test_find_note_g4 :: proc(t: ^testing.T) {
+    // G4 391.995 Hz
+    note := find_note(391)
+    testing.expect_value(t, note.octave, 4)
+    testing.expect_value(t, note.semitone_index, 7)
+    testing.expect_value(t, note.is_accidental, false)
+    testing.expect_value(t, note.name, 'G')
+}

@@ -2,7 +2,34 @@ package app
 
 import "core:math"
 
+read_samples :: proc(ringbuffer: ^Ringbuffer, samples: []f32, target_interval: f64) -> (u32, f64) {
+    @(static) frame_counter_real := 0.0
 
+    frames_available := frames_available_in_ringbuffer(ringbuffer)
+
+    next_frame_count, frames_to_skip, frames_to_read := calculate_framerate(
+        frames_available,
+        frame_counter_real,
+        target_interval
+    )
+
+    // don't let the counter increase forever, we only need to keep the fractional part
+    frame_counter_real = next_frame_count - math.floor(next_frame_count)
+
+    // skip old samples to pick up slack and catch up with the writer
+    if frames_to_skip > 0 do advance_ringbuffer(ringbuffer, frames_to_skip)
+
+    // consume one frequency interval of samples
+    if frames_to_read > 0 do read_ringbuffer(ringbuffer, samples, frames_to_read)
+
+    // correct for sub-sample drift
+    drift := f64(1.0) - frame_counter_real
+
+    return frames_to_read, drift
+}
+
+
+@(private="file")
 calculate_framerate:: proc(
     frames_available: u32,
     frame_count: f64,
@@ -34,30 +61,4 @@ calculate_framerate:: proc(
 
     frames_to_skip = frames_to_ingest - frames_to_read
     return
-}
-
-read_samples :: proc(rb_index: int, samples: []f32, target_interval: f64) -> (u32, f64) {
-    @(static) frame_counter_real := 0.0
-
-    frames_available := frames_available_in_ringbuffer(rb_index)
-
-    next_frame_count, frames_to_skip, frames_to_read := calculate_framerate(
-        frames_available,
-        frame_counter_real,
-        target_interval
-    )
-
-    // don't let the counter increase forever, we only need to keep the fractional part
-    frame_counter_real = next_frame_count - math.floor(next_frame_count)
-
-    // skip old samples to pick up slack and catch up with the writer
-    if frames_to_skip > 0 do advance_ringbuffer(rb_index, frames_to_skip)
-
-    // consume one frequency interval of samples
-    if frames_to_read > 0 do read_ringbuffer(rb_index, samples, frames_to_read)
-
-    // correct for sub-sample drift
-    drift := f64(1.0) - frame_counter_real
-
-    return frames_to_read, drift
 }

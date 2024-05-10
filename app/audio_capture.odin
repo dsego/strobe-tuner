@@ -3,24 +3,23 @@ package app
 import "core:fmt"
 import "core:math"
 import "core:mem"
+import "core:slice"
 import "core:runtime"
 import ma "vendor:miniaudio"
 
 
-// Simplify by using a constant number of ringbuffers instead of a dynamic list.
-MAX_RB_COUNT :: 2
-DEFAULT_RB_SIZE :: 96000
-
-
 device_config: ma.device_config
 device: ma.device
-ringbuffers: [MAX_RB_COUNT] ma.pcm_rb
 ctx: ma.context_type
 capture_devices: [^]ma.device_info
 capture_device_count: u32
 
 
-Ringbuffer :: ma.pcm_rb
+// 4-channel ring buffer for strobe data
+strobe_ringbuffer: Ringbuffer
+
+// 1-channel ring buffer for pitch detection
+pitch_ringbuffer: Ringbuffer
 
 
 @(private)
@@ -49,10 +48,8 @@ audio_capture_callback :: proc "c" (
     input: rawptr,
     frame_count: u32
 ) {
-    for &rb in ringbuffers {
-        write_to_ringbuffer(&rb, device, output, input, frame_count)
-    }
-    // write_to_ringbuffer(&rb, device, output, input, frame_count)
+    write_to_ringbuffer(&pitch_ringbuffer, device, output, input, frame_count)
+    process_strobe_ringbuffer(device, output, input, frame_count)
 }
 
 @(private)
@@ -88,6 +85,7 @@ write_to_ringbuffer :: proc "c" (
         }
 
         ma.copy_pcm_frames(data_ptr, input, u64(frames_to_write), ma.format.f32, 1)
+
         // fmt.println(frames_to_write)
         // data := (^f32)(input)
 
@@ -106,6 +104,72 @@ write_to_ringbuffer :: proc "c" (
         if frames_left <= 0 do break
     }
 }
+
+@(private)
+process_strobe_ringbuffer :: proc "c" (
+    device: ^ma.device,
+    output: rawptr,
+    input: rawptr,
+    frame_count: u32
+) {
+    data_ptr : rawptr
+    frames_left := frame_count
+
+    rb := &strobe_ringbuffer
+
+    context = runtime.default_context()
+
+    // Capture samples and write to a ring buffer.
+    for {
+        frames_to_write := frames_left
+
+        if ma.pcm_rb_acquire_write(rb, &frames_to_write, &data_ptr) != ma.result.SUCCESS {
+            ma.log_post(
+                ma.device_get_log(device),
+                u32(ma.log_level.LOG_LEVEL_ERROR),
+                "Failed to acquire capture PCM frames from ring buffer."
+            )
+            break
+        }
+
+        if frames_to_write == 0 {
+            if ma.pcm_rb_pointer_distance(rb) == i32(ma.pcm_rb_get_subbuffer_size(rb)) {
+                break // Overrun
+            }
+        }
+
+        data :[]f32 = slice.from_ptr(cast([^]f32) data_ptr, int(frame_count))
+        input_slice :[]f32 = slice.from_ptr(cast([^]f32) input, int(frame_count))
+
+        for i in 0..<frame_count {
+            for c in 0..<u32(STROBE_COUNT) {
+                //  run through iir biquad
+                data[i+c] = run_strobe(&strobes[i], input_slice[i])
+            }
+        }
+
+
+        ma.copy_pcm_frames(data_ptr, input, u64(frames_to_write), ma.format.f32, 1)
+
+        // fmt.println(frames_to_write)
+        // data := (^f32)(input)
+
+        // fmt.println(data^)
+
+        if ma.pcm_rb_commit_write(rb, frames_to_write, data_ptr) != ma.result.SUCCESS {
+            ma.log_post(
+                ma.device_get_log(device),
+                u32(ma.log_level.LOG_LEVEL_ERROR),
+                "Failed to commit capture PCM frames to ring buffer."
+            )
+            break
+        }
+
+        frames_left -= frames_to_write
+        if frames_left <= 0 do break
+    }
+}
+
 
 init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
     device_config = ma.device_config_init(ma.device_type.capture)
@@ -168,13 +232,17 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
     }
 
     // Init ringbuffers
-    for &rb in ringbuffers {
-        if ma.pcm_rb_init(ma.format.f32, 1, DEFAULT_RB_SIZE, nil, nil, &rb) != ma.result.SUCCESS {
-            fmt.println("Failed to initialize ring buffer.")
-            return false
-        }
+    pcm_rb_status := ma.pcm_rb_init(ma.format.f32, 1, DEFAULT_RB_SIZE, nil, nil, &pitch_ringbuffer)
+    if pcm_rb_status != ma.result.SUCCESS {
+        fmt.println("Failed to initialize ring buffer.")
+        return false
     }
 
+    pcm_rb_status = ma.pcm_rb_init(ma.format.f32, STROBE_COUNT, DEFAULT_RB_SIZE, nil, nil, &strobe_ringbuffer)
+    if pcm_rb_status != ma.result.SUCCESS {
+        fmt.println("Failed to initialize ring buffer.")
+        return false
+    }
 
     return true
 }
@@ -183,50 +251,34 @@ destroy_audio_capture :: proc() {
     ma.device_stop(&device)
     ma.device_uninit(&device)
     ma.context_uninit(&ctx)
-
-    for &rb in ringbuffers {
-        ma.pcm_rb_uninit(&rb)
-    }
+    ma.pcm_rb_uninit(&pitch_ringbuffer)
+    ma.pcm_rb_uninit(&strobe_ringbuffer)
 }
-
-// rb: ma.pcm_rb
-
-// NOTE: comment out for now, we can use a static list
-// add_ringbuffer :: proc(config: ^AudioCapture, size: u32 = 96000) -> int {
-//     // rb: ma.pcm_rb
-//     if ma.pcm_rb_init(ma.format.f32, 1, size, nil, nil, &rb) != ma.result.SUCCESS {
-//         fmt.println("Failed to initialize ring buffer.")
-//         return -1
-//     }
-//     // append(&ringbuffers, rb)
-
-//     ringbuffer_id := len(config.ringbuffers) - 1
-//     return ringbuffer_id
-// }
 
 
 advance_ringbuffer :: proc (
-    rb_index: int,
+    ringbuffer: ^Ringbuffer,
     frames_to_skip: u32,
 ) {
-    ma.pcm_rb_seek_read(&ringbuffers[rb_index], frames_to_skip)
+    ma.pcm_rb_seek_read(ringbuffer, frames_to_skip)
 }
 
 
-frames_available_in_ringbuffer:: proc (rb_index: int) -> u32 {
-    return ma.pcm_rb_available_read(&ringbuffers[rb_index])
+frames_available_in_ringbuffer:: proc (ringbuffers: ^Ringbuffer) -> u32 {
+    return ma.pcm_rb_available_read(ringbuffers)
 }
 
 
 read_ringbuffer :: proc(
-    rb_index: int,
+    rb_ptr: ^Ringbuffer,
     samples: []f32,
     frame_count: u32
 ) -> u32 {
     data_ptr : rawptr
-    rb_pt := &ringbuffers[rb_index]
-
     total_frames_read : u32 = 0
+
+    channel_count := ma.pcm_rb_get_channels(rb_ptr)
+    assert(len(samples) == int(channel_count * frame_count))
 
     // The ring buffer can return fewer frames than requested if the position is near the end of the buffer.
     // We want to loop until we get all the needed frames.
@@ -234,7 +286,7 @@ read_ringbuffer :: proc(
 
         frames_to_read: u32 = frame_count - total_frames_read
 
-        acquire_result := ma.pcm_rb_acquire_read(rb_pt, &frames_to_read, &data_ptr)
+        acquire_result := ma.pcm_rb_acquire_read(rb_ptr, &frames_to_read, &data_ptr)
         if acquire_result != ma.result.SUCCESS {
             fmt.println("Failed to acquire read pointer from ring buffer.", ma.result_description(acquire_result))
             break
@@ -242,9 +294,15 @@ read_ringbuffer :: proc(
 
         if frames_to_read == 0 do break // end of ringbuffer
 
-        ma.copy_pcm_frames(raw_data(samples[total_frames_read:]), data_ptr, u64(frames_to_read), ma.format.f32, 1)
+        ma.copy_pcm_frames(
+            raw_data(samples[total_frames_read*channel_count:]),
+            data_ptr,
+            u64(frames_to_read),
+            ma.format.f32,
+            channel_count,
+        )
 
-        commit_result := ma.pcm_rb_commit_read(rb_pt, frames_to_read, data_ptr)
+        commit_result := ma.pcm_rb_commit_read(rb_ptr, frames_to_read, data_ptr)
 
         // if ringbuffer at end we still want to continue trying to acquire read
         if commit_result != ma.result.SUCCESS && commit_result != ma.result.AT_END {

@@ -7,15 +7,31 @@ import "core:strings"
 
 
 
+import ma "vendor:miniaudio"
+
+// Simplify by using a constant number of ringbuffers instead of a dynamic list.
+DEFAULT_RB_SIZE :: 96000
+
+STROBE_COUNT :: 4
+
 // FFT size for pitch detection
 FFT_SIZE :: 4096
+
 SAMPLERATE :: 44100
+SAMPLE_SIZE :: 1024
+
 SCREEN_WIDTH :: 1024
 SCREEN_HEIGHT :: 768
 
 
-font: rl.Font
+Ringbuffer :: ma.pcm_rb
+
 font_atlas := "ABCDEFGHz♯♭/1234567890."
+font: rl.Font
+
+target_freq: f64
+frame_counter_real: f64
+strobe_samples: [STROBE_COUNT*SAMPLE_SIZE]f32
 
 
 main :: proc() {
@@ -49,6 +65,14 @@ main :: proc() {
     font = rl.LoadFontEx("../assets/NotoSansMono-Medium.ttf", 128, codepoints, count)
     defer rl.UnloadFont(font)
 
+
+    // freq := 293.6648  // D4
+    // freq := 138.5913 // C#
+    // freq := 261.6256
+    target_freq = 391.9954
+    frame_counter_real := 0.0
+
+
     for !rl.WindowShouldClose() {
 
         /* DISABLE PITCH DETECTION
@@ -71,6 +95,13 @@ main :: proc() {
         note := find_note(freq)
 
         */
+
+        frame_count, drift := read_samples(
+            ringbuffer=&strobe_ringbuffer,
+            samples=strobe_samples[:],
+            target_interval=f64(SAMPLERATE) / target_freq,
+        )
+
         rl.BeginDrawing()
         {
             draw_screen()
@@ -80,20 +111,18 @@ main :: proc() {
 }
 
 
+
+
 @(private)
 draw_screen :: proc() {
+    @(static) sharp : cstring = "♯"
 
     rl.ClearBackground(rl.BLACK)
 
 
-    // freq : f32 = 293.6648  // D4
-    freq : f32 = 138.5913 // C#
-    // freq : f32 = 261.6256
-    note := find_note(freq)
+    note := find_note(f32(target_freq))
 
-    sharp : cstring = "♯"
-
-    // fmt.println(note)
+    // fmt.println(target_freq, note)
 
     // TODO: make draw_note() method
     if note.is_accidental {
@@ -109,7 +138,8 @@ draw_screen :: proc() {
 
     // rl.DrawText("A1", 10, 10, 30, rl.PURPLE)
 
-    formatted_freq := strings.clone_to_cstring(fmt.aprintf("%.1fHz", freq))
+
+    formatted_freq := strings.clone_to_cstring(fmt.aprintf("%.1fHz", target_freq))
     rl.DrawTextEx(font, formatted_freq, {20, 100}, 32, 0, rl.PURPLE)
 
 }

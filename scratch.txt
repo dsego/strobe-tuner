@@ -1,6 +1,15 @@
 
 
-loop over band inside one frag shader
+
+
+4 channel ringbuffer
+    - apply iir filtering in the audio callback, 4 iir filter for 4 channels
+    - read ringbuffer in one iteration for frame rate calculations
+    - peak read one sample before & after -> re-interpolate based on sub-sample drift
+
+
+
+
 
 
 show tone indication, the notes move left & right, the marker is static
@@ -9,7 +18,6 @@ show tone indication, the notes move left & right, the marker is static
   C2  C#2 D2 D#2  E2
 
 
-use image maps instead of fonts
 
 bit stream auto correlation?
 
