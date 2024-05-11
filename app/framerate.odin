@@ -1,6 +1,7 @@
 package app
 
 import "core:math"
+import "core:fmt"
 
 read_samples :: proc(ringbuffer: ^Ringbuffer, samples: []f32, target_interval: f64) -> (u32, f64) {
     @(static) frame_counter_real := 0.0

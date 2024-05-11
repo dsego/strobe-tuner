@@ -21,7 +21,7 @@ init_strobes :: proc (size: int, normalized_freq: f64) {
 }
 
 run_strobe :: proc (strobe: ^Strobe, sample: f32) -> f32 {
-    return biquad_process_sample(&strobe.biquad, sample)
+    return sample // biquad_process_sample(&strobe.biquad, sample)
 }
 
 destroy_strobes :: proc() {

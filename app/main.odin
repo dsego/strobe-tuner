@@ -12,7 +12,7 @@ import ma "vendor:miniaudio"
 // Simplify by using a constant number of ringbuffers instead of a dynamic list.
 DEFAULT_RB_SIZE :: 96000
 
-STROBE_COUNT :: 4
+STROBE_COUNT :: 1
 
 // FFT size for pitch detection
 FFT_SIZE :: 4096
@@ -26,6 +26,7 @@ SCREEN_HEIGHT :: 768
 
 Ringbuffer :: ma.pcm_rb
 
+sharp : cstring = "♯"
 font_atlas := "ABCDEFGHz♯♭/1234567890."
 font: rl.Font
 
@@ -35,22 +36,16 @@ strobe_samples: [STROBE_COUNT*SAMPLE_SIZE]f32
 
 
 main :: proc() {
-    /*
     ok := init_audio_capture(SAMPLERATE)
     if !ok do return
     defer destroy_audio_capture()
 
-    pitch := pitch_init(FFT_SIZE, SAMPLERATE)
-    defer pitch_destroy(pitch)
+    // pitch := pitch_init(FFT_SIZE, SAMPLERATE)
+    // defer pitch_destroy(pitch)
 
-    samples: []f32 = make([]f32, FFT_SIZE)
-    new_samples: []f32 = make([]f32, FFT_SIZE)
-    defer delete(samples)
-
-    freq : f32 = 261.6256
-    strobe_band := init_strobe(1024, f64(freq/SAMPLERATE))
-    defer destroy_strobe(strobe_band)
-    */
+    // samples: []f32 = make([]f32, FFT_SIZE)
+    // new_samples: []f32 = make([]f32, FFT_SIZE)
+    // defer delete(samples)
 
     rl.SetTargetFPS(60)
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
@@ -95,51 +90,66 @@ main :: proc() {
         note := find_note(freq)
 
         */
+        note := find_note(f32(target_freq))
+        target_interval := f64(SAMPLERATE) / target_freq
 
         frame_count, drift := read_samples(
             ringbuffer=&strobe_ringbuffer,
             samples=strobe_samples[:],
-            target_interval=f64(SAMPLERATE) / target_freq,
+            target_interval=target_interval,
         )
 
+        dx := f32(800) / f32(target_interval-1)
+        drift_adj := f32(drift) * dx
+
+
         rl.BeginDrawing()
+        defer rl.EndDrawing()
         {
-            draw_screen()
+            rl.ClearBackground(rl.BLACK)
+
+            for i in 0..<STROBE_COUNT {
+
+                points: [SAMPLE_SIZE]rl.Vector2
+                x := 50.0 - drift_adj
+                y := 200 + 110 * i32(i)
+
+                for j in 0..<frame_count {
+                    // note that y is flipped (negative)
+                    dy := 100.0 / 2.0 - strobe_samples[i+int(j)] * 400.0
+                    points[j] = { x, f32(y) + dy }
+                    x += dx
+                }
+
+                rl.DrawRectangleLines(50, y, 800, 100, rl.GRAY)
+                rl.DrawLineStrip(raw_data(points[:]), i32(frame_count), rl.PINK)
+            }
+
+
+
+            // fmt.println(target_freq, note)
+
+            // TODO: make draw_note() method
+            if note.is_accidental {
+                rl.DrawTextEx(font, cstring(&note.name), {20, 20}, 64, 0, rl.PURPLE)
+                rl.DrawTextEx(font, sharp, {50, 20}, 32, 0, rl.PURPLE)
+                rl.DrawTextEx(font, sharp, {50, 20}, 32, 0, rl.PURPLE)
+            } else {
+                rl.DrawTextEx(font, cstring(&note.name), {20, 20}, 64, 0, rl.PURPLE)
+            }
+
+            // run_strobe(strobe_band, )
+            // fmt.println(note.name, note.semitone_index)
+
+            // rl.DrawText("A1", 10, 10, 30, rl.PURPLE)
+
+
+            formatted_freq := strings.clone_to_cstring(fmt.aprintf("%.1fHz", target_freq))
+            rl.DrawTextEx(font, formatted_freq, {20, 100}, 32, 0, rl.PURPLE)
+
         }
-        rl.EndDrawing()
     }
 }
 
 
 
-
-@(private)
-draw_screen :: proc() {
-    @(static) sharp : cstring = "♯"
-
-    rl.ClearBackground(rl.BLACK)
-
-
-    note := find_note(f32(target_freq))
-
-    // fmt.println(target_freq, note)
-
-    // TODO: make draw_note() method
-    if note.is_accidental {
-        rl.DrawTextEx(font, cstring(&note.name), {20, 20}, 64, 0, rl.PURPLE)
-        rl.DrawTextEx(font, sharp, {50, 20}, 32, 0, rl.PURPLE)
-        rl.DrawTextEx(font, sharp, {50, 20}, 32, 0, rl.PURPLE)
-    } else {
-        rl.DrawTextEx(font, cstring(&note.name), {20, 20}, 64, 0, rl.PURPLE)
-    }
-
-    // run_strobe(strobe_band, )
-    // fmt.println(note.name, note.semitone_index)
-
-    // rl.DrawText("A1", 10, 10, 30, rl.PURPLE)
-
-
-    formatted_freq := strings.clone_to_cstring(fmt.aprintf("%.1fHz", target_freq))
-    rl.DrawTextEx(font, formatted_freq, {20, 100}, 32, 0, rl.PURPLE)
-
-}
