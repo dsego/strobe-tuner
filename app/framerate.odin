@@ -4,28 +4,30 @@ import "core:math"
 import "core:fmt"
 
 read_samples :: proc(ringbuffer: ^Ringbuffer, samples: []f32, target_interval: f64) -> (u32, f64) {
-    @(static) frame_counter_real := 0.0
+    // @(static) frame_counter_real := 0.0
 
-    frames_available := frames_available_in_ringbuffer(ringbuffer)
+    // frames_available := frames_available_in_ringbuffer(ringbuffer)
 
-    next_frame_count, frames_to_skip, frames_to_read := calculate_framerate(
-        frames_available,
-        frame_counter_real,
-        target_interval
-    )
+    // next_frame_count, frames_to_skip, frames_to_read := calculate_framerate(
+    //     frames_available,
+    //     frame_counter_real,
+    //     target_interval
+    // )
 
-    // don't let the counter increase forever, we only need to keep the fractional part
-    frame_counter_real = next_frame_count - math.floor(next_frame_count)
+    // // don't let the counter increase forever, we only need to keep the fractional part
+    // frame_counter_real = next_frame_count - math.floor(next_frame_count)
 
-    // skip old samples to pick up slack and catch up with the writer
-    if frames_to_skip > 0 do advance_ringbuffer(ringbuffer, frames_to_skip)
+    // // skip old samples to pick up slack and catch up with the writer
+    // if frames_to_skip > 0 do advance_ringbuffer(ringbuffer, frames_to_skip)
 
-    // consume one frequency interval of samples
-    if frames_to_read > 0 do read_ringbuffer(ringbuffer, samples, frames_to_read)
+    // // consume one frequency interval of samples
+    // if frames_to_read > 0 do read_ringbuffer(ringbuffer, samples, frames_to_read)
 
-    // correct for sub-sample drift
-    drift := f64(1.0) - frame_counter_real
+    // // correct for sub-sample drift
+    // drift := f64(1.0) - frame_counter_real
 
+    frames_to_read := u32(0)
+    drift := 0.0
     return frames_to_read, drift
 }
 

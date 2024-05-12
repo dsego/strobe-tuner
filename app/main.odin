@@ -93,14 +93,14 @@ main :: proc() {
         note := find_note(f32(target_freq))
         target_interval := f64(SAMPLERATE) / target_freq
 
-        frame_count, drift := read_samples(
-            ringbuffer=&strobe_ringbuffer,
-            samples=strobe_samples[:],
-            target_interval=target_interval,
-        )
+        // frame_count, drift := read_samples(
+        //     ringbuffer=&strobe_ringbuffer,
+        //     samples=strobe_samples[:],
+        //     target_interval=target_interval,
+        // )
 
-        dx := f32(800) / f32(target_interval-1)
-        drift_adj := f32(drift) * dx
+        // dx := f32(800) / f32(target_interval-1)
+        // drift_adj := f32(drift) * dx
 
 
         rl.BeginDrawing()
@@ -110,19 +110,19 @@ main :: proc() {
 
             for i in 0..<STROBE_COUNT {
 
-                points: [SAMPLE_SIZE]rl.Vector2
-                x := 50.0 - drift_adj
-                y := 200 + 110 * i32(i)
+                // points: [SAMPLE_SIZE]rl.Vector2
+                // x := 50.0 - drift_adj
+                // y := 200 + 110 * i32(i)
 
-                for j in 0..<frame_count {
-                    // note that y is flipped (negative)
-                    dy := 100.0 / 2.0 - strobe_samples[i+int(j)] * 400.0
-                    points[j] = { x, f32(y) + dy }
-                    x += dx
-                }
+                // for j in 0..<frame_count {
+                //     // note that y is flipped (negative)
+                //     dy := 100.0 / 2.0 - strobe_samples[i+int(j)] * 400.0
+                //     points[j] = { x, f32(y) + dy }
+                //     x += dx
+                // }
 
-                rl.DrawRectangleLines(50, y, 800, 100, rl.GRAY)
-                rl.DrawLineStrip(raw_data(points[:]), i32(frame_count), rl.PINK)
+                // rl.DrawRectangleLines(50, y, 800, 100, rl.GRAY)
+                // rl.DrawLineStrip(raw_data(points[:]), i32(frame_count), rl.PINK)
             }
 
 

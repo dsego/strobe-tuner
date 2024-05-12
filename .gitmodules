@@ -1,0 +1,3 @@
+[submodule "odin-portaudio"]
+	path = odin-portaudio
+	url = git@github.com:jockus/odin-portaudio.git
