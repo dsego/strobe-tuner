@@ -28,7 +28,8 @@ foreign pa_ringbuffer {
         dataPtr: rawptr
     ) -> rb_size_t ---
     FlushRingBuffer :: proc (rbuf: ^RingBuffer) ---
-    GetRingBufferWriteAvailable :: proc (rbuf: ^RingBuffer) ---
+    GetRingBufferWriteAvailable :: proc (rbuf: ^RingBuffer) -> rb_size_t ---
+    GetRingBufferReadAvailable :: proc (rbuf: ^RingBuffer) -> rb_size_t ---
 
     WriteRingBuffer :: proc (rbuf: ^RingBuffer, data: rawptr, elementCount: rb_size_t) -> rb_size_t ---
     ReadRingBuffer :: proc (rbuf: ^RingBuffer, data: rawptr, elementCount: rb_size_t) -> rb_size_t ---

@@ -3,31 +3,32 @@ package app
 import "core:math"
 import "core:fmt"
 
-read_samples :: proc(ringbuffer: ^Ringbuffer, samples: []f32, target_interval: f64) -> (u32, f64) {
-    // @(static) frame_counter_real := 0.0
+import pa_rb "../pa_ringbuffer"
 
-    // frames_available := frames_available_in_ringbuffer(ringbuffer)
 
-    // next_frame_count, frames_to_skip, frames_to_read := calculate_framerate(
-    //     frames_available,
-    //     frame_counter_real,
-    //     target_interval
-    // )
+read_samples :: proc(rb_ptr: ^pa_rb.RingBuffer, samples: []f32, target_interval: f64) -> (u32, f64) {
+    @(static) frame_counter_real := 0.0
 
-    // // don't let the counter increase forever, we only need to keep the fractional part
-    // frame_counter_real = next_frame_count - math.floor(next_frame_count)
+    frames_available := frames_available_in_ringbuffer(rb_ptr)
 
-    // // skip old samples to pick up slack and catch up with the writer
-    // if frames_to_skip > 0 do advance_ringbuffer(ringbuffer, frames_to_skip)
+    next_frame_count, frames_to_skip, frames_to_read := calculate_framerate(
+        u32(frames_available),
+        frame_counter_real,
+        target_interval
+    )
 
-    // // consume one frequency interval of samples
-    // if frames_to_read > 0 do read_ringbuffer(ringbuffer, samples, frames_to_read)
+    // don't let the counter increase forever, we only need to keep the fractional part
+    frame_counter_real = next_frame_count - math.floor(next_frame_count)
 
-    // // correct for sub-sample drift
-    // drift := f64(1.0) - frame_counter_real
+    // skip old samples to pick up slack and catch up with the writer
+    if frames_to_skip > 0 do advance_ringbuffer(rb_ptr, i32(frames_to_skip))
 
-    frames_to_read := u32(0)
-    drift := 0.0
+    // consume one frequency interval of samples
+    if frames_to_read > 0 do read_ringbuffer(rb_ptr, samples, frames_to_read, STROBE_COUNT)
+
+    // correct for sub-sample drift
+    drift := f64(1.0) - frame_counter_real
+
     return frames_to_read, drift
 }
 
