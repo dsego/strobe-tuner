@@ -13,7 +13,7 @@ import ma "vendor:miniaudio"
 // NOTE: Needs to be a power of 2 for portaudio ring buffers!
 DEFAULT_RB_SIZE :: 65536
 
-STROBE_COUNT :: 4
+STROBE_COUNT :: 1
 
 // FFT size for pitch detection
 FFT_SIZE :: 4096
@@ -33,7 +33,7 @@ font: rl.Font
 
 target_freq: f64
 frame_counter_real: f64
-strobe_samples: [STROBE_COUNT*SAMPLE_SIZE]f32
+
 
 
 main :: proc() {
@@ -65,7 +65,10 @@ main :: proc() {
     // freq := 293.6648  // D4
     // freq := 138.5913 // C#
     // freq := 261.6256
-    target_freq = 391.9954
+    target_freq = 440.0000 // A
+    // target_freq = 329.6276 // E
+    // target_freq = 261.6256 // C
+    // target_freq = 391.9954 // G
     frame_counter_real := 0.0
 
 
@@ -94,14 +97,6 @@ main :: proc() {
         note := find_note(f32(target_freq))
         target_interval := f64(SAMPLERATE) / target_freq
 
-        frame_count, drift := read_samples(
-            rb_ptr=&strobe_ringbuffer,
-            samples=strobe_samples[:],
-            target_interval=target_interval,
-        )
-
-        dx := f32(800) / f32(target_interval-1)
-        drift_adj := f32(drift) * dx
 
 
         rl.BeginDrawing()
@@ -109,24 +104,7 @@ main :: proc() {
         {
             rl.ClearBackground(rl.BLACK)
 
-            for i in 0..<STROBE_COUNT {
-
-                points: [SAMPLE_SIZE]rl.Vector2
-                x := 50.0 - drift_adj
-                y := 200 + 110 * i32(i)
-
-                for j in 0..<frame_count {
-                    // note that y is flipped (negative)
-                    dy := 100.0 / 2.0 - strobe_samples[i+int(j)] * 400.0
-                    points[j] = { x, f32(y) + dy }
-                    x += dx
-                }
-
-                rl.DrawRectangleLines(50, y, 800, 100, rl.GRAY)
-                rl.DrawLineStrip(raw_data(points[:]), i32(frame_count), rl.PINK)
-            }
-
-
+            draw_strobes(target_interval)
 
             // fmt.println(target_freq, note)
 

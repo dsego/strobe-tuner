@@ -10,6 +10,7 @@ read_samples :: proc(rb_ptr: ^pa_rb.RingBuffer, samples: []f32, target_interval:
     @(static) frame_counter_real := 0.0
 
     frames_available := frames_available_in_ringbuffer(rb_ptr)
+    // fmt.println(frames_available)
 
     next_frame_count, frames_to_skip, frames_to_read := calculate_framerate(
         u32(frames_available),
