@@ -26,25 +26,44 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
 
     fmt.println("Initialized PortAudio")
 
+    device_count := pa.GetDeviceCount()
+
+    for i in 0..<device_count {
+        fmt.printf("  %v ‣ %s\n", i, pa.GetDeviceInfo(i).name)
+    }
+
+    device:i32 = 3
+
     interleaved_bytes := size_of(f32) * STROBE_COUNT
     strobe_ringbuffer_data = make([]u8, DEFAULT_RB_SIZE * interleaved_bytes)
     pa_rb.InitializeRingBuffer(&strobe_ringbuffer, i32(interleaved_bytes), DEFAULT_RB_SIZE, raw_data(strobe_ringbuffer_data))
 
-    // TODO
-    // PaStreamParameters params;
-    // params.device = device;
-    // params.channelCount = 1;
-    // params.sampleFormat = paFloat32;
-    // params.suggestedLatency = Pa_GetDeviceInfo(device)->defaultLowInputLatency;
-    // params.hostApiSpecificStreamInfo = NULL;
+    // err = pa.OpenDefaultStream(
+    //     stream=&stream,
+    //     numInputChannels=1,
+    //     numOutputChannels=0,
+    //     sampleFormat=pa.Float32,
+    //     sampleRate=f64(samplerate),
+    //     framesPerBuffer=pa.FramesPerBufferUnspecified,
+    //     streamCallback=stream_callback,
+    //     userData=nil,
+    // )
 
-    err = pa.OpenDefaultStream(
-        stream=&stream,
-        numInputChannels=1,
-        numOutputChannels=0,
+    stream_params := pa.StreamParameters {
+        device=device,
+        channelCount=1,
         sampleFormat=pa.Float32,
+        suggestedLatency=pa.GetDeviceInfo(device).defaultLowInputLatency,
+        hostApiSpecificStreamInfo=nil,
+    }
+
+    err = pa.OpenStream(
+        stream=&stream,
+        inputParameters=&stream_params,
+        outputParameters=nil,
         sampleRate=f64(samplerate),
         framesPerBuffer=pa.FramesPerBufferUnspecified,
+        streamFlags=0,
         streamCallback=stream_callback,
         userData=nil,
     )
