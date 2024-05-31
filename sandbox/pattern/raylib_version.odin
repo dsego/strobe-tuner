@@ -2,6 +2,7 @@ package pattern
 
 
 import "core:fmt"
+import "core:math"
 import rl "vendor:raylib"
 
 raylib_version :: proc() {
@@ -15,7 +16,9 @@ raylib_version :: proc() {
     defer rl.UnloadImage(image)
 
     for i in 0..<256 {
-        rl.ImageDrawPixel(&image, i32(i), 0, {u8(i), u8(i), u8(i), 255})
+        freq := f32(5.0)
+        val := math.sin_f32(f32(i)/256.0 * 2.0 * math.PI * freq) * 127.5 + 127.5
+        rl.ImageDrawPixel(&image, i32(i), 0, {u8(val), u8(val), u8(val), 255})
     }
 
     texture := rl.LoadTextureFromImage(image)

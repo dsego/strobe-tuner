@@ -8,11 +8,20 @@ import pa_rb "../pa_ringbuffer"
 
 read_samples :: proc(rb_ptr: ^pa_rb.RingBuffer, samples: []f32, target_interval: f64) -> (u32, f64) {
     @(static) frame_counter_real := 0.0
+    @(static) drift := 0.0
+    @(static) frames_to_read: u32 = 0
 
     frames_available := frames_available_in_ringbuffer(rb_ptr)
-    // fmt.println(frames_available)
 
-    next_frame_count, frames_to_skip, frames_to_read := calculate_framerate(
+    // we don't have enough samples to advance, return previous results
+    if f64(frames_available) < target_interval {
+        return frames_to_read, drift
+    }
+
+    next_frame_count: f64
+    frames_to_skip: u32
+
+    next_frame_count, frames_to_skip, frames_to_read = calculate_framerate(
         u32(frames_available),
         frame_counter_real,
         target_interval
@@ -28,7 +37,7 @@ read_samples :: proc(rb_ptr: ^pa_rb.RingBuffer, samples: []f32, target_interval:
     if frames_to_read > 0 do read_ringbuffer(rb_ptr, samples, frames_to_read, STROBE_COUNT)
 
     // correct for sub-sample drift
-    drift := f64(1.0) - frame_counter_real
+    drift = f64(1.0) - frame_counter_real
 
     return frames_to_read, drift
 }

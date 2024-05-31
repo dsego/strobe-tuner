@@ -8,20 +8,20 @@ Strobe :: struct {
 
 strobes: [STROBE_COUNT] Strobe
 
-init_strobes :: proc (size: int, normalized_freq: f64) {
+init_strobes :: proc (normalized_freq: f64) {
     freq := normalized_freq
 
     for i in 0..<STROBE_COUNT {
-        bandwidth := 0.1 * freq
+        bandwidth := 0.5 * freq
         strobes[i] = Strobe {}
         strobes[i].biquad = biquad_resonator(freq, bandwidth)
-        strobes[i].samples = make([]f32, size)
+        // strobes[i].samples = make([]f32, size)
         freq *= 2.0
     }
 }
 
 run_strobe :: proc (strobe: ^Strobe, sample: f32) -> f32 {
-    return sample // biquad_process_sample(&strobe.biquad, sample)
+    return biquad_process_sample(&strobe.biquad, sample)
 }
 
 destroy_strobes :: proc() {

@@ -28,11 +28,20 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
 
     device_count := pa.GetDeviceCount()
 
+    //  MacBook Pro Microphone
+    device:i32 = -1
+
     for i in 0..<device_count {
-        fmt.printf("  %v ‣ %s\n", i, pa.GetDeviceInfo(i).name)
+        device_name := pa.GetDeviceInfo(i).name
+        str := "  %v  ‣  %s\n"
+        if device_name == "BlackHole 2ch" {
+        // if device_name == "MacBook Pro Microphone" {
+            str = "  %v [‣] %s\n"
+            device = i
+        }
+        fmt.printf(str, i, device_name)
     }
 
-    device:i32 = 3
 
     interleaved_bytes := size_of(f32) * STROBE_COUNT
     strobe_ringbuffer_data = make([]u8, DEFAULT_RB_SIZE * interleaved_bytes)

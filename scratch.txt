@@ -1,5 +1,15 @@
 
 
+add zeros to filter out harmonics? - copy resonator
+
+
+need to figure out how to work the framerate with the interleaved data
+
+
+resample strobe in strobe display
+
+
+------------------------------------
 
 
 4 channel ringbuffer
@@ -39,8 +49,6 @@ the pitch sandbox should show multiple methods in tandem to compare !!!!
 debugging screens activated by key combo
 
 
-- autocorrelation section -> shows the autocorrelation with marker on selected lag, shows the current note
-
 
 -----
 
@@ -64,11 +72,7 @@ IIR scaling filter gain  / page 300
 Automatic Gain control AGC - / page 783
 Envelope detection / page 784
 
-----
 
-
-popravit framerate da ukljucuje n semplova s lijeve strane? - OVO
-framerate - interpolate signal before sending to display
 
 
 --------
@@ -81,37 +85,5 @@ samplerBuffer ???
 
 
 ints, floats, pointers are atomic?
-
-
-RENDERING
-
-
-prototype ---> raylib
-metal_app/
-    shaders.odin
-    main.odin       // init audio, rendering, run the main loop, pitch detect
-    display.odin    // draw display & strobes, draw note, indicators
-
-core/
-
-
-    framerate.odin
-    strobe.odin          // read samples --> iir filter, gain, process
-
-
-
-
-read audio from ring buffer
-    -> pitch detection
-        -> set framerate target freq
-        -> set strobe iir filters
-
-    -> framerate -> send samples to strobes
-        -> strobe processing
-
-
-draw window
-    -> draw detected note
-    -> read strobe data -> strobe display
 
 

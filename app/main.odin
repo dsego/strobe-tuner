@@ -32,11 +32,22 @@ font_atlas := "ABCDEFGHz♯♭/1234567890."
 font: rl.Font
 
 target_freq: f64
-frame_counter_real: f64
-
 
 
 main :: proc() {
+
+
+    // freq := 293.6648  // D4
+    // freq := 138.5913 // C#
+    // freq := 261.6256
+    // target_freq = 440.0000 // A
+    target_freq = 329.6276 // E
+    // target_freq = 261.6256 // C
+    // target_freq = 391.9954 // G
+
+
+    init_strobes(target_freq / SAMPLERATE)
+
     ok := init_audio_capture(SAMPLERATE)
     if !ok do return
     defer destroy_audio_capture()
@@ -48,6 +59,7 @@ main :: proc() {
     // new_samples: []f32 = make([]f32, FFT_SIZE)
     // defer delete(samples)
 
+    rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetTargetFPS(60)
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
@@ -61,16 +73,10 @@ main :: proc() {
     font = rl.LoadFontEx("../assets/NotoSansMono-Medium.ttf", 128, codepoints, count)
     defer rl.UnloadFont(font)
 
+    init_strobe_display()
+    defer destroy_strobe_display()
 
-    // freq := 293.6648  // D4
-    // freq := 138.5913 // C#
-    // freq := 261.6256
-    target_freq = 440.0000 // A
-    // target_freq = 329.6276 // E
-    // target_freq = 261.6256 // C
-    // target_freq = 391.9954 // G
-    frame_counter_real := 0.0
-
+    should_draw_pattern := true
 
     for !rl.WindowShouldClose() {
 
@@ -95,16 +101,35 @@ main :: proc() {
 
         */
         note := find_note(f32(target_freq))
-        target_interval := f64(SAMPLERATE) / target_freq
+
+        // aim at a double interval, to show more of the wave shape and slow down the strobe movement
+        target_interval := 2.0 * f64(SAMPLERATE) / target_freq
 
 
+        frame_count, drift := read_samples(
+            rb_ptr=&strobe_ringbuffer,
+            samples=strobe_samples[:],
+            target_interval=target_interval,
+        )
+
+        if rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
+            should_draw_pattern = !should_draw_pattern
+        }
+
+        load_strobe_texture(frame_count)
+        defer unload_strobe_texture()
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
         {
             rl.ClearBackground(rl.BLACK)
 
-            draw_strobes(target_interval)
+            draw_strobes(
+                target_interval,
+                drift,
+                frame_count,
+                should_draw_pattern
+            )
 
             // fmt.println(target_freq, note)
 
