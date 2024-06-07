@@ -3,6 +3,7 @@ package app
 
 import rl "vendor:raylib"
 import "core:fmt"
+import "core:path/filepath"
 import "core:strings"
 
 
@@ -33,13 +34,11 @@ font: rl.Font
 
 target_freq: f64
 
+// Root directory relative to this file
+root_dir := filepath.dir(#file)
 
 main :: proc() {
 
-
-    // freq := 293.6648  // D4
-    // freq := 138.5913 // C#
-    // freq := 261.6256
     // target_freq = 440.0000 // A
     target_freq = 329.6276 // E
     // target_freq = 261.6256 // C
@@ -70,7 +69,8 @@ main :: proc() {
     codepoints := rl.LoadCodepoints(raw_data(font_atlas), &count)
     defer rl.UnloadCodepoints(codepoints)
 
-    font = rl.LoadFontEx("../assets/NotoSansMono-Medium.ttf", 128, codepoints, count)
+    font_path := strings.clone_to_cstring(filepath.join({root_dir, "../assets/NotoSansMono-Medium.ttf"}))
+    font = rl.LoadFontEx(font_path, 128, codepoints, count)
     defer rl.UnloadFont(font)
 
     init_strobe_display()
@@ -111,6 +111,8 @@ main :: proc() {
             samples=strobe_samples[:],
             target_interval=target_interval,
         )
+
+        fmt.println(frame_count, drift)
 
         if rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
             should_draw_pattern = !should_draw_pattern
