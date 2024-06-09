@@ -148,11 +148,13 @@ process_strobe_ringbuffer :: proc "c" (
         &size2
     )
 
+    // fmt.println("num written", num_written, size1, size2)
+
     // store interleaved samples for each strobe
     write_to_rb_region(region1, size1, input_slice)
 
     if size2 > 0 {
-        write_to_rb_region(region2, size2, input_slice)
+        write_to_rb_region(region2, size2, input_slice[size1:])
     }
 
     pa_rb.AdvanceRingBufferWriteIndex(&strobe_ringbuffer, num_written)
