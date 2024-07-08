@@ -34,8 +34,8 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
     for i in 0..<device_count {
         device_name := pa.GetDeviceInfo(i).name
         str := "  %v  ‣  %s\n"
-        // if device_name == "BlackHole 2ch" {
-        if device_name == "MacBook Pro Microphone" {
+        if device_name == "BlackHole 2ch" {
+        // if device_name == "MacBook Pro Microphone" {
             str = "  %v [‣] %s\n"
             device = i
         }
@@ -172,8 +172,8 @@ write_to_rb_region :: proc(region: rawptr, size: i32, input_slice: []f32) {
     }
 }
 
-advance_ringbuffer :: proc (rb_ptr: ^pa_rb.RingBuffer, frames_to_skip: i32) {
-    pa_rb.AdvanceRingBufferReadIndex(rb_ptr, frames_to_skip)
+advance_ringbuffer :: proc (rb_ptr: ^pa_rb.RingBuffer, frames_to_skip: i32) -> i32 {
+    return pa_rb.AdvanceRingBufferReadIndex(rb_ptr, frames_to_skip)
 }
 
 frames_available_in_ringbuffer:: proc (rb_ptr: ^pa_rb.RingBuffer) -> i32 {

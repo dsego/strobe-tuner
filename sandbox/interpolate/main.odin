@@ -9,8 +9,8 @@ import "core:fmt"
 SCREEN_WIDTH :: 800
 SCREEN_HEIGHT :: 600
 
-target_freq := 2300.0
 sample_count := 38
+target_interval := 38.347826087
 drift := 0.5217391304395278
 
 
@@ -54,7 +54,7 @@ main :: proc() {
         adj_points[i] = { f32(x), f32(y + dy) }
         x += dx
     }
-    fmt.println(adj_points)
+    // fmt.println(adj_points)
 
 
     for !rl.WindowShouldClose() {

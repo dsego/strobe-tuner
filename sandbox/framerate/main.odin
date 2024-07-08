@@ -13,7 +13,7 @@ SCREEN_WIDTH :: 1024
 SCREEN_HEIGHT :: 768
 
 // TODO: ability to choose sample rate
-SAMPLERATE :: u32(48000)
+SAMPLERATE :: u32(44100)
 
 // SIZE :: 1024
 SIZE :: 4096
@@ -34,9 +34,11 @@ capture_device_count: u32
 // target_freq := 55.0
 // target_freq := 65.406
 // target_freq := 82.407
-target_freq := 49.00
+// target_freq := 49.00
 // target_freq := 440.0
-target_interval := f64(SAMPLERATE) / target_freq
+target_freq := 1567.982
+// target_freq := 7902.133
+target_interval := 2.0 * f64(SAMPLERATE) / target_freq
 frame_counter_real := 0.0
 
 
@@ -126,7 +128,7 @@ init_audio_capture :: proc() {
     fmt.println("..................................\n")
 
     // set BlackHole 2ch device for capture
-    // config.capture.pDeviceID = &capture_devices[1].id
+    config.capture.pDeviceID = &capture_devices[1].id
 
     // Internal Mic
     // config.capture.pDeviceID = &capture_devices[1].id
@@ -265,6 +267,8 @@ draw_screen :: proc() {
     // xpos := f32(10.0)
 
     frame_count, drift := read_samples()
+
+    fmt.println(target_interval, frame_count, drift)
 
     // stretch samples to fit the screen width
     resolution := f32(SCREEN_WIDTH-40) / f32(target_interval-1)

@@ -45,14 +45,14 @@ test_cents_to_freq :: proc(t: ^testing.T) {
 
 cents_to_octave :: proc(cents: f32) -> (f32, f32) {
     nearest: f32 = math.round(cents / 100.0)
-    octave := math.floor((nearest/12.0) + 4.75)
+    octave := math.trunc((nearest/12.0) + 4.75)
     return octave, nearest
 }
 
 freq_to_octave :: proc(freq: f32) -> f32 {
     cents := freq_to_cents(freq)
     nearest: f32 = math.round(cents / 100.0)
-    octave := math.floor((nearest/12.0) + 4.75)
+    octave := math.trunc((nearest/12.0) + 4.75)
     return octave
 }
 

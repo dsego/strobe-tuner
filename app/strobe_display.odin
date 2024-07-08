@@ -20,14 +20,7 @@ destroy_strobe_display :: proc () {
 
 load_strobe_texture :: proc (frame_count: u32) {
     for i in 0..<STROBE_COUNT {
-        max: f32 = 0.0
-        for j in 0..<frame_count {
-            abs_val := abs(strobe_samples[i+int(j)])
-            if abs_val > max {
-                max = abs_val
-            }
-        }
-
+        max := find_abs_max(strobe_samples[:frame_count])
         factor := 1.0 / max
 
         for j in 0..<frame_count {
@@ -53,21 +46,26 @@ draw_strobes :: proc(
     show_pattern: bool,
 ) {
 
-    width :f32 = 800
+    // fmt.println(target_interval, frame_count, drift)
 
-    dx := width / f32(target_interval-1)
+    width: f32 = 800
+    height: f32 = 100
 
-    // TODO:
-    // Resample based on sub-sample drift
+    // floored_interval := math.trunc(target_interval)
 
+    // resolution
+    dx := width / f32(target_interval-1.0)
 
     drift_adj := f32(drift) * dx
 
 
     for i in 0..<STROBE_COUNT {
         points: [SAMPLE_SIZE]rl.Vector2
-        x := width + 50 + drift_adj
-        // x := 50.0 - drift_adj
+        // x := width + 50
+        x :f32 = 50.0 //+ drift_adj
+
+        // fmt.println(drift, x)
+
         y := 200 + 110 * i32(i)
 
         rl.DrawRectangleLines(49, y-1, 802, 102, rl.GRAY)
@@ -85,14 +83,33 @@ draw_strobes :: proc(
             )
 
         } else {
+            max := find_abs_max(strobe_samples[:frame_count])
+            factor := (height/2.0 - 1.0) / max
+
+            // resample by linear interpolation to fit the pixels
+            // e.g. from 300 samples produce a value for each of the 800 pixels
+
             for j in 0..<frame_count {
                 // note that y is flipped (negative)
-                dy := 100.0 / 2.0 - strobe_samples[i+int(j)] * 400.0
+                dy := height/2.0 - strobe_samples[i+int(j)] * factor
                 points[j] = { x, f32(y) + dy }
-                x -= dx
+                x += dx
             }
+
             rl.DrawLineStrip(raw_data(points[:]), i32(frame_count), rl.PINK)
         }
 
     }
+}
+
+
+find_abs_max :: proc (slice: []f32) -> f32 {
+    max: f32 = 0.0
+    for i in 0..<len(slice) {
+        abs_val := abs(slice[i])
+        if abs_val > max {
+            max = abs_val
+        }
+    }
+    return max
 }

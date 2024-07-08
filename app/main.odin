@@ -39,8 +39,12 @@ root_dir := filepath.dir(#file)
 
 main :: proc() {
 
+    target_freq = 2500
+    // target_freq = 1567.982
+    // target_freq = 7902.133
+
     // target_freq = 440.0000 // A
-    target_freq = 329.6276 // E
+    // target_freq = 329.6276 // E
     // target_freq = 261.6256 // C
     // target_freq = 391.9954 // G
 
@@ -76,7 +80,7 @@ main :: proc() {
     init_strobe_display()
     defer destroy_strobe_display()
 
-    should_draw_pattern := true
+    show_pattern := false
 
     for !rl.WindowShouldClose() {
 
@@ -105,17 +109,14 @@ main :: proc() {
         // aim at a double interval, to show more of the wave shape and slow down the strobe movement
         target_interval := 2.0 * f64(SAMPLERATE) / target_freq
 
-
         frame_count, drift := read_samples(
             rb_ptr=&strobe_ringbuffer,
             samples=strobe_samples[:],
             target_interval=target_interval,
         )
 
-        fmt.println(frame_count, drift)
-
         if rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
-            should_draw_pattern = !should_draw_pattern
+            show_pattern = !show_pattern
         }
 
         load_strobe_texture(frame_count)
@@ -130,7 +131,7 @@ main :: proc() {
                 target_interval,
                 drift,
                 frame_count,
-                should_draw_pattern
+                show_pattern,
             )
 
             // fmt.println(target_freq, note)
