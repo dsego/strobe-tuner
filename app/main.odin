@@ -20,7 +20,7 @@ STROBE_COUNT :: 1
 FFT_SIZE :: 4096
 
 SAMPLERATE :: 44100
-SAMPLE_SIZE :: 1024
+SAMPLE_SIZE :: 2048
 
 SCREEN_WIDTH :: 1024
 SCREEN_HEIGHT :: 768
@@ -39,7 +39,8 @@ root_dir := filepath.dir(#file)
 
 main :: proc() {
 
-    target_freq = 2500
+    // target_freq = 2500
+    target_freq = 44
     // target_freq = 1567.982
     // target_freq = 7902.133
 
@@ -127,12 +128,12 @@ main :: proc() {
         {
             rl.ClearBackground(rl.BLACK)
 
-            draw_strobes(
-                target_interval,
-                drift,
-                frame_count,
-                show_pattern,
-            )
+            // draw_strobes(
+            //     target_interval,
+            //     drift,
+            //     frame_count,
+            //     show_pattern,
+            // )
 
             // fmt.println(target_freq, note)
 

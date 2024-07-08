@@ -12,7 +12,7 @@ read_samples :: proc(rb_ptr: ^pa_rb.RingBuffer, samples: []f32, target_interval:
 /*
     Example:
 
-                      【         target interval = 7.xx      】
+                      【         target interval = 7.xx      】↱ fractional part
     +-------------------------------------------------------------------------------+
     |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
     +-------------------------------------------------------------------------------+
@@ -45,10 +45,12 @@ read_samples :: proc(rb_ptr: ^pa_rb.RingBuffer, samples: []f32, target_interval:
         read_ringbuffer(rb_ptr, samples, frames_to_read, STROBE_COUNT)
     }
 
-    overlap_sample = f64(samples[frames_to_read-1])
+    if frames_to_read > 0 {
+        overlap_sample = f64(samples[frames_to_read-1])
+    }
 
     // correct for sub-sample drift
-    return frames_to_read, fractional_part
+    return u32(math.ceil(target_interval)), fractional_part
 }
 
 
