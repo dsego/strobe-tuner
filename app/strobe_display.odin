@@ -86,13 +86,13 @@ draw_strobes :: proc(
             max := find_abs_max(strobe_samples[:frame_count])
             factor := (height/2.0 - 1.0) / max
 
-            // resample by linear interpolation to fit the pixels
+            // TODO: resample by linear interpolation to fit the pixels
             // e.g. from 300 samples produce a value for each of the 800 pixels
 
             for j in 0..<frame_count {
                 // note that y is flipped (negative)
                 dy := height/2.0 - strobe_samples[i+int(j)] * factor
-                points[j] = { x, f32(y) + dy }
+                points[j] = { x + f32(drift) * dx, f32(y) + dy }
                 x += dx
             }
 

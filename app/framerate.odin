@@ -45,12 +45,14 @@ read_samples :: proc(rb_ptr: ^pa_rb.RingBuffer, samples: []f32, target_interval:
         read_ringbuffer(rb_ptr, samples, frames_to_read, STROBE_COUNT)
     }
 
+    count := u32(math.ceil(target_interval))
+
     if frames_to_read > 0 {
-        overlap_sample = f64(samples[frames_to_read-1])
+        overlap_sample = f64(samples[count-1])
     }
 
     // correct for sub-sample drift
-    return u32(math.ceil(target_interval)), fractional_part
+    return count, fractional_part
 }
 
 
@@ -79,6 +81,7 @@ calculate_framerate :: proc(
 
     // case 2. there is overlap with the previous interval (if there is a previous frame)
     } else if f64(frames_available) - frame_counter_real^ - target_interval < target_interval {
+
         // 7.2 + 7.2 = 14.4 -> 15 frames, 8 + 7 -> .2 + 7.2 = 7.4  ~ 7 new samples to read
         // 7.8 + 7.8 = 15.6 -> 16 frames, 8 + 8 -> .8 + 7.8 = 8.6  ~ 8 new samples to read
         if frame_counter_real^ > EPS {

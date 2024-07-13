@@ -153,7 +153,9 @@ main :: proc() {
 
 
             formatted_freq := strings.clone_to_cstring(fmt.aprintf("%.1fHz", target_freq))
+            formatted_interval := strings.clone_to_cstring(fmt.aprintf("%.2f", target_interval))
             rl.DrawTextEx(font, formatted_freq, {20, 100}, 32, 0, rl.PURPLE)
+            rl.DrawTextEx(font, formatted_interval, {20, 150}, 16, 0, rl.SKYBLUE)
 
         }
     }
