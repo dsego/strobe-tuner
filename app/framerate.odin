@@ -79,7 +79,6 @@ calculate_framerate :: proc(
 
     // case 2. there is overlap with the previous interval (if there is a previous frame)
     } else if f64(frames_available) - frame_counter_real^ - target_interval < target_interval {
-
         // 7.2 + 7.2 = 14.4 -> 15 frames, 8 + 7 -> .2 + 7.2 = 7.4  ~ 7 new samples to read
         // 7.8 + 7.8 = 15.6 -> 16 frames, 8 + 8 -> .8 + 7.8 = 8.6  ~ 8 new samples to read
         if frame_counter_real^ > EPS {
@@ -94,17 +93,16 @@ calculate_framerate :: proc(
     // case 3. we can skip a few intervals and read the most recent interval
     } else {
         interval_count := math.trunc(f64(frames_available) / target_interval)
-        frames_to_ingest_real := target_interval * interval_count
-
-        next_frame_counter_real = frame_counter_real^ + frames_to_ingest_real
+        next_frame_counter_real = frame_counter_real^ + target_interval * interval_count
         frames_to_read = u32(math.ceil(target_interval))
-        frames_to_skip = u32(math.ceil(frames_to_ingest_real)) - frames_to_read - u32(math.ceil(frame_counter_real^))
+        frames_to_skip = u32(math.ceil(next_frame_counter_real)) - frames_to_read - u32(math.ceil(frame_counter_real^))
     }
 
     fractional_part := math.ceil(next_frame_counter_real) - next_frame_counter_real
 
     // reset counter to just the fractional part to prevent it from growing endlessly and rolling over
     frame_counter_real^ = next_frame_counter_real - math.trunc(next_frame_counter_real)
+
 
     return frames_to_read, frames_to_skip, fractional_part
 }
@@ -281,5 +279,29 @@ test_calculate_framerate :: proc(t: ^testing.T) {
         testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPS, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
         testing.expect_value(t, skip, 0)
         testing.expect_value(t, read, 36)
+    }
+
+    // 0 5619.0683061733916 267.57468124635199 5733
+    {
+        frame_counter_real := 0.0
+        read, skip, drift := calculate_framerate(5733, 267.57468124635199, &frame_counter_real)
+        expected_counter_real := 0.0683061733916
+        expected_drift := 1.0 - expected_counter_real
+        testing.expect(t, math.abs(expected_drift - drift) < EPS, fmt.tprintf("expected %v, got %v", expected_drift, drift))
+        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPS, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
+        testing.expect_value(t, skip, 5352)
+        testing.expect_value(t, read, 268)
+    }
+
+    // 0.93898083777560259 536.08834333047957 267.57468124635199 646
+    {
+        frame_counter_real := 0.93898083777560259
+        read, skip, drift := calculate_framerate(646, 267.57468124635199, &frame_counter_real)
+        expected_counter_real := 0.08834333047957
+        expected_drift := 1.0 - expected_counter_real
+        testing.expect(t, math.abs(expected_drift - drift) < EPS, fmt.tprintf("expected %v, got %v", expected_drift, drift))
+        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPS, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
+        testing.expect_value(t, skip, 268)
+        testing.expect_value(t, read, 268)
     }
 }

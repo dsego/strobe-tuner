@@ -40,12 +40,12 @@ root_dir := filepath.dir(#file)
 main :: proc() {
 
     // target_freq = 2500
-    target_freq = 44
+    // target_freq = 88
     // target_freq = 1567.982
     // target_freq = 7902.133
 
     // target_freq = 440.0000 // A
-    // target_freq = 329.6276 // E
+    target_freq = 329.6276 // E
     // target_freq = 261.6256 // C
     // target_freq = 391.9954 // G
 
@@ -128,12 +128,12 @@ main :: proc() {
         {
             rl.ClearBackground(rl.BLACK)
 
-            // draw_strobes(
-            //     target_interval,
-            //     drift,
-            //     frame_count,
-            //     show_pattern,
-            // )
+            draw_strobes(
+                target_interval,
+                drift,
+                frame_count,
+                show_pattern,
+            )
 
             // fmt.println(target_freq, note)
 
