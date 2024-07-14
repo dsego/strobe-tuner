@@ -37,7 +37,19 @@ target_freq: f64
 // Root directory relative to this file
 root_dir := filepath.dir(#file)
 
+
 main :: proc() {
+
+    ukulele_freqs: []f64 = {
+        391.9954, // G
+        261.6256, // C
+        329.6276, // E
+        440.0000, // A
+    }
+
+    ukulele_freqs_idx := 0
+
+    target_freq = ukulele_freqs[0]
 
     // target_freq = 2500
     // target_freq = 88
@@ -45,7 +57,7 @@ main :: proc() {
     // target_freq = 7902.133
 
     // target_freq = 440.0000 // A
-    target_freq = 329.6276 // E
+    // target_freq = 329.6276 // E
     // target_freq = 261.6256 // C
     // target_freq = 391.9954 // G
 
@@ -85,6 +97,31 @@ main :: proc() {
 
     for !rl.WindowShouldClose() {
 
+
+        // Toggle between scope view and strobe view
+        if rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
+            show_pattern = !show_pattern
+        }
+
+
+        freq_changed := false
+
+        // Pick next or previous ukulele string
+        if rl.IsKeyPressed(rl.KeyboardKey.RIGHT) {
+            ukulele_freqs_idx += 1
+            freq_changed = true
+        }
+        if rl.IsKeyPressed(rl.KeyboardKey.LEFT) {
+            ukulele_freqs_idx -= 1
+            freq_changed = true
+        }
+
+        if (freq_changed) {
+            ukulele_freqs_idx %= len(ukulele_freqs)
+            if ukulele_freqs_idx < 0 do ukulele_freqs_idx += len(ukulele_freqs) // wrap around
+            reset_framerate()
+        }
+
         /* DISABLE PITCH DETECTION
         // Pitch detection, use the first ringbuffer
         new_count := read_ringbuffer(0, new_samples, FFT_SIZE/2)
@@ -105,6 +142,9 @@ main :: proc() {
         note := find_note(freq)
 
         */
+
+        target_freq = ukulele_freqs[ukulele_freqs_idx]
+
         note := find_note(f32(target_freq))
 
         // aim at a double interval, to show more of the wave shape and slow down the strobe movement
@@ -116,9 +156,7 @@ main :: proc() {
             target_interval=target_interval,
         )
 
-        if rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
-            show_pattern = !show_pattern
-        }
+
 
         load_strobe_texture(frame_count)
         defer unload_strobe_texture()

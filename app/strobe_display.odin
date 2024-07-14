@@ -61,8 +61,7 @@ draw_strobes :: proc(
 
     for i in 0..<STROBE_COUNT {
         points: [SAMPLE_SIZE]rl.Vector2
-        // x := width + 50
-        x :f32 = 50.0 //+ drift_adj
+        x :f32 = width + 50.0 //+ drift_adj
 
         // fmt.println(drift, x)
 
@@ -84,7 +83,8 @@ draw_strobes :: proc(
 
         } else {
             max := find_abs_max(strobe_samples[:frame_count])
-            factor := (height/2.0 - 1.0) / max
+            // factor := (height/2.0 - 1.0) / max
+            factor := (height/2.0 - 1.0) * 10.0
 
             // TODO: resample by linear interpolation to fit the pixels
             // e.g. from 300 samples produce a value for each of the 800 pixels
@@ -92,8 +92,8 @@ draw_strobes :: proc(
             for j in 0..<frame_count {
                 // note that y is flipped (negative)
                 dy := height/2.0 - strobe_samples[i+int(j)] * factor
-                points[j] = { x + f32(drift) * dx, f32(y) + dy }
-                x += dx
+                points[j] = { x - f32(drift) * dx, f32(y) + dy }
+                x -= dx
             }
 
             rl.DrawLineStrip(raw_data(points[:]), i32(frame_count), rl.PINK)

@@ -19,6 +19,8 @@ stream: ^pa.Stream
 err: pa.Error
 
 
+active_device: i32 = -1
+
 
 init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
     err = pa.Initialize()
@@ -28,16 +30,13 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
 
     device_count := pa.GetDeviceCount()
 
-    //  MacBook Pro Microphone
-    device:i32 = -1
-
     for i in 0..<device_count {
         device_name := pa.GetDeviceInfo(i).name
         str := "  %v  ‣  %s\n"
-        if device_name == "BlackHole 2ch" {
-        // if device_name == "MacBook Pro Microphone" {
+        // if device_name == "BlackHole 2ch" {
+        if device_name == "MacBook Pro Microphone" {
             str = "  %v [‣] %s\n"
-            device = i
+            active_device = i
         }
         fmt.printf(str, i, device_name)
     }
@@ -59,10 +58,10 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
     // )
 
     stream_params := pa.StreamParameters {
-        device=device,
+        device=active_device,
         channelCount=1,
         sampleFormat=pa.Float32,
-        suggestedLatency=pa.GetDeviceInfo(device).defaultLowInputLatency,
+        suggestedLatency=pa.GetDeviceInfo(active_device).defaultLowInputLatency,
         hostApiSpecificStreamInfo=nil,
     }
 

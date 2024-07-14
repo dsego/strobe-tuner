@@ -8,6 +8,20 @@ import pa_rb "../pa_ringbuffer"
 
 EPS := 0.000001
 
+
+// TODO: make this a state object {
+frame_counter_real := 0.0
+overlap_sample := 0.0
+// }
+
+
+
+reset_framerate :: proc() {
+    frame_counter_real = 0.0
+    overlap_sample = 0.0
+}
+
+
 read_samples :: proc(rb_ptr: ^pa_rb.RingBuffer, samples: []f32, target_interval: f64) -> (u32, f64) {
 /*
     Example:
@@ -22,8 +36,8 @@ read_samples :: proc(rb_ptr: ^pa_rb.RingBuffer, samples: []f32, target_interval:
 
 */
     frames_available := frames_available_in_ringbuffer(rb_ptr)
-    @(static) frame_counter_real := 0.0
-    @(static) overlap_sample := 0.0
+    frame_counter_real = 0.0
+    overlap_sample = 0.0
 
     frames_to_read, frames_to_skip, fractional_part := calculate_framerate(
         u32(frames_available),
