@@ -36,8 +36,6 @@ read_samples :: proc(rb_ptr: ^pa_rb.RingBuffer, samples: []f32, target_interval:
 
 */
     frames_available := frames_available_in_ringbuffer(rb_ptr)
-    frame_counter_real = 0.0
-    overlap_sample = 0.0
 
     frames_to_read, frames_to_skip, fractional_part := calculate_framerate(
         u32(frames_available),
