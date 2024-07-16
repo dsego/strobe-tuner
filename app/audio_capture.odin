@@ -5,7 +5,7 @@ import "core:math"
 import "core:mem"
 import "core:c"
 import "core:slice"
-import "core:runtime"
+import "base:runtime"
 
 
 import pa "../odin-portaudio"
@@ -33,8 +33,8 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
     for i in 0..<device_count {
         device_name := pa.GetDeviceInfo(i).name
         str := "  %v  ‣  %s\n"
-        // if device_name == "BlackHole 2ch" {
-        if device_name == "MacBook Pro Microphone" {
+        if device_name == "BlackHole 2ch" {
+        // if device_name == "MacBook Pro Microphone" {
             str = "  %v [‣] %s\n"
             active_device = i
         }

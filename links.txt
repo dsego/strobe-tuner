@@ -14,7 +14,7 @@ A few simple frequency estimation methods in Python
 https://gist.github.com/endolith/255291
 
 
-Amplitude Analysis: Root-mean-square EMG Envelope
+Amplitude Analysis: Root-mean-square EMG Envelope - Envelope detection
 https://delsys.com/amplitude-analysis-root-mean-square-emg-envelope/
 
 
@@ -32,9 +32,6 @@ kokkinizita.linuxaudio.org/linuxaudio/zita-resampler/resampler.html
 ----
 
 
-
-Envelope detection
-https://delsys.com/amplitude-analysis-root-mean-square-emg-envelope/
 
 Pitch detection algos in C++
 https://github.com/sevagh/pitch-detection

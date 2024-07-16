@@ -1,4 +1,10 @@
 
+Automatic Gain control AGC - / page 783
+Envelope detection / page 784
+
+
+
+--------
 
 add zeros to filter out harmonics? - copy resonator
 
