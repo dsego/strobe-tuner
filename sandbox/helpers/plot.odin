@@ -49,3 +49,14 @@ draw_time_plot :: proc(using rect: rl.Rectangle, len_samples: int, div_ms: f32, 
         label_ms += div_ms
     }
 }
+
+
+draw_timeplot_box :: proc(using rect: rl.Rectangle) {
+    // Horizontal lines
+    rl.DrawLineEx({x, y}, {x+width, y}, 0.5, rl.GRAY)
+    rl.DrawLineEx({x, y+height}, {x+width, y+height}, 0.5, rl.GRAY)
+
+    // Vertical lines
+    rl.DrawLineEx({x, y}, {x, y+height}, 0.5, rl.GRAY)
+    rl.DrawLineEx({x+width, y}, {x+width, y+height}, 0.5, rl.GRAY)
+}
