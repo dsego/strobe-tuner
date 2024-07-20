@@ -40,6 +40,15 @@ root_dir := filepath.dir(#file)
 
 main :: proc() {
 
+    guitar_freqs: []f64 = {
+        82.40689, // E
+        110.0000, // A
+        146.8324, // D
+        195.9977, // G
+        246.9417, // B
+        329.6276, // E
+    }
+
     ukulele_freqs: []f64 = {
         391.9954, // G
         261.6256, // C
@@ -47,9 +56,10 @@ main :: proc() {
         440.0000, // A
     }
 
-    ukulele_freqs_idx := 0
+    freqs_idx := 0
+    guitar_freqs_idx := 0
 
-    target_freq = ukulele_freqs[0]
+    target_freq = guitar_freqs[0]
 
     // target_freq = 2500
     // target_freq = 88
@@ -108,17 +118,19 @@ main :: proc() {
 
         // Pick next or previous ukulele string
         if rl.IsKeyPressed(rl.KeyboardKey.RIGHT) {
-            ukulele_freqs_idx += 1
+            freqs_idx += 1
             freq_changed = true
         }
         if rl.IsKeyPressed(rl.KeyboardKey.LEFT) {
-            ukulele_freqs_idx -= 1
+            freqs_idx -= 1
             freq_changed = true
         }
 
         if (freq_changed) {
-            ukulele_freqs_idx %= len(ukulele_freqs)
-            if ukulele_freqs_idx < 0 do ukulele_freqs_idx += len(ukulele_freqs) // wrap around
+            // freqs_idx %= len(ukulele_freqs)
+            freqs_idx %= len(guitar_freqs)
+            // if freqs_idx < 0 do freqs_idx += len(ukulele_freqs) // wrap around
+            if freqs_idx < 0 do freqs_idx += len(guitar_freqs) // wrap around
             reset_framerate()
         }
 
@@ -143,7 +155,8 @@ main :: proc() {
 
         */
 
-        target_freq = ukulele_freqs[ukulele_freqs_idx]
+        // target_freq = ukulele_freqs[freqs_idx]
+        target_freq = guitar_freqs[freqs_idx]
 
         note := find_note(f32(target_freq))
 
