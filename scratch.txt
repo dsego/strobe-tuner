@@ -1,6 +1,11 @@
 
-Automatic Gain control AGC - / page 783
-Envelope detection / page 784
+
+Show frequency response from the pitch object.
+
+use freq response to know whether to apply gain, if there is a strong frequency?
+
+
+
 
 
 
@@ -42,7 +47,7 @@ auto correlation - test with bass notes, low frequencies
 
 the pitch sandbox should show multiple methods in tandem to compare !!!!
 
----> TODO if two peaks are close, choose the second one
+
 
 ------
 
@@ -52,7 +57,7 @@ the pitch sandbox should show multiple methods in tandem to compare !!!!
 
 
 
-debugging screens activated by key combo
+
 
 
 
@@ -75,21 +80,5 @@ goertzel?
 IIR scaling filter gain  / page 300
 
 
-Automatic Gain control AGC - / page 783
-Envelope detection / page 784
-
-
-
 
 --------
-
-should pitch be run frequent and then averaged across blocks to smooth?
-should the ffts overlap?
-
-
-samplerBuffer ???
-
-
-ints, floats, pointers are atomic?
-
-

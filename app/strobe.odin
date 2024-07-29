@@ -1,5 +1,7 @@
 package app
 
+import "core:math"
+
 Strobe :: struct {
     size: int,
     samples: []f32,
@@ -7,6 +9,13 @@ Strobe :: struct {
 }
 
 strobes: [STROBE_COUNT] Strobe
+
+
+squared: f32
+rms_window_size := 4096
+window_counter := 0
+
+
 
 init_strobes :: proc (normalized_freq: f64) {
     freq := normalized_freq
@@ -21,7 +30,18 @@ init_strobes :: proc (normalized_freq: f64) {
 }
 
 run_strobe :: proc (strobe: ^Strobe, sample: f32) -> f32 {
-    return biquad_process_sample(&strobe.biquad, sample)
+
+    // rolling square average
+    squared -= squared / f32(rms_window_size)
+    squared += (sample * sample) / f32(rms_window_size)
+    rms := math.sqrt(squared) * 2.0
+
+    // apply auto gain
+    target_rms := f32(0.4)
+    gain := target_rms / rms
+    agc_sample := sample * gain
+
+    return biquad_process_sample(&strobe.biquad, agc_sample)
 }
 
 destroy_strobes :: proc() {

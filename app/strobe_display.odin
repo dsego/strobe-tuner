@@ -11,7 +11,6 @@ pattern_texture: rl.Texture2D
 
 init_strobe_display :: proc () {
     pattern_image = rl.GenImageColor(1024, 1, {100, 0, 0, 255})
-
 }
 
 destroy_strobe_display :: proc () {
@@ -82,9 +81,8 @@ draw_strobes :: proc(
             )
 
         } else {
-            max := find_abs_max(strobe_samples[:frame_count])
-            // factor := (height/2.0 - 1.0) / max
-            factor := (height/2.0 - 1.0) * 1000.0
+
+            factor := (height/2.0 - 1.0) * 10.0
 
             // TODO: resample by linear interpolation to fit the pixels
             // e.g. from 300 samples produce a value for each of the 800 pixels

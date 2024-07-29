@@ -15,6 +15,11 @@ import pa_rb "../pa_ringbuffer"
 // 4-channel ring buffer for strobe data
 strobe_ringbuffer: pa_rb.RingBuffer
 strobe_ringbuffer_data: []u8
+
+
+pitch_ringbuffer: pa_rb.RingBuffer
+pitch_ringbuffer_data: []u8
+
 stream: ^pa.Stream
 err: pa.Error
 
@@ -33,8 +38,8 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
     for i in 0..<device_count {
         device_name := pa.GetDeviceInfo(i).name
         str := "  %v  ‣  %s\n"
-        if device_name == "BlackHole 2ch" {
-        // if device_name == "MacBook Pro Microphone" {
+        // if device_name == "BlackHole 2ch" {
+        if device_name == "MacBook Pro Microphone" {
             str = "  %v [‣] %s\n"
             active_device = i
         }
@@ -45,6 +50,9 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
     interleaved_bytes := size_of(f32) * STROBE_COUNT
     strobe_ringbuffer_data = make([]u8, DEFAULT_RB_SIZE * interleaved_bytes)
     pa_rb.InitializeRingBuffer(&strobe_ringbuffer, i32(interleaved_bytes), DEFAULT_RB_SIZE, raw_data(strobe_ringbuffer_data))
+
+    pitch_ringbuffer_data = make([]u8, DEFAULT_RB_SIZE * size_of(f32))
+    pa_rb.InitializeRingBuffer(&pitch_ringbuffer, i32(interleaved_bytes), DEFAULT_RB_SIZE, raw_data(pitch_ringbuffer_data))
 
     // err = pa.OpenDefaultStream(
     //     stream=&stream,
@@ -105,6 +113,7 @@ destroy_audio_capture :: proc() {
     fmt.println("Terminated PortAudio")
 
     delete(strobe_ringbuffer_data)
+    delete(pitch_ringbuffer_data)
 }
 
 
@@ -117,14 +126,16 @@ stream_callback :: proc "c" (
     statusFlags : pa.StreamCallbackFlags,
     userData : rawptr,
 ) -> int {
-    process_strobe_ringbuffer(input, frameCount)
+    process_ringbuffer(&strobe_ringbuffer , input, frameCount)
+    process_ringbuffer(&pitch_ringbuffer , input, frameCount)
     return 0
     // write_to_ringbuffer(&pitch_ringbuffer, device, output, input, frame_count)
 }
 
 
 @(private)
-process_strobe_ringbuffer :: proc "c" (
+process_ringbuffer :: proc "c" (
+    rb_ptr: ^pa_rb.RingBuffer,
     input: rawptr,
     frame_count: c.ulong
 ) {
@@ -139,7 +150,7 @@ process_strobe_ringbuffer :: proc "c" (
     size2: i32
 
     num_written := pa_rb.GetRingBufferWriteRegions(
-        &strobe_ringbuffer,
+        rb_ptr,
         i32(frame_count),
         &region1,
         &size1,
@@ -156,7 +167,7 @@ process_strobe_ringbuffer :: proc "c" (
         write_to_rb_region(region2, size2, input_slice[size1:])
     }
 
-    pa_rb.AdvanceRingBufferWriteIndex(&strobe_ringbuffer, num_written)
+    pa_rb.AdvanceRingBufferWriteIndex(rb_ptr, num_written)
 }
 
 

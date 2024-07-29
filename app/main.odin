@@ -1,14 +1,9 @@
 package app
 
-
 import rl "vendor:raylib"
 import "core:fmt"
-import "core:path/filepath"
 import "core:strings"
 
-
-
-import ma "vendor:miniaudio"
 
 // Simplify by using a constant number of ringbuffers instead of a dynamic list.
 // NOTE: Needs to be a power of 2 for portaudio ring buffers!
@@ -26,16 +21,7 @@ SCREEN_WIDTH :: 1024
 SCREEN_HEIGHT :: 768
 
 
-Ringbuffer :: ma.pcm_rb
-
-sharp : cstring = "♯"
-font_atlas := "ABCDEFGHz♯♭/1234567890."
-font: rl.Font
-
 target_freq: f64
-
-// Root directory relative to this file
-root_dir := filepath.dir(#file)
 
 
 main :: proc() {
@@ -57,9 +43,10 @@ main :: proc() {
     }
 
     freqs_idx := 0
-    guitar_freqs_idx := 0
 
-    target_freq = guitar_freqs[0]
+    freqs: []f64 = ukulele_freqs
+
+    target_freq = freqs[0]
 
     // target_freq = 2500
     // target_freq = 88
@@ -78,12 +65,12 @@ main :: proc() {
     if !ok do return
     defer destroy_audio_capture()
 
-    // pitch := pitch_init(FFT_SIZE, SAMPLERATE)
-    // defer pitch_destroy(pitch)
+    pitch := pitch_init(FFT_SIZE, SAMPLERATE)
+    defer pitch_destroy(pitch)
 
-    // samples: []f32 = make([]f32, FFT_SIZE)
-    // new_samples: []f32 = make([]f32, FFT_SIZE)
-    // defer delete(samples)
+    samples: []f32 = make([]f32, FFT_SIZE)
+    new_samples: []f32 = make([]f32, FFT_SIZE)
+    defer delete(samples)
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetTargetFPS(60)
@@ -91,17 +78,14 @@ main :: proc() {
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
     defer rl.CloseWindow()
 
+    init_drawing_context()
+    defer destroy_drawing_context()
 
-    count := i32(0)
-    codepoints := rl.LoadCodepoints(raw_data(font_atlas), &count)
-    defer rl.UnloadCodepoints(codepoints)
-
-    font_path := strings.clone_to_cstring(filepath.join({root_dir, "../assets/NotoSansMono-Medium.ttf"}))
-    font = rl.LoadFontEx(font_path, 128, codepoints, count)
-    defer rl.UnloadFont(font)
 
     init_strobe_display()
     defer destroy_strobe_display()
+
+
 
     show_pattern := false
 
@@ -127,16 +111,14 @@ main :: proc() {
         }
 
         if (freq_changed) {
-            // freqs_idx %= len(ukulele_freqs)
-            freqs_idx %= len(guitar_freqs)
-            // if freqs_idx < 0 do freqs_idx += len(ukulele_freqs) // wrap around
-            if freqs_idx < 0 do freqs_idx += len(guitar_freqs) // wrap around
+            freqs_idx %= len(freqs)
+            if freqs_idx < 0 do freqs_idx += len(freqs) // wrap around
             reset_framerate()
         }
 
-        /* DISABLE PITCH DETECTION
+
         // Pitch detection, use the first ringbuffer
-        new_count := read_ringbuffer(0, new_samples, FFT_SIZE/2)
+        new_count := read_ringbuffer(&pitch_ringbuffer, new_samples, FFT_SIZE/2, 1)
 
         if new_count > 0 {
 
@@ -150,13 +132,11 @@ main :: proc() {
 
         // TODO: add to delay line (moving average of 5-10 samples)
         // TODO: no need to run pitch detect if samples haven't changed
-        freq, _, _ := pitch_detect(pitch, samples)
-        note := find_note(freq)
+        freq, lag, val := pitch_detect(pitch, samples)
+        // note := find_note(freq)
 
-        */
 
-        // target_freq = ukulele_freqs[freqs_idx]
-        target_freq = guitar_freqs[freqs_idx]
+        target_freq = freqs[freqs_idx]
 
         note := find_note(f32(target_freq))
 
@@ -187,15 +167,7 @@ main :: proc() {
             )
 
             // fmt.println(target_freq, note)
-
-            // TODO: make draw_note() method
-            if note.is_accidental {
-                rl.DrawTextEx(font, cstring(&note.name), {20, 20}, 64, 0, rl.PURPLE)
-                rl.DrawTextEx(font, sharp, {50, 20}, 32, 0, rl.PURPLE)
-                rl.DrawTextEx(font, sharp, {50, 20}, 32, 0, rl.PURPLE)
-            } else {
-                rl.DrawTextEx(font, cstring(&note.name), {20, 20}, 64, 0, rl.PURPLE)
-            }
+            draw_note(&note)
 
             // run_strobe(strobe_band, )
             // fmt.println(note.name, note.semitone_index)
@@ -203,10 +175,18 @@ main :: proc() {
             // rl.DrawText("A1", 10, 10, 30, rl.PURPLE)
 
 
+
+
+            // Show target frequency & interval
+
             formatted_freq := strings.clone_to_cstring(fmt.aprintf("%.1fHz", target_freq))
             formatted_interval := strings.clone_to_cstring(fmt.aprintf("%.2f", target_interval))
             rl.DrawTextEx(font, formatted_freq, {20, 100}, 32, 0, rl.PURPLE)
             rl.DrawTextEx(font, formatted_interval, {20, 150}, 16, 0, rl.SKYBLUE)
+
+
+            rect := rl.Rectangle{40, 400, SCREEN_WIDTH-80, 200}
+            draw_autocorrelation(rect, &pitch, lag, val)
 
         }
     }

@@ -128,8 +128,7 @@ cents_to_note :: proc (cents: f32, pitch_standard: f32 = 440.0) -> (note: Note) 
         index == 3 ||
         index == 6 ||
         index == 8 ||
-        index == 10
-    )
+        index == 10)
 
     note.name = note_names[index]
 

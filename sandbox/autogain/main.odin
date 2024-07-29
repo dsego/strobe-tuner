@@ -52,16 +52,14 @@ main :: proc() {
 
 
     squared: f32
-    rms_window_size := 2048
+    rms_window_size := 4096
     window_counter := 0
 
+    // rolling square average
     for i in 0..<len(audio_buffer) {
-        squared += audio_buffer[i] * audio_buffer[i]
-        if window_counter >= rms_window_size {
-            squared -= audio_buffer[i - rms_window_size] * audio_buffer[i - rms_window_size]
-        }
-        window_counter += 1
-        rms[i] = math.sqrt(squared / f32(rms_window_size))
+        squared -= squared / f32(rms_window_size)
+        squared += (audio_buffer[i] * audio_buffer[i]) / f32(rms_window_size)
+        rms[i] = math.sqrt(squared) * 2.
     }
 
     // https://github.com/sile/dagc/blob/main/src/lib.rs
@@ -80,14 +78,13 @@ main :: proc() {
     // -------------------------
 
 
-
     // TODO: how to apply gain only above certain threshold...  make it logarithmic?
 
-    // target_rms := f32(0.5)
-    // for i in 0..<len(audio_buffer) {
-    //     gain := target_rms / rms[i]
-    //     agc_audio[i] = audio_buffer[i] * gain
-    // }
+    target_rms := f32(0.4)
+    for i in 0..<len(audio_buffer) {
+        gain := target_rms / rms[i]
+        agc_audio[i] = audio_buffer[i] * gain
+    }
 
     position: = 0
     moved_window := true
