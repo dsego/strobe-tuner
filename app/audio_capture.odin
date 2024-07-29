@@ -52,7 +52,7 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
     pa_rb.InitializeRingBuffer(&strobe_ringbuffer, i32(interleaved_bytes), DEFAULT_RB_SIZE, raw_data(strobe_ringbuffer_data))
 
     pitch_ringbuffer_data = make([]u8, DEFAULT_RB_SIZE * size_of(f32))
-    pa_rb.InitializeRingBuffer(&pitch_ringbuffer, i32(interleaved_bytes), DEFAULT_RB_SIZE, raw_data(pitch_ringbuffer_data))
+    pa_rb.InitializeRingBuffer(&pitch_ringbuffer, i32(size_of(f32)), DEFAULT_RB_SIZE, raw_data(pitch_ringbuffer_data))
 
     // err = pa.OpenDefaultStream(
     //     stream=&stream,
@@ -119,23 +119,23 @@ destroy_audio_capture :: proc() {
 
 @(private)
 stream_callback :: proc "c" (
-    input : rawptr,
-    output : rawptr,
-    frameCount : c.ulong,
-    timeInfo : ^pa.StreamCallbackTimeInfo,
-    statusFlags : pa.StreamCallbackFlags,
-    userData : rawptr,
+    input: rawptr,
+    output: rawptr,
+    frameCount: c.ulong,
+    timeInfo: ^pa.StreamCallbackTimeInfo,
+    statusFlags: pa.StreamCallbackFlags,
+    userData: rawptr,
 ) -> int {
-    process_ringbuffer(&strobe_ringbuffer , input, frameCount)
-    process_ringbuffer(&pitch_ringbuffer , input, frameCount)
+    // context = runtime.default_context()
+    process_strobe_ringbuffer(input, frameCount)
+
+    pa_rb.WriteRingBuffer(&pitch_ringbuffer, input, i32(frameCount))
     return 0
-    // write_to_ringbuffer(&pitch_ringbuffer, device, output, input, frame_count)
 }
 
 
 @(private)
-process_ringbuffer :: proc "c" (
-    rb_ptr: ^pa_rb.RingBuffer,
+process_strobe_ringbuffer :: proc "c" (
     input: rawptr,
     frame_count: c.ulong
 ) {
@@ -150,7 +150,7 @@ process_ringbuffer :: proc "c" (
     size2: i32
 
     num_written := pa_rb.GetRingBufferWriteRegions(
-        rb_ptr,
+        &strobe_ringbuffer,
         i32(frame_count),
         &region1,
         &size1,
@@ -167,7 +167,7 @@ process_ringbuffer :: proc "c" (
         write_to_rb_region(region2, size2, input_slice[size1:])
     }
 
-    pa_rb.AdvanceRingBufferWriteIndex(rb_ptr, num_written)
+    pa_rb.AdvanceRingBufferWriteIndex(&strobe_ringbuffer, num_written)
 }
 
 
