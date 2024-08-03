@@ -9,7 +9,7 @@ import "core:path/filepath"
 root_dir := filepath.dir(#file)
 
 sharp : cstring = "♯"
-font_atlas := "ABCDEFGHz♯♭/-1234567890.ms"
+font_atlas := "ABCDEFGHz♯♭/-1234567890.msc"
 font: rl.Font
 
 
@@ -28,13 +28,13 @@ destroy_drawing_context :: proc() {
     rl.UnloadFont(font)
 }
 
-draw_note :: proc(note: ^Note) {
+draw_note :: proc(note: ^Note, pos: [2]f32) {
     if note.is_accidental {
-        rl.DrawTextEx(font, cstring(&note.name), {20, 20}, 64, 0, rl.PURPLE)
-        rl.DrawTextEx(font, sharp, {50, 20}, 32, 0, rl.PURPLE)
-        rl.DrawTextEx(font, sharp, {50, 20}, 32, 0, rl.PURPLE)
+        rl.DrawTextEx(font, cstring(&note.name), pos, 64, 0, rl.PURPLE)
+        rl.DrawTextEx(font, sharp, {pos.x+30, pos.y}, 32, 0, rl.PURPLE)
+        rl.DrawTextEx(font, sharp, {pos.x+30, pos.y}, 32, 0, rl.PURPLE)
     } else {
-        rl.DrawTextEx(font, cstring(&note.name), {20, 20}, 64, 0, rl.PURPLE)
+        rl.DrawTextEx(font, cstring(&note.name), pos, 64, 0, rl.PURPLE)
     }
 }
 

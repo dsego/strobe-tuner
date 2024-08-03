@@ -121,9 +121,13 @@ pitch_detect :: proc (using config: PitchConfig, samples: []f32) -> (f32, f32, f
     }
 
     improved_lag := f32(lag) + peak_location
-    estimated_freq = f32(samplerate) / improved_lag
+
+    if improved_lag > 0.0 {
+        estimated_freq = f32(samplerate) / improved_lag
+    }
+
     // fmt.println("Interpolated peak location", improved_lag)
-    // fmt.println("Estimated frequency improved Hz", estimated_freq)
+    // fmt.println("Estimated frequency improved Hz", estimated_freq, improved_lag)
 
     normalized_val := autocorrelation[lag] / autocorrelation[0]
     return estimated_freq, f32(lag), normalized_val

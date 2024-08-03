@@ -21,7 +21,11 @@ SCREEN_WIDTH :: 1024
 SCREEN_HEIGHT :: 768
 
 
+
 target_freq: f64
+
+// running average to smooth out detected freq
+detected_freq_avg: f32 = 1.0
 
 
 main :: proc() {
@@ -44,9 +48,10 @@ main :: proc() {
 
     freqs_idx := 0
 
-    freqs: []f64 = ukulele_freqs
+    freqs: []f64 = guitar_freqs
 
     target_freq = freqs[0]
+
 
     // target_freq = 2500
     // target_freq = 88
@@ -60,6 +65,8 @@ main :: proc() {
 
 
     init_strobes(target_freq / SAMPLERATE)
+
+    smooth_conf := init_smoothing(10)
 
     ok := init_audio_capture(SAMPLERATE)
     if !ok do return
@@ -130,11 +137,14 @@ main :: proc() {
 
         }
 
-        // TODO: add to delay line (moving average of 5-10 samples)
-        // TODO: no need to run pitch detect if samples haven't changed
-        freq, lag, val := pitch_detect(pitch, samples)
-        // note := find_note(freq)
 
+        // TODO: no need to run pitch detect if samples haven't changed
+        detected_freq, lag, val := pitch_detect(pitch, samples)
+
+        // Smooth out the detected freq
+        detected_freq_avg = smooth(&smooth_conf, detected_freq)
+
+        detected_note := find_note(detected_freq_avg)
 
         target_freq = freqs[freqs_idx]
 
@@ -167,7 +177,8 @@ main :: proc() {
             )
 
             // fmt.println(target_freq, note)
-            draw_note(&note)
+            draw_note(&note, {20, 20})
+
 
             // run_strobe(strobe_band, )
             // fmt.println(note.name, note.semitone_index)
@@ -185,7 +196,18 @@ main :: proc() {
             rl.DrawTextEx(font, formatted_interval, {20, 150}, 16, 0, rl.SKYBLUE)
 
 
-            rect := rl.Rectangle{40, 400, SCREEN_WIDTH-80, 200}
+            // Detected note
+            draw_note(&detected_note, {20, 400})
+            formatted_detected_freq := strings.clone_to_cstring(fmt.aprintf("%.1fHz", detected_freq_avg))
+            rl.DrawTextEx(font, formatted_detected_freq, {20, 450}, 32, 0, rl.PURPLE)
+
+
+            cents_diff := freq_to_cents(detected_freq_avg) - f32(detected_note.cents)
+            formatted_cents_diff := strings.clone_to_cstring(fmt.aprintf("%.1fc", cents_diff))
+            rl.DrawTextEx(font, formatted_cents_diff, {200, 450}, 24, 0, rl.ORANGE)
+
+
+            rect := rl.Rectangle{40, 500, SCREEN_WIDTH-80, 200}
             draw_autocorrelation(rect, &pitch, lag, val)
 
         }
