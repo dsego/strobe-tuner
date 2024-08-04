@@ -3,7 +3,6 @@ package app
 import rl "vendor:raylib"
 import "core:strings"
 import "core:fmt"
-import "core:math"
 import "core:path/filepath"
 
 // Root directory relative to this file
@@ -117,11 +116,6 @@ draw_freq_plot :: proc(using rect: rl.Rectangle, len_samples: int, div_hz: f32) 
     }
 }
 
-
-
-magnitude :: proc (fft_val: complex64) -> f32 {
-    return math.sqrt(real(fft_val) * real(fft_val) + imag(fft_val) * imag(fft_val))
-}
 
 draw_freq_spectrum :: proc(rect: rl.Rectangle, pitch_config: ^PitchConfig) {
     points: [FFT_SIZE/8]rl.Vector2 = {}

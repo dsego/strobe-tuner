@@ -1,6 +1,7 @@
 package app
 import "core:mem"
 import "core:fmt"
+import "core:math"
 
 import "../pffft"
 
@@ -19,6 +20,7 @@ PitchConfig :: struct {
 }
 
 pitch_init :: proc (fft_size: int, samplerate: int) -> (config: PitchConfig = {}) {
+    config.fft_size = fft_size
     config.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
     config.fft = make([]complex64, fft_size)
     config.fft_conj_product = make([]complex64, fft_size)
@@ -36,15 +38,7 @@ pitch_destroy :: proc (config: PitchConfig) {
 }
 
 
-// TODO: compare padded vs unpadded fft
-pitch_detect :: proc (using config: PitchConfig, samples: []f32) -> (f32, f32, f32) {
-
-    // Generate the autocorrelation
-    //   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,
-    //    then taking the inverse FFT will give us the cyclic auto-correlation.
-
-    // copy(padded_samples, samples)
-
+pitch_run_fft :: proc (using config: PitchConfig, samples: []f32) {
     pffft.transform_ordered(
         pffft_setup,
         raw_data(samples),
@@ -64,6 +58,59 @@ pitch_detect :: proc (using config: PitchConfig, samples: []f32) -> (f32, f32, f
         nil,
         pffft.Direction.BACKWARD
     )
+}
+
+
+magnitude :: proc (fft_val: complex64) -> f32 {
+    return math.sqrt(real(fft_val) * real(fft_val) + imag(fft_val) * imag(fft_val))
+}
+
+
+pitch_detect_spectrum :: proc(using config: PitchConfig) -> f32 {
+    bin := 0
+    max_magnitude := f32(0.0)
+
+    for i in 3..<fft_size/2 {
+        magnitude := magnitude(fft[i])
+        if magnitude > max_magnitude {
+            max_magnitude = magnitude
+            bin = i
+        }
+    }
+
+    // Parabolic interpolation
+    peak_location: f32 = 0
+    if bin > 0 {
+        peak_location = parabolic_interpolation(
+            magnitude(fft[bin-1]),
+            magnitude(fft[bin]),
+            magnitude(fft[bin+1])
+        )
+    }
+
+    improved_bin := f32(bin) + peak_location
+
+    freq := improved_bin * SAMPLERATE / FFT_SIZE
+    return freq
+}
+
+
+// Parabolic interpolation to find the more accurate peak location
+// https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
+parabolic_interpolation :: proc (alpha: f32, beta: f32, gamma: f32) -> f32 {
+    return 0.5 * (alpha - gamma) / (alpha - 2.0 * beta + gamma)
+}
+
+
+// TODO: compare padded vs unpadded fft
+// Detect pitch via auto-correlation
+pitch_detect_ac :: proc (using config: PitchConfig) -> (f32, f32, f32) {
+
+    // Generate the autocorrelation
+    //   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,
+    //    then taking the inverse FFT will give us the cyclic auto-correlation.
+
+    // copy(padded_samples, samples)
 
     // Find the first maximum peak lag
     lag := 0
@@ -122,15 +169,15 @@ pitch_detect :: proc (using config: PitchConfig, samples: []f32) -> (f32, f32, f
     // estimated_freq = f32(samplerate) / f32(lag)
     // fmt.println("Estimated frequency Hz", estimated_freq)
 
-    // Parabolic interpolation to find the more accurate peak location
-    // https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
+
 
     peak_location: f32 = 0
     if lag > 0 {
-        alpha := autocorrelation[lag-1]
-        beta := autocorrelation[lag]
-        gamma := autocorrelation[lag+1]
-        peak_location = 0.5 * (alpha - gamma) / (alpha - 2.0 * beta + gamma)
+        peak_location = parabolic_interpolation(
+            autocorrelation[lag-1],
+            autocorrelation[lag],
+            autocorrelation[lag+1]
+        )
     }
 
     improved_lag := f32(lag) + peak_location

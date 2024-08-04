@@ -48,7 +48,7 @@ main :: proc() {
 
     freqs_idx := 0
 
-    freqs: []f64 = guitar_freqs
+    freqs: []f64 = ukulele_freqs
 
     target_freq = freqs[0]
 
@@ -137,9 +137,12 @@ main :: proc() {
 
         }
 
+        pitch_run_fft(pitch, samples)
+
 
         // TODO: no need to run pitch detect if samples haven't changed
-        detected_freq, lag, val := pitch_detect(pitch, samples)
+        detected_freq, lag, val := pitch_detect_ac(pitch)
+
 
         // Smooth out the detected freq
         detected_freq_avg = smooth(&smooth_conf, detected_freq)
@@ -149,6 +152,12 @@ main :: proc() {
         target_freq = freqs[freqs_idx]
 
         note := find_note(f32(target_freq))
+
+
+        // Find spectrum peak
+        detected_freq_2 := pitch_detect_spectrum(pitch)
+        detected_note_2 := find_note(detected_freq_2)
+
 
         // aim at a double interval, to show more of the wave shape and slow down the strobe movement
         target_interval := 2.0 * f64(SAMPLERATE) / target_freq
@@ -196,25 +205,32 @@ main :: proc() {
             rl.DrawTextEx(font, formatted_interval, {20, 150}, 16, 0, rl.SKYBLUE)
 
 
-            // Detected note
-            draw_note(&detected_note, {20, 400}, 48)
+            // Detected note - auto correlation
+            draw_note(&detected_note, {20, 180}, 48)
             formatted_detected_freq := strings.clone_to_cstring(fmt.aprintf("%.1fHz", detected_freq_avg))
-            rl.DrawTextEx(font, formatted_detected_freq, {20, 450}, 24, 0, rl.PURPLE)
+            rl.DrawTextEx(font, formatted_detected_freq, {20, 230}, 24, 0, rl.PURPLE)
 
 
             cents_diff := freq_to_cents(detected_freq_avg) - f32(detected_note.cents)
             formatted_cents_diff := strings.clone_to_cstring(fmt.aprintf("%.1fc", cents_diff))
-            rl.DrawTextEx(font, formatted_cents_diff, {120, 450}, 24, 0, rl.ORANGE)
+            rl.DrawTextEx(font, formatted_cents_diff, {20, 260}, 24, 0, rl.ORANGE)
 
             draw_autocorrelation(
-                rl.Rectangle{40, 200, SCREEN_WIDTH-80, 160},
+                rl.Rectangle{160, 180, SCREEN_WIDTH-180, 160},
                 &pitch,
                 lag,
                 val
             )
 
 
-            draw_freq_spectrum(rl.Rectangle{40, 460, SCREEN_WIDTH-80, 160}, &pitch)
+            // Spectrum
+            draw_note(&detected_note_2, {20, 400}, 48)
+            detected_freq_2_str := strings.clone_to_cstring(fmt.aprintf("%.1fHz", detected_freq_2))
+            rl.DrawTextEx(font, detected_freq_2_str, {20, 480}, 24, 0, rl.PURPLE)
+
+
+            // TODO: draw in log format
+            draw_freq_spectrum(rl.Rectangle{160, 400, SCREEN_WIDTH-180, 160}, &pitch)
 
         }
     }
