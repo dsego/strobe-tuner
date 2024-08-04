@@ -206,9 +206,15 @@ main :: proc() {
             formatted_cents_diff := strings.clone_to_cstring(fmt.aprintf("%.1fc", cents_diff))
             rl.DrawTextEx(font, formatted_cents_diff, {120, 450}, 24, 0, rl.ORANGE)
 
+            draw_autocorrelation(
+                rl.Rectangle{40, 200, SCREEN_WIDTH-80, 160},
+                &pitch,
+                lag,
+                val
+            )
 
-            rect := rl.Rectangle{40, 200, SCREEN_WIDTH-80, 160}
-            draw_autocorrelation(rect, &pitch, lag, val)
+
+            draw_freq_spectrum(rl.Rectangle{40, 460, SCREEN_WIDTH-80, 160}, &pitch)
 
         }
     }

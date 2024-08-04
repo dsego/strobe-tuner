@@ -75,32 +75,45 @@ pitch_detect :: proc (using config: PitchConfig, samples: []f32) -> (f32, f32, f
     len := len(autocorrelation) / 2
     peak_index := 0
 
+
     for i < len {
 
         // go down the slope until we reach the local minimum
         for i < len - 1 && autocorrelation[i+1] < autocorrelation[i] {
             i += 1
         }
+
+
+        lag = i
         // fmt.println("local min", i, autocorrelation[i]/autocorrelation[0], threshold/autocorrelation[0])
 
-        // go up the slope until we reach the local maximum
-        for i < len - 1 && autocorrelation[i+1] > autocorrelation[i] {
+
+        // we want to look up to n/2 and find the lag for the max peak
+        for i < len - 1 {
+            if autocorrelation[i+1] > autocorrelation[lag] {
+                lag = i + 1
+            }
             i += 1
         }
 
+        // go up the slope until we reach the local maximum
+        // for i < len - 1 && autocorrelation[i+1] > autocorrelation[i] {
+        //     i += 1
+        // }
+
         // fmt.println("local max", i, autocorrelation[i]/autocorrelation[0], threshold/autocorrelation[0])
 
-        if autocorrelation[i] > threshold {
-            lag = i
-            // trying to find the fundamental when the first harmonic is close,
-            //  even if second the peak is a tiny bi smaller
-            threshold = autocorrelation[i]
-            // fmt.println("Found local max at", i)
-            peak_index += 1
-        }
+        // if autocorrelation[i] > threshold {
+        //     lag = i
+        //     // trying to find the fundamental when the first harmonic is close,
+        //     //  even if second the peak is a tiny bit smaller
+        //     threshold = autocorrelation[i]
+        //     // fmt.println("Found local max at", i)
+        //     peak_index += 1
+        // }
 
-        // we don't need to look at other peaks?
-        if peak_index >= 2 do break
+        // // we don't need to look at other peaks?
+        // if peak_index >= 2 do break
 
         i += 1
     }
