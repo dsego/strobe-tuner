@@ -177,7 +177,7 @@ main :: proc() {
             )
 
             // fmt.println(target_freq, note)
-            draw_note(&note, {20, 20})
+            draw_note(&note, {20, 20}, 64)
 
 
             // run_strobe(strobe_band, )
@@ -197,17 +197,17 @@ main :: proc() {
 
 
             // Detected note
-            draw_note(&detected_note, {20, 400})
+            draw_note(&detected_note, {20, 400}, 48)
             formatted_detected_freq := strings.clone_to_cstring(fmt.aprintf("%.1fHz", detected_freq_avg))
-            rl.DrawTextEx(font, formatted_detected_freq, {20, 450}, 32, 0, rl.PURPLE)
+            rl.DrawTextEx(font, formatted_detected_freq, {20, 450}, 24, 0, rl.PURPLE)
 
 
             cents_diff := freq_to_cents(detected_freq_avg) - f32(detected_note.cents)
             formatted_cents_diff := strings.clone_to_cstring(fmt.aprintf("%.1fc", cents_diff))
-            rl.DrawTextEx(font, formatted_cents_diff, {200, 450}, 24, 0, rl.ORANGE)
+            rl.DrawTextEx(font, formatted_cents_diff, {120, 450}, 24, 0, rl.ORANGE)
 
 
-            rect := rl.Rectangle{40, 500, SCREEN_WIDTH-80, 200}
+            rect := rl.Rectangle{40, 200, SCREEN_WIDTH-80, 160}
             draw_autocorrelation(rect, &pitch, lag, val)
 
         }

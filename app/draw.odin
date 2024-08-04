@@ -28,13 +28,13 @@ destroy_drawing_context :: proc() {
     rl.UnloadFont(font)
 }
 
-draw_note :: proc(note: ^Note, pos: [2]f32) {
+draw_note :: proc(note: ^Note, pos: [2]f32, size: f32) {
     if note.is_accidental {
-        rl.DrawTextEx(font, cstring(&note.name), pos, 64, 0, rl.PURPLE)
-        rl.DrawTextEx(font, sharp, {pos.x+30, pos.y}, 32, 0, rl.PURPLE)
-        rl.DrawTextEx(font, sharp, {pos.x+30, pos.y}, 32, 0, rl.PURPLE)
+        rl.DrawTextEx(font, cstring(&note.name), pos, size, 0, rl.PURPLE)
+        rl.DrawTextEx(font, sharp, {pos.x+size/2, pos.y}, size/1.5, 0, rl.PURPLE)
+        rl.DrawTextEx(font, sharp, {pos.x+size/2, pos.y}, size/1.5, 0, rl.PURPLE)
     } else {
-        rl.DrawTextEx(font, cstring(&note.name), pos, 64, 0, rl.PURPLE)
+        rl.DrawTextEx(font, cstring(&note.name), pos, size, 0, rl.PURPLE)
     }
 }
 
@@ -96,3 +96,6 @@ draw_time_plot :: proc(using rect: rl.Rectangle, len_samples: int, div_ms: f32) 
         rl.DrawTextEx(font, fmt.ctprintf("%.0fms", d), {px, y+height+8}, 16, 0, rl.GRAY)
     }
 }
+
+
+

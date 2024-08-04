@@ -57,16 +57,18 @@ draw_strobes :: proc(
 
     drift_adj := f32(drift) * dx
 
+    pos := [2]i32{160, 50}
+
 
     for i in 0..<STROBE_COUNT {
         points: [SAMPLE_SIZE]rl.Vector2
-        x :f32 = width + 50.0 //+ drift_adj
+        x :f32 = width + f32(pos.x) //+ drift_adj
 
         // fmt.println(drift, x)
 
-        y := 200 + 110 * i32(i)
+        y := pos.y + 110 * i32(i)
 
-        rl.DrawRectangleLines(49, y-1, 802, 102, rl.GRAY)
+        rl.DrawRectangleLines(pos.x-1, y-1, 802, 102, rl.GRAY)
 
         // fmt.println(frame_count)
 
