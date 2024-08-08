@@ -20,6 +20,7 @@ PitchConfig :: struct {
     autocorrelation: []f32,
     samplerate: int,
     windowed_samples: []f32,
+    padded_samples: []f32,
 }
 
 pitch_init :: proc (fft_size: int, samplerate: int) -> (config: PitchConfig = {}) {
@@ -33,7 +34,7 @@ pitch_init :: proc (fft_size: int, samplerate: int) -> (config: PitchConfig = {}
     config.autocorrelation = make([]f32, fft_size)
     config.samplerate = samplerate
     config.windowed_samples = make([]f32, fft_size)
-    // config.padded_samples = make([]f32, fft_size)
+    config.padded_samples = make([]f32, fft_size)
     return
 }
 
@@ -46,6 +47,7 @@ pitch_destroy :: proc (config: PitchConfig) {
     delete(config.windowed_samples)
     delete(config.spectrum)
     delete(config.hps)
+    delete(config.padded_samples)
 }
 
 
@@ -181,9 +183,15 @@ parabolic :: proc (alpha: f32, beta: f32, gamma: f32) -> f32 {
 // Detect pitch via auto-correlation
 pitch_detect_ac :: proc (using config: PitchConfig, samples: []f32) -> (f32, f32, f32) {
 
+    // Generate the autocorrelation
+    //   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,
+    //    then taking the inverse FFT will give us the cyclic auto-correlation.
+
+    copy(padded_samples, samples[:fft_size/2])
+
     pffft.transform_ordered(
         pffft_setup,
-        raw_data(samples),
+        raw_data(padded_samples),
         raw_data(mem.slice_data_cast([]f32, fft)),
         nil,
         pffft.Direction.FORWARD
@@ -202,11 +210,6 @@ pitch_detect_ac :: proc (using config: PitchConfig, samples: []f32) -> (f32, f32
     )
 
 
-    // Generate the autocorrelation
-    //   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,
-    //    then taking the inverse FFT will give us the cyclic auto-correlation.
-
-    // copy(padded_samples, samples)
 
     // Find the first maximum peak lag
     lag := 0
@@ -216,7 +219,7 @@ pitch_detect_ac :: proc (using config: PitchConfig, samples: []f32) -> (f32, f32
     i := 1
 
     // throw away the negative lags
-    len := len(autocorrelation) / 2
+    len := len(autocorrelation) / 2 + 1  // + 1 ?
     peak_index := 0
 
 
@@ -254,6 +257,7 @@ pitch_detect_ac :: proc (using config: PitchConfig, samples: []f32) -> (f32, f32
     if improved_lag > 0.0 {
         estimated_freq = f32(samplerate) / improved_lag
     }
+    // fmt.println(lag, improved_lag, estimated_freq)
 
     // fmt.println("Interpolated peak location", improved_lag)
     // fmt.println("Estimated frequency improved Hz", estimated_freq, improved_lag)

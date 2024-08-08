@@ -50,7 +50,7 @@ draw_autocorrelation :: proc(
     val: f32,
 ) {
     points: [FFT_SIZE]rl.Vector2 = {}
-    l := len(pitch_config.autocorrelation)/2
+    l := len(pitch_config.autocorrelation) / 2
 
     // stretch samples to fit the box width
     px_per_sample := f32(rect.width) / f32(l - 1)
