@@ -9,13 +9,16 @@ import "core:path/filepath"
 root_dir := filepath.dir(#file)
 
 sharp : cstring = "♯"
-font_atlas := "ABCDEFGHz♯♭/-1234567890.msck"
+font_atlas : cstring = "ABCDEFGHz♯♭/-1234567890.msck"
 font: rl.Font
+
+
+SPECTRUM_DISPLAY_LEN :: FFT_SIZE / 20
 
 
 init_drawing_context :: proc() {
     count := i32(0)
-    codepoints := rl.LoadCodepoints(raw_data(font_atlas), &count)
+    codepoints := rl.LoadCodepoints(font_atlas, &count)
     defer rl.UnloadCodepoints(codepoints)
 
     path := filepath.join({root_dir, "../assets/NotoSansMono-Medium.ttf"})
@@ -47,7 +50,7 @@ draw_autocorrelation :: proc(
     val: f32,
 ) {
     points: [FFT_SIZE]rl.Vector2 = {}
-    l := len(pitch_config.autocorrelation)
+    l := len(pitch_config.autocorrelation)/2
 
     // stretch samples to fit the box width
     px_per_sample := f32(rect.width) / f32(l - 1)
@@ -103,42 +106,42 @@ draw_freq_plot :: proc(using rect: rl.Rectangle, len_samples: int, div_hz: f32) 
     rl.DrawTextEx(font, "1", {x-16, y-8}, 16, 0, rl.GRAY)
 
     rl.DrawLineEx({x, y+height}, {x+width, y+height}, 0.5, rl.GRAY)
-    rl.DrawTextEx(font, "-1", {x-24, y+height-8}, 16, 0, rl.GRAY)
+    rl.DrawTextEx(font, "0", {x-24, y+height-8}, 16, 0, rl.GRAY)
 
     // Vertical lines every x Hz
-    len_hz := f32(SAMPLERATE / 8.0)
+    len_hz := f32(SAMPLERATE) / 20
     px_per_hz := f32(width) / len_hz
 
     for d := f32(0); d < len_hz; d += div_hz {
         px := x + d * px_per_hz
         rl.DrawLineEx({px, y}, {px, y+height}, 0.5, rl.GRAY)
-        rl.DrawTextEx(font, fmt.ctprintf("%.0fkHz", d/1000.0), {px, y+height+8}, 16, 0, rl.GRAY)
+        rl.DrawTextEx(font, fmt.ctprintf("%.1fkHz", d/1000.0), {px, y+height+8}, 16, 0, rl.GRAY)
     }
 }
 
 
 draw_freq_spectrum :: proc(rect: rl.Rectangle, pitch_config: ^PitchConfig) {
-    points: [FFT_SIZE/8]rl.Vector2 = {}
-    l := len(points)
+    spectrum_points: [SPECTRUM_DISPLAY_LEN]rl.Vector2 = {}
+    hps_points: [SPECTRUM_DISPLAY_LEN]rl.Vector2 = {}
 
-    fft := pitch_config.fft
+    spectrum := pitch_config.spectrum
+    hps := pitch_config.hps
 
     // stretch samples to fit the box width
-    px_per_sample := f32(rect.width) / f32(l - 1)
-
+    px_per_sample := f32(rect.width) / f32(SPECTRUM_DISPLAY_LEN - 1)
     x := rect.x
 
+    for i in 0..<SPECTRUM_DISPLAY_LEN {
+        y1 := rect.y + rect.height - spectrum[i] * rect.height * 0.001
+        spectrum_points[i] = { x, y1 }
 
-    for i in 0..<l {
-        magnitude := magnitude(fft[i])
-        y := rect.y + rect.height - magnitude * (rect.height / 2.0) * 0.05
-        points[i] = { x, y }
+        y2 := rect.y + rect.height - hps[i] * rect.height * 0.001
+        hps_points[i] = { x, y2 }
+
         x += px_per_sample
     }
 
-    draw_freq_plot(rect, l, 1000.0)
-    rl.DrawLineStrip(raw_data(points[:]), i32(l), rl.GOLD)
-
-
-    // rl.DrawLineEx({rect.x, cy}, {rect.x+rect.width, cy}, 0.5, rl.GRAY)
+    draw_freq_plot(rect, SPECTRUM_DISPLAY_LEN, 500.0)
+    rl.DrawLineStrip(raw_data(spectrum_points[:]), i32(SPECTRUM_DISPLAY_LEN), rl.GOLD)
+    rl.DrawLineStrip(raw_data(hps_points[:]), i32(SPECTRUM_DISPLAY_LEN), rl.GREEN)
 }

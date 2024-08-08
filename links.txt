@@ -52,3 +52,8 @@ https://gist.github.com/Lperlind/1bb993a1c0f1acdd49080fd4852f95c5
 
 MetalKit
 https://developer.apple.com/documentation/metal/using_metal_to_draw_a_view_s_contents
+
+
+Onset detection, spectral flux
+https://youtu.be/at2NppqIZok
+https://github.com/aniawsz/rtmonoaudio2midi

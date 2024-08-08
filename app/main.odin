@@ -137,26 +137,27 @@ main :: proc() {
 
         }
 
-        pitch_run_fft(pitch, samples)
-
 
         // TODO: no need to run pitch detect if samples haven't changed
-        detected_freq, lag, val := pitch_detect_ac(pitch)
+        detected_freq_ac, lag, val := pitch_detect_ac(pitch, samples)
+        detected_note_ac := find_note(detected_freq_ac)
 
+        // TODO: Smooth out the detected freq?
+        // detected_freq_avg = smooth(&smooth_conf, detected_freq_ac)
 
-        // Smooth out the detected freq
-        detected_freq_avg = smooth(&smooth_conf, detected_freq)
-
-        detected_note := find_note(detected_freq_avg)
 
         target_freq = freqs[freqs_idx]
-
         note := find_note(f32(target_freq))
 
 
         // Find spectrum peak
-        detected_freq_2 := pitch_detect_spectrum(pitch)
-        detected_note_2 := find_note(detected_freq_2)
+        detected_freq_spectrum := pitch_detect_spectrum(pitch, samples)
+
+        // fmt.println(detected_freq_spectrum)
+
+        detected_freq_hps := pitch_detect_hps(pitch)
+        detected_note_spectrum := find_note(detected_freq_spectrum)
+        detected_note_hps := find_note(detected_freq_hps)
 
 
         // aim at a double interval, to show more of the wave shape and slow down the strobe movement
@@ -206,12 +207,12 @@ main :: proc() {
 
 
             // Detected note - auto correlation
-            draw_note(&detected_note, {20, 180}, 48)
-            formatted_detected_freq := strings.clone_to_cstring(fmt.aprintf("%.1fHz", detected_freq_avg))
+            draw_note(&detected_note_ac, {20, 180}, 48)
+            formatted_detected_freq := strings.clone_to_cstring(fmt.aprintf("%.1fHz", detected_freq_ac))
             rl.DrawTextEx(font, formatted_detected_freq, {20, 230}, 24, 0, rl.PURPLE)
 
 
-            cents_diff := freq_to_cents(detected_freq_avg) - f32(detected_note.cents)
+            cents_diff := freq_to_cents(detected_freq_ac) - f32(detected_note_ac.cents)
             formatted_cents_diff := strings.clone_to_cstring(fmt.aprintf("%.1fc", cents_diff))
             rl.DrawTextEx(font, formatted_cents_diff, {20, 260}, 24, 0, rl.ORANGE)
 
@@ -224,13 +225,27 @@ main :: proc() {
 
 
             // Spectrum
-            draw_note(&detected_note_2, {20, 400}, 48)
-            detected_freq_2_str := strings.clone_to_cstring(fmt.aprintf("%.1fHz", detected_freq_2))
-            rl.DrawTextEx(font, detected_freq_2_str, {20, 480}, 24, 0, rl.PURPLE)
+            draw_note(&detected_note_spectrum, {20, 400}, 48)
+            detected_freq_spectrum_str := strings.clone_to_cstring(fmt.aprintf("%.1fHz", detected_freq_spectrum))
+            rl.DrawTextEx(font, detected_freq_spectrum_str, {20, 450}, 24, 0, rl.PURPLE)
+
+            // HPS
+            draw_note(&detected_note_hps, {20, 500}, 48)
+            detected_freq_hps_str := strings.clone_to_cstring(fmt.aprintf("%.1fHz", detected_freq_spectrum))
+            rl.DrawTextEx(font, detected_freq_hps_str, {20, 550}, 24, 0, rl.PURPLE)
 
 
             // TODO: draw in log format
             draw_freq_spectrum(rl.Rectangle{160, 400, SCREEN_WIDTH-180, 160}, &pitch)
+
+
+            // window: [100]rl.Vector2 = {}
+            // for i in 0..<100 {
+            //     // window[i] = blackman_harris(f32(i), f32(100))
+            //     window[i] = { f32(40 + i), 700 - 100.0 * blackman_harris(f32(i), f32(100))}
+            // }
+            // // fmt.println(window)
+            // rl.DrawLineStrip(raw_data(window[:]), 100, rl.BLUE)
 
         }
     }

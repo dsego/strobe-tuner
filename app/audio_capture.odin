@@ -36,14 +36,14 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (ok: bool) {
     device_count := pa.GetDeviceCount()
 
     for i in 0..<device_count {
-        device_name := pa.GetDeviceInfo(i).name
-        str := "  %v  ‣  %s\n"
-        if device_name == "BlackHole 2ch" {
-        // if device_name == "MacBook Pro Microphone" {
-            str = "  %v [‣] %s\n"
+        info := pa.GetDeviceInfo(i)
+        str := "  %v  ‣  %s (%v ch)\n"
+        if info.name == "BlackHole 2ch" {
+        // if info.name == "MacBook Pro Microphone" {
+            str = "  %v [‣] %s (%v ch)\n"
             active_device = i
         }
-        fmt.printf(str, i, device_name)
+        fmt.printf(str, i, info.name, info.maxInputChannels)
     }
 
 
