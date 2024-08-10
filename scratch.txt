@@ -1,8 +1,18 @@
+
+---->
+
+note onset - spectral flux (or spectral flatness)
+
+
+-> autocorrelation to find true fundamental
+  -> to improve accuracy look for this peak in the FFT spectrum and find the precise measurement
+
+
+-----
+
+
+
 foreign import portaudio "system:/opt/homebrew/Cellar/portaudio/19.7.0/lib/libportaudio.dylib"
-
-Show frequency response from the pitch object.
-
-use freq response to know whether to apply gain, if there is a strong frequency?
 
 
 
@@ -41,11 +51,6 @@ show tone indication, the notes move left & right, the marker is static
 
 
 bit stream auto correlation?
-
-auto correlation - test with bass notes, low frequencies
-
-
-the pitch sandbox should show multiple methods in tandem to compare !!!!
 
 
 

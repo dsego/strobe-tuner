@@ -57,3 +57,12 @@ https://developer.apple.com/documentation/metal/using_metal_to_draw_a_view_s_con
 Onset detection, spectral flux
 https://youtu.be/at2NppqIZok
 https://github.com/aniawsz/rtmonoaudio2midi
+
+
+Audio and music analysis library for C & Python
+https://libaudioflux.github.io/audioFlux/
+
+
+HPS
+https://github.com/joaocarvalhoopen/Polyphonic_note_detector_using_Harmonic_Product_Spectrum?tab=readme-ov-file
+https://github.com/sergiucaraian/piano-notes-detector/blob/master/main.py

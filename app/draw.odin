@@ -13,9 +13,6 @@ font_atlas : cstring = "ABCDEFGHz♯♭/-1234567890.msck"
 font: rl.Font
 
 
-SPECTRUM_DISPLAY_LEN :: FFT_SIZE / 20
-
-
 init_drawing_context :: proc() {
     count := i32(0)
     codepoints := rl.LoadCodepoints(font_atlas, &count)
@@ -132,16 +129,16 @@ draw_freq_spectrum :: proc(rect: rl.Rectangle, pitch_config: ^PitchConfig) {
     x := rect.x
 
     for i in 0..<SPECTRUM_DISPLAY_LEN {
-        y1 := rect.y + rect.height - spectrum[i] * rect.height * 0.001
+        y1 := rect.y + rect.height - spectrum[i] * rect.height * 0.01
         spectrum_points[i] = { x, y1 }
 
-        y2 := rect.y + rect.height - hps[i] * rect.height * 0.001
+        y2 := rect.y + rect.height - hps[i] * rect.height * 0.01
         hps_points[i] = { x, y2 }
 
         x += px_per_sample
     }
 
     draw_freq_plot(rect, SPECTRUM_DISPLAY_LEN, 500.0)
-    rl.DrawLineStrip(raw_data(spectrum_points[:]), i32(SPECTRUM_DISPLAY_LEN), rl.GOLD)
-    rl.DrawLineStrip(raw_data(hps_points[:]), i32(SPECTRUM_DISPLAY_LEN), rl.GREEN)
+    rl.DrawLineStrip(raw_data(spectrum_points[:]), i32(SPECTRUM_DISPLAY_LEN), rl.LIME)
+    // rl.DrawLineStrip(raw_data(hps_points[:]), i32(SPECTRUM_DISPLAY_LEN), rl.GREEN)
 }

@@ -119,20 +119,23 @@ pitch_detect_spectrum :: proc(using config: PitchConfig, samples: []f32) -> f32 
     return freq
 }
 
+
+
+// TODO: not working, constantly getting lots of peaks in lower frequencies
 pitch_detect_hps :: proc(using config: PitchConfig) -> f32 {
 
 
     // perform Harmonic Product Spectrum
-    // copy(hps, spectrum)
+    copy(hps, spectrum)
     // size := fft_size / 2
 
     max_harmonics :: 4
 
-    // for downsample_factor in 2..=max_harmonics {
-    //     for i in 0..< fft_size / downsample_factor {
-    //         hps[i] += spectrum[i * downsample_factor]
-    //     }
-    // }
+    for downsample_factor in 1..=max_harmonics {
+        for i in 0..< fft_size / downsample_factor {
+            hps[i] *= spectrum[i * downsample_factor]
+        }
+    }
 
     // normalize ?
     // for i in 0..<FFT_SIZE {

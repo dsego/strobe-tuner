@@ -4,29 +4,10 @@ import rl "vendor:raylib"
 import "core:fmt"
 import "core:strings"
 
-
-// Simplify by using a constant number of ringbuffers instead of a dynamic list.
-// NOTE: Needs to be a power of 2 for portaudio ring buffers!
-DEFAULT_RB_SIZE :: 65536
-
-STROBE_COUNT :: 1
-
-// FFT size for pitch detection
-FFT_SIZE :: 4096
-
-SAMPLERATE :: 44100
-SAMPLE_SIZE :: 2048
-
-SCREEN_WIDTH :: 1024
-SCREEN_HEIGHT :: 768
-
-
-
 target_freq: f64
 
 // running average to smooth out detected freq
 detected_freq_avg: f32 = 1.0
-
 
 main :: proc() {
 
@@ -78,6 +59,7 @@ main :: proc() {
     samples: []f32 = make([]f32, FFT_SIZE)
     new_samples: []f32 = make([]f32, FFT_SIZE)
     defer delete(samples)
+    defer delete(new_samples)
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetTargetFPS(60)
@@ -152,12 +134,12 @@ main :: proc() {
 
         // Find spectrum peak
         detected_freq_spectrum := pitch_detect_spectrum(pitch, samples)
+        detected_note_spectrum := find_note(detected_freq_spectrum)
 
         // fmt.println(detected_freq_spectrum)
 
-        detected_freq_hps := pitch_detect_hps(pitch)
-        detected_note_spectrum := find_note(detected_freq_spectrum)
-        detected_note_hps := find_note(detected_freq_hps)
+        // detected_freq_hps := pitch_detect_hps(pitch)
+        // detected_note_hps := find_note(detected_freq_hps)
 
 
         // aim at a double interval, to show more of the wave shape and slow down the strobe movement
@@ -228,24 +210,13 @@ main :: proc() {
             draw_note(&detected_note_spectrum, {20, 400}, 48)
             detected_freq_spectrum_str := strings.clone_to_cstring(fmt.aprintf("%.1fHz", detected_freq_spectrum))
             rl.DrawTextEx(font, detected_freq_spectrum_str, {20, 450}, 24, 0, rl.PURPLE)
-
-            // HPS
-            draw_note(&detected_note_hps, {20, 500}, 48)
-            detected_freq_hps_str := strings.clone_to_cstring(fmt.aprintf("%.1fHz", detected_freq_spectrum))
-            rl.DrawTextEx(font, detected_freq_hps_str, {20, 550}, 24, 0, rl.PURPLE)
-
-
-            // TODO: draw in log format
             draw_freq_spectrum(rl.Rectangle{160, 400, SCREEN_WIDTH-180, 160}, &pitch)
 
+            // HPS
+            // draw_note(&detected_note_hps, {20, 500}, 48)
+            // detected_freq_hps_str := strings.clone_to_cstring(fmt.aprintf("%.1fHz", detected_freq_spectrum))
+            // rl.DrawTextEx(font, detected_freq_hps_str, {20, 550}, 24, 0, rl.PURPLE)
 
-            // window: [100]rl.Vector2 = {}
-            // for i in 0..<100 {
-            //     // window[i] = blackman_harris(f32(i), f32(100))
-            //     window[i] = { f32(40 + i), 700 - 100.0 * blackman_harris(f32(i), f32(100))}
-            // }
-            // // fmt.println(window)
-            // rl.DrawLineStrip(raw_data(window[:]), 100, rl.BLUE)
 
         }
     }
