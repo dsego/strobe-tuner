@@ -143,6 +143,7 @@ main :: proc() {
 
 
         // aim at a double interval, to show more of the wave shape and slow down the strobe movement
+        // TODO: pad fft for better precision, eg 4096 samples = 8192 padded fft size
         target_interval := 2.0 * f64(SAMPLERATE) / target_freq
 
         frame_count, drift := read_samples(
@@ -161,12 +162,7 @@ main :: proc() {
         {
             rl.ClearBackground(rl.BLACK)
 
-            draw_strobes(
-                target_interval,
-                drift,
-                frame_count,
-                show_pattern,
-            )
+            draw_strobes(target_interval, drift, frame_count, show_pattern,)
 
             // fmt.println(target_freq, note)
             draw_note(&note, {20, 20}, 64)
@@ -174,7 +170,6 @@ main :: proc() {
 
             // run_strobe(strobe_band, )
             // fmt.println(note.name, note.semitone_index)
-
             // rl.DrawText("A1", 10, 10, 30, rl.PURPLE)
 
 
@@ -188,27 +183,23 @@ main :: proc() {
             rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_ac), {20, 230}, 24, 0, rl.PURPLE)
 
 
-            cents_diff := freq_to_cents(detected_freq_ac) - f32(detected_note_ac.cents)
-            rl.DrawTextEx(font, fmt.ctprintf("%.1fc", cents_diff), {20, 260}, 24, 0, rl.ORANGE)
+            // cents_diff := freq_to_cents(detected_freq_ac) - f32(detected_note_ac.cents)
+            // rl.DrawTextEx(font, fmt.ctprintf("%.1fc", cents_diff), {20, 260}, 24, 0, rl.ORANGE)
 
-            draw_autocorrelation(
-                rl.Rectangle{160, 180, SCREEN_WIDTH-180, 160},
-                &pitch,
-                lag,
-                val
-            )
-
+            draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 120}, &pitch, lag, val)
 
             // Spectrum
-            draw_note(&detected_note_spectrum, {20, 400}, 48)
-            rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_spectrum), {20, 450}, 24, 0, rl.PURPLE)
-            draw_freq_spectrum(rl.Rectangle{160, 400, SCREEN_WIDTH-180, 160}, &pitch)
+            draw_note(&detected_note_spectrum, {20, 350}, 48)
+            rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_spectrum), {20, 400}, 24, 0, rl.PURPLE)
+            draw_freq_spectrum(rl.Rectangle{160, 350, SCREEN_WIDTH-180, 120}, &pitch)
 
             // HPS
             // draw_note(&detected_note_hps, {20, 500}, 48)
             // rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_spectrum), {20, 550}, 24, 0, rl.PURPLE)
 
 
+            // TODO: use the AC for detecting the fundamental, find the freq peak in that area and feed to the meter
+            draw_note_meter(rl.Rectangle{50, 500, 400, 100}, &detected_note_ac, detected_freq_ac)
         }
     }
 }

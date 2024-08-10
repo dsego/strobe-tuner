@@ -146,3 +146,42 @@ draw_freq_spectrum :: proc(rect: rl.Rectangle, pitch_config: ^PitchConfig) {
     rl.DrawLineStrip(raw_data(spectrum_points[:]), i32(SPECTRUM_DISPLAY_LEN), rl.LIME)
     // rl.DrawLineStrip(raw_data(hps_points[:]), i32(SPECTRUM_DISPLAY_LEN), rl.GREEN)
 }
+
+
+draw_note_meter :: proc (rect: rl.Rectangle, detected_note: ^Note, freq: f32) {
+
+    // outline for visual debugging
+    rl.DrawRectangleLinesEx(rect, 1.0, rl.ORANGE)
+
+
+    draw_note(detected_note, {rect.x + rect.width/2.0 - 20.0, rect.y}, 64)
+
+    // convert to cents, because we need the log scale
+    cents := freq_to_cents(freq)
+    cents_error := cents - f32(detected_note.cents)
+
+    px := rect.width / 100.0
+
+    pos := rect.width/2 + cents_error * px
+
+    // "needle"
+    needle_width:f32 = 6.0
+    needle_height: f32 = 24.0
+
+    // horizontal line, ie "rail"
+    rail_y := rect.y + rect.height - needle_height/2
+    rl.DrawRectangleV({rect.x, rail_y - 2.0}, {rect.width, 4.0}, rl.GRAY)
+
+    // vertical notches
+    rl.DrawRectangleV({rect.x + rect.width/2.0 - 0.5, rail_y - 10.0}, {1.0, 20.0}, rl.GRAY)
+    rl.DrawRectangleV({rect.x, rail_y - 10.0}, {1.0, 20.0}, rl.GRAY)
+    rl.DrawRectangleV({rect.x + rect.width - 0.5, rail_y - 10.0}, {1.0, 20.0}, rl.GRAY)
+
+
+    // draw needle
+    rl.DrawRectangleV(
+        {rect.x + pos - needle_width/2.0, rect.y + rect.height - needle_height},
+        {needle_width, needle_height},
+        rl.LIGHTGRAY
+    )
+}

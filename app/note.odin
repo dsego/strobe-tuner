@@ -109,6 +109,7 @@ test_freq_to_octave :: proc(t: ^testing.T) {
 
 note_names: []u8 = {'C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B'}
 
+
 cents_to_note :: proc (cents: f32, pitch_standard: f32 = 440.0) -> (note: Note) {
     octave, nearest := cents_to_octave(cents)
 
