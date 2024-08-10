@@ -178,25 +178,18 @@ main :: proc() {
             // rl.DrawText("A1", 10, 10, 30, rl.PURPLE)
 
 
-
-
             // Show target frequency & interval
-
-            formatted_freq := strings.clone_to_cstring(fmt.aprintf("%.1fHz", target_freq))
-            formatted_interval := strings.clone_to_cstring(fmt.aprintf("%.2f", target_interval))
-            rl.DrawTextEx(font, formatted_freq, {20, 100}, 32, 0, rl.PURPLE)
-            rl.DrawTextEx(font, formatted_interval, {20, 150}, 16, 0, rl.SKYBLUE)
+            rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", target_freq), {20, 100}, 32, 0, rl.PURPLE)
+            rl.DrawTextEx(font, fmt.ctprintf("%.2f", target_interval), {20, 150}, 16, 0, rl.SKYBLUE)
 
 
             // Detected note - auto correlation
             draw_note(&detected_note_ac, {20, 180}, 48)
-            formatted_detected_freq := strings.clone_to_cstring(fmt.aprintf("%.1fHz", detected_freq_ac))
-            rl.DrawTextEx(font, formatted_detected_freq, {20, 230}, 24, 0, rl.PURPLE)
+            rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_ac), {20, 230}, 24, 0, rl.PURPLE)
 
 
             cents_diff := freq_to_cents(detected_freq_ac) - f32(detected_note_ac.cents)
-            formatted_cents_diff := strings.clone_to_cstring(fmt.aprintf("%.1fc", cents_diff))
-            rl.DrawTextEx(font, formatted_cents_diff, {20, 260}, 24, 0, rl.ORANGE)
+            rl.DrawTextEx(font, fmt.ctprintf("%.1fc", cents_diff), {20, 260}, 24, 0, rl.ORANGE)
 
             draw_autocorrelation(
                 rl.Rectangle{160, 180, SCREEN_WIDTH-180, 160},
@@ -208,14 +201,12 @@ main :: proc() {
 
             // Spectrum
             draw_note(&detected_note_spectrum, {20, 400}, 48)
-            detected_freq_spectrum_str := strings.clone_to_cstring(fmt.aprintf("%.1fHz", detected_freq_spectrum))
-            rl.DrawTextEx(font, detected_freq_spectrum_str, {20, 450}, 24, 0, rl.PURPLE)
+            rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_spectrum), {20, 450}, 24, 0, rl.PURPLE)
             draw_freq_spectrum(rl.Rectangle{160, 400, SCREEN_WIDTH-180, 160}, &pitch)
 
             // HPS
             // draw_note(&detected_note_hps, {20, 500}, 48)
-            // detected_freq_hps_str := strings.clone_to_cstring(fmt.aprintf("%.1fHz", detected_freq_spectrum))
-            // rl.DrawTextEx(font, detected_freq_hps_str, {20, 550}, 24, 0, rl.PURPLE)
+            // rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_spectrum), {20, 550}, 24, 0, rl.PURPLE)
 
 
         }

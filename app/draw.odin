@@ -8,7 +8,8 @@ import "core:path/filepath"
 // Root directory relative to this file
 root_dir := filepath.dir(#file)
 
-sharp : cstring = "♯"
+SHARP :: "♯"
+
 font_atlas : cstring = "ABCDEFGHz♯♭/-1234567890.msck"
 font: rl.Font
 
@@ -29,13 +30,16 @@ destroy_drawing_context :: proc() {
 }
 
 draw_note :: proc(note: ^Note, pos: [2]f32, size: f32) {
+    // Note name
+    rl.DrawTextEx(font, cstring(&note.name), pos, size, 0, rl.PURPLE)
+
+    // Sharp sign
     if note.is_accidental {
-        rl.DrawTextEx(font, cstring(&note.name), pos, size, 0, rl.PURPLE)
-        rl.DrawTextEx(font, sharp, {pos.x+size/2, pos.y}, size/1.5, 0, rl.PURPLE)
-        rl.DrawTextEx(font, sharp, {pos.x+size/2, pos.y}, size/1.5, 0, rl.PURPLE)
-    } else {
-        rl.DrawTextEx(font, cstring(&note.name), pos, size, 0, rl.PURPLE)
+        rl.DrawTextEx(font, SHARP, {pos.x+size/2, pos.y}, size/1.5, 0, rl.PURPLE)
     }
+
+    // Octave
+    rl.DrawTextEx(font, fmt.ctprintf("%v", note.octave), {pos.x+size/2, pos.y+size/2}, size/2.5, 0, rl.PURPLE)
 }
 
 
