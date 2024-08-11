@@ -11,7 +11,7 @@ EPS := 0.000001
 
 // TODO: make this a state object {
 frame_counter_real := 0.0
-overlap_sample := 0.0
+overlap_sample :f32 = 0.0
 // }
 
 
@@ -22,7 +22,11 @@ reset_framerate :: proc() {
 }
 
 
-read_samples :: proc(rb_ptr: ^pa_rb.RingBuffer, samples: []f32, target_interval: f64) -> (u32, f64) {
+read_samples :: proc(
+    rb_ptr: ^pa_rb.RingBuffer,
+    samples: []f32,
+    target_interval: f64
+) -> (u32, f64) {
 /*
     Example:
 
@@ -46,21 +50,21 @@ read_samples :: proc(rb_ptr: ^pa_rb.RingBuffer, samples: []f32, target_interval:
     if frames_to_read > 0 && frames_to_skip == 0 {
         // Capturing the next adjacent period, keep the overlap sample for interpolation
         if frames_to_read > u32(math.trunc(target_interval)) {
-            read_ringbuffer(rb_ptr, samples[:], frames_to_read, STROBE_COUNT)
+            read_ringbuffer(rb_ptr, samples[:], frames_to_read)
         } else {
-            samples[0] = f32(overlap_sample)
-            read_ringbuffer(rb_ptr, samples[1:], frames_to_read, STROBE_COUNT)
+            samples[0] = overlap_sample
+            read_ringbuffer(rb_ptr, samples[1:], frames_to_read)
         }
     } else {
         // Next period to read not adjacent, skip a number of intervals and read an entire interval of samples
         advance_ringbuffer(rb_ptr, i32(frames_to_skip)) // skip old samples to pick up slack and catch up with the writer
-        read_ringbuffer(rb_ptr, samples, frames_to_read, STROBE_COUNT)
+        read_ringbuffer(rb_ptr, samples, frames_to_read)
     }
 
     count := u32(math.ceil(target_interval))
 
     if frames_to_read > 0 {
-        overlap_sample = f64(samples[count-1])
+        overlap_sample = samples[count-1]
     }
 
     // correct for sub-sample drift

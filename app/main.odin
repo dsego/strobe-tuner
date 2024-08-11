@@ -107,7 +107,7 @@ main :: proc() {
 
 
         // Pitch detection, use the first ringbuffer
-        new_count := read_ringbuffer(&pitch_ringbuffer, new_samples, FFT_SIZE/2, 1)
+        new_count := read_ringbuffer(&pitch_ringbuffer, new_samples, FFT_SIZE/2)
 
         if new_count > 0 {
 
@@ -146,23 +146,13 @@ main :: proc() {
         // TODO: pad fft for better precision, eg 4096 samples = 8192 padded fft size
         target_interval := 2.0 * f64(SAMPLERATE) / target_freq
 
-        frame_count, drift := read_samples(
-            rb_ptr=&strobe_ringbuffer,
-            samples=strobe_samples[:],
-            target_interval=target_interval,
-        )
-
-
-
-        load_strobe_texture(frame_count)
-        defer unload_strobe_texture()
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
         {
             rl.ClearBackground(rl.BLACK)
 
-            draw_strobes(target_interval, drift, frame_count, show_pattern,)
+            draw_strobe_display(target_interval, show_pattern)
 
             // fmt.println(target_freq, note)
             draw_note(&note, {20, 20}, 64)
@@ -199,7 +189,7 @@ main :: proc() {
 
 
             // TODO: use the AC for detecting the fundamental, find the freq peak in that area and feed to the meter
-            draw_note_meter(rl.Rectangle{50, 500, 400, 100}, &detected_note_ac, detected_freq_ac)
+            draw_note_meter(rl.Rectangle{50, 500, 400, 100}, &detected_note_spectrum, detected_freq_spectrum)
         }
     }
 }

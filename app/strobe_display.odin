@@ -5,101 +5,107 @@ import "core:math"
 import rl "vendor:raylib"
 
 
-strobe_samples: [STROBE_COUNT*SAMPLE_SIZE]f32
-pattern_image: rl.Image
-pattern_texture: rl.Texture2D
+StrobeDisplay :: struct {
+    samples: [SAMPLE_SIZE]f32,
+    pattern_image: rl.Image,
+    pattern_texture: rl.Texture2D,
+    points: [SAMPLE_SIZE]rl.Vector2,
+}
+
+
+strobe_displays: [STROBE_COUNT]StrobeDisplay
+
 
 init_strobe_display :: proc () {
-    pattern_image = rl.GenImageColor(1024, 1, {100, 0, 0, 255})
+    for i in 0..<STROBE_COUNT {
+        strobe_displays[i].pattern_image = rl.GenImageColor(1024, 1, {100, 0, 0, 255})
+    }
 }
 
 destroy_strobe_display :: proc () {
-    rl.UnloadImage(pattern_image)
+    for i in 0..<STROBE_COUNT {
+        rl.UnloadImage(strobe_displays[i].pattern_image)
+    }
 }
 
-load_strobe_texture :: proc (frame_count: u32) {
-    for i in 0..<STROBE_COUNT {
-        max := find_abs_max(strobe_samples[:frame_count])
-        factor := 1.0 / max
 
-        for j in 0..<frame_count {
-            // convert from range -1.0 - 1.0 to range 0 - 255
-            val := u8(f32(factor) * strobe_samples[i+int(j)] * 127.5 + 127.5)
-            // val := u8(255)
-            // freq := f32(10.0)
-            // val := u8(math.sin_f32(f32(j)/256.0 * 2.0 * math.PI * freq) * 127.5 + 127.5)
-            rl.ImageDrawPixel(&pattern_image, i32(frame_count-j-1), 0, {val, val, val, 255})
+draw_strobe_display :: proc(target_interval: f64, show_pattern: bool = false) {
+    for i in 0..<STROBE_COUNT {
+        rect := rl.Rectangle{160, f32(50 + 110 * i), 800, 100}
+        frame_count, drift := read_samples(
+            rb_ptr=&strobe_ringbuffers[i],
+            samples=strobe_displays[i].samples[:],
+            target_interval=target_interval,
+        )
+        _draw_strobe_lines(rect, &strobe_displays[i], target_interval, frame_count, drift)
+
+        if show_pattern {
+            // _draw_strobe_pattern(rect, &strobe_displays[i], target_interval, frame)
         }
     }
-    pattern_texture = rl.LoadTextureFromImage(pattern_image)
 }
 
-unload_strobe_texture :: proc () {
-    rl.UnloadTexture(pattern_texture)
-}
-
-draw_strobes :: proc(
+@(private)
+_draw_strobe_lines :: proc(
+    rect: rl.Rectangle,
+    strobe_display: ^StrobeDisplay,
     target_interval: f64,
-    drift: f64,
     frame_count: u32,
-    show_pattern: bool,
+    drift: f64,
 ) {
 
-    // fmt.println(target_interval, frame_count, drift)
-
-    width: f32 = 800
-    height: f32 = 100
-
-    // floored_interval := math.trunc(target_interval)
+    x:f32 = rect.width + f32(rect.x) //+ drift_adj
+    y := rect.y
 
     // resolution
-    dx := width / f32(target_interval-1.0)
+    dx := rect.width / f32(target_interval-1.0)
 
     drift_adj := f32(drift) * dx
 
-    pos := [2]i32{160, 50}
 
+    rl.DrawRectangleLinesEx({rect.x-1, y-1, rect.width+2, rect.height+2}, 1.0, rl.GRAY)
 
-    for i in 0..<STROBE_COUNT {
-        points: [SAMPLE_SIZE]rl.Vector2
-        x :f32 = width + f32(pos.x) //+ drift_adj
+    factor := (rect.height/2.0 - 1.0) * 10.0
 
-        // fmt.println(drift, x)
+    // TODO: resample by linear interpolation to fit the pixels
+    // e.g. from 300 samples produce a value for each of the 800 pixels
 
-        y := pos.y + 110 * i32(i)
-
-        rl.DrawRectangleLines(pos.x-1, y-1, 802, 102, rl.GRAY)
-
-        // fmt.println(frame_count)
-
-        if show_pattern {
-            rl.DrawTexturePro(
-                texture=pattern_texture,
-                source={0, 0, f32(frame_count), 1},
-                dest={50, f32(y), 800, 100},
-                origin={},
-                rotation=0,
-                tint=rl.WHITE,
-            )
-
-        } else {
-
-            factor := (height/2.0 - 1.0) * 10.0
-
-            // TODO: resample by linear interpolation to fit the pixels
-            // e.g. from 300 samples produce a value for each of the 800 pixels
-
-            for j in 0..<frame_count {
-                // note that y is flipped (negative)
-                dy := height/2.0 - strobe_samples[i+int(j)] * factor
-                points[j] = { x - f32(drift) * dx, f32(y) + dy }
-                x -= dx
-            }
-
-            rl.DrawLineStrip(raw_data(points[:]), i32(frame_count), rl.PINK)
-        }
-
+    for i in 0..<frame_count {
+        // note that y is flipped (negative)
+        dy := rect.height/2.0 - strobe_display.samples[i] * factor
+        strobe_display.points[i] = { x - f32(drift) * dx, f32(y) + dy }
+        x -= dx
     }
+
+    rl.DrawLineStrip(raw_data(strobe_display.points[:]), i32(frame_count), rl.PINK)
+}
+
+@(private)
+_draw_strobe_pattern :: proc() {
+
+    // max := find_abs_max(strobe_samples[:frame_count])
+    // factor := 1.0 / max
+
+    // for j in 0..<frame_count {
+    //     // convert from range -1.0 - 1.0 to range 0 - 255
+    //     val := u8(f32(factor) * strobe_samples[i+int(j)] * 127.5 + 127.5)
+    //     // val := u8(255)
+    //     // freq := f32(10.0)
+    //     // val := u8(math.sin_f32(f32(j)/256.0 * 2.0 * math.PI * freq) * 127.5 + 127.5)
+    //     rl.ImageDrawPixel(&pattern_image, i32(frame_count-j-1), 0, {val, val, val, 255})
+    // }
+
+    // pattern_texture = rl.LoadTextureFromImage(pattern_image)
+    // defer rl.UnloadTexture(pattern_texture)
+
+    // rl.DrawTexturePro(
+    //     texture=pattern_texture,
+    //     source={0, 0, f32(frame_count), 1},
+    //     dest={50, f32(y), 800, 100},
+    //     origin={},
+    //     rotation=0,
+    //     tint=rl.WHITE,
+    // )
 }
 
 
