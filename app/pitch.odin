@@ -14,6 +14,7 @@ PitchConfig :: struct {
     fft_size: int,
     fft: []complex64,
     win_fft: []complex64, // windowed fft
+    last_spectrum: []f32,
     spectrum: []f32,
     hps: []f32, // harmonic product spectrum
     fft_conj_product: []complex64,
@@ -28,6 +29,7 @@ pitch_init :: proc (fft_size: int, samplerate: int) -> (config: PitchConfig = {}
     config.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
     config.fft = make([]complex64, fft_size)
     config.win_fft = make([]complex64, fft_size)
+    config.last_spectrum = make([]f32, fft_size)
     config.spectrum = make([]f32, fft_size)
     config.hps = make([]f32, fft_size)
     config.fft_conj_product = make([]complex64, fft_size)
@@ -45,6 +47,7 @@ pitch_destroy :: proc (config: PitchConfig) {
     delete(config.fft_conj_product)
     delete(config.autocorrelation)
     delete(config.windowed_samples)
+    delete(config.last_spectrum)
     delete(config.spectrum)
     delete(config.hps)
     delete(config.padded_samples)
@@ -71,6 +74,9 @@ pitch_detect_spectrum :: proc(using config: PitchConfig, samples: []f32) -> f32 
         nil,
         pffft.Direction.FORWARD
     )
+
+    // We need this to calculate the spectral flux
+    copy(last_spectrum, spectrum)
 
     // calculate the spectrum
     for i in 0..<len(fft) {
@@ -270,10 +276,57 @@ pitch_detect_ac :: proc (using config: PitchConfig, samples: []f32) -> (f32, f32
 }
 
 
-// blackmann_window :: proc (k: f32, size: f32) -> f32 {
-//     l : f32 = 2.0 * math.PI * k / (size - 1.0)
-//     return 0.42 - 0.5 * math.cos(l) + 0.08 * math.cos(2.0 * l)
-// }
+spectral_flux :: proc (last_spectrum: []f32, spectrum: []f32) -> f32 {
+    assert(len(last_spectrum) == len(spectrum))
+
+    flux:f32 = 0.0
+
+    for i in 0..<len(spectrum) {
+        flux += max(spectrum[i] - last_spectrum[i], 0)
+    }
+
+    return flux
+}
+
+
+// The spectral flatness is calculated by dividing the geometric mean
+//  of the power spectrum by the arithmetic mean of the power spectrum.
+spectral_flatness :: proc (spectrum: []f32) -> f32 {
+    flatness := geometric_mean(spectrum) / arithmetic_mean(spectrum)
+    return flatness
+}
+
+
+arithmetic_mean :: proc (array: []f32) -> f32 {
+    mean: f32 = 0.0
+
+    for i in 0..<len(array) {
+        mean += array[i]
+    }
+
+    mean /= f32(len(array))
+    return mean
+}
+
+
+geometric_mean :: proc (array: []f32) -> f32 {
+    geometric_mean: f32 = 0.0
+
+    for i in 0..<len(array) {
+        // note, adding a small value to avoid zeros, because ln(0) = -inf
+        //  also adding noise floor produces more sensible values
+        geometric_mean += math.ln(array[i] + 0.001)
+    }
+    geometric_mean /= f32(len(array))
+    geometric_mean = math.exp(geometric_mean)
+
+    return geometric_mean
+}
+
+
+
+// flux = sum([max(spectrum[n] - last_spectrum[n], 0)
+//             for n in xrange(self._window_size)])
 
 
 // Symmetric Blackmann-Harris

@@ -147,6 +147,10 @@ main :: proc() {
         target_interval := 2.0 * f64(SAMPLERATE) / target_freq
 
 
+        // limit to note range 20Hz - 8kHz
+        flatness := spectral_flatness(pitch.spectrum[2:750])
+
+
         rl.BeginDrawing()
         defer rl.EndDrawing()
         {
@@ -190,6 +194,10 @@ main :: proc() {
 
             // TODO: use the AC for detecting the fundamental, find the freq peak in that area and feed to the meter
             draw_note_meter(rl.Rectangle{50, 500, 400, 100}, &detected_note_spectrum, detected_freq_spectrum)
+
+
+            rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {500, 500}, 24, 0, rl.PINK)
+            rl.DrawRectangleV({500, 550}, {100 * flatness, 4.0}, rl.PINK)
         }
     }
 }

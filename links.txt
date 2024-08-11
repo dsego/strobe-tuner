@@ -66,3 +66,7 @@ https://libaudioflux.github.io/audioFlux/
 HPS
 https://github.com/joaocarvalhoopen/Polyphonic_note_detector_using_Harmonic_Product_Spectrum?tab=readme-ov-file
 https://github.com/sergiucaraian/piano-notes-detector/blob/master/main.py
+
+
+C++ library for audio and music analysis
+https://github.com/MTG/essentia
