@@ -276,21 +276,10 @@ pitch_detect_ac :: proc (using config: PitchConfig, samples: []f32) -> (f32, f32
 }
 
 
-spectral_flux :: proc (last_spectrum: []f32, spectrum: []f32) -> f32 {
-    assert(len(last_spectrum) == len(spectrum))
-
-    flux:f32 = 0.0
-
-    for i in 0..<len(spectrum) {
-        flux += max(spectrum[i] - last_spectrum[i], 0)
-    }
-
-    return flux
-}
 
 
-// The spectral flatness is calculated by dividing the geometric mean
-//  of the power spectrum by the arithmetic mean of the power spectrum.
+// NOTE: spectral flatness doesn't work great for tones with lots of harmonics.
+// TODO: consider spectral contrast or spectral entropy?
 spectral_flatness :: proc (spectrum: []f32) -> f32 {
     flatness := geometric_mean(spectrum) / arithmetic_mean(spectrum)
     return flatness
