@@ -131,7 +131,7 @@ draw_freq_spectrum :: proc(rect: rl.Rectangle, spectrum: []f32, fft_size: int, s
     x := rect.x
 
     for i in 0..<l {
-        y := rect.y + rect.height - spectrum[i] * rect.height * 0.01
+        y := rect.y + rect.height - spectrum[i] * rect.height * 0.1 // HARDCODED gain
         spectrum_points[i] = { x, y }
         x += px_per_sample
     }

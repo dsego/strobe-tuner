@@ -80,6 +80,9 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32, 
 
     i := 1
 
+
+    // TODO: don't look for notes lower than 20Hz = lag 50ms
+
     // throw away the negative lags
     half_len := len(autocorrelation) / 2 + 1  // + 1 ?
     peak_index := 0

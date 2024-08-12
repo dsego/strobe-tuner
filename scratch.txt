@@ -1,26 +1,23 @@
-minimalistic flat ui inspired by ableton
+
+
+move fft processing and pitch detection into audio loop?
+
+because audio loop is run every time there are new samples
+
+running in the main loop could be doing extra unnecessary work (calculating the same fft over and over)
 
 
 
----->
+----
 
 flatness vs acf peak amplitude as measure of presence of notes -> flatness is better
 
 
 acf -> don't look for notes lower than 20Hz = lag 50ms
 
-acf problem at finding peak at low E bass note due to being imprecise, jumps between adjacent notes
-
-
 
 
 try out cepstrum
-
-
--> autocorrelation to find true fundamental
-  -> to improve accuracy look for this peak in the FFT spectrum and find the precise measurement
-
-
 
 
 
@@ -38,6 +35,9 @@ foreign import portaudio "system:/opt/homebrew/Cellar/portaudio/19.7.0/lib/libpo
 
 
 --------
+
+
+minimalistic flat ui inspired by ableton
 
 add zeros to filter out harmonics? - copy resonator
 

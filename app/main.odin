@@ -89,6 +89,15 @@ main :: proc() {
 
     show_pattern := false
 
+    detected_freq_spectrum: f32
+    detected_note_spectrum: Note
+    detected_freq_ac: f32
+    ac_lag: f32
+    ac_val: f32
+    detected_note_ac: Note
+    flatness: f32
+
+
     for !rl.WindowShouldClose() {
 
 
@@ -116,11 +125,18 @@ main :: proc() {
             reset_framerate()
         }
 
+        target_freq = freqs[freqs_idx]
+        note := find_note(f32(target_freq))
+
+        // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
+        target_interval := 2.0 * f64(SAMPLERATE) / target_freq
+
 
         // Pitch detection, use the first ringbuffer
         new_count := read_ringbuffer(&pitch_ringbuffer, new_samples, FFT_SIZE/2)
 
         if new_count > 0 {
+
 
             // move old samples back to make room for new samples
             copy(samples, samples[new_count:])
@@ -128,32 +144,20 @@ main :: proc() {
             // copy over new samples into the freed space
             copy(samples[FFT_SIZE/2-new_count:], new_samples[:new_count])
 
+            detected_freq_ac, ac_lag, ac_val = ac_pitch_detect(&ac, samples)
+            detected_note_ac = find_note(detected_freq_ac)
+
+            // TODO: Smooth out the detected freq?
+            // detected_freq_avg = smooth(&smooth_conf, detected_freq_ac)
+
+            // Find spectrum peak
+            detected_freq_spectrum = spectrum_pitch_detect(&spectrum, samples)
+            detected_note_spectrum = find_note(detected_freq_spectrum)
+
+
+            // limit to note range 20Hz - 8kHz
+            flatness = spectral_flatness(spectrum.spectrum[2:750])
         }
-
-
-        // TODO: no need to run pitch detect if samples haven't changed
-        detected_freq_ac, lag, val := ac_pitch_detect(&ac, samples)
-        detected_note_ac := find_note(detected_freq_ac)
-
-
-        // TODO: Smooth out the detected freq?
-        // detected_freq_avg = smooth(&smooth_conf, detected_freq_ac)
-
-
-        target_freq = freqs[freqs_idx]
-        note := find_note(f32(target_freq))
-
-
-        // Find spectrum peak
-        detected_freq_spectrum := spectrum_pitch_detect(&spectrum, samples)
-        detected_note_spectrum := find_note(detected_freq_spectrum)
-
-
-        // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
-        target_interval := 2.0 * f64(SAMPLERATE) / target_freq
-
-        // limit to note range 20Hz - 8kHz
-        flatness := spectral_flatness(spectrum.spectrum[2:750])
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -185,7 +189,7 @@ main :: proc() {
             // cents_diff := freq_to_cents(detected_freq_ac) - f32(detected_note_ac.cents)
             // rl.DrawTextEx(font, fmt.ctprintf("%.1fc", cents_diff), {20, 260}, 24, 0, rl.ORANGE)
 
-            draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 120}, &ac, lag, val)
+            draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 120}, &ac, ac_lag, ac_val)
 
             // Spectrum
             if freq_in_range(detected_freq_spectrum) {
