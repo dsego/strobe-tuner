@@ -195,15 +195,26 @@ main :: proc() {
             if freq_in_range(detected_freq_spectrum) {
                 draw_note(&detected_note_spectrum, {20, 350}, 48)
                 rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_spectrum), {20, 400}, 24, 0, rl.PURPLE)
-                draw_freq_spectrum(rl.Rectangle{160, 350, SCREEN_WIDTH-180, 120}, &pitch)
             }
+
+            draw_freq_spectrum(rl.Rectangle{160, 350, SCREEN_WIDTH-180, 120}, &pitch)
+            draw_cepstrum(rl.Rectangle{160, 520, SCREEN_WIDTH-180, 120}, &pitch)
 
 
             // TODO: use the AC for detecting the fundamental, find the freq peak in that area and feed to the meter
-            draw_note_meter(rl.Rectangle{50, 500, 400, 100}, &detected_note_spectrum, detected_freq_spectrum)
+            // draw_note_meter(rl.Rectangle{50, 500, 400, 100}, &detected_note_spectrum, detected_freq_spectrum)
 
-            rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {500, 500}, 24, 0, rl.PINK)
-            rl.DrawRectangleV({500, 550}, {100 * flatness, 4.0}, rl.PINK)
+            // rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {500, 500}, 24, 0, rl.PINK)
+            // rl.DrawRectangleV({500, 550}, {100 * flatness, 4.0}, rl.PINK)
+
+
+
         }
     }
+}
+
+
+spectral_flatness :: proc (spectrum: []f32) -> f32 {
+    flatness := geometric_mean(spectrum) / arithmetic_mean(spectrum)
+    return flatness
 }

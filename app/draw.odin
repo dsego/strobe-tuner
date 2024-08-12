@@ -147,6 +147,33 @@ draw_freq_spectrum :: proc(rect: rl.Rectangle, pitch_config: ^PitchConfig) {
     // rl.DrawLineStrip(raw_data(hps_points[:]), i32(SPECTRUM_DISPLAY_LEN), rl.GREEN)
 }
 
+draw_cepstrum :: proc(rect: rl.Rectangle, pitch_config: ^PitchConfig) {
+    cepstrum_points: [SPECTRUM_DISPLAY_LEN]rl.Vector2 = {}
+    hps_points: [SPECTRUM_DISPLAY_LEN]rl.Vector2 = {}
+
+    cepstrum := pitch_config.cepstrum
+    hps := pitch_config.hps
+
+    // stretch samples to fit the box width
+    px_per_sample := f32(rect.width) / f32(SPECTRUM_DISPLAY_LEN - 1)
+    x := rect.x
+
+    for i in 0..<SPECTRUM_DISPLAY_LEN {
+        y1 := rect.y + rect.height - cepstrum[i] * rect.height
+        cepstrum_points[i] = { x, y1 }
+
+        y2 := rect.y + rect.height - hps[i] * rect.height * 0.01
+        hps_points[i] = { x, y2 }
+
+        x += px_per_sample
+    }
+
+    draw_freq_plot(rect, SPECTRUM_DISPLAY_LEN, 500.0)
+    rl.DrawLineStrip(raw_data(cepstrum_points[:]), i32(SPECTRUM_DISPLAY_LEN), rl.SKYBLUE)
+    // rl.DrawLineStrip(raw_data(hps_points[:]), i32(SPECTRUM_DISPLAY_LEN), rl.GREEN)
+}
+
+
 
 draw_note_meter :: proc (rect: rl.Rectangle, detected_note: ^Note, freq: f32) {
 
