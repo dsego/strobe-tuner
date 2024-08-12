@@ -34,11 +34,12 @@ spectrum_destroy :: proc (config: ^SpectrumConfig) {
 }
 
 spectrum_pitch_detect :: proc(using config: ^SpectrumConfig, samples: []f32) -> f32 {
-    assert(len(samples) == fft_size/2)
+    sample_len := len(samples)
+    assert(sample_len == fft_size/2)
 
     // pad with zeros and apply windowing
-    for i in 0..<fft_size/2 {
-        windowed_samples[i] = samples[i] * blackman_harris(f32(i), f32(fft_size))
+    for i in 0..<sample_len {
+        windowed_samples[i] = samples[i] * blackman_harris(f32(i), f32(sample_len))
     }
 
     pffft.transform_ordered(

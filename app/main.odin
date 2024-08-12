@@ -153,8 +153,6 @@ main :: proc() {
         target_interval := 2.0 * f64(SAMPLERATE) / target_freq
 
         // limit to note range 20Hz - 8kHz
-        // TODO: fix flatness, the refactoring broke it!
-        //   works in commit b95976b27b8a023625acdf24ba150a9f9c0bb184
         flatness := spectral_flatness(spectrum.spectrum[2:750])
 
         rl.BeginDrawing()
