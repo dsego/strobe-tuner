@@ -27,7 +27,7 @@ ceps_init :: proc (fft_size: int, samplerate: int) -> (config: CepsConfig = {}) 
     return
 }
 
-ceps_destroy :: proc (config: CepsConfig) {
+ceps_destroy :: proc (config: ^CepsConfig) {
     pffft.destroy_setup(config.pffft_setup)
     delete(config.fft)
     delete(config.windowed_samples)
@@ -36,7 +36,7 @@ ceps_destroy :: proc (config: CepsConfig) {
 }
 
 // computing the inverse Fourier transform (IFT) of the logarithm of the estimated signal spectrum.
-ceps_pitch_detect :: proc(using config: CepsConfig, samples: []f32) -> f32 {
+ceps_pitch_detect :: proc(using config: ^CepsConfig, samples: []f32) -> f32 {
     assert(len(samples) == fft_size/2)
 
     // pad with zeros and apply windowing

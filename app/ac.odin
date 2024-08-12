@@ -28,7 +28,7 @@ ac_init :: proc (fft_size: int, samplerate: int) -> (config: AcConfig = {}) {
     return
 }
 
-ac_destroy :: proc (config: AcConfig) {
+ac_destroy :: proc (config: ^AcConfig) {
     pffft.destroy_setup(config.pffft_setup)
     delete(config.fft)
     delete(config.autocorrelation)
@@ -38,7 +38,7 @@ ac_destroy :: proc (config: AcConfig) {
 
 
 // Detect pitch via auto-correlation
-ac_pitch_detect :: proc (using config: AcConfig, samples: []f32) -> (f32, f32, f32) {
+ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32, f32) {
 
     // Generate the autocorrelation
     //   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,

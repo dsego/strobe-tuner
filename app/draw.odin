@@ -29,38 +29,38 @@ destroy_drawing_context :: proc() {
     rl.UnloadFont(font)
 }
 
-draw_note :: proc(note: ^Note, pos: [2]f32, size: f32) {
+
+draw_note :: proc(note: ^Note, pos: [2]f32, size: f32, color: rl.Color = rl.PURPLE) {
     // Note name
-    rl.DrawTextEx(font, cstring(&note.name), pos, size, 0, rl.PURPLE)
+    rl.DrawTextEx(font, cstring(&note.name), pos, size, 0, color)
 
     // Sharp sign
     if note.is_accidental {
-        rl.DrawTextEx(font, SHARP, {pos.x+size/2, pos.y}, size/1.5, 0, rl.PURPLE)
+        rl.DrawTextEx(font, SHARP, {pos.x+size/2, pos.y}, size/1.5, 0, color)
     }
 
-    // Octave
-    rl.DrawTextEx(font, fmt.ctprintf("%v", note.octave), {pos.x+size/2, pos.y+size/2}, size/2.5, 0, rl.PURPLE)
+    // Octave number
+    rl.DrawTextEx(font, fmt.ctprintf("%v", note.octave), {pos.x+size/2, pos.y+size/2}, size/2.5, 0, color)
 }
-
 
 
 draw_autocorrelation :: proc(
     rect: rl.Rectangle,
-    pitch_config: ^PitchConfig,
+    ac_config: ^AcConfig,
     lag: f32,
     val: f32,
 ) {
     points: [FFT_SIZE]rl.Vector2 = {}
-    l := len(pitch_config.autocorrelation) / 2
+    l := len(ac_config.autocorrelation) / 2
 
     // stretch samples to fit the box width
     px_per_sample := f32(rect.width) / f32(l - 1)
 
     x := rect.x
-    gain: = 1.0 / pitch_config.autocorrelation[0]
+    gain: = 1.0 / ac_config.autocorrelation[0]
 
     for i in 0..<l {
-        y := rect.y + (rect.height/2.0) - pitch_config.autocorrelation[i] * (rect.height / 2.0) * gain
+        y := rect.y + (rect.height/2.0) - ac_config.autocorrelation[i] * (rect.height / 2.0) * gain
         points[i] = { x, y }
         x += px_per_sample
     }
@@ -101,7 +101,7 @@ draw_time_plot :: proc(using rect: rl.Rectangle, len_samples: int, div_ms: f32) 
 }
 
 
-draw_freq_plot :: proc(using rect: rl.Rectangle, len_samples: int, div_hz: f32) {
+draw_freq_plot :: proc(using rect: rl.Rectangle, len_hz: f32, div_hz: f32) {
     // Horizontal lines at 1,0,-1
     rl.DrawLineEx({x, y}, {x+width, y}, 0.5, rl.GRAY)
     rl.DrawTextEx(font, "1", {x-16, y-8}, 16, 0, rl.GRAY)
@@ -110,7 +110,6 @@ draw_freq_plot :: proc(using rect: rl.Rectangle, len_samples: int, div_hz: f32) 
     rl.DrawTextEx(font, "0", {x-24, y+height-8}, 16, 0, rl.GRAY)
 
     // Vertical lines every x Hz
-    len_hz := f32(SAMPLERATE) / 20
     px_per_hz := f32(width) / len_hz
 
     for d := f32(0); d < len_hz; d += div_hz {
@@ -121,56 +120,29 @@ draw_freq_plot :: proc(using rect: rl.Rectangle, len_samples: int, div_hz: f32) 
 }
 
 
-draw_freq_spectrum :: proc(rect: rl.Rectangle, pitch_config: ^PitchConfig) {
-    spectrum_points: [SPECTRUM_DISPLAY_LEN]rl.Vector2 = {}
-    hps_points: [SPECTRUM_DISPLAY_LEN]rl.Vector2 = {}
+draw_freq_spectrum :: proc(rect: rl.Rectangle, spectrum: []f32, fft_size: int, samplerate: int) {
+    l := len(spectrum)
 
-    spectrum := pitch_config.spectrum
-    hps := pitch_config.hps
+    // TODO: allocate on the heap ?
+    spectrum_points: [MAX_SPECTRUM_DISPLAY_LEN]rl.Vector2 = {}
 
     // stretch samples to fit the box width
-    px_per_sample := f32(rect.width) / f32(SPECTRUM_DISPLAY_LEN - 1)
+    px_per_sample := f32(rect.width) / f32(l - 1)
     x := rect.x
 
-    for i in 0..<SPECTRUM_DISPLAY_LEN {
-        y1 := rect.y + rect.height - spectrum[i] * rect.height * 0.01
-        spectrum_points[i] = { x, y1 }
-
-        y2 := rect.y + rect.height - hps[i] * rect.height * 0.01
-        hps_points[i] = { x, y2 }
-
+    for i in 0..<l {
+        y := rect.y + rect.height - spectrum[i] * rect.height * 0.01
+        spectrum_points[i] = { x, y }
         x += px_per_sample
     }
 
-    draw_freq_plot(rect, SPECTRUM_DISPLAY_LEN, 500.0)
-    rl.DrawLineStrip(raw_data(spectrum_points[:]), i32(SPECTRUM_DISPLAY_LEN), rl.LIME)
-    // rl.DrawLineStrip(raw_data(hps_points[:]), i32(SPECTRUM_DISPLAY_LEN), rl.GREEN)
-}
+    bin_hz := f32(samplerate) / f32(fft_size)
+    len_hz := f32(l) * bin_hz // number of bins * Hz covered by bin
 
-draw_cepstrum :: proc(rect: rl.Rectangle, pitch_config: ^PitchConfig) {
-    cepstrum_points: [SPECTRUM_DISPLAY_LEN]rl.Vector2 = {}
-    hps_points: [SPECTRUM_DISPLAY_LEN]rl.Vector2 = {}
+    div_hz:f32 = 500.0 // show division every 0.5kHz
 
-    cepstrum := pitch_config.cepstrum
-    hps := pitch_config.hps
-
-    // stretch samples to fit the box width
-    px_per_sample := f32(rect.width) / f32(SPECTRUM_DISPLAY_LEN - 1)
-    x := rect.x
-
-    for i in 0..<SPECTRUM_DISPLAY_LEN {
-        y1 := rect.y + rect.height - cepstrum[i] * rect.height
-        cepstrum_points[i] = { x, y1 }
-
-        y2 := rect.y + rect.height - hps[i] * rect.height * 0.01
-        hps_points[i] = { x, y2 }
-
-        x += px_per_sample
-    }
-
-    draw_freq_plot(rect, SPECTRUM_DISPLAY_LEN, 500.0)
-    rl.DrawLineStrip(raw_data(cepstrum_points[:]), i32(SPECTRUM_DISPLAY_LEN), rl.SKYBLUE)
-    // rl.DrawLineStrip(raw_data(hps_points[:]), i32(SPECTRUM_DISPLAY_LEN), rl.GREEN)
+    draw_freq_plot(rect, len_hz, div_hz)
+    rl.DrawLineStrip(raw_data(spectrum_points[:]), i32(l), rl.LIME)
 }
 
 
@@ -178,7 +150,7 @@ draw_cepstrum :: proc(rect: rl.Rectangle, pitch_config: ^PitchConfig) {
 draw_note_meter :: proc (rect: rl.Rectangle, detected_note: ^Note, freq: f32) {
 
     // outline for visual debugging
-    rl.DrawRectangleLinesEx(rect, 1.0, rl.ORANGE)
+    // rl.DrawRectangleLinesEx(rect, 1.0, rl.ORANGE)
 
     if freq_in_range(freq) {
         draw_note(detected_note, {rect.x + rect.width/2.0 - 20.0, rect.y}, 64)

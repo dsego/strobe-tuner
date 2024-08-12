@@ -26,14 +26,14 @@ spectrum_init :: proc (fft_size: int, samplerate: int) -> (config: SpectrumConfi
     return
 }
 
-spectrum_destroy :: proc (config: SpectrumConfig) {
+spectrum_destroy :: proc (config: ^SpectrumConfig) {
     pffft.destroy_setup(config.pffft_setup)
     delete(config.fft)
     delete(config.windowed_samples)
     delete(config.spectrum)
 }
 
-spectrum_pitch_detect :: proc(using config: SpectrumConfig, samples: []f32) -> f32 {
+spectrum_pitch_detect :: proc(using config: ^SpectrumConfig, samples: []f32) -> f32 {
     assert(len(samples) == fft_size/2)
 
     // pad with zeros and apply windowing
@@ -83,3 +83,7 @@ spectrum_pitch_detect :: proc(using config: SpectrumConfig, samples: []f32) -> f
 }
 
 
+spectral_flatness :: proc (spectrum: []f32) -> f32 {
+    flatness := geometric_mean(spectrum) / arithmetic_mean(spectrum)
+    return flatness
+}

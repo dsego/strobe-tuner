@@ -36,7 +36,7 @@ main :: proc() {
 
     freqs_idx := 0
 
-    freqs: []f64 = bass_freqs
+    freqs: []f64 = ukulele_freqs
 
     target_freq = freqs[0]
 
@@ -60,13 +60,18 @@ main :: proc() {
     if !ok do return
     defer destroy_audio_capture()
 
-    pitch := pitch_init(FFT_SIZE, SAMPLERATE)
-    defer pitch_destroy(pitch)
+    ac := ac_init(FFT_SIZE, SAMPLERATE)
+    defer ac_destroy(&ac)
 
-    samples: []f32 = make([]f32, FFT_SIZE)
-    new_samples: []f32 = make([]f32, FFT_SIZE)
+    spectrum := spectrum_init(FFT_SIZE, SAMPLERATE)
+    defer spectrum_destroy(&spectrum)
+
+    samples: []f32 = make([]f32, FFT_SIZE/2)
     defer delete(samples)
+
+    new_samples: []f32 = make([]f32, FFT_SIZE/2)
     defer delete(new_samples)
+
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetTargetFPS(60)
@@ -76,7 +81,6 @@ main :: proc() {
 
     init_drawing_context()
     defer destroy_drawing_context()
-
 
     init_strobe_display()
     defer destroy_strobe_display()
@@ -122,13 +126,13 @@ main :: proc() {
             copy(samples, samples[new_count:])
 
             // copy over new samples into the freed space
-            copy(samples[FFT_SIZE-new_count:], new_samples[:new_count])
+            copy(samples[FFT_SIZE/2-new_count:], new_samples[:new_count])
 
         }
 
 
         // TODO: no need to run pitch detect if samples haven't changed
-        detected_freq_ac, lag, val := pitch_detect_ac(pitch, samples)
+        detected_freq_ac, lag, val := ac_pitch_detect(&ac, samples)
         detected_note_ac := find_note(detected_freq_ac)
 
 
@@ -141,23 +145,17 @@ main :: proc() {
 
 
         // Find spectrum peak
-        detected_freq_spectrum := pitch_detect_spectrum(pitch, samples)
+        detected_freq_spectrum := spectrum_pitch_detect(&spectrum, samples)
         detected_note_spectrum := find_note(detected_freq_spectrum)
 
-        // fmt.println(detected_freq_spectrum)
 
-        // detected_freq_hps := pitch_detect_hps(pitch)
-        // detected_note_hps := find_note(detected_freq_hps)
-
-
-        // aim at a double interval, to show more of the wave shape and slow down the strobe movement
-        // TODO: pad fft for better precision, eg 4096 samples = 8192 padded fft size
+        // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
         target_interval := 2.0 * f64(SAMPLERATE) / target_freq
 
-
         // limit to note range 20Hz - 8kHz
-        flatness := spectral_flatness(pitch.spectrum[2:750])
-
+        // TODO: fix flatness, the refactoring broke it!
+        //   works in commit b95976b27b8a023625acdf24ba150a9f9c0bb184
+        flatness := spectral_flatness(spectrum.spectrum[2:750])
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -189,7 +187,7 @@ main :: proc() {
             // cents_diff := freq_to_cents(detected_freq_ac) - f32(detected_note_ac.cents)
             // rl.DrawTextEx(font, fmt.ctprintf("%.1fc", cents_diff), {20, 260}, 24, 0, rl.ORANGE)
 
-            draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 120}, &pitch, lag, val)
+            draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 120}, &ac, lag, val)
 
             // Spectrum
             if freq_in_range(detected_freq_spectrum) {
@@ -197,15 +195,14 @@ main :: proc() {
                 rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_spectrum), {20, 400}, 24, 0, rl.PURPLE)
             }
 
-            draw_freq_spectrum(rl.Rectangle{160, 350, SCREEN_WIDTH-180, 120}, &pitch)
-            draw_cepstrum(rl.Rectangle{160, 520, SCREEN_WIDTH-180, 120}, &pitch)
+            draw_freq_spectrum(rl.Rectangle{160, 350, SCREEN_WIDTH-180, 120}, spectrum.spectrum[:200], FFT_SIZE, SAMPLERATE)
 
 
             // TODO: use the AC for detecting the fundamental, find the freq peak in that area and feed to the meter
-            // draw_note_meter(rl.Rectangle{50, 500, 400, 100}, &detected_note_spectrum, detected_freq_spectrum)
+            draw_note_meter(rl.Rectangle{50, 500, 400, 100}, &detected_note_spectrum, detected_freq_spectrum)
 
-            // rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {500, 500}, 24, 0, rl.PINK)
-            // rl.DrawRectangleV({500, 550}, {100 * flatness, 4.0}, rl.PINK)
+            rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {500, 500}, 24, 0, rl.PINK)
+            rl.DrawRectangleV({500, 550}, {100 * flatness, 4.0}, rl.PINK)
 
 
 
@@ -213,8 +210,3 @@ main :: proc() {
     }
 }
 
-
-spectral_flatness :: proc (spectrum: []f32) -> f32 {
-    flatness := geometric_mean(spectrum) / arithmetic_mean(spectrum)
-    return flatness
-}
