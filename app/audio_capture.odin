@@ -194,7 +194,7 @@ read_ringbuffer :: proc(
     data_ptr : rawptr
     total_frames_read : u32 = 0
 
-    assert(len(samples) >= int(frame_count))
+    assert(len(samples) >= int(frame_count), fmt.aprintf("frame_count %v larger than samples size %v", frame_count, len(samples)))
 
     num_read := pa_rb.ReadRingBuffer(rb_ptr, raw_data(samples), i32(frame_count))
     return u32(num_read)

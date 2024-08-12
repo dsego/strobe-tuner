@@ -153,8 +153,9 @@ draw_note_meter :: proc (rect: rl.Rectangle, detected_note: ^Note, freq: f32) {
     // outline for visual debugging
     rl.DrawRectangleLinesEx(rect, 1.0, rl.ORANGE)
 
-
-    draw_note(detected_note, {rect.x + rect.width/2.0 - 20.0, rect.y}, 64)
+    if freq_in_range(freq) {
+        draw_note(detected_note, {rect.x + rect.width/2.0 - 20.0, rect.y}, 64)
+    }
 
     // convert to cents, because we need the log scale
     cents := freq_to_cents(freq)

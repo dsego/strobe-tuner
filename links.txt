@@ -70,3 +70,13 @@ https://github.com/sergiucaraian/piano-notes-detector/blob/master/main.py
 
 C++ library for audio and music analysis
 https://github.com/MTG/essentia
+
+
+HNR
+https://www2.humusoft.cz/www/papers/tcp11/106_stranik.pdf
+https://www.math.uci.edu/~yqi/jasa537_1.pdf
+
+
+
+
+https://dsp.stackexchange.com/questions/85582/estimating-period-of-low-frequency-oscillations-autocorrelation-vs-frequency-a

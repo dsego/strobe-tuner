@@ -14,8 +14,8 @@ PitchConfig :: struct {
     fft_size: int,
     fft: []complex64,
     win_fft: []complex64, // windowed fft
-    last_spectrum: []f32,
     spectrum: []f32,
+    cepstrum: []f32,
     hps: []f32, // harmonic product spectrum
     fft_conj_product: []complex64,
     autocorrelation: []f32,
@@ -29,8 +29,8 @@ pitch_init :: proc (fft_size: int, samplerate: int) -> (config: PitchConfig = {}
     config.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
     config.fft = make([]complex64, fft_size)
     config.win_fft = make([]complex64, fft_size)
-    config.last_spectrum = make([]f32, fft_size)
     config.spectrum = make([]f32, fft_size)
+    config.cepstrum = make([]f32, fft_size)
     config.hps = make([]f32, fft_size)
     config.fft_conj_product = make([]complex64, fft_size)
     config.autocorrelation = make([]f32, fft_size)
@@ -47,8 +47,8 @@ pitch_destroy :: proc (config: PitchConfig) {
     delete(config.fft_conj_product)
     delete(config.autocorrelation)
     delete(config.windowed_samples)
-    delete(config.last_spectrum)
     delete(config.spectrum)
+    delete(config.cepstrum)
     delete(config.hps)
     delete(config.padded_samples)
 }
@@ -75,9 +75,6 @@ pitch_detect_spectrum :: proc(using config: PitchConfig, samples: []f32) -> f32 
         pffft.Direction.FORWARD
     )
 
-    // We need this to calculate the spectral flux
-    copy(last_spectrum, spectrum)
-
     // calculate the spectrum
     for i in 0..<len(fft) {
         spectrum[i] = magnitude(win_fft[i])
@@ -89,8 +86,8 @@ pitch_detect_spectrum :: proc(using config: PitchConfig, samples: []f32) -> f32 
     bin := 0
     max_magnitude := f32(0.0)
 
-    // Keep only the positive frequencies (DC to Nyquist), ignore first 3 bins (arbitrary)
-    for i in 3..<fft_size/2 {
+    // Keep only the positive frequencies (DC to Nyquist), ignore first 2 bins
+    for i in 2..<fft_size/2 {
         magnitude := spectrum[i]
         if magnitude > max_magnitude {
             max_magnitude = magnitude
@@ -275,6 +272,30 @@ pitch_detect_ac :: proc (using config: PitchConfig, samples: []f32) -> (f32, f32
     return estimated_freq, f32(lag), normalized_val
 }
 
+
+pitch_detect_cepstrum :: proc (using config: PitchConfig, samples: []f32) -> f32 {
+
+    // computing the inverse Fourier transform (IFT) of the logarithm of the estimated signal spectrum.
+
+
+    // 1. log(mag(spectrum))
+
+    // 2. inverse FFT
+
+    // 3. cepstrum
+
+    // pffft.transform_ordered(
+    //     pffft_setup,
+    //     raw_data(padded_samples),
+    //     raw_data(mem.slice_data_cast([]f32, fft)),
+    //     nil,
+    //     pffft.Direction.BACKWARD
+    // )
+    return 0.0
+}
+
+
+
 spectral_flatness :: proc (spectrum: []f32) -> f32 {
     flatness := geometric_mean(spectrum) / arithmetic_mean(spectrum)
     return flatness
@@ -285,7 +306,7 @@ arithmetic_mean :: proc (array: []f32) -> f32 {
     mean: f32 = 0.0
 
     for i in 0..<len(array) {
-        mean += array[i]
+        mean += array[i] + math.F32_EPSILON // adding epsilon so it never goes to zero
     }
 
     mean /= f32(len(array))
@@ -299,7 +320,7 @@ geometric_mean :: proc (array: []f32) -> f32 {
     for i in 0..<len(array) {
         // note, adding a small value to avoid zeros, because ln(0) = -inf
         //  also adding noise floor produces more sensible values
-        geometric_mean += math.ln(array[i] + 0.001)
+        geometric_mean += math.ln(array[i] + math.F32_EPSILON)
     }
     geometric_mean /= f32(len(array))
     geometric_mean = math.exp(geometric_mean)
@@ -328,4 +349,8 @@ blackman_harris :: proc (i: f32, num: f32) -> f32 {
     res := a0 - seg1 + seg2 - seg3
 
     return res
+}
+
+freq_in_range :: proc (freq: f32) -> bool {
+    return freq > MIN_FREQ && freq < MAX_FREQ
 }

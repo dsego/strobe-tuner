@@ -1,18 +1,29 @@
-
-
-
-
 minimalistic flat ui inspired by ableton
 
 
 
 ---->
 
-note onset - spectral flux (or spectral flatness) ---> spectrogram measure of harmonicity ???
+flatness vs acf peak amplitude as measure of presence of notes -> flatness is better
+
+
+acf -> don't look for notes lower than 20Hz = lag 50ms
+
+acf problem at finding peak at low E bass note due to being imprecise, jumps between adjacent notes
+
+
+
+
+try out cepstrum
 
 
 -> autocorrelation to find true fundamental
   -> to improve accuracy look for this peak in the FFT spectrum and find the precise measurement
+
+
+
+
+
 
 
 -----

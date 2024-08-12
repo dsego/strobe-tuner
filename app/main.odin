@@ -11,25 +11,32 @@ detected_freq_avg: f32 = 1.0
 
 main :: proc() {
 
+    bass_freqs: []f64 = {
+        41.20344, // E1
+        55.00000,  // A1
+        73.41619, // D2
+        97.99886, // G2
+    }
+
     guitar_freqs: []f64 = {
-        82.40689, // E
-        110.0000, // A
-        146.8324, // D
-        195.9977, // G
-        246.9417, // B
-        329.6276, // E
+        82.40689, // E2
+        110.0000, // A2
+        146.8324, // D3
+        195.9977, // G3
+        246.9417, // B3
+        329.6276, // E4
     }
 
     ukulele_freqs: []f64 = {
-        391.9954, // G
-        261.6256, // C
-        329.6276, // E
-        440.0000, // A
+        391.9954, // G4
+        261.6256, // C4
+        329.6276, // E4
+        440.0000, // A4
     }
 
     freqs_idx := 0
 
-    freqs: []f64 = ukulele_freqs
+    freqs: []f64 = bass_freqs
 
     target_freq = freqs[0]
 
@@ -124,6 +131,7 @@ main :: proc() {
         detected_freq_ac, lag, val := pitch_detect_ac(pitch, samples)
         detected_note_ac := find_note(detected_freq_ac)
 
+
         // TODO: Smooth out the detected freq?
         // detected_freq_avg = smooth(&smooth_conf, detected_freq_ac)
 
@@ -173,9 +181,10 @@ main :: proc() {
 
 
             // Detected note - auto correlation
-            draw_note(&detected_note_ac, {20, 180}, 48)
-            rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_ac), {20, 230}, 24, 0, rl.PURPLE)
-
+            if freq_in_range(detected_freq_ac) {
+                draw_note(&detected_note_ac, {20, 180}, 48)
+                rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_ac), {20, 230}, 24, 0, rl.PURPLE)
+            }
 
             // cents_diff := freq_to_cents(detected_freq_ac) - f32(detected_note_ac.cents)
             // rl.DrawTextEx(font, fmt.ctprintf("%.1fc", cents_diff), {20, 260}, 24, 0, rl.ORANGE)
@@ -183,24 +192,18 @@ main :: proc() {
             draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 120}, &pitch, lag, val)
 
             // Spectrum
-            draw_note(&detected_note_spectrum, {20, 350}, 48)
-            rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_spectrum), {20, 400}, 24, 0, rl.PURPLE)
-            draw_freq_spectrum(rl.Rectangle{160, 350, SCREEN_WIDTH-180, 120}, &pitch)
-
-            // HPS
-            // draw_note(&detected_note_hps, {20, 500}, 48)
-            // rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_spectrum), {20, 550}, 24, 0, rl.PURPLE)
+            if freq_in_range(detected_freq_spectrum) {
+                draw_note(&detected_note_spectrum, {20, 350}, 48)
+                rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_spectrum), {20, 400}, 24, 0, rl.PURPLE)
+                draw_freq_spectrum(rl.Rectangle{160, 350, SCREEN_WIDTH-180, 120}, &pitch)
+            }
 
 
             // TODO: use the AC for detecting the fundamental, find the freq peak in that area and feed to the meter
             draw_note_meter(rl.Rectangle{50, 500, 400, 100}, &detected_note_spectrum, detected_freq_spectrum)
-
 
             rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {500, 500}, 24, 0, rl.PINK)
             rl.DrawRectangleV({500, 550}, {100 * flatness, 4.0}, rl.PINK)
         }
     }
 }
-
-
-
