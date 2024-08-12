@@ -275,11 +275,6 @@ pitch_detect_ac :: proc (using config: PitchConfig, samples: []f32) -> (f32, f32
     return estimated_freq, f32(lag), normalized_val
 }
 
-
-
-
-// NOTE: spectral flatness doesn't work great for tones with lots of harmonics.
-// TODO: consider spectral contrast or spectral entropy?
 spectral_flatness :: proc (spectrum: []f32) -> f32 {
     flatness := geometric_mean(spectrum) / arithmetic_mean(spectrum)
     return flatness

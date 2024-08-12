@@ -1,10 +1,14 @@
+
+
+
+
 minimalistic flat ui inspired by ableton
 
 
 
 ---->
 
-note onset - spectral flux (or spectral flatness)
+note onset - spectral flux (or spectral flatness) ---> spectrogram measure of harmonicity ???
 
 
 -> autocorrelation to find true fundamental
