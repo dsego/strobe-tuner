@@ -111,14 +111,13 @@ filter_init :: proc(
 
     // Append N - Q zero-valued samples to the end of the impulse
     for i in 0..<impulse_response_size {
-        config.padded_impulse_response[i] = (
-            blackmann_window(f32(i), f32(impulse_response_size)) *
-            math.sin(math.PI * f32(i) * passband_freq / SAMPLERATE) *
-            (
-                math.sin(math.PI * f32(i) * passband_freq / SAMPLERATE) / math.sin(math.PI * f32(i) /SAMPLERATE)
-            ) / SAMPLERATE
 
-        )
+        pb_sin := math.sin(math.PI * f32(i) * passband_freq / SAMPLERATE)
+        sin := math.sin(math.PI * f32(i) / SAMPLERATE)
+
+        config.padded_impulse_response[i] =
+            blackmann_window(f32(i), f32(impulse_response_size)) *
+            pb_sin * (pb_sin / sin) / SAMPLERATE
     }
     config.padded_impulse_response[0] = passband_freq / SAMPLERATE
 
