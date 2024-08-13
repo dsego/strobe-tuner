@@ -80,3 +80,7 @@ https://www.math.uci.edu/~yqi/jasa537_1.pdf
 
 
 https://dsp.stackexchange.com/questions/85582/estimating-period-of-low-frequency-oscillations-autocorrelation-vs-frequency-a
+
+
+IFFT(log(abs(FFT(s)))) == real(FFT(log(abs(FFT(s)))))
+https://dsp.stackexchange.com/questions/47272/cepstrum-ifft-or-fft-to-enter-the-cepstral-domain

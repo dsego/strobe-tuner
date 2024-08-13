@@ -46,21 +46,53 @@ draw_note :: proc(note: ^Note, pos: [2]f32, size: f32, color: rl.Color = rl.PURP
 
 draw_autocorrelation :: proc(
     rect: rl.Rectangle,
-    ac_config: ^AcConfig,
+    buffer: []f32,
     lag: f32,
     val: f32,
 ) {
     points: [FFT_SIZE]rl.Vector2 = {}
-    l := len(ac_config.autocorrelation) / 2
+    l := len(buffer) / 2
 
     // stretch samples to fit the box width
     px_per_sample := f32(rect.width) / f32(l - 1)
 
     x := rect.x
-    gain: = 1.0 / ac_config.autocorrelation[0]
+    gain: = 1.0 / buffer[0]
 
     for i in 0..<l {
-        y := rect.y + (rect.height/2.0) - ac_config.autocorrelation[i] * (rect.height / 2.0) * gain
+        y := rect.y + (rect.height/2.0) - buffer[i] * (rect.height / 2.0) * gain
+        points[i] = { x, y }
+        x += px_per_sample
+    }
+
+    draw_time_plot(rect, l, 9.0)
+    rl.DrawLineStrip(raw_data(points[:]), i32(l), rl.GOLD)
+
+    // Mark lag position with a cross
+    cx := rect.x + lag * f32(rect.width) / f32(l - 1)
+    cy := rect.y + (rect.height/2.0) - val * (rect.height / 2.0)
+
+    rl.DrawLineEx({rect.x, cy}, {rect.x+rect.width, cy}, 0.5, rl.GRAY)
+    rl.DrawLineEx({cx-7.0, cy}, {cx+7.0, cy}, 2.0, rl.PINK)
+    rl.DrawLineEx({cx, cy-7.0}, {cx, cy+7.0}, 2.0, rl.PINK)
+}
+
+draw_cepstrum :: proc(
+    rect: rl.Rectangle,
+    buffer: []f32,
+    lag: f32,
+    val: f32,
+) {
+    points: [FFT_SIZE]rl.Vector2 = {}
+    l := len(buffer) / 2
+
+    // stretch samples to fit the box width
+    px_per_sample := f32(rect.width) / f32(l - 1)
+
+    x := rect.x
+
+    for i in 0..<l {
+        y := rect.y + (rect.height/2.0) - buffer[i] * (rect.height / 2.0)
         points[i] = { x, y }
         x += px_per_sample
     }

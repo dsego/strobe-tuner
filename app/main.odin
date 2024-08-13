@@ -36,7 +36,7 @@ main :: proc() {
 
     freqs_idx := 0
 
-    freqs: []f64 = ukulele_freqs
+    freqs: []f64 = guitar_freqs
 
     target_freq = freqs[0]
 
@@ -66,6 +66,9 @@ main :: proc() {
     spectrum := spectrum_init(FFT_SIZE, SAMPLERATE)
     defer spectrum_destroy(&spectrum)
 
+    cepstrum := ceps_init(FFT_SIZE, SAMPLERATE)
+    defer ceps_destroy(&cepstrum)
+
     samples: []f32 = make([]f32, FFT_SIZE/2)
     defer delete(samples)
 
@@ -91,12 +94,20 @@ main :: proc() {
 
     detected_freq_spectrum: f32
     detected_note_spectrum: Note
+
     detected_freq_ac: f32
+    detected_note_ac: Note
     ac_lag: f32
     ac_val: f32
-    detected_note_ac: Note
+
     flatness: f32
 
+    detected_freq_ceps: f32
+    detected_note_ceps: Note
+    ceps_lag: f32
+    ceps_val: f32
+
+    gen_freqs()
 
     for !rl.WindowShouldClose() {
 
@@ -157,7 +168,15 @@ main :: proc() {
 
             // limit to note range 20Hz - 8kHz
             flatness = spectral_flatness(spectrum.spectrum[2:750])
+
+            // Cepstrum
+            // detected_freq_ceps, ceps_lag, ceps_val = ceps_pitch_detect(&cepstrum, samples)
+            // detected_note_ceps = find_note(detected_freq_ceps)
+
+            run_filters(piano_key_frequencies[:], samples, SAMPLERATE)
         }
+
+
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -189,7 +208,7 @@ main :: proc() {
             // cents_diff := freq_to_cents(detected_freq_ac) - f32(detected_note_ac.cents)
             // rl.DrawTextEx(font, fmt.ctprintf("%.1fc", cents_diff), {20, 260}, 24, 0, rl.ORANGE)
 
-            draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 120}, &ac, ac_lag, ac_val)
+            draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 120}, ac.autocorrelation, ac_lag, ac_val)
 
             // Spectrum
             if freq_in_range(detected_freq_spectrum) {
@@ -199,15 +218,40 @@ main :: proc() {
 
             draw_freq_spectrum(rl.Rectangle{160, 350, SCREEN_WIDTH-180, 120}, spectrum.spectrum[:200], FFT_SIZE, SAMPLERATE)
 
+            // draw_cepstrum(rl.Rectangle{160, 500, SCREEN_WIDTH-180, 120}, cepstrum.cepstrum[:200], ceps_lag, ceps_val)
+
+            // Cepstrum
+            // if freq_in_range(detected_freq_ceps) {
+            //     draw_note(&detected_note_ceps, {20, 500}, 48)
+            //     rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_ceps), {20, 550}, 24, 0, rl.PURPLE)
+            // }
 
             // TODO: use the AC for detecting the fundamental, find the freq peak in that area and feed to the meter
-            draw_note_meter(rl.Rectangle{50, 500, 400, 100}, &detected_note_spectrum, detected_freq_spectrum)
+            // draw_note_meter(rl.Rectangle{50, 500, 400, 100}, &detected_note_spectrum, detected_freq_spectrum)
 
-            rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {500, 500}, 24, 0, rl.PINK)
-            rl.DrawRectangleV({500, 550}, {100 * flatness, 4.0}, rl.PINK)
+            rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {50, 520}, 24, 0, rl.PINK)
+            rl.DrawRectangleV({50, 550}, {100 * flatness, 4.0}, rl.PINK)
 
+            {
+                bin := 0
+                max:f32 = 0.0
+                for f, i in piano_key_spectrum {
+                    pos := f32(i) * 8.0
+                    vol:f32 = f * 2.0
 
+                    rl.DrawRectangleV({50 + pos, 700 - vol}, {5.0, 1.0 + vol}, rl.MAROON)
 
+                    if max > 0.0 && vol < max {
+                        continue
+                    }
+                    else if vol > max {
+                        max = vol
+                        bin = i
+                    }
+
+                }
+                rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", piano_key_frequencies[bin]), {600, 600}, 24, 0, rl.MAROON)
+            }
         }
     }
 }

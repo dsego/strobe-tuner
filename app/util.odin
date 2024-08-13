@@ -1,6 +1,8 @@
 package app
 
 import "core:math"
+import "core:fmt"
+
 
 // Parabolic interpolation to find the more accurate peak location
 // https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
@@ -8,11 +10,11 @@ parabolic :: proc (alpha: f32, beta: f32, gamma: f32) -> f32 {
     return 0.5 * (alpha - gamma) / (alpha - 2.0 * beta + gamma)
 }
 
-arithmetic_mean :: proc (array: []f32, eps: f32 = math.F32_EPSILON) -> f32 {
+arithmetic_mean :: proc (array: []f32) -> f32 {
     mean: f32 = 0.0
 
     for i in 0..<len(array) {
-        mean += array[i] + eps // adding epsilon so it never goes to zero
+        mean += max(array[i], math.F32_EPSILON) // epsilon so it never goes to zero
     }
 
     mean /= f32(len(array))
@@ -20,13 +22,12 @@ arithmetic_mean :: proc (array: []f32, eps: f32 = math.F32_EPSILON) -> f32 {
 }
 
 
-geometric_mean :: proc (array: []f32, eps: f32 = math.F32_EPSILON) -> f32 {
+geometric_mean :: proc (array: []f32) -> f32 {
     geometric_mean: f32 = 0.0
 
     for i in 0..<len(array) {
-        // note, adding a small value to avoid zeros, because ln(0) = -inf
-        //  also adding noise floor produces more sensible values for flatness
-        geometric_mean += math.ln(array[i] + eps)
+        // need to avoid zeros, because ln(0) = -inf
+        geometric_mean += math.ln(max(array[i], math.F32_EPSILON))
     }
     geometric_mean /= f32(len(array))
     geometric_mean = math.exp(geometric_mean)
@@ -59,4 +60,8 @@ freq_in_range :: proc (freq: f32) -> bool {
 // Complex number magnitude
 magnitude :: proc (cpx: complex64) -> f32 {
     return math.sqrt(real(cpx) * real(cpx) + imag(cpx) * imag(cpx))
+}
+
+square :: proc (cpx: complex64) -> f32 {
+    return real(cpx) * real(cpx) + imag(cpx) * imag(cpx)
 }

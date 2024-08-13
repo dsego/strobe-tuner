@@ -49,6 +49,11 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32, 
     // pad samples with zeros to avoid cyclic convolution
     copy(padded_samples[:fft_size/2], samples)
 
+    // windowing ?
+    // for i in 0..<fft_size/2 {
+    //     padded_samples[i] = samples[i] * blackman_harris(f32(i), f32(fft_size/2))
+    // }
+
     // FFT transform
     pffft.transform_ordered(
         pffft_setup,
