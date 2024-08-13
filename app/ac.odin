@@ -80,17 +80,15 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32, 
 
     // Find the first maximum peak lag
     lag := 0
-    threshold := 0.3 * autocorrelation[0]
     estimated_freq := f32(0)
 
     i := 1
 
-
     // TODO: don't look for notes lower than 20Hz = lag 50ms
+
 
     // throw away the negative lags
     half_len := len(autocorrelation) / 2 + 1  // + 1 ?
-    peak_index := 0
 
     // go down the slope until we reach the local minimum
     for i < half_len - 1 && autocorrelation[i+1] < autocorrelation[i] {
@@ -107,23 +105,55 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32, 
         i += 1
     }
 
+    first_lag := lag
+    chosen_lag := first_lag
+
+    /*  Looking for missing fundamental - not a good approach - many false positives
+    // reset starting point to first found lag (because we are at the end already)
+    i = first_lag
+
+    // first go down to reach the minimum again
+    for i < half_len - 1 && autocorrelation[i+1] < autocorrelation[i] {
+        i += 1
+    }
+
+    lag = i
+
+    // look for a second peak, possibly a missing fundamental
+    for i < half_len - 1 {
+        if autocorrelation[i+1] > autocorrelation[lag] {
+            lag = i + 1
+        }
+        i += 1
+    }
+
+    second_lag := lag
+
+    chosen_lag := first_lag
+    threshold:f32 = 0.75
+    if autocorrelation[second_lag] > threshold * autocorrelation[first_lag] {
+        chosen_lag = second_lag
+    }
+    */
+
+
     // interpolate peak to get a more precise result
     peak_location: f32 = 0
-    if lag > 0 {
+    if chosen_lag > 0 {
         peak_location = parabolic(
-            autocorrelation[lag-1],
-            autocorrelation[lag],
-            autocorrelation[lag+1]
+            autocorrelation[chosen_lag-1],
+            autocorrelation[chosen_lag],
+            autocorrelation[chosen_lag+1]
         )
     }
 
-    improved_lag := f32(lag) + peak_location
+    improved_lag := f32(chosen_lag) + peak_location
 
     // convert lag to frequency
     if improved_lag > 0.0 {
         estimated_freq = f32(samplerate) / improved_lag
     }
 
-    normalized_val := autocorrelation[lag] / autocorrelation[0]
-    return estimated_freq, f32(lag), normalized_val
+    normalized_val := autocorrelation[chosen_lag] / autocorrelation[0]
+    return estimated_freq, f32(chosen_lag), normalized_val
 }

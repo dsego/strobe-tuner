@@ -51,30 +51,44 @@ draw_autocorrelation :: proc(
     val: f32,
 ) {
     points: [FFT_SIZE]rl.Vector2 = {}
-    l := len(buffer) / 2
+
+    start := 0
+    end := len(buffer) / 2
+    len := end - start
+    rel_lag := lag - f32(start)
 
     // stretch samples to fit the box width
-    px_per_sample := f32(rect.width) / f32(l - 1)
+    px_per_sample := f32(rect.width) / f32(len - 1)
 
     x := rect.x
     gain: = 1.0 / buffer[0]
 
-    for i in 0..<l {
-        y := rect.y + (rect.height/2.0) - buffer[i] * (rect.height / 2.0) * gain
+    for i in 0..<len {
+        y := rect.y + (rect.height/2.0) - buffer[start+i] * (rect.height / 2.0) * gain
         points[i] = { x, y }
         x += px_per_sample
     }
 
-    draw_time_plot(rect, l, 9.0)
-    rl.DrawLineStrip(raw_data(points[:]), i32(l), rl.GOLD)
+    draw_time_plot(rect, len, 9.0)
+    rl.DrawLineStrip(raw_data(points[:]), i32(len), rl.GOLD)
 
     // Mark lag position with a cross
-    cx := rect.x + lag * f32(rect.width) / f32(l - 1)
-    cy := rect.y + (rect.height/2.0) - val * (rect.height / 2.0)
+    {
+        cx := rect.x + rel_lag * f32(rect.width) / f32(len - 1)
+        cy := rect.y + (rect.height/2.0) - val * (rect.height / 2.0)
 
-    rl.DrawLineEx({rect.x, cy}, {rect.x+rect.width, cy}, 0.5, rl.GRAY)
-    rl.DrawLineEx({cx-7.0, cy}, {cx+7.0, cy}, 2.0, rl.PINK)
-    rl.DrawLineEx({cx, cy-7.0}, {cx, cy+7.0}, 2.0, rl.PINK)
+        // Horizontal ruler
+        rl.DrawLineEx({rect.x, cy}, {cx, cy}, 0.5, rl.GRAY)
+        rl.DrawTextEx(font, fmt.ctprintf("%.1f", val), {rect.x, cy}, 16, 0, rl.GRAY)
+
+        // Vertical ruler
+        rl.DrawLineEx({cx, cy}, {cx, rect.y+rect.height}, 0.5, rl.GRAY)
+        rl.DrawTextEx(font, fmt.ctprintf("%.1f", lag), {cx, rect.y+rect.height}, 16, 0, rl.GRAY)
+
+        // X marker - cross
+        rl.DrawLineEx({cx-7.0, cy}, {cx+7.0, cy}, 2.0, rl.PINK)
+        rl.DrawLineEx({cx, cy-7.0}, {cx, cy+7.0}, 2.0, rl.PINK)
+    }
 }
 
 draw_cepstrum :: proc(

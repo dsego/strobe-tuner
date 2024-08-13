@@ -39,7 +39,7 @@ main :: proc() {
     freqs: []f64 = guitar_freqs
 
     target_freq = freqs[0]
-
+    target_interval := 0.0
 
     // target_freq = 2500
     // target_freq = 88
@@ -102,12 +102,11 @@ main :: proc() {
 
     flatness: f32
 
-    detected_freq_ceps: f32
-    detected_note_ceps: Note
-    ceps_lag: f32
-    ceps_val: f32
+    // detected_freq_ceps: f32
+    // detected_note_ceps: Note
+    // ceps_lag: f32
+    // ceps_val: f32
 
-    gen_freqs()
 
     for !rl.WindowShouldClose() {
 
@@ -118,29 +117,23 @@ main :: proc() {
         }
 
 
-        freq_changed := false
+        // freq_changed := false
 
-        // Pick next or previous ukulele string
-        if rl.IsKeyPressed(rl.KeyboardKey.RIGHT) {
-            freqs_idx += 1
-            freq_changed = true
-        }
-        if rl.IsKeyPressed(rl.KeyboardKey.LEFT) {
-            freqs_idx -= 1
-            freq_changed = true
-        }
+        // // Pick next or previous ukulele string
+        // if rl.IsKeyPressed(rl.KeyboardKey.RIGHT) {
+        //     freqs_idx += 1
+        //     freq_changed = true
+        // }
+        // if rl.IsKeyPressed(rl.KeyboardKey.LEFT) {
+        //     freqs_idx -= 1
+        //     freq_changed = true
+        // }
 
-        if (freq_changed) {
-            freqs_idx %= len(freqs)
-            if freqs_idx < 0 do freqs_idx += len(freqs) // wrap around
-            reset_framerate()
-        }
-
-        target_freq = freqs[freqs_idx]
-        note := find_note(f32(target_freq))
-
-        // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
-        target_interval := 2.0 * f64(SAMPLERATE) / target_freq
+        // if (freq_changed) {
+        //     freqs_idx %= len(freqs)
+        //     if freqs_idx < 0 do freqs_idx += len(freqs) // wrap around
+        //     reset_framerate()
+        // }
 
 
         // Pitch detection, use the first ringbuffer
@@ -173,10 +166,18 @@ main :: proc() {
             // detected_freq_ceps, ceps_lag, ceps_val = ceps_pitch_detect(&cepstrum, samples)
             // detected_note_ceps = find_note(detected_freq_ceps)
 
-            run_filters(piano_key_frequencies[:], samples, SAMPLERATE)
+            if target_freq != f64(detected_note_ac.frequency) {
+                reset_framerate()
+                target_freq = f64(detected_note_ac.frequency)
+
+                // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
+                target_interval = 2.0 * f64(SAMPLERATE) / target_freq
+            }
+
         }
 
-
+        // TODO: change to something meaningful
+        target_interval = min(max(target_interval, 1), 1000)
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -186,7 +187,7 @@ main :: proc() {
             draw_strobe_display(target_interval, show_pattern)
 
             // fmt.println(target_freq, note)
-            draw_note(&note, {20, 20}, 64)
+            // draw_note(&note, {20, 20}, 64)
 
 
             // run_strobe(strobe_band, )
@@ -201,22 +202,23 @@ main :: proc() {
 
             // Detected note - auto correlation
             if freq_in_range(detected_freq_ac) {
-                draw_note(&detected_note_ac, {20, 180}, 48)
-                rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_ac), {20, 230}, 24, 0, rl.PURPLE)
+                draw_note(&detected_note_ac, {20, 250}, 48)
+                rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_ac), {20, 300}, 24, 0, rl.PURPLE)
             }
 
             // cents_diff := freq_to_cents(detected_freq_ac) - f32(detected_note_ac.cents)
             // rl.DrawTextEx(font, fmt.ctprintf("%.1fc", cents_diff), {20, 260}, 24, 0, rl.ORANGE)
 
-            draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 120}, ac.autocorrelation, ac_lag, ac_val)
+            // draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 120}, ac.autocorrelation, ac_lag, ac_val)
+            draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 250}, ac.autocorrelation, ac_lag, ac_val)
 
             // Spectrum
             if freq_in_range(detected_freq_spectrum) {
-                draw_note(&detected_note_spectrum, {20, 350}, 48)
-                rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_spectrum), {20, 400}, 24, 0, rl.PURPLE)
+                draw_note(&detected_note_spectrum, {20, 500}, 48)
+                rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_spectrum), {20, 550}, 24, 0, rl.PURPLE)
             }
 
-            draw_freq_spectrum(rl.Rectangle{160, 350, SCREEN_WIDTH-180, 120}, spectrum.spectrum[:200], FFT_SIZE, SAMPLERATE)
+            draw_freq_spectrum(rl.Rectangle{160, 500, SCREEN_WIDTH-180, 120}, spectrum.spectrum[:200], FFT_SIZE, SAMPLERATE)
 
             // draw_cepstrum(rl.Rectangle{160, 500, SCREEN_WIDTH-180, 120}, cepstrum.cepstrum[:200], ceps_lag, ceps_val)
 
@@ -227,31 +229,10 @@ main :: proc() {
             // }
 
             // TODO: use the AC for detecting the fundamental, find the freq peak in that area and feed to the meter
-            // draw_note_meter(rl.Rectangle{50, 500, 400, 100}, &detected_note_spectrum, detected_freq_spectrum)
+            draw_note_meter(rl.Rectangle{50, 600, 400, 100}, &detected_note_ac, detected_freq_ac)
 
-            rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {50, 520}, 24, 0, rl.PINK)
-            rl.DrawRectangleV({50, 550}, {100 * flatness, 4.0}, rl.PINK)
-
-            {
-                bin := 0
-                max:f32 = 0.0
-                for f, i in piano_key_spectrum {
-                    pos := f32(i) * 8.0
-                    vol:f32 = f * 2.0
-
-                    rl.DrawRectangleV({50 + pos, 700 - vol}, {5.0, 1.0 + vol}, rl.MAROON)
-
-                    if max > 0.0 && vol < max {
-                        continue
-                    }
-                    else if vol > max {
-                        max = vol
-                        bin = i
-                    }
-
-                }
-                rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", piano_key_frequencies[bin]), {600, 600}, 24, 0, rl.MAROON)
-            }
+            rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {20, 620}, 24, 0, rl.PINK)
+            rl.DrawRectangleV({20, 650}, {100 * flatness, 4.0}, rl.PINK)
         }
     }
 }
