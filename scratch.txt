@@ -1,11 +1,34 @@
 
 
-move fft processing and pitch detection into audio loop?
 
-because audio loop is run every time there are new samples
 
-running in the main loop could be doing extra unnecessary work (calculating the same fft over and over)
+Idea, DFTs for selected freq bins, how to reduce side lobes
 
+  -> try goertzel or SDFT for single bin freqs - page 745...both also suffers spectral leakage :(
+
+
+-- the cause is discontinuities due to the limited window, can we be smarter about probing with sin/cos
+maybe we can detect the zero crossings instead of using the whole length for the DFT
+
+---
+
+
+Flatness ->  trigger pitch detection only if note detected (low flatness)
+
+Flatness -> trigger RMS gain for strobes ?
+
+Fundamental detected via AC
+
+Set the strobe framerate based on detected pitch - make sure there are no glitches
+-> noise gate, auto gain
+
+-> CLEAR RINGBUFFER when changing frequency ?
+
+
+Peak trigger (schmitt?) to generate an improved strobe display (bands)
+
+
+Frequency Locked Synth -> AGC and a Period Trigger
 
 
 ----
@@ -18,7 +41,6 @@ acf -> don't look for notes lower than 20Hz = lag 50ms
 
 
 try out cepstrum
-
 
 
 

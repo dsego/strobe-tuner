@@ -116,24 +116,23 @@ main :: proc() {
             show_pattern = !show_pattern
         }
 
+        freq_changed := false
 
-        // freq_changed := false
+        // Pick next or previous ukulele string
+        if rl.IsKeyPressed(rl.KeyboardKey.RIGHT) {
+            freqs_idx += 1
+            freq_changed = true
+        }
+        if rl.IsKeyPressed(rl.KeyboardKey.LEFT) {
+            freqs_idx -= 1
+            freq_changed = true
+        }
 
-        // // Pick next or previous ukulele string
-        // if rl.IsKeyPressed(rl.KeyboardKey.RIGHT) {
-        //     freqs_idx += 1
-        //     freq_changed = true
-        // }
-        // if rl.IsKeyPressed(rl.KeyboardKey.LEFT) {
-        //     freqs_idx -= 1
-        //     freq_changed = true
-        // }
-
-        // if (freq_changed) {
-        //     freqs_idx %= len(freqs)
-        //     if freqs_idx < 0 do freqs_idx += len(freqs) // wrap around
-        //     reset_framerate()
-        // }
+        if freq_changed {
+            freqs_idx %= len(freqs)
+            if freqs_idx < 0 do freqs_idx += len(freqs) // wrap around
+            reset_framerate()
+        }
 
 
         // Pitch detection, use the first ringbuffer
@@ -166,15 +165,21 @@ main :: proc() {
             // detected_freq_ceps, ceps_lag, ceps_val = ceps_pitch_detect(&cepstrum, samples)
             // detected_note_ceps = find_note(detected_freq_ceps)
 
-            if target_freq != f64(detected_note_ac.frequency) {
-                reset_framerate()
-                target_freq = f64(detected_note_ac.frequency)
+            // if target_freq != f64(detected_note_ac.frequency) {
+            //     reset_framerate()
+            //     target_freq = f64(detected_note_ac.frequency)
 
-                // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
-                target_interval = 2.0 * f64(SAMPLERATE) / target_freq
-            }
+            //     // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
+            //     target_interval = 2.0 * f64(SAMPLERATE) / target_freq
+            // }
 
         }
+
+        target_freq = freqs[freqs_idx]
+        note := find_note(f32(target_freq))
+
+        // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
+        target_interval = 2.0 * f64(SAMPLERATE) / target_freq
 
         // TODO: change to something meaningful
         target_interval = min(max(target_interval, 1), 1000)
@@ -185,14 +190,7 @@ main :: proc() {
             rl.ClearBackground(rl.BLACK)
 
             draw_strobe_display(target_interval, show_pattern)
-
-            // fmt.println(target_freq, note)
-            // draw_note(&note, {20, 20}, 64)
-
-
-            // run_strobe(strobe_band, )
-            // fmt.println(note.name, note.semitone_index)
-            // rl.DrawText("A1", 10, 10, 30, rl.PURPLE)
+            draw_note(&note, {20, 20}, 64)
 
 
             // Show target frequency & interval
@@ -201,7 +199,7 @@ main :: proc() {
 
 
             // Detected note - auto correlation
-            if freq_in_range(detected_freq_ac) {
+            if freq_in_range(detected_freq_ac) && ac_val > 0.5 {
                 draw_note(&detected_note_ac, {20, 250}, 48)
                 rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_ac), {20, 300}, 24, 0, rl.PURPLE)
             }
@@ -229,10 +227,13 @@ main :: proc() {
             // }
 
             // TODO: use the AC for detecting the fundamental, find the freq peak in that area and feed to the meter
-            draw_note_meter(rl.Rectangle{50, 600, 400, 100}, &detected_note_ac, detected_freq_ac)
+            // draw_note_meter(rl.Rectangle{50, 600, 400, 100}, &detected_note_ac, detected_freq_ac)
 
             rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {20, 620}, 24, 0, rl.PINK)
             rl.DrawRectangleV({20, 650}, {100 * flatness, 4.0}, rl.PINK)
+
+            rl.DrawTextEx(font, fmt.ctprintf("%.4f", ac_val), {20, 660}, 24, 0, rl.LIME)
+            rl.DrawRectangleV({20, 690}, {100 * ac_val, 4.0}, rl.LIME)
         }
     }
 }

@@ -77,7 +77,6 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32, 
         pffft.Direction.BACKWARD
     )
 
-
     // Find the first maximum peak lag
     lag := 0
     estimated_freq := f32(0)
@@ -154,6 +153,11 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32, 
         estimated_freq = f32(samplerate) / improved_lag
     }
 
+    // The normalized value can provide a confidence level
     normalized_val := autocorrelation[chosen_lag] / autocorrelation[0]
+    if math.is_nan(normalized_val) {
+        normalized_val = 0.0
+    }
+
     return estimated_freq, f32(chosen_lag), normalized_val
 }

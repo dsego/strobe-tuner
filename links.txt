@@ -84,3 +84,31 @@ https://dsp.stackexchange.com/questions/85582/estimating-period-of-low-frequency
 
 IFFT(log(abs(FFT(s)))) == real(FFT(log(abs(FFT(s)))))
 https://dsp.stackexchange.com/questions/47272/cepstrum-ifft-or-fft-to-enter-the-cepstral-domain
+
+
+Goertzel
+https://github.com/sveljko/goertzel
+
+
+
+NAC
+- can define confidence ->  NAC = 1 completely periodic
+https://dsp.stackexchange.com/questions/64339/pitch-detection-which-is-the-most-robust-way-to-distinguish-voiced-from-unvoice
+
+
+
+DESGIN INSPIRATION
+https://dribbble.com/shots/12125934-Guitar-Tuner-app-concept-Sound-Editing-Application?utm_source=pinterest&utm_campaign=pinterest_shot&utm_content=Guitar+Tuner+app+concept+%7C+Sound+Editing+Application&utm_medium=Social_Share
+https://dribbble.com/shots/22712861-UI-Exploration-Chords-App
+https://dribbble.com/shots/6783347-Mobile-Tuner-for-Musicians
+https://dribbble.com/shots/7882017-TUNETONE-Tuner-App
+https://dribbble.com/shots/9523492-JUNA-Tuner
+https://dribbble.com/shots/11504525-Guitar-tuner
+https://dribbble.com/shots/2243077-Tuner-app-animation
+https://in.pinterest.com/pin/447052700522131793/
+https://www.behance.net/gallery/74197825/TATS-Synth-RedBull
+
+
+
+Frequency counter
+https://www.keysight.com/blogs/en/tech/educ/2023/frequency-counter-essential-guide
