@@ -9,7 +9,9 @@ STROBE_COUNT :: 1
 
 // FFT size for pitch detection
 FFT_SIZE :: 4096
-SAMPLE_SIZE :: 4096
+
+
+STROBE_SAMPLE_SIZE :: 4096
 
 SAMPLERATE :: 44100
 

@@ -1,5 +1,8 @@
 ----------------
 
+Pitch detection
+https://github.com/sevagh/pitch-detection/tree/master/misc/mcleod
+
 Fast and Efficient Pitch Detection: Bitstream Autocorrelation
 https://www.cycfi.com/2018/03/fast-and-efficient-pitch-detection-bitstream-autocorrelation/
 
@@ -112,3 +115,19 @@ https://www.behance.net/gallery/74197825/TATS-Synth-RedBull
 
 Frequency counter
 https://www.keysight.com/blogs/en/tech/educ/2023/frequency-counter-essential-guide
+
+
+Smoothing
+https://towardsdatascience.com/the-perfect-way-to-smooth-your-noisy-data-4f3fe6b44440
+https://medium.com/@prashunjaveri/sensor-data-outlier-detection-for-software-defined-vehicles-and-robots-part-1-aff7423c761e
+https://medium.com/@prashunjaveri/sensor-data-outlier-detection-and-smoothing-for-software-defined-vehicles-and-robots-isolation-f-da3ce8e8c28
+
+
+Kalman filter
+https://www.kalmanfilter.net/background.html
+https://youtu.be/CaCcOwJPytQ?list=PLX2gX-ftPVXU3oUFNATxGXY90AULiqnWT
+https://github.com/rlabbe/Kalman-and-Bayesian-Filters-in-Python/
+https://youtu.be/-DiZGpAh7T4
+
+Detecting Outliers
+https://youtu.be/PyYjTA9oa5w

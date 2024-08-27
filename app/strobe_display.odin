@@ -6,10 +6,10 @@ import rl "vendor:raylib"
 
 
 StrobeDisplay :: struct {
-    samples: [SAMPLE_SIZE]f32,
+    samples: [STROBE_SAMPLE_SIZE]f32,
     pattern_image: rl.Image,
     pattern_texture: rl.Texture2D,
-    points: [SAMPLE_SIZE]rl.Vector2,
+    points: [STROBE_SAMPLE_SIZE]rl.Vector2,
 }
 
 

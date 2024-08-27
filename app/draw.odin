@@ -10,7 +10,7 @@ root_dir := filepath.dir(#file)
 
 SHARP :: "♯"
 
-font_atlas : cstring = "ABCDEFGHz♯♭/-1234567890.msck"
+font_atlas : cstring = "ABCDEFGHz♯♭/-1234567890.msckFPS"
 font: rl.Font
 
 
