@@ -131,3 +131,7 @@ https://youtu.be/-DiZGpAh7T4
 
 Detecting Outliers
 https://youtu.be/PyYjTA9oa5w
+
+
+A SMARTER WAY TO FIND PITCH
+http://riogrande.cs.tcu.edu/1516Ribbit/resources/A_Smarter_Way_to_Find_Pitch.pdf

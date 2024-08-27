@@ -4,7 +4,6 @@ import rl "vendor:raylib"
 import "core:fmt"
 import "core:strings"
 
-target_freq: f64
 
 
 main :: proc() {
@@ -34,9 +33,10 @@ main :: proc() {
 
     freqs_idx := 0
 
+    target_freq := 0.0
     freqs: []f64 = guitar_freqs
 
-    target_freq = freqs[0]
+
     target_interval := 0.0
 
     // target_freq = 2500
@@ -183,14 +183,14 @@ main :: proc() {
 
         }
 
-        target_freq = freqs[freqs_idx]
+        target_freq = 220.0 // freqs[freqs_idx]
         note := find_note(f32(target_freq))
 
         // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
         target_interval = 2.0 * f64(SAMPLERATE) / target_freq
 
-        // TODO: change to something meaningful
-        target_interval = min(max(target_interval, 1), 1000)
+        // TODO: change to something meaningful ->
+        // target_interval = min(max(target_interval, 1), 4096)
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -218,7 +218,7 @@ main :: proc() {
             // rl.DrawTextEx(font, fmt.ctprintf("%.1fc", cents_diff), {20, 260}, 24, 0, rl.ORANGE)
 
             // draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 120}, ac.autocorr, ac_lag, ac_val)
-            draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 250}, ac.autocorr[:], &ac)
+            draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 200}, &ac)
 
             // Spectrum
             // if freq_in_range(detected_freq_spectrum) {
@@ -237,7 +237,7 @@ main :: proc() {
             // }
 
             // TODO: use the AC for detecting the fundamental, find the freq peak in that area and feed to the meter
-            draw_note_meter(rl.Rectangle{400, 500, 400, 100}, &detected_note_ac, detected_freq_ac)
+            draw_note_meter(rl.Rectangle{400, 600, 400, 100}, &detected_note_ac, detected_freq_ac)
             // draw_note_meter(rl.Rectangle{400, 600, 400, 100}, &detected_note_ac, freq_estimate)
 
             // rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {20, 620}, 24, 0, rl.PINK)

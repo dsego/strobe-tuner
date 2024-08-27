@@ -46,23 +46,22 @@ draw_note :: proc(note: ^Note, pos: [2]f32, size: f32, color: rl.Color = rl.PURP
 
 draw_autocorrelation :: proc(
     rect: rl.Rectangle,
-    buffer: []f32,
     ac: ^AcConfig,
 ) {
     points: [FFT_SIZE]rl.Vector2 = {}
 
     start := 0 // enables me to move the start to zoom into a portion of the graph
-    end := len(buffer) / 2
+    end := len(ac.autocorr) / 2
     len := end - start
 
     // stretch samples to fit the box width
     px_per_sample := f32(rect.width) / f32(len - 1)
 
     x := rect.x
-    gain: = 1.0 / buffer[0]
+    gain: = 1.0 / ac.autocorr[0]
 
     for i in 0..<len {
-        y := rect.y + (rect.height/2.0) - buffer[start+i] * (rect.height / 2.0) * gain
+        y := rect.y + (rect.height/2.0) - ac.autocorr[start+i] * (rect.height / 2.0) * gain
         points[i] = { x, y }
         x += px_per_sample
     }

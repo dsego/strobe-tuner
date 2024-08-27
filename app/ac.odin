@@ -14,6 +14,7 @@ AcConfig :: struct {
     fft_size: int,
     fft: []complex64,
     autocorr: []f32,
+    nsdf: []f32,
     samplerate: int,
     padded_samples: []f32,
     peaks: [dynamic]int,
@@ -24,6 +25,7 @@ ac_init :: proc (fft_size: int, samplerate: int) -> (config: AcConfig = {}) {
     config.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
     config.fft = make([]complex64, fft_size)
     config.autocorr = make([]f32, fft_size)
+    config.nsdf = make([]f32, fft_size)
     config.samplerate = samplerate
     config.padded_samples = make([]f32, fft_size)
     return
@@ -33,6 +35,7 @@ ac_destroy :: proc (config: ^AcConfig) {
     pffft.destroy_setup(config.pffft_setup)
     delete(config.fft)
     delete(config.autocorr)
+    delete(config.nsdf)
     delete(config.padded_samples)
     delete(config.peaks)
 }
@@ -78,6 +81,8 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32) 
         nil,
         pffft.Direction.BACKWARD
     )
+
+
 
     // Find the first maximum peak lag
     lag := 0
@@ -144,3 +149,6 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32) 
 
     return estimated_freq, normalized_val
 }
+
+
+// http://riogrande.cs.tcu.edu/1516Ribbit/resources/A_Smarter_Way_to_Find_Pitch.pdf

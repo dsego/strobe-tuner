@@ -53,28 +53,24 @@ _draw_strobe_lines :: proc(
     frame_count: u32,
     drift: f64,
 ) {
+    // fmt.println(target_interval, frame_count, drift)
+    rl.DrawRectangleLinesEx({rect.x-1, rect.y-1, rect.width+2, rect.height+2}, 1.0, rl.GRAY)
 
-    x:f32 = rect.width + f32(rect.x) //+ drift_adj
-    y := rect.y
+    resolution := rect.width / f32(target_interval-1.0)
+    drift_adj := f32(drift) * resolution
 
-    // resolution
-    dx := rect.width / f32(target_interval-1.0)
+    x:f32 = f32(rect.x) + f32(rect.width) - drift_adj
 
-    drift_adj := f32(drift) * dx
-
-
-    rl.DrawRectangleLinesEx({rect.x-1, y-1, rect.width+2, rect.height+2}, 1.0, rl.GRAY)
-
-    factor := (rect.height/2.0 - 1.0) * 10.0
+    factor := (rect.height/2.0 - 1.0)
 
     // TODO: resample by linear interpolation to fit the pixels
     // e.g. from 300 samples produce a value for each of the 800 pixels
 
     for i in 0..<frame_count {
         // note that y is flipped (negative)
-        dy := rect.height/2.0 - strobe_display.samples[i] * factor
-        strobe_display.points[i] = { x - f32(drift) * dx, f32(y) + dy }
-        x -= dx
+        y := rect.y + rect.height/2.0 - strobe_display.samples[i] * factor
+        strobe_display.points[frame_count-i-1] = { x, y }
+        x -= resolution
     }
 
     rl.DrawLineStrip(raw_data(strobe_display.points[:]), i32(frame_count), rl.PINK)

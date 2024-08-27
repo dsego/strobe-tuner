@@ -3,7 +3,7 @@ package main
 import "core:fmt"
 // import "core:os"
 import "core:math"
-import "core:runtime"
+import "base:runtime"
 
 import rl "vendor:raylib"
 import ma "vendor:miniaudio"
@@ -31,12 +31,14 @@ capture_device_count: u32
 // NOTE: aiming to fetch a number of samples close to the horizontal resolution, eg 1024px.
 // freq A1 = 55Hz
 
+target_freq := 220.0
+
 // target_freq := 55.0
 // target_freq := 65.406
 // target_freq := 82.407
 // target_freq := 49.00
 // target_freq := 440.0
-target_freq := 1567.982
+// target_freq := 1567.982
 // target_freq := 7902.133
 target_interval := 2.0 * f64(SAMPLERATE) / target_freq
 frame_counter_real := 0.0
@@ -279,7 +281,7 @@ draw_screen :: proc() {
 
     for i in 0..<frame_count {
         // note that y is flipped (negative)
-        y := SCREEN_HEIGHT/2 - samples[i] * 1000
+        y := SCREEN_HEIGHT/2 - samples[i] * 100
         points[i] = { x, y }
         x += resolution
     }
