@@ -34,7 +34,7 @@ main :: proc() {
 
     freqs_idx := 0
 
-    freqs: []f64 = ukulele_freqs
+    freqs: []f64 = guitar_freqs
 
     target_freq = freqs[0]
     target_interval := 0.0
@@ -95,6 +95,7 @@ main :: proc() {
     // detected_note_spectrum: Note
 
     detected_freq_ac: f32
+    ac_confidence: f32
     detected_note_ac: Note
     ac_lag: f32
     ac_val: f32
@@ -149,7 +150,8 @@ main :: proc() {
             copy(samples[u32(len(samples))-new_count:], new_samples[:new_count])
 
             // TODO: filter out high frequencies before autocorrelation?
-            detected_freq_ac, ac_lag, ac_val = ac_pitch_detect(&ac, samples)
+            detected_freq_ac, ac_confidence = ac_pitch_detect(&ac, samples)
+
             detected_note_ac = find_note(detected_freq_ac)
 
             // Assume 1Hz error
@@ -215,8 +217,8 @@ main :: proc() {
             // cents_diff := freq_to_cents(detected_freq_ac) - f32(detected_note_ac.cents)
             // rl.DrawTextEx(font, fmt.ctprintf("%.1fc", cents_diff), {20, 260}, 24, 0, rl.ORANGE)
 
-            // draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 120}, ac.autocorrelation, ac_lag, ac_val)
-            draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 250}, ac.autocorrelation[:], ac_lag, ac_val)
+            // draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 120}, ac.autocorr, ac_lag, ac_val)
+            draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 250}, ac.autocorr[:], &ac)
 
             // Spectrum
             // if freq_in_range(detected_freq_spectrum) {

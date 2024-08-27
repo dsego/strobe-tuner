@@ -47,15 +47,13 @@ draw_note :: proc(note: ^Note, pos: [2]f32, size: f32, color: rl.Color = rl.PURP
 draw_autocorrelation :: proc(
     rect: rl.Rectangle,
     buffer: []f32,
-    lag: f32,
-    val: f32,
+    ac: ^AcConfig,
 ) {
     points: [FFT_SIZE]rl.Vector2 = {}
 
-    start := 0
+    start := 0 // enables me to move the start to zoom into a portion of the graph
     end := len(buffer) / 2
     len := end - start
-    rel_lag := lag - f32(start)
 
     // stretch samples to fit the box width
     px_per_sample := f32(rect.width) / f32(len - 1)
@@ -72,8 +70,11 @@ draw_autocorrelation :: proc(
     draw_time_plot(rect, len, 9.0)
     rl.DrawLineStrip(raw_data(points[:]), i32(len), rl.GOLD)
 
-    // Mark lag position with a cross
-    {
+    // Mark peak positions with a cross
+    for peak in ac.peaks {
+        val := ac.autocorr[peak] / ac.autocorr[0]
+        rel_lag := f32(peak) - f32(start)
+
         cx := rect.x + rel_lag * f32(rect.width) / f32(len - 1)
         cy := rect.y + (rect.height/2.0) - val * (rect.height / 2.0)
 
@@ -83,7 +84,7 @@ draw_autocorrelation :: proc(
 
         // Vertical ruler
         rl.DrawLineEx({cx, cy}, {cx, rect.y+rect.height}, 0.5, rl.GRAY)
-        rl.DrawTextEx(font, fmt.ctprintf("%.1f", lag), {cx, rect.y+rect.height}, 16, 0, rl.GRAY)
+        rl.DrawTextEx(font, fmt.ctprintf("%.1f", f32(peak)), {cx, rect.y+rect.height-16}, 16, 0, rl.GRAY)
 
         // X marker - cross
         rl.DrawLineEx({cx-7.0, cy}, {cx+7.0, cy}, 2.0, rl.PINK)

@@ -13,16 +13,17 @@ AcConfig :: struct {
     pffft_setup: rawptr,
     fft_size: int,
     fft: []complex64,
-    autocorrelation: []f32,
+    autocorr: []f32,
     samplerate: int,
     padded_samples: []f32,
+    peaks: [dynamic]int,
 }
 
 ac_init :: proc (fft_size: int, samplerate: int) -> (config: AcConfig = {}) {
     config.fft_size = fft_size
     config.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
     config.fft = make([]complex64, fft_size)
-    config.autocorrelation = make([]f32, fft_size)
+    config.autocorr = make([]f32, fft_size)
     config.samplerate = samplerate
     config.padded_samples = make([]f32, fft_size)
     return
@@ -31,15 +32,16 @@ ac_init :: proc (fft_size: int, samplerate: int) -> (config: AcConfig = {}) {
 ac_destroy :: proc (config: ^AcConfig) {
     pffft.destroy_setup(config.pffft_setup)
     delete(config.fft)
-    delete(config.autocorrelation)
+    delete(config.autocorr)
     delete(config.padded_samples)
+    delete(config.peaks)
 }
 
 
 
 // Detect pitch via auto-correlation
-ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32, f32) {
-    // Generate the autocorrelation
+ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32) {
+    // Generate the autocorr
     //   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,
     //    then taking the inverse FFT will give us the cyclic auto-correlation.
 
@@ -72,68 +74,73 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32, 
     pffft.transform_ordered(
         pffft_setup,
         raw_data(mem.slice_data_cast([]f32, fft)),
-        raw_data(autocorrelation),
+        raw_data(autocorr),
         nil,
         pffft.Direction.BACKWARD
     )
 
     // Find the first maximum peak lag
     lag := 0
+    peak_idx := 0
     i := 1
 
-    // TODO: don't look for notes lower than 20Hz = lag 50ms
-    // TODO: enumerate all discrete peaks -> run parabolic interpolation on first 2-3 to find the true max peak
-    // TODO: can we be smarter about traversing lags, maybe skip ahead X samples at a time instead of checking each sample
-
     // throw away the negative lags
-    half_len := len(autocorrelation) / 2 + 1  // + 1 ?
+    n := len(autocorr) / 2
 
-    // go down the slope until we reach the local minimum
-    for i < half_len - 1 && autocorrelation[i+1] < autocorrelation[i] {
-        i += 1
-    }
+    // clear out peaks from the previous run
+    clear(&peaks)
 
-    // fmt.println("MIN", autocorrelation[i])
+    for i < n {
+        // go down the slope until we reach the local minimum
+        for i < n && autocorr[i+1] < autocorr[i] do i += 1
 
-    lag = i
+        // no slope, we're on flat grounds
+        if i == 1 do break
 
-    // we want to look up to n/2 and find the lag for the max peak
-    for i < half_len - 1 {
-        if autocorrelation[i+1] > autocorrelation[lag] {
-            lag = i + 1
+        // the min is our starting point
+        lag = i
+
+        // search for the max peak across the whole buffer
+        for i < n {
+            if autocorr[i+1] > autocorr[lag] do lag = i + 1
+            i += 1
         }
-        i += 1
+
+        // we didn't find a max
+        if i == lag do break
+
+        append(&peaks, lag)
+
+        // continue search for other max peaks from this lag
+        i = lag + 1
     }
 
-    chosen_lag := lag
-    // fmt.println("MAX", autocorrelation[i])
+    estimated_freq:f32 = 0.0
+    normalized_val:f32 = 0.0
 
-    // interpolate peak to get a more precise result
-    peak_location: f32 = 0
-
-    if chosen_lag > 0 {
-        peak_location = parabolic(
-            autocorrelation[chosen_lag-1],
-            autocorrelation[chosen_lag],
-            autocorrelation[chosen_lag+1]
+    if len(peaks) > 1 {
+        p1 := f32(peaks[0]) + parabolic(
+            autocorr[peaks[0]-1],
+            autocorr[peaks[0]],
+            autocorr[peaks[0]+1]
         )
+
+        p2 := f32(peaks[1]) + parabolic(
+            autocorr[peaks[1]-1],
+            autocorr[peaks[1]],
+            autocorr[peaks[1]+1]
+        )
+        distance := p2 - p1
+
+        if distance > 0.0 {
+            estimated_freq = f32(samplerate) / distance
+        }
+
+
+        // The normalized value can provide a confidence level
+        chosen_lag := peaks[0]
+        normalized_val = autocorr[chosen_lag] / autocorr[0]
     }
 
-    improved_lag := f32(chosen_lag) + peak_location
-    // improved_lag := f32(chosen_lag)
-
-    // convert lag to frequency
-    estimated_freq := f32(0)
-    if improved_lag > 0.0 {
-        estimated_freq = f32(samplerate) / improved_lag
-    }
-    // fmt.println(chosen_lag, improved_lag)
-
-    // The normalized value can provide a confidence level
-    normalized_val := autocorrelation[chosen_lag] / autocorrelation[0]
-    if math.is_nan(normalized_val) {
-        normalized_val = 0.0
-    }
-
-    return estimated_freq, f32(improved_lag), normalized_val
+    return estimated_freq, normalized_val
 }
