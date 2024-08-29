@@ -70,8 +70,55 @@ draw_autocorrelation :: proc(
     rl.DrawLineStrip(raw_data(points[:]), i32(len), rl.GOLD)
 
     // Mark peak positions with a cross
-    for peak in ac.peaks {
+    for peak in ac.autocorr_peaks {
         val := ac.autocorr[peak] / ac.autocorr[0]
+        rel_lag := f32(peak) - f32(start)
+
+        cx := rect.x + rel_lag * f32(rect.width) / f32(len - 1)
+        cy := rect.y + (rect.height/2.0) - val * (rect.height / 2.0)
+
+        // Horizontal ruler
+        rl.DrawLineEx({rect.x, cy}, {cx, cy}, 0.5, rl.GRAY)
+        rl.DrawTextEx(font, fmt.ctprintf("%.1f", val), {rect.x, cy}, 16, 0, rl.GRAY)
+
+        // Vertical ruler
+        rl.DrawLineEx({cx, cy}, {cx, rect.y+rect.height}, 0.5, rl.GRAY)
+        rl.DrawTextEx(font, fmt.ctprintf("%.1f", f32(peak)), {cx, rect.y+rect.height-16}, 16, 0, rl.GRAY)
+
+        // X marker - cross
+        rl.DrawLineEx({cx-7.0, cy}, {cx+7.0, cy}, 2.0, rl.PINK)
+        rl.DrawLineEx({cx, cy-7.0}, {cx, cy+7.0}, 2.0, rl.PINK)
+    }
+}
+
+draw_nsdf :: proc(
+    rect: rl.Rectangle,
+    ac: ^AcConfig,
+) {
+    points: [FFT_SIZE]rl.Vector2 = {}
+
+    start := 0 // enables me to move the start to zoom into a portion of the graph
+    end := len(ac.nsdf) / 2
+    len := end - start
+
+    // stretch samples to fit the box width
+    px_per_sample := f32(rect.width) / f32(len - 1)
+
+    x := rect.x
+    gain: = 1.0 / ac.nsdf[0]
+
+    for i in 0..<len {
+        y := rect.y + (rect.height/2.0) - ac.nsdf[start+i] * (rect.height / 2.0) * gain
+        points[i] = { x, y }
+        x += px_per_sample
+    }
+
+    draw_time_plot(rect, len, 9.0)
+    rl.DrawLineStrip(raw_data(points[:]), i32(len), rl.GOLD)
+
+    // Mark peak positions with a cross
+    for peak in ac.nsdf_peaks {
+        val := ac.nsdf[peak] / ac.nsdf[0]
         rel_lag := f32(peak) - f32(start)
 
         cx := rect.x + rel_lag * f32(rect.width) / f32(len - 1)

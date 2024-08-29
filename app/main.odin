@@ -219,6 +219,7 @@ main :: proc() {
 
             // draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 120}, ac.autocorr, ac_lag, ac_val)
             draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 200}, &ac)
+            draw_nsdf(rl.Rectangle{160, 440, SCREEN_WIDTH-180, 200}, &ac)
 
             // Spectrum
             // if freq_in_range(detected_freq_spectrum) {
@@ -237,7 +238,7 @@ main :: proc() {
             // }
 
             // TODO: use the AC for detecting the fundamental, find the freq peak in that area and feed to the meter
-            draw_note_meter(rl.Rectangle{400, 600, 400, 100}, &detected_note_ac, detected_freq_ac)
+            draw_note_meter(rl.Rectangle{200, 640, 400, 100}, &detected_note_ac, detected_freq_ac)
             // draw_note_meter(rl.Rectangle{400, 600, 400, 100}, &detected_note_ac, freq_estimate)
 
             // rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {20, 620}, 24, 0, rl.PINK)

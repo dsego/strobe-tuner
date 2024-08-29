@@ -17,7 +17,8 @@ AcConfig :: struct {
     nsdf: []f32,
     samplerate: int,
     padded_samples: []f32,
-    peaks: [dynamic]int,
+    autocorr_peaks: [dynamic]int,
+    nsdf_peaks: [dynamic]int,
 }
 
 ac_init :: proc (fft_size: int, samplerate: int) -> (config: AcConfig = {}) {
@@ -37,7 +38,8 @@ ac_destroy :: proc (config: ^AcConfig) {
     delete(config.autocorr)
     delete(config.nsdf)
     delete(config.padded_samples)
-    delete(config.peaks)
+    delete(config.autocorr_peaks)
+    delete(config.nsdf_peaks)
 }
 
 
@@ -48,16 +50,49 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32) 
     //   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,
     //    then taking the inverse FFT will give us the cyclic auto-correlation.
 
+    ac_process_samples(config, samples)
+    ac_nsdf(config, samples)
+    ac_find_autocorr_peaks(config)
+    ac_find_nsdf_peaks(config)
+
+    estimated_freq:f32 = 0.0
+    normalized_val:f32 = 0.0
+
+    peaks := nsdf_peaks
+
+    if len(peaks) > 1 {
+        p1 := f32(peaks[0]) + parabolic(
+            nsdf[peaks[0]-1],
+            nsdf[peaks[0]],
+            nsdf[peaks[0]+1]
+        )
+
+        p2 := f32(peaks[1]) + parabolic(
+            nsdf[peaks[1]-1],
+            nsdf[peaks[1]],
+            nsdf[peaks[1]+1]
+        )
+        distance := p2 - p1
+
+        if distance > 0.0 {
+            estimated_freq = f32(samplerate) / p1
+        }
+
+
+        // The normalized value can provide a confidence level
+        chosen_lag := peaks[0]
+        normalized_val = autocorr[chosen_lag] / autocorr[0]
+    }
+
+    return estimated_freq, normalized_val
+}
+
+ac_process_samples :: proc (using config: ^AcConfig, samples: []f32) {
     assert(len(samples) <= fft_size/2)
 
     // pad samples with zeros to avoid cyclic convolution
     mem.zero_slice(padded_samples)
     copy(padded_samples, samples)
-
-    // windowing ?
-    // for i in 0..<fft_size/2 {
-    //     padded_samples[i] = padded_samples[i] * blackman_harris(f32(i), f32(fft_size/2))
-    // }
 
     // FFT transform
     pffft.transform_ordered(
@@ -81,10 +116,10 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32) 
         nil,
         pffft.Direction.BACKWARD
     )
+}
 
 
-
-    // Find the first maximum peak lag
+ac_find_autocorr_peaks :: proc (using config: ^AcConfig) {
     lag := 0
     peak_idx := 0
     i := 1
@@ -93,7 +128,7 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32) 
     n := len(autocorr) / 2
 
     // clear out peaks from the previous run
-    clear(&peaks)
+    clear(&autocorr_peaks)
 
     for i < n {
         // go down the slope until we reach the local minimum
@@ -114,41 +149,68 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32) 
         // we didn't find a max
         if i == lag do break
 
-        append(&peaks, lag)
+        append(&autocorr_peaks, lag)
 
         // continue search for other max peaks from this lag
         i = lag + 1
     }
-
-    estimated_freq:f32 = 0.0
-    normalized_val:f32 = 0.0
-
-    if len(peaks) > 1 {
-        p1 := f32(peaks[0]) + parabolic(
-            autocorr[peaks[0]-1],
-            autocorr[peaks[0]],
-            autocorr[peaks[0]+1]
-        )
-
-        p2 := f32(peaks[1]) + parabolic(
-            autocorr[peaks[1]-1],
-            autocorr[peaks[1]],
-            autocorr[peaks[1]+1]
-        )
-        distance := p2 - p1
-
-        if distance > 0.0 {
-            estimated_freq = f32(samplerate) / distance
-        }
-
-
-        // The normalized value can provide a confidence level
-        chosen_lag := peaks[0]
-        normalized_val = autocorr[chosen_lag] / autocorr[0]
-    }
-
-    return estimated_freq, normalized_val
 }
 
+ac_find_nsdf_peaks :: proc (using config: ^AcConfig) {
+    lag := 0
+    peak_idx := 0
+    i := 1
 
+    // throw away the negative lags
+    n := len(nsdf) / 2
+
+    // clear out peaks from the previous run
+    clear(&nsdf_peaks)
+
+    // go down the slope to find the min value
+    for i < n && nsdf[i+1] < nsdf[i] do i += 1
+
+    // search for the first max peak
+    for i < n && nsdf[i] < nsdf[i+1] do i += 1
+
+    lag = i
+
+    append(&nsdf_peaks, lag)
+
+
+
+    // go down the slope to find the min value
+    for i < n && nsdf[i+1] < nsdf[i] do i += 1
+
+    // search for the first max peak
+    for i < n && nsdf[i] < nsdf[i+1] do i += 1
+
+    lag = i
+
+    append(&nsdf_peaks, lag)
+
+}
+
+// Normalised Square Difference Function
 // http://riogrande.cs.tcu.edu/1516Ribbit/resources/A_Smarter_Way_to_Find_Pitch.pdf
+ac_nsdf :: proc (using config: ^AcConfig, samples: []f32) {
+
+    copy(nsdf, autocorr)
+
+    n := len(nsdf) / 2
+
+    // 75% overlap
+    k := n
+
+    // left-hand summation for zero lag
+    lhsum := 2.0 * nsdf[0] / f32(len(nsdf))
+
+    for i in 0..<k {
+        lhsum -= samples[i] * samples[i] + samples[n-i-1] * samples[n-i-1]
+        if lhsum > 0.0 {
+            nsdf[i] *= 2.0 / lhsum
+        } else {
+            nsdf[i] = 0.0
+        }
+    }
+}
