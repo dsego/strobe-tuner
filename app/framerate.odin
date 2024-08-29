@@ -104,15 +104,9 @@ calculate_framerate :: proc(
     } else if f64(frames_available) - frame_counter_real^ - target_interval < target_interval {
         // 7.2 + 7.2 = 14.4 -> 15 frames, 8 + 7 -> .2 + 7.2 = 7.4  ~ 7 new samples to read
         // 7.8 + 7.8 = 15.6 -> 16 frames, 8 + 8 -> .8 + 7.8 = 8.6  ~ 8 new samples to read
-        if frame_counter_real^ > EPSILON {
-            frames_to_read = u32(math.trunc(frame_counter_real^ + target_interval))
-        } else {
-            // we have an overlap sample stored, read the number of samples rounded down!
-            frames_to_read = u32(math.trunc(target_interval))
-        }
+        frames_to_read = u32(math.trunc(frame_counter_real^ + target_interval))
         frames_to_skip = u32(0)
         next_frame_counter_real += target_interval
-
 
     // case 3. we can skip a few intervals and read the most recent interval
     } else {
