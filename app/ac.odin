@@ -60,29 +60,29 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32) 
 
     peaks := nsdf_peaks
 
-    if len(peaks) > 1 {
+    // if len(peaks) > 1 {
         p1 := f32(peaks[0]) + parabolic(
             nsdf[peaks[0]-1],
             nsdf[peaks[0]],
             nsdf[peaks[0]+1]
         )
 
-        p2 := f32(peaks[1]) + parabolic(
-            nsdf[peaks[1]-1],
-            nsdf[peaks[1]],
-            nsdf[peaks[1]+1]
-        )
-        distance := p2 - p1
+        // p2 := f32(peaks[1]) + parabolic(
+        //     nsdf[peaks[1]-1],
+        //     nsdf[peaks[1]],
+        //     nsdf[peaks[1]+1]
+        // )
+        // distance := p2 - p1
 
-        if distance > 0.0 {
-            estimated_freq = f32(samplerate) / p1
-        }
+        // if distance > 0.0 {
+        if p1 > 0.0 do estimated_freq = f32(samplerate) / p1
+        // }
 
 
         // The normalized value can provide a confidence level
         chosen_lag := peaks[0]
         normalized_val = autocorr[chosen_lag] / autocorr[0]
-    }
+    // }
 
     return estimated_freq, normalized_val
 }
@@ -156,6 +156,10 @@ ac_find_autocorr_peaks :: proc (using config: ^AcConfig) {
     }
 }
 
+
+// TODO: need a different strategy to find peak
+// it's normalized so find largest peak above 0.9
+// the true peak stays static !!!
 ac_find_nsdf_peaks :: proc (using config: ^AcConfig) {
     lag := 0
     peak_idx := 0
@@ -170,22 +174,17 @@ ac_find_nsdf_peaks :: proc (using config: ^AcConfig) {
     // go down the slope to find the min value
     for i < n && nsdf[i+1] < nsdf[i] do i += 1
 
-    // search for the first max peak
-    for i < n && nsdf[i] < nsdf[i+1] do i += 1
-
     lag = i
 
-    append(&nsdf_peaks, lag)
-
-
-
-    // go down the slope to find the min value
-    for i < n && nsdf[i+1] < nsdf[i] do i += 1
-
     // search for the first max peak
-    for i < n && nsdf[i] < nsdf[i+1] do i += 1
-
-    lag = i
+    for i < n - 200 {
+        // peak
+        if nsdf[i+1] < nsdf[i] {
+            // compare to previous peak
+            if nsdf[lag] < 0.95 * nsdf[i] do lag = i + 1
+        }
+        i += 1
+    }
 
     append(&nsdf_peaks, lag)
 
