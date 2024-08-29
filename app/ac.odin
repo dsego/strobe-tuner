@@ -46,47 +46,30 @@ ac_destroy :: proc (config: ^AcConfig) {
 
 // Detect pitch via auto-correlation
 ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32) {
-    // Generate the autocorr
-    //   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,
-    //    then taking the inverse FFT will give us the cyclic auto-correlation.
-
     ac_process_samples(config, samples)
     ac_nsdf(config, samples)
-    ac_find_autocorr_peaks(config)
-    ac_find_nsdf_peaks(config)
+    lag := ac_find_nsdf_peak(config)
 
     estimated_freq:f32 = 0.0
     normalized_val:f32 = 0.0
 
-    peaks := nsdf_peaks
+    p1 := f32(lag) + parabolic(
+        nsdf[lag-1],
+        nsdf[lag],
+        nsdf[lag+1]
+    )
 
-    // if len(peaks) > 1 {
-        p1 := f32(peaks[0]) + parabolic(
-            nsdf[peaks[0]-1],
-            nsdf[peaks[0]],
-            nsdf[peaks[0]+1]
-        )
+    if p1 > 0.0 do estimated_freq = f32(samplerate) / p1
 
-        // p2 := f32(peaks[1]) + parabolic(
-        //     nsdf[peaks[1]-1],
-        //     nsdf[peaks[1]],
-        //     nsdf[peaks[1]+1]
-        // )
-        // distance := p2 - p1
-
-        // if distance > 0.0 {
-        if p1 > 0.0 do estimated_freq = f32(samplerate) / p1
-        // }
-
-
-        // The normalized value can provide a confidence level
-        chosen_lag := peaks[0]
-        normalized_val = autocorr[chosen_lag] / autocorr[0]
-    // }
+    // The normalized value can provide a confidence level?
+    normalized_val = nsdf[lag] / nsdf[0]
 
     return estimated_freq, normalized_val
 }
 
+// Generate the auto-correlation
+//   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,
+//    then taking the inverse FFT will give us the cyclic auto-correlation.
 ac_process_samples :: proc (using config: ^AcConfig, samples: []f32) {
     assert(len(samples) <= fft_size/2)
 
@@ -158,9 +141,9 @@ ac_find_autocorr_peaks :: proc (using config: ^AcConfig) {
 
 
 // TODO: need a different strategy to find peak
-// it's normalized so find largest peak above 0.9
-// the true peak stays static !!!
-ac_find_nsdf_peaks :: proc (using config: ^AcConfig) {
+// find all max peaks between two zero crossings
+// use interpolation before deciding on peak
+ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> int {
     lag := 0
     peak_idx := 0
     i := 1
@@ -186,30 +169,26 @@ ac_find_nsdf_peaks :: proc (using config: ^AcConfig) {
         i += 1
     }
 
-    append(&nsdf_peaks, lag)
+    return lag
 
 }
 
-// Normalised Square Difference Function
+// Normalized Square Difference Function (through autocorrelation)
 // http://riogrande.cs.tcu.edu/1516Ribbit/resources/A_Smarter_Way_to_Find_Pitch.pdf
 ac_nsdf :: proc (using config: ^AcConfig, samples: []f32) {
+    n := len(samples)
+    copy(nsdf, autocorr[:n])
 
-    copy(nsdf, autocorr)
-
-    n := len(nsdf) / 2
-
-    // 75% overlap
     k := n
-
     // left-hand summation for zero lag
     lhsum := 2.0 * nsdf[0] / f32(len(nsdf))
 
     for i in 0..<k {
-        lhsum -= samples[i] * samples[i] + samples[n-i-1] * samples[n-i-1]
         if lhsum > 0.0 {
             nsdf[i] *= 2.0 / lhsum
         } else {
             nsdf[i] = 0.0
         }
+        lhsum -= samples[i] * samples[i] + samples[n-i-1] * samples[n-i-1]
     }
 }

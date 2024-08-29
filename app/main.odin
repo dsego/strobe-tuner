@@ -61,12 +61,6 @@ main :: proc() {
     ac := ac_init(FFT_SIZE, SAMPLERATE)
     defer ac_destroy(&ac)
 
-    // spectrum := spectrum_init(FFT_SIZE, SAMPLERATE)
-    // defer spectrum_destroy(&spectrum)
-
-    cepstrum := ceps_init(FFT_SIZE, SAMPLERATE)
-    defer ceps_destroy(&cepstrum)
-
     samples: []f32 = make([]f32, FFT_SIZE/2)
     defer delete(samples)
 
@@ -87,29 +81,16 @@ main :: proc() {
     defer destroy_strobe_display()
 
 
-
     show_pattern := false
-    ac_lowpass := false
 
-    // detected_freq_spectrum: f32
-    // detected_note_spectrum: Note
-
-    detected_freq_ac: f32
-    ac_confidence: f32
-    detected_note_ac: Note
-    ac_lag: f32
-    ac_val: f32
+    detected_freq: f32
+    detected_note: Note
+    clarity: f32
 
     // flatness: f32
 
-
-    // detected_freq_ceps: f32
-    // detected_note_ceps: Note
-    // ceps_lag: f32
-    // ceps_val: f32
-
-    freq_estimate:f32 = 260.0
-    freq_estimate_error:f32 = 0.5
+    // freq_estimate: f32 = 260.0
+    // freq_estimate_error:f32 = 0.5
 
     for !rl.WindowShouldClose() {
 
@@ -150,37 +131,11 @@ main :: proc() {
             copy(samples[u32(len(samples))-new_count:], new_samples[:new_count])
 
             // TODO: filter out high frequencies before autocorrelation?
-            detected_freq_ac, ac_confidence = ac_pitch_detect(&ac, samples)
-
-            detected_note_ac = find_note(detected_freq_ac)
+            detected_freq, clarity = ac_pitch_detect(&ac, samples)
+            detected_note = find_note(detected_freq)
 
             // Assume 1Hz error
             // freq_estimate, freq_estimate_error = kalman_filter(detected_freq_ac, freq_estimate, freq_estimate_error, 0.3)
-
-
-            // fmt.println(freq_estimate)
-
-
-            // Find spectrum peak
-            // detected_freq_spectrum = spectrum_pitch_detect(&spectrum, samples)
-            // detected_note_spectrum = find_note(detected_freq_spectrum)
-
-
-            // limit to note range 20Hz - 8kHz
-            // flatness = spectral_flatness(spectrum.spectrum[2:750])
-
-            // Cepstrum
-            // detected_freq_ceps, ceps_lag, ceps_val = ceps_pitch_detect(&cepstrum, samples)
-            // detected_note_ceps = find_note(detected_freq_ceps)
-
-            // if target_freq != f64(detected_note_ac.frequency) {
-            //     reset_framerate()
-            //     target_freq = f64(detected_note_ac.frequency)
-
-            //     // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
-            //     target_interval = 2.0 * f64(SAMPLERATE) / target_freq
-            // }
-
         }
 
         target_freq = freqs[freqs_idx]
@@ -205,47 +160,24 @@ main :: proc() {
 
             // Show target frequency & interval
             rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", target_freq), {20, 100}, 32, 0, rl.PURPLE)
-            rl.DrawTextEx(font, fmt.ctprintf("%.2f", target_interval), {20, 150}, 16, 0, rl.SKYBLUE)
+            rl.DrawTextEx(font, fmt.ctprintf("%.4f", target_interval), {20, 150}, 16, 0, rl.SKYBLUE)
 
 
             // Detected note - auto correlation
-            if freq_in_range(detected_freq_ac) {
-                draw_note(&detected_note_ac, {20, 250}, 48)
-                rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", detected_freq_ac), {20, 300}, 24, 0, rl.PURPLE)
+            if freq_in_range(detected_freq) {
+                draw_note(&detected_note, {20, 250}, 48)
+                rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", detected_freq), {20, 300}, 24, 0, rl.PURPLE)
             }
 
-            // cents_diff := freq_to_cents(detected_freq_ac) - f32(detected_note_ac.cents)
-            // rl.DrawTextEx(font, fmt.ctprintf("%.1fc", cents_diff), {20, 260}, 24, 0, rl.ORANGE)
+            draw_nsdf(rl.Rectangle{160, 200, SCREEN_WIDTH-180, 200}, &ac)
 
-            // draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 120}, ac.autocorr, ac_lag, ac_val)
-            draw_autocorrelation(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 200}, &ac)
-            draw_nsdf(rl.Rectangle{160, 440, SCREEN_WIDTH-180, 200}, &ac)
-
-            // Spectrum
-            // if freq_in_range(detected_freq_spectrum) {
-            //     draw_note(&detected_note_spectrum, {20, 500}, 48)
-            //     rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_spectrum), {20, 550}, 24, 0, rl.PURPLE)
-            // }
-
-            // draw_freq_spectrum(rl.Rectangle{160, 500, SCREEN_WIDTH-180, 120}, spectrum.spectrum[:200], FFT_SIZE, SAMPLERATE)
-
-            // draw_cepstrum(rl.Rectangle{160, 500, SCREEN_WIDTH-180, 120}, cepstrum.cepstrum[:200], ceps_lag, ceps_val)
-
-            // Cepstrum
-            // if freq_in_range(detected_freq_ceps) {
-            //     draw_note(&detected_note_ceps, {20, 500}, 48)
-            //     rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", detected_freq_ceps), {20, 550}, 24, 0, rl.PURPLE)
-            // }
-
-            // TODO: use the AC for detecting the fundamental, find the freq peak in that area and feed to the meter
-            draw_note_meter(rl.Rectangle{200, 640, 400, 100}, &detected_note_ac, detected_freq_ac)
-            // draw_note_meter(rl.Rectangle{400, 600, 400, 100}, &detected_note_ac, freq_estimate)
+            draw_note_meter(rl.Rectangle{160, 400, 400, 100}, &detected_note, detected_freq)
 
             // rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {20, 620}, 24, 0, rl.PINK)
             // rl.DrawRectangleV({20, 650}, {100 * flatness, 4.0}, rl.PINK)
 
-            rl.DrawTextEx(font, fmt.ctprintf("%.4f", ac_val), {20, 660}, 24, 0, rl.LIME)
-            rl.DrawRectangleV({20, 690}, {100 * ac_val, 4.0}, rl.LIME)
+            rl.DrawTextEx(font, fmt.ctprintf("%.4f", clarity), {20, 660}, 24, 0, rl.LIME)
+            rl.DrawRectangleV({20, 690}, {100 * clarity, 4.0}, rl.LIME)
         }
     }
 }
