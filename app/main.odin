@@ -31,7 +31,7 @@ main :: proc() {
         440.0000, // A4
     }
 
-    freqs_idx := 0
+    freqs_idx := 1
 
     target_freq := 0.0
     freqs: []f64 = guitar_freqs
@@ -183,7 +183,7 @@ main :: proc() {
 
         }
 
-        target_freq = 220.0 // freqs[freqs_idx]
+        target_freq = freqs[freqs_idx]
         note := find_note(f32(target_freq))
 
         // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement

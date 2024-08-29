@@ -31,7 +31,7 @@ capture_device_count: u32
 // NOTE: aiming to fetch a number of samples close to the horizontal resolution, eg 1024px.
 // freq A1 = 55Hz
 
-target_freq := 220.0
+target_freq := 110.0
 
 // target_freq := 55.0
 // target_freq := 65.406

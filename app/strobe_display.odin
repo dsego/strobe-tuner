@@ -37,7 +37,7 @@ draw_strobe_display :: proc(target_interval: f64, show_pattern: bool = false) {
             samples=strobe_displays[i].samples[:],
             target_interval=target_interval,
         )
-        _draw_strobe_lines(rect, &strobe_displays[i], target_interval, frame_count, drift)
+        draw_strobe_lines(rect, &strobe_displays[i], target_interval, frame_count, drift)
 
         if show_pattern {
             // _draw_strobe_pattern(rect, &strobe_displays[i], target_interval, frame)
@@ -46,7 +46,7 @@ draw_strobe_display :: proc(target_interval: f64, show_pattern: bool = false) {
 }
 
 @(private)
-_draw_strobe_lines :: proc(
+draw_strobe_lines :: proc(
     rect: rl.Rectangle,
     strobe_display: ^StrobeDisplay,
     target_interval: f64,
@@ -61,7 +61,7 @@ _draw_strobe_lines :: proc(
 
     x:f32 = f32(rect.x) + f32(rect.width) - drift_adj
 
-    factor := (rect.height/2.0 - 1.0)
+    factor := (rect.height/2.0 - 1.0) //* 10.0
 
     // TODO: resample by linear interpolation to fit the pixels
     // e.g. from 300 samples produce a value for each of the 800 pixels
@@ -69,7 +69,7 @@ _draw_strobe_lines :: proc(
     for i in 0..<frame_count {
         // note that y is flipped (negative)
         y := rect.y + rect.height/2.0 - strobe_display.samples[i] * factor
-        strobe_display.points[frame_count-i-1] = { x, y }
+        strobe_display.points[i] = { x, y }
         x -= resolution
     }
 

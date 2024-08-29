@@ -6,10 +6,14 @@ import "core:testing"
 
 import pa_rb "../pa_ringbuffer"
 
-EPS := 0.000001
+EPSILON :: 0.000001
 
 
 // TODO: make this a state object {
+
+// FIXME
+// FIXME
+// FIXME
 frame_counter_real := 0.0
 overlap_sample :f32 = 0.0
 // }
@@ -48,7 +52,7 @@ read_samples :: proc(
     )
 
     if frames_to_read > 0 && frames_to_skip == 0 {
-        // Capturing the next adjacent period, keep the overlap sample for interpolation
+        // Capturing the next adjacent period
         if frames_to_read > u32(math.trunc(target_interval)) {
             read_ringbuffer(rb_ptr, samples[:], frames_to_read)
         } else {
@@ -63,6 +67,7 @@ read_samples :: proc(
 
     count := u32(math.ceil(target_interval))
 
+    // keep the overlap sample for interpolation
     if frames_to_read > 0 {
         overlap_sample = samples[count-1]
     }
@@ -97,17 +102,17 @@ calculate_framerate :: proc(
 
     // case 2. there is overlap with the previous interval (if there is a previous frame)
     } else if f64(frames_available) - frame_counter_real^ - target_interval < target_interval {
-
         // 7.2 + 7.2 = 14.4 -> 15 frames, 8 + 7 -> .2 + 7.2 = 7.4  ~ 7 new samples to read
         // 7.8 + 7.8 = 15.6 -> 16 frames, 8 + 8 -> .8 + 7.8 = 8.6  ~ 8 new samples to read
-        if frame_counter_real^ > EPS {
+        if frame_counter_real^ > EPSILON {
             frames_to_read = u32(math.trunc(frame_counter_real^ + target_interval))
         } else {
-            // no overlap sample stored yet, read the number of samples rounded up
-            frames_to_read = u32(math.ceil(target_interval))
+            // we have an overlap sample stored, read the number of samples rounded down!
+            frames_to_read = u32(math.trunc(target_interval))
         }
         frames_to_skip = u32(0)
         next_frame_counter_real += target_interval
+
 
     // case 3. we can skip a few intervals and read the most recent interval
     } else {
@@ -166,8 +171,8 @@ test_calculate_framerate :: proc(t: ^testing.T) {
         read, skip, drift := calculate_framerate(100, 35.28, &frame_counter_real)
         expected_counter_real := 0.56
         expected_drift := 1.0 - expected_counter_real
-        testing.expect(t, math.abs(expected_drift - drift) < EPS, fmt.tprintf("expected %v, got %v", expected_drift, drift))
-        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPS, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
+        testing.expect(t, math.abs(expected_drift - drift) < EPSILON, fmt.tprintf("expected %v, got %v", expected_drift, drift))
+        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPSILON, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
         testing.expect_value(t, skip, 35)
         testing.expect_value(t, read, 36)
     }
@@ -196,8 +201,8 @@ test_calculate_framerate :: proc(t: ^testing.T) {
         read, skip, drift := calculate_framerate(300, 35.28, &frame_counter_real)
         expected_counter_real := 0.76
         expected_drift := 1.0 - expected_counter_real
-        testing.expect(t, math.abs(expected_drift - drift) < EPS, fmt.tprintf("expected %v, got %v", expected_drift, drift))
-        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPS, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
+        testing.expect(t, math.abs(expected_drift - drift) < EPSILON, fmt.tprintf("expected %v, got %v", expected_drift, drift))
+        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPSILON, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
         testing.expect_value(t, skip, 246)
         testing.expect_value(t, read, 36)
     }
@@ -209,8 +214,8 @@ test_calculate_framerate :: proc(t: ^testing.T) {
         read, skip, drift := calculate_framerate(40, 35.28, &frame_counter_real)
         expected_counter_real := 0.56
         expected_drift := 1.0 - expected_counter_real
-        testing.expect(t, math.abs(expected_drift - drift) < EPS, fmt.tprintf("expected %v, got %v", expected_drift, drift))
-        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPS, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
+        testing.expect(t, math.abs(expected_drift - drift) < EPSILON, fmt.tprintf("expected %v, got %v", expected_drift, drift))
+        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPSILON, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
         testing.expect_value(t, skip, 0)
         testing.expect_value(t, read, 35)
     }
@@ -221,8 +226,8 @@ test_calculate_framerate :: proc(t: ^testing.T) {
         read, skip, drift := calculate_framerate(40, 35.28, &frame_counter_real)
         expected_counter_real := 0.28
         expected_drift := 1.0 - expected_counter_real
-        testing.expect(t, math.abs(expected_drift - drift) < EPS, fmt.tprintf("expected %v, got %v", expected_drift, drift))
-        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPS, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
+        testing.expect(t, math.abs(expected_drift - drift) < EPSILON, fmt.tprintf("expected %v, got %v", expected_drift, drift))
+        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPSILON, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
         testing.expect_value(t, skip, 0)
         testing.expect_value(t, read, 36)
     }
@@ -244,8 +249,8 @@ test_calculate_framerate :: proc(t: ^testing.T) {
         read, skip, drift := calculate_framerate(80, 10.5, &frame_counter_real)
         expected_counter_real := 0.5
         expected_drift := 1.0 - expected_counter_real
-        testing.expect(t, math.abs(expected_drift - drift) < EPS, fmt.tprintf("expected %v, got %v", expected_drift, drift))
-        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPS, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
+        testing.expect(t, math.abs(expected_drift - drift) < EPSILON, fmt.tprintf("expected %v, got %v", expected_drift, drift))
+        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPSILON, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
         testing.expect_value(t, skip, 63)
         testing.expect_value(t, read, 11)
     }
@@ -262,8 +267,8 @@ test_calculate_framerate :: proc(t: ^testing.T) {
         read, skip, drift := calculate_framerate(40, 7.2, &frame_counter_real)
         expected_counter_real := 0.0
         expected_drift := 0.0
-        testing.expect(t, math.abs(expected_drift - drift) < EPS, fmt.tprintf("expected %v, got %v", expected_drift, drift))
-        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPS, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
+        testing.expect(t, math.abs(expected_drift - drift) < EPSILON, fmt.tprintf("expected %v, got %v", expected_drift, drift))
+        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPSILON, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
         testing.expect_value(t, skip, 28)
         testing.expect_value(t, read, 8)
     }
@@ -272,8 +277,8 @@ test_calculate_framerate :: proc(t: ^testing.T) {
         read, skip, drift := calculate_framerate(10, 7.2, &frame_counter_real)
         expected_counter_real := 0.2
         expected_drift := 0.8
-        testing.expect(t, math.abs(expected_drift - drift) < EPS, fmt.tprintf("expected %v, got %v", expected_drift, drift))
-        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPS, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
+        testing.expect(t, math.abs(expected_drift - drift) < EPSILON, fmt.tprintf("expected %v, got %v", expected_drift, drift))
+        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPSILON, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
         testing.expect_value(t, skip, 0)
         testing.expect_value(t, read, 8)
     }
@@ -282,8 +287,8 @@ test_calculate_framerate :: proc(t: ^testing.T) {
         read, skip, drift := calculate_framerate(10, 7.2, &frame_counter_real)
         expected_counter_real := 0.8
         expected_drift := 0.2
-        testing.expect(t, math.abs(expected_drift - drift) < EPS, fmt.tprintf("expected %v, got %v", expected_drift, drift))
-        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPS, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
+        testing.expect(t, math.abs(expected_drift - drift) < EPSILON, fmt.tprintf("expected %v, got %v", expected_drift, drift))
+        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPSILON, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
         testing.expect_value(t, skip, 0)
         testing.expect_value(t, read, 7)
     }
@@ -294,8 +299,8 @@ test_calculate_framerate :: proc(t: ^testing.T) {
         read, skip, drift := calculate_framerate(40, 35.8, &frame_counter_real)
         expected_counter_real := 0.6
         expected_drift := 0.4
-        testing.expect(t, math.abs(expected_drift - drift) < EPS, fmt.tprintf("expected %v, got %v", expected_drift, drift))
-        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPS, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
+        testing.expect(t, math.abs(expected_drift - drift) < EPSILON, fmt.tprintf("expected %v, got %v", expected_drift, drift))
+        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPSILON, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
         testing.expect_value(t, skip, 0)
         testing.expect_value(t, read, 36)
     }
@@ -306,8 +311,8 @@ test_calculate_framerate :: proc(t: ^testing.T) {
         read, skip, drift := calculate_framerate(5733, 267.57468124635199, &frame_counter_real)
         expected_counter_real := 0.0683061733916
         expected_drift := 1.0 - expected_counter_real
-        testing.expect(t, math.abs(expected_drift - drift) < EPS, fmt.tprintf("expected %v, got %v", expected_drift, drift))
-        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPS, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
+        testing.expect(t, math.abs(expected_drift - drift) < EPSILON, fmt.tprintf("expected %v, got %v", expected_drift, drift))
+        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPSILON, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
         testing.expect_value(t, skip, 5352)
         testing.expect_value(t, read, 268)
     }
@@ -318,8 +323,8 @@ test_calculate_framerate :: proc(t: ^testing.T) {
         read, skip, drift := calculate_framerate(646, 267.57468124635199, &frame_counter_real)
         expected_counter_real := 0.08834333047957
         expected_drift := 1.0 - expected_counter_real
-        testing.expect(t, math.abs(expected_drift - drift) < EPS, fmt.tprintf("expected %v, got %v", expected_drift, drift))
-        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPS, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
+        testing.expect(t, math.abs(expected_drift - drift) < EPSILON, fmt.tprintf("expected %v, got %v", expected_drift, drift))
+        testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPSILON, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
         testing.expect_value(t, skip, 268)
         testing.expect_value(t, read, 268)
     }
