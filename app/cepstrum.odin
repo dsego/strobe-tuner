@@ -109,7 +109,7 @@ ceps_pitch_detect :: proc(using config: ^CepsConfig, samples: []f32) -> (f32, f3
     // interpolate peak to get a more precise result
     peak_location: f32 = 0
     if lag > 0 {
-        peak_location = parabolic(
+        peak_location, _ = parabolic(
             cepstrum[lag-1],
             cepstrum[lag],
             cepstrum[lag+1]

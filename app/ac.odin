@@ -9,6 +9,8 @@ import "../pffft"
 //  Pitch detection based on auto correlation
 // ------------------------------------------------------------------------------------------------
 
+Vec2 :: [2]f32
+
 AcConfig :: struct {
     pffft_setup: rawptr,
     fft_size: int,
@@ -18,7 +20,8 @@ AcConfig :: struct {
     samplerate: int,
     padded_samples: []f32,
     autocorr_peaks: [dynamic]int,
-    nsdf_peaks: [dynamic]int,
+    nsdf_peaks: [dynamic]Vec2,
+    chosen_peak_idx: int,
 }
 
 ac_init :: proc (fft_size: int, samplerate: int) -> (config: AcConfig = {}) {
@@ -45,26 +48,22 @@ ac_destroy :: proc (config: ^AcConfig) {
 
 
 // Detect pitch via auto-correlation
-ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, f32) {
+ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> f32 {
     ac_process_samples(config, samples)
+
+    // ac_find_autocorr_peaks(config)
+
     ac_nsdf(config, samples)
-    lag := ac_find_nsdf_peak(config)
+    peak, ok := ac_find_nsdf_peak(config).?
 
-    estimated_freq:f32 = 0.0
-    normalized_val:f32 = 0.0
+    estimated_freq: f32 = 0.0
+    normalized_val: f32 = 0.0
 
-    p1 := f32(lag) + parabolic(
-        nsdf[lag-1],
-        nsdf[lag],
-        nsdf[lag+1]
-    )
+    if ok {
+        estimated_freq =  f32(samplerate) / peak.x
+    }
 
-    if p1 > 0.0 do estimated_freq = f32(samplerate) / p1
-
-    // The normalized value can provide a confidence level?
-    normalized_val = nsdf[lag] / nsdf[0]
-
-    return estimated_freq, normalized_val
+    return estimated_freq
 }
 
 // Generate the auto-correlation
@@ -140,37 +139,69 @@ ac_find_autocorr_peaks :: proc (using config: ^AcConfig) {
 }
 
 
-// TODO: need a different strategy to find peak
-// find all max peaks between two zero crossings
-// use interpolation before deciding on peak
-ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> int {
-    lag := 0
-    peak_idx := 0
-    i := 1
-
-    // throw away the negative lags
-    n := len(nsdf) / 2
-
+ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Maybe(Vec2)  {
     // clear out peaks from the previous run
     clear(&nsdf_peaks)
 
-    // go down the slope to find the min value
-    for i < n && nsdf[i+1] < nsdf[i] do i += 1
+    found := false
 
-    lag = i
+    // throw away the negative lags and ignore the right most area that's glitching
+    n := len(nsdf) / 2 - 100
 
-    // search for the first max peak
-    for i < n - 200 {
-        // peak
-        if nsdf[i+1] < nsdf[i] {
-            // compare to previous peak
-            if nsdf[lag] < 0.95 * nsdf[i] do lag = i + 1
+    max_peak := Vec2{0.0, 0.0}
+
+    // enumerate all the candidate peaks
+    i := 1
+    for i < n {
+
+        // go down the first slope
+        for i < n && nsdf[i] > 0.0 do i += 1
+
+        // skip all negative values
+        for i < n && nsdf[i] <= 0.0 do i += 1
+
+        lag := i
+        min := lag
+
+        // search for a local max peak in the positive area
+        for i < n && nsdf[i] > 0.0 {
+            if nsdf[i] > nsdf[lag] {
+                lag = i
+            }
+            i += 1
         }
+
+        if lag > min {
+            peak_location, magnitude := parabolic(
+                nsdf[lag-1],
+                nsdf[lag],
+                nsdf[lag+1]
+            )
+            improved_lag := f32(lag) + peak_location
+            append(&nsdf_peaks, Vec2{improved_lag, magnitude})
+
+            if magnitude >= max_peak.y {
+                max_peak = Vec2{improved_lag, magnitude}
+            }
+        }
+
+
         i += 1
     }
 
-    return lag
+    THRESHOLD: f32 = 0.8
+    chosen_peak: Maybe(Vec2) = nil
 
+    // take the first key maximum above this threshold
+    for p, idx in nsdf_peaks {
+        if p.y >= THRESHOLD * max_peak.y {
+            chosen_peak = p
+            chosen_peak_idx = idx
+            break
+        }
+    }
+
+    return chosen_peak
 }
 
 // Normalized Square Difference Function (through autocorrelation)
@@ -179,11 +210,10 @@ ac_nsdf :: proc (using config: ^AcConfig, samples: []f32) {
     n := len(samples)
     copy(nsdf, autocorr[:n])
 
-    k := n
     // left-hand summation for zero lag
     lhsum := 2.0 * nsdf[0] / f32(len(nsdf))
 
-    for i in 0..<k {
+    for i in 0..<n {
         if lhsum > 0.0 {
             nsdf[i] *= 2.0 / lhsum
         } else {

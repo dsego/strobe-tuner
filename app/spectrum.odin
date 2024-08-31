@@ -70,7 +70,7 @@ spectrum_pitch_detect :: proc(using config: ^SpectrumConfig, samples: []f32) -> 
     // Parabolic interpolation to determine a more accurate pitch
     peak_location: f32 = 0
     if bin > 0 {
-        peak_location = parabolic(
+        peak_location, _ = parabolic(
             math.ln(spectrum[bin-1]),
             math.ln(spectrum[bin]),
             math.ln(spectrum[bin+1]),

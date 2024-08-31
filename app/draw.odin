@@ -94,6 +94,7 @@ draw_autocorrelation :: proc(
 draw_nsdf :: proc(
     rect: rl.Rectangle,
     ac: ^AcConfig,
+    peak: Vec2,
 ) {
     points: [FFT_SIZE]rl.Vector2 = {}
 
@@ -117,24 +118,30 @@ draw_nsdf :: proc(
     rl.DrawLineStrip(raw_data(points[:]), i32(len), rl.GOLD)
 
     // Mark peak positions with a cross
-    for peak in ac.nsdf_peaks {
-        val := ac.nsdf[peak] / ac.nsdf[0]
-        rel_lag := f32(peak) - f32(start)
+    for peak, i in ac.nsdf_peaks {
+        val := peak.y / ac.nsdf[0]
+        rel_lag := f32(peak.x) - f32(start)
 
         cx := rect.x + rel_lag * f32(rect.width) / f32(len - 1)
         cy := rect.y + (rect.height/2.0) - val * (rect.height / 2.0)
 
+        /*
         // Horizontal ruler
         rl.DrawLineEx({rect.x, cy}, {cx, cy}, 0.5, rl.GRAY)
         rl.DrawTextEx(font, fmt.ctprintf("%.1f", val), {rect.x, cy}, 16, 0, rl.GRAY)
 
         // Vertical ruler
         rl.DrawLineEx({cx, cy}, {cx, rect.y+rect.height}, 0.5, rl.GRAY)
-        rl.DrawTextEx(font, fmt.ctprintf("%.1f", f32(peak)), {cx, rect.y+rect.height-16}, 16, 0, rl.GRAY)
+        rl.DrawTextEx(font, fmt.ctprintf("%.1f", f32(peak.x)), {cx, rect.y+rect.height-16}, 16, 0, rl.GRAY)
+        */
 
         // X marker - cross
-        rl.DrawLineEx({cx-7.0, cy}, {cx+7.0, cy}, 2.0, rl.PINK)
-        rl.DrawLineEx({cx, cy-7.0}, {cx, cy+7.0}, 2.0, rl.PINK)
+        color := rl.GRAY
+        if ac.chosen_peak_idx == i {
+            color = rl.PINK
+        }
+        rl.DrawLineEx({cx-7.0, cy}, {cx+7.0, cy}, 2.0, color)
+        rl.DrawLineEx({cx, cy-7.0}, {cx, cy+7.0}, 2.0, color)
     }
 }
 

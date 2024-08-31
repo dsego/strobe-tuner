@@ -61,7 +61,7 @@ draw_strobe_lines :: proc(
 
     x:f32 = f32(rect.x) + f32(rect.width) - drift_adj
 
-    factor := (rect.height/2.0 - 1.0) //* 10.0
+    factor := (rect.height/2.0 - 1.0) * 10.0
 
     // TODO: resample by linear interpolation to fit the pixels
     // e.g. from 300 samples produce a value for each of the 800 pixels

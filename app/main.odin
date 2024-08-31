@@ -34,7 +34,7 @@ main :: proc() {
     freqs_idx := 1
 
     target_freq := 0.0
-    freqs: []f64 = guitar_freqs
+    freqs: []f64 = ukulele_freqs
 
 
     target_interval := 0.0
@@ -86,6 +86,7 @@ main :: proc() {
     detected_freq: f32
     detected_note: Note
     clarity: f32
+    peak: Vec2
 
     // flatness: f32
 
@@ -131,7 +132,7 @@ main :: proc() {
             copy(samples[u32(len(samples))-new_count:], new_samples[:new_count])
 
             // TODO: filter out high frequencies before autocorrelation?
-            detected_freq, clarity = ac_pitch_detect(&ac, samples)
+            detected_freq = ac_pitch_detect(&ac, samples)
             detected_note = find_note(detected_freq)
 
             // Assume 1Hz error
@@ -169,7 +170,9 @@ main :: proc() {
                 rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", detected_freq), {20, 300}, 24, 0, rl.PURPLE)
             }
 
-            draw_nsdf(rl.Rectangle{160, 200, SCREEN_WIDTH-180, 200}, &ac)
+            draw_nsdf(rl.Rectangle{160, 200, SCREEN_WIDTH-180, 200}, &ac, peak)
+
+            // draw_autocorrelation(rl.Rectangle{160, 450, SCREEN_WIDTH-180, 200}, &ac)
 
             draw_note_meter(rl.Rectangle{160, 400, 400, 100}, &detected_note, detected_freq)
 
