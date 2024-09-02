@@ -146,7 +146,7 @@ ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Maybe(Vec2)  {
     found := false
 
     // throw away the negative lags and ignore the right most area that's glitching
-    n := len(nsdf) / 2 - 100
+    n := len(nsdf) / 2 - len(nsdf) / 16
 
     max_peak := Vec2{0.0, 0.0}
 
@@ -164,8 +164,8 @@ ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Maybe(Vec2)  {
         min := lag
 
         // search for a local max peak in the positive area
-        for i < n && nsdf[i] > 0.0 {
-            if nsdf[i] > nsdf[lag] {
+        for i < n - 1 && nsdf[i] > 0.0 {
+            if nsdf[i] > nsdf[lag] && nsdf[i] > nsdf[i+1] {
                 lag = i
             }
             i += 1
