@@ -10,6 +10,7 @@ StrobeDisplay :: struct {
     pattern_image: rl.Image,
     pattern_texture: rl.Texture2D,
     points: [STROBE_SAMPLE_SIZE]rl.Vector2,
+    framerate_state: FramerateState,
 }
 
 
@@ -19,6 +20,7 @@ strobe_displays: [STROBE_COUNT]StrobeDisplay
 init_strobe_display :: proc () {
     for i in 0..<STROBE_COUNT {
         strobe_displays[i].pattern_image = rl.GenImageColor(1024, 1, {100, 0, 0, 255})
+        strobe_displays[i].framerate_state = init_framerate()
     }
 }
 
@@ -32,7 +34,8 @@ destroy_strobe_display :: proc () {
 draw_strobe_display :: proc(target_interval: f64, show_pattern: bool = false) {
     for i in 0..<STROBE_COUNT {
         rect := rl.Rectangle{160, f32(50 + 110 * i), 800, 100}
-        frame_count, drift := read_samples(
+        frame_count, drift := read_framerate_samples(
+            &strobe_displays[i].framerate_state,
             rb_ptr=&strobe_ringbuffers[i],
             samples=strobe_displays[i].samples[:],
             target_interval=target_interval,
@@ -45,6 +48,15 @@ draw_strobe_display :: proc(target_interval: f64, show_pattern: bool = false) {
     }
 }
 
+reset_strobes :: proc() {
+    for i in 0..<STROBE_COUNT {
+        reset_framerate(&strobe_displays[i].framerate_state)
+    }
+}
+
+
+phase: f32 = 0.0
+
 @(private)
 draw_strobe_lines :: proc(
     rect: rl.Rectangle,
@@ -55,6 +67,7 @@ draw_strobe_lines :: proc(
 ) {
     // fmt.println(target_interval, frame_count, drift)
     rl.DrawRectangleLinesEx({rect.x-1, rect.y-1, rect.width+2, rect.height+2}, 1.0, rl.GRAY)
+    rl.DrawLineEx({rect.x, rect.y + rect.height/2.0}, {rect.x+rect.width, rect.y + rect.height/2.0}, 1.0, rl.GRAY)
 
     resolution := rect.width / f32(target_interval-1.0)
     drift_adj := f32(drift) * resolution
@@ -73,7 +86,36 @@ draw_strobe_lines :: proc(
         x -= resolution
     }
 
+
+    // target_interval = 2.0 * f64(SAMPLERATE) / target_freq
+
     rl.DrawLineStrip(raw_data(strobe_display.points[:]), i32(frame_count), rl.PINK)
+
+
+
+    dft := run_dft(110.0, strobe_display.samples[:], SAMPLERATE)
+
+    sin := real(dft)
+    cos := imag(dft)
+    phase = -math.atan2(sin, cos)
+
+    // if phase > 2.0 * math.PI do phase /= 2.0 * math.PI
+
+    // UNWRAP PHASE??
+
+
+    // fmt.println(math.sin(phase), math.cos(phase))
+    // pos :=
+
+    // if sin < 0.0 do sin += math.PI
+    // if cos < 0.0 do cos += math.PI
+
+    rl.DrawCircleLines(500, 600, 80, rl.GRAY)
+    rl.DrawCircleV(rl.Vector2{500.0 - 80.0 * math.cos(phase), 600.0 - 80.0 * math.sin(phase)}, 6.0, rl.PINK)
+    rl.DrawCircleV(rl.Vector2{500.0 - 80.0 * math.cos(phase+math.PI), 600.0 - 80.0 * math.sin(phase+math.PI)}, 6.0, rl.PINK)
+
+    // TODO - sum can be negative & positive
+    // rl.DrawRectangleV({200, 690}, {20.0 * sum, 5.0}, rl.GOLD)
 }
 
 @(private)

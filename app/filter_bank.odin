@@ -26,13 +26,13 @@ run_filters :: proc (dft_freqs: []f32, samples: []f32, samplerate: f32) {
     }
 
     for f_hz, i in dft_freqs {
-        piano_key_spectrum[i] = magnitude(dft(f_hz, windowed_samples[:], samplerate))
+        piano_key_spectrum[i] = magnitude(run_dft(f_hz, windowed_samples[:], samplerate))
     }
 }
 
 
 // A brute force implementation that executes the Fourier formula directly
-dft :: proc(freq_hz: f32, samples: []f32, samplerate: f32) -> (dft: complex64) {
+run_dft :: proc(freq_hz: f32, samples: []f32, samplerate: f32) -> (dft: complex64) {
     freq_bin := freq_hz * f32(len(samples)) / samplerate
     phase_angle:f32 = 2.0 * math.PI / f32(len(samples))
 

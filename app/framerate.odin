@@ -9,24 +9,25 @@ import pa_rb "../pa_ringbuffer"
 EPSILON :: 0.000001
 
 
-// TODO: make this a state object {
-
-// FIXME
-// FIXME
-// FIXME
-frame_counter_real := 0.0
-overlap_sample :f32 = 0.0
-// }
+FramerateState :: struct {
+    frame_counter_real: f64,
+    overlap_sample: f32,
+}
 
 
+init_framerate :: proc () -> FramerateState {
+    return FramerateState{}
+}
 
-reset_framerate :: proc() {
+
+reset_framerate :: proc(using state: ^FramerateState) {
     frame_counter_real = 0.0
     overlap_sample = 0.0
 }
 
 
-read_samples :: proc(
+read_framerate_samples :: proc(
+    using state: ^FramerateState,
     rb_ptr: ^pa_rb.RingBuffer,
     samples: []f32,
     target_interval: f64

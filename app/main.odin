@@ -34,7 +34,7 @@ main :: proc() {
     freqs_idx := 1
 
     target_freq := 0.0
-    freqs: []f64 = ukulele_freqs
+    freqs: []f64 = guitar_freqs
 
 
     target_interval := 0.0
@@ -115,7 +115,7 @@ main :: proc() {
         if freq_changed {
             freqs_idx %= len(freqs)
             if freqs_idx < 0 do freqs_idx += len(freqs) // wrap around
-            reset_framerate()
+            reset_strobes()
         }
 
         // Pitch detection, use the first ringbuffer
@@ -131,7 +131,6 @@ main :: proc() {
             // copy over new samples into the freed space
             copy(samples[u32(len(samples))-new_count:], new_samples[:new_count])
 
-            // TODO: filter out high frequencies before autocorrelation?
             detected_freq = ac_pitch_detect(&ac, samples)
             detected_note = find_note(detected_freq)
 
@@ -143,7 +142,8 @@ main :: proc() {
         note := find_note(f32(target_freq))
 
         // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
-        target_interval = 2.0 * f64(SAMPLERATE) / target_freq
+        // target_interval = 2.0 * f64(SAMPLERATE) / target_freq
+        target_interval =  f64(SAMPLERATE) / target_freq / 2.0
 
         // TODO: change to something meaningful ->
         // target_interval = min(max(target_interval, 1), 4096)
