@@ -142,8 +142,7 @@ main :: proc() {
         note := find_note(f32(target_freq))
 
         // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
-        // target_interval = 2.0 * f64(SAMPLERATE) / target_freq
-        target_interval =  f64(SAMPLERATE) / target_freq / 2.0
+        target_interval = 2.0 * f64(SAMPLERATE) / target_freq
 
         // TODO: change to something meaningful ->
         // target_interval = min(max(target_interval, 1), 4096)

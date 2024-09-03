@@ -6,25 +6,6 @@ pomice se 55/44100 po semplu
 sta s ovom informacijom?
 
 
-
-
--------
--------
--------
--------
-
-
-bolja ideja?
-
-
-suma svih semplova unutar strobe prozora
-
-
-umjesto bara (rect) nacrtaj kao tocku koja kruzi?
-
-min suma je 0, max suma je broj semplova? npr. za 110hz 801.8182
-
-
 ---------
 ---------
 ---------

@@ -43,7 +43,7 @@ draw_strobe_display :: proc(target_interval: f64, show_pattern: bool = false) {
         draw_strobe_lines(rect, &strobe_displays[i], target_interval, frame_count, drift)
 
         if show_pattern {
-            // _draw_strobe_pattern(rect, &strobe_displays[i], target_interval, frame)
+            // draw_strobe_pattern(rect, &strobe_displays[i], target_interval, frame)
         }
     }
 }
@@ -54,8 +54,6 @@ reset_strobes :: proc() {
     }
 }
 
-
-phase: f32 = 0.0
 
 @(private)
 draw_strobe_lines :: proc(
@@ -90,36 +88,10 @@ draw_strobe_lines :: proc(
     // target_interval = 2.0 * f64(SAMPLERATE) / target_freq
 
     rl.DrawLineStrip(raw_data(strobe_display.points[:]), i32(frame_count), rl.PINK)
-
-
-
-    dft := run_dft(110.0, strobe_display.samples[:], SAMPLERATE)
-
-    sin := real(dft)
-    cos := imag(dft)
-    phase = -math.atan2(sin, cos)
-
-    // if phase > 2.0 * math.PI do phase /= 2.0 * math.PI
-
-    // UNWRAP PHASE??
-
-
-    // fmt.println(math.sin(phase), math.cos(phase))
-    // pos :=
-
-    // if sin < 0.0 do sin += math.PI
-    // if cos < 0.0 do cos += math.PI
-
-    rl.DrawCircleLines(500, 600, 80, rl.GRAY)
-    rl.DrawCircleV(rl.Vector2{500.0 - 80.0 * math.cos(phase), 600.0 - 80.0 * math.sin(phase)}, 6.0, rl.PINK)
-    rl.DrawCircleV(rl.Vector2{500.0 - 80.0 * math.cos(phase+math.PI), 600.0 - 80.0 * math.sin(phase+math.PI)}, 6.0, rl.PINK)
-
-    // TODO - sum can be negative & positive
-    // rl.DrawRectangleV({200, 690}, {20.0 * sum, 5.0}, rl.GOLD)
 }
 
 @(private)
-_draw_strobe_pattern :: proc() {
+draw_strobe_pattern :: proc() {
 
     // max := find_abs_max(strobe_samples[:frame_count])
     // factor := 1.0 / max
