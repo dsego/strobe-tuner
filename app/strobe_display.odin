@@ -31,7 +31,7 @@ destroy_strobe_display :: proc () {
 }
 
 
-draw_strobe_display :: proc(target_interval: f64, show_pattern: bool = false) {
+draw_strobe_display :: proc(target_freq: f64, target_interval: f64, show_pattern: bool = false) {
     for i in 0..<STROBE_COUNT {
         rect := rl.Rectangle{160, f32(50 + 110 * i), 800, 100}
         frame_count, drift := read_framerate_samples(
@@ -40,6 +40,10 @@ draw_strobe_display :: proc(target_interval: f64, show_pattern: bool = false) {
             samples=strobe_displays[i].samples[:],
             target_interval=target_interval,
         )
+
+
+        experiment(rect, &strobe_displays[i], target_interval, frame_count, drift, target_freq)
+
         draw_strobe_lines(rect, &strobe_displays[i], target_interval, frame_count, drift)
 
         if show_pattern {
@@ -116,6 +120,61 @@ draw_strobe_pattern :: proc() {
     //     rotation=0,
     //     tint=rl.WHITE,
     // )
+}
+
+
+experiment :: proc(
+    rect: rl.Rectangle,
+    using strobe_display: ^StrobeDisplay,
+    target_interval: f64,
+    frame_count: u32,
+    drift: f64,
+    target_freq: f64,
+) {
+
+    buffers: [401][1024]f32
+
+    period := f32(SAMPLERATE / target_freq)
+    half_period := period / 2.0
+
+    flip := false
+    next_edge := half_period
+
+    // for shift in 0..<len(buffers) {
+    //     next_edge = half_period - f32(shift)
+
+    //     // draw one black-white stripe pattern
+    //     for i in 0..<frame_count {
+    //         buffers[shift][i] = flip ? 1.0 : 0.0
+    //         if f32(i) > next_edge {
+    //             flip = !flip
+    //             next_edge += half_period
+    //         }
+    //     }
+    // }
+
+    // for i in 0..<frame_count {
+    //     for shift in 1..<len(buffers) {
+    //         buffers[0][i] += buffers[shift][i] * strobe_display.samples[i]
+    //     }
+    // }
+
+    dx := rect.width / f32(target_interval)
+    pos := rect.x + rect.width
+    for i in 0..<frame_count {
+        // convert from range 0.0 - 1.0 to range 0 - 255
+        // val := u8(strobe_display.samples[i][0][i] * 255)
+
+        // convert from range -1.0 - 1.0 to range 0 - 255
+        val := 0.5 + 0.5 * strobe_display.samples[i] * 100.0
+        val = math.min(math.max(val, 0.0), 1.0)
+        byte_val := u8(val * 255)
+        rl.DrawLineEx({pos, rect.y}, {pos, rect.y + 10}, dx, rl.Color{255, 255, 255, u8(byte_val)})
+
+        // val = u8(buffers[400][i] * 255)
+        // rl.DrawLineEx({pos, rect.y + 10}, {pos, rect.y + 20}, dx, rl.Color{255, 255, 255, u8(val)})
+        pos -= dx
+    }
 }
 
 

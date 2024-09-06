@@ -33,7 +33,7 @@ main :: proc() {
 
     freqs_idx := 1
 
-    target_freq := 0.0
+    target_freq := 110.0
     freqs: []f64 = guitar_freqs
 
 
@@ -154,7 +154,7 @@ main :: proc() {
 
             rl.DrawFPS(700, 20)
 
-            draw_strobe_display(target_interval, show_pattern)
+            draw_strobe_display(target_freq, target_interval, show_pattern)
             draw_note(&note, {20, 20}, 64)
 
 
