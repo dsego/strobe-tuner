@@ -1,4 +1,13 @@
 
+
+
+
+low pass filter for strobe instead of reson
+
+
+
+
+
 ideja
 za svaki sample unutar sekunde 44100 semplova, koliko se strobe pattern pomakao?
 npr. 220Hh - 4 trakice  - 55 puta puni krug
@@ -95,10 +104,6 @@ minimalistic flat ui inspired by ableton
 
 add zeros to filter out harmonics? - copy resonator
 
-
-need to figure out how to work the framerate with the interleaved data
-
-
 resample strobe in strobe display
 
 
@@ -119,23 +124,6 @@ show tone indication, the notes move left & right, the marker is static
           V
 --|---|---|---|---|--
   C2  C#2 D2 D#2  E2
-
-
-
-bit stream auto correlation?
-
-
-
-------
-
-- min & max freq that can be detected (based on fft size and max lag)
-- hide note below signal threshold, based on rms? vu-meter, envelope
-- last note sticks?
-
-
-
-
-
 
 
 -----

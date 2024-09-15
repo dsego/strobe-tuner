@@ -34,7 +34,7 @@ main :: proc() {
     freqs_idx := 1
 
     target_freq := 110.0
-    freqs: []f64 = guitar_freqs
+    freqs: []f64 = ukulele_freqs
 
 
     target_interval := 0.0
@@ -50,7 +50,7 @@ main :: proc() {
     // target_freq = 391.9954 // G
 
 
-    init_strobes(target_freq / SAMPLERATE)
+    set_strobes(target_freq)
 
     smooth_conf := init_smoothing(30)
 
@@ -115,8 +115,17 @@ main :: proc() {
         if freq_changed {
             freqs_idx %= len(freqs)
             if freqs_idx < 0 do freqs_idx += len(freqs) // wrap around
-            reset_strobes()
+
+            reset_strobe_display()
+            target_freq = freqs[freqs_idx]
+
+            set_strobes(target_freq)
+
+            // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
+            target_interval = 2.0 * f64(SAMPLERATE) / target_freq
+
         }
+        note := find_note(f32(target_freq))
 
         // Pitch detection, use the first ringbuffer
         // TODO: run in a loop until all samples in ringbuffer are exhausted???
@@ -138,14 +147,6 @@ main :: proc() {
             // freq_estimate, freq_estimate_error = kalman_filter(detected_freq_ac, freq_estimate, freq_estimate_error, 0.3)
         }
 
-        target_freq = freqs[freqs_idx]
-        note := find_note(f32(target_freq))
-
-        // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
-        target_interval = 2.0 * f64(SAMPLERATE) / target_freq
-
-        // TODO: change to something meaningful ->
-        // target_interval = min(max(target_interval, 1), 4096)
 
         rl.BeginDrawing()
         defer rl.EndDrawing()

@@ -1,6 +1,7 @@
 package app
 
 import "core:math"
+import "core:fmt"
 
 Strobe :: struct {
     size: int,
@@ -11,22 +12,28 @@ Strobe :: struct {
 
 strobes: [STROBE_COUNT] Strobe
 
-init_strobes :: proc (normalized_freq: f64) {
-    freq := normalized_freq
+set_strobes :: proc (base_freq_hz: f64) {
+    freq_hz := base_freq_hz
 
     for i in 0..<STROBE_COUNT {
-        bandwidth := 0.5 * freq
         strobes[i] = Strobe {}
-        strobes[i].biquad = biquad_resonator(freq, bandwidth)
+        cents := freq_to_cents(f32(freq_hz))
+        bandwidth_hz := cents_to_freq(f32(cents) + 50) - cents_to_freq(f32(cents) - 50)
+
+        norm_freq := freq_hz / SAMPLERATE
+        norm_bandwidth := bandwidth_hz / SAMPLERATE
+
+        fmt.println(bandwidth_hz, freq_hz)
+        strobes[i].biquad = biquad_resonator(norm_freq, f64(norm_bandwidth))
         // strobes[i].smooth = init_smoothing(2048)
         // strobes[i].samples = make([]f32, size)
-        freq *= 2.0
+        freq_hz *= 2.0
     }
 }
 
 // TODO: optimize to not run per sample?
 run_strobe :: proc (strobe: ^Strobe, sample: f32) -> f32 {
-    // return sample //* 10.0
+    // return sample * 1.0
 
     // rolling square average
     // squared := sample * sample
@@ -40,7 +47,7 @@ run_strobe :: proc (strobe: ^Strobe, sample: f32) -> f32 {
     // gain := f32(1.0)
     // agc_sample := sample * gain
 
-    return biquad_process_sample(&strobe.biquad, sample)
+    return 100.0 * biquad_process_sample(&strobe.biquad, sample)
 }
 
 destroy_strobes :: proc() {
