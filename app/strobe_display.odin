@@ -123,6 +123,8 @@ draw_strobe_pattern :: proc() {
 }
 
 
+prev_phase:f32 = 0.0
+
 experiment :: proc(
     rect: rl.Rectangle,
     using strobe_display: ^StrobeDisplay,
@@ -160,8 +162,56 @@ experiment :: proc(
     //     }
     // }
 
+    // draw strobe pattern by calculating DFT phase
+    dft := run_dft(f32(target_freq), strobe_display.samples[:], SAMPLERATE)
+    sin := real(dft)
+    cos := imag(dft)
+
+    //  how to account for the small drift here
+    phase := -math.atan2(sin, cos)
 
 
+    phase_diff := phase - prev_phase
+    prev_phase = phase
+
+
+    // fmt.println(phase, magnitude(dft))
+
+    rl.DrawCircleLines(700, 600, 80, rl.GRAY)
+    rl.DrawCircleV(rl.Vector2{700.0 - 80.0 * math.cos(phase), 600.0 - 80.0 * math.sin(phase)}, 6.0, rl.PINK)
+    rl.DrawCircleV(rl.Vector2{700.0 - 80.0 * math.cos(phase+math.PI), 600.0 - 80.0 * math.sin(phase+math.PI)}, 6.0, rl.PINK)
+
+
+    // try drawing phase diff as needle -----------------
+
+    // r := rl.Rectangle{160, 600, 400, 100}
+
+    // // "needle"
+    // needle_width: f32 = 4.0
+    // needle_height: f32 = 16.0
+
+    // // horizontal line, ie "rail"
+    // rail_y := r.y + r.height - needle_height/2
+    // rl.DrawRectangleV({r.x, rail_y - 2.0}, {r.width, 4.0}, rl.GRAY)
+
+    // // vertical notches
+    // rl.DrawRectangleV({r.x + r.width/2.0 - 0.5, rail_y - 8.0}, {1.0, 16.0}, rl.GRAY)
+    // rl.DrawRectangleV({r.x, rail_y - 8.0}, {1.0, 16.0}, rl.GRAY)
+    // rl.DrawRectangleV({r.x + r.width - 0.5, rail_y - 8.0}, {1.0, 16.0}, rl.GRAY)
+
+
+    // // draw needle
+    // rl.DrawRectangleV(
+    //     {r.x + r.width/2.0 + r.width * phase_diff / math.PI - needle_width/2.0, r.y + rect.height - needle_height},
+    //     {needle_width, needle_height},
+    //     rl.LIGHTGRAY
+    // )
+
+
+
+    // ============
+
+    // draw strobe pattern directly from samples
 
     dx := rect.width / f32(target_interval - 1.0)
     drift_adj := f32(drift) * dx

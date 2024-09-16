@@ -1,24 +1,21 @@
 
 
+for phase driven strobe -> generate pattern, move by phase
 
 
-low pass filter for strobe instead of reson
+DFT -> draw magnitude bar -> determine if I can use to blur/fade the strobe pattern
 
 
 
+try 2 DFTs one for base, one for 2x freq - compare that fender ukulele, see if patterns move independently
+
+->>>> the 2 DFTs should be pre-filtered or not?
 
 
-ideja
-za svaki sample unutar sekunde 44100 semplova, koliko se strobe pattern pomakao?
-npr. 220Hh - 4 trakice  - 55 puta puni krug
-pomice se 55/44100 po semplu
-sta s ovom informacijom?
+
+reson - how to improve bass note filtering to remove harmonic?
 
 
----------
----------
----------
----------
 ---------
 
 

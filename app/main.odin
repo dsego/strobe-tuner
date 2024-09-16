@@ -33,8 +33,8 @@ main :: proc() {
 
     freqs_idx := 1
 
-    target_freq := 110.0
-    freqs: []f64 = ukulele_freqs
+    target_freq := 55.0
+    freqs: []f64 = guitar_freqs
 
 
     target_interval := 0.0
@@ -52,7 +52,7 @@ main :: proc() {
 
     set_strobes(target_freq)
 
-    smooth_conf := init_smoothing(30)
+    // smooth_conf := init_smoothing(30)
 
     ok := init_audio_capture(SAMPLERATE)
     if !ok do return
@@ -84,6 +84,7 @@ main :: proc() {
     show_pattern := false
 
     detected_freq: f32
+    detected_freq_mean: f32
     detected_note: Note
     clarity: f32
     peak: Vec2
@@ -123,6 +124,7 @@ main :: proc() {
 
             // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
             target_interval = 2.0 * f64(SAMPLERATE) / target_freq
+            // target_interval = 4.0 * f64(SAMPLERATE) / target_freq
 
         }
         note := find_note(f32(target_freq))
@@ -141,10 +143,12 @@ main :: proc() {
             copy(samples[u32(len(samples))-new_count:], new_samples[:new_count])
 
             detected_freq = ac_pitch_detect(&ac, samples)
-            detected_note = find_note(detected_freq)
+            if detected_freq >= MIN_FREQ  && detected_freq <= MAX_FREQ {
+                detected_freq_mean = ewma_filter(detected_freq, 0.4, detected_freq_mean)
+                detected_note = find_note(detected_freq)
+                // fmt.println(detected_freq, detected_freq_mean)
+            }
 
-            // Assume 1Hz error
-            // freq_estimate, freq_estimate_error = kalman_filter(detected_freq_ac, freq_estimate, freq_estimate_error, 0.3)
         }
 
 
@@ -175,6 +179,7 @@ main :: proc() {
             // draw_autocorrelation(rl.Rectangle{160, 450, SCREEN_WIDTH-180, 200}, &ac)
 
             draw_note_meter(rl.Rectangle{160, 400, 400, 100}, &detected_note, detected_freq)
+            draw_note_meter(rl.Rectangle{160, 500, 400, 100}, &detected_note, detected_freq_mean)
 
             // rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {20, 620}, 24, 0, rl.PINK)
             // rl.DrawRectangleV({20, 650}, {100 * flatness, 4.0}, rl.PINK)

@@ -33,7 +33,7 @@ set_strobes :: proc (base_freq_hz: f64) {
 
 // TODO: optimize to not run per sample?
 run_strobe :: proc (strobe: ^Strobe, sample: f32) -> f32 {
-    // return sample * 1.0
+    // return sample * 100.0
 
     // rolling square average
     // squared := sample * sample

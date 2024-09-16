@@ -67,3 +67,14 @@ magnitude :: proc (cpx: complex64) -> f32 {
 square :: proc (cpx: complex64) -> f32 {
     return real(cpx) * real(cpx) + imag(cpx) * imag(cpx)
 }
+
+
+
+// Exponentially Weighted Moving Average (https://github.com/jonnieZG/EWMA)
+// Parameters:
+//   alpha - smoothing factor in 0..1
+//   prev_output
+ewma_filter :: proc (input: f32, alpha: f32, prev_output: f32) -> (output: f32) {
+    output = (alpha * input + (1.0 - alpha) * prev_output)
+    return
+}
