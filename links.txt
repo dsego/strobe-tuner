@@ -121,6 +121,8 @@ Smoothing
 https://towardsdatascience.com/the-perfect-way-to-smooth-your-noisy-data-4f3fe6b44440
 https://medium.com/@prashunjaveri/sensor-data-outlier-detection-for-software-defined-vehicles-and-robots-part-1-aff7423c761e
 https://medium.com/@prashunjaveri/sensor-data-outlier-detection-and-smoothing-for-software-defined-vehicles-and-robots-isolation-f-da3ce8e8c28
+https://github.com/SableRaf/signalfilter/blob/master/src/OneEuroFilter.java
+https://github.com/jonnieZG/EWMA/blob/master/Ewma.cpp
 
 
 Kalman filter

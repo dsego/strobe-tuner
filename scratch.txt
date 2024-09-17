@@ -1,5 +1,10 @@
 
 
+
+how to smooth freq meter? ewma + logic to reset initial state (ignore zero freqs) and remove outliers
+
+
+
 for phase driven strobe -> generate pattern, move by phase
 
 

@@ -52,7 +52,6 @@ main :: proc() {
 
     set_strobes(target_freq)
 
-    // smooth_conf := init_smoothing(30)
 
     ok := init_audio_capture(SAMPLERATE)
     if !ok do return
@@ -94,14 +93,17 @@ main :: proc() {
     // freq_estimate: f32 = 260.0
     // freq_estimate_error:f32 = 0.5
 
+    // set initial frequency
+    freq_changed := true
+
+    smooth := init_smoothing(15)
+
     for !rl.WindowShouldClose() {
 
         // Toggle between scope view and strobe view
         if rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
             show_pattern = !show_pattern
         }
-
-        freq_changed := false
 
         // Pick next or previous ukulele string
         if rl.IsKeyPressed(rl.KeyboardKey.RIGHT) {
@@ -126,6 +128,7 @@ main :: proc() {
             target_interval = 2.0 * f64(SAMPLERATE) / target_freq
             // target_interval = 4.0 * f64(SAMPLERATE) / target_freq
 
+            freq_changed = false
         }
         note := find_note(f32(target_freq))
 
@@ -144,7 +147,8 @@ main :: proc() {
 
             detected_freq = ac_pitch_detect(&ac, samples)
             if detected_freq >= MIN_FREQ  && detected_freq <= MAX_FREQ {
-                detected_freq_mean = ewma_filter(detected_freq, 0.4, detected_freq_mean)
+                detected_freq_mean = ewma_filter(detected_freq, 0.2, detected_freq_mean)
+                // detected_freq_mean = run_smooth(&smooth, detected_freq)
                 detected_note = find_note(detected_freq)
                 // fmt.println(detected_freq, detected_freq_mean)
             }
@@ -179,7 +183,10 @@ main :: proc() {
             // draw_autocorrelation(rl.Rectangle{160, 450, SCREEN_WIDTH-180, 200}, &ac)
 
             draw_note_meter(rl.Rectangle{160, 400, 400, 100}, &detected_note, detected_freq)
+            rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", detected_freq), {100, 450}, 18, 0, rl.GREEN)
+
             draw_note_meter(rl.Rectangle{160, 500, 400, 100}, &detected_note, detected_freq_mean)
+            rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", detected_freq_mean), {100, 550}, 18, 0, rl.GREEN)
 
             // rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {20, 620}, 24, 0, rl.PINK)
             // rl.DrawRectangleV({20, 650}, {100 * flatness, 4.0}, rl.PINK)
