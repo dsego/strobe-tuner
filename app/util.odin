@@ -74,7 +74,23 @@ square :: proc (cpx: complex64) -> f32 {
 // Parameters:
 //   alpha - smoothing factor in 0..1
 //   prev_output
-ewma_filter :: proc (input: f32, alpha: f32, prev_output: f32) -> (output: f32) {
+ewma_filter :: proc (
+    input: f32,
+    alpha: f32,
+    prev_output: f32
+) -> (output: f32) {
     output = (alpha * input + (1.0 - alpha) * prev_output)
     return
+}
+
+
+find_abs_max :: proc (slice: []f32) -> f32 {
+    max: f32 = 0.0
+    for i in 0..<len(slice) {
+        abs_val := abs(slice[i])
+        if abs_val > max {
+            max = abs_val
+        }
+    }
+    return max
 }

@@ -48,7 +48,7 @@ ac_destroy :: proc (config: ^AcConfig) {
 
 
 // Detect pitch via auto-correlation
-ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> f32 {
+ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, Vec2) {
     ac_process_samples(config, samples)
 
     // ac_find_autocorr_peaks(config)
@@ -63,7 +63,7 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> f32 {
         estimated_freq =  f32(samplerate) / peak.x
     }
 
-    return estimated_freq
+    return estimated_freq, peak
 }
 
 // Generate the auto-correlation

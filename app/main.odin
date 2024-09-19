@@ -49,22 +49,22 @@ main :: proc() {
     // target_freq = 261.6256 // C
     // target_freq = 391.9954 // G
 
+    // strobes: [dynamic]Strobe
+    // defer delete(strobes)
 
-    set_strobes(target_freq)
+    // s1 := init_strobe(target_freq, SAMPLERATE)
+    // s2 := init_strobe(target_freq * 2.0, SAMPLERATE)
+    // append(&strobes, s1)
+    // append(&strobes, s2)
 
 
-    ok := init_audio_capture(SAMPLERATE)
+    pitch_detector := init_pitch_detector()
+    defer destroy_pitch_detector(&pitch_detector)
+
+
+    ok, audio_capture := init_audio_capture(SAMPLERATE)
     if !ok do return
-    defer destroy_audio_capture()
-
-    ac := ac_init(FFT_SIZE, SAMPLERATE)
-    defer ac_destroy(&ac)
-
-    samples: []f32 = make([]f32, FFT_SIZE/2)
-    defer delete(samples)
-
-    new_samples: []f32 = make([]f32, FFT_SIZE/2)
-    defer delete(new_samples)
+    defer destroy_audio_capture(audio_capture)
 
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
@@ -76,17 +76,12 @@ main :: proc() {
     init_drawing_context()
     defer destroy_drawing_context()
 
-    init_strobe_display()
-    defer destroy_strobe_display()
-
+    // init_strobe_display()
+    // defer destroy_strobe_display()
+    register_audio_node(audio_capture, &pitch_detector)
+    start_audio_capture(audio_capture)
 
     show_pattern := false
-
-    detected_freq: f32
-    detected_freq_mean: f32
-    detected_note: Note
-    clarity: f32
-    peak: Vec2
 
     // flatness: f32
 
@@ -95,6 +90,7 @@ main :: proc() {
 
     // set initial frequency
     freq_changed := true
+    pitch_info := PitchInfo{}
 
     smooth := init_smoothing(15)
 
@@ -119,10 +115,10 @@ main :: proc() {
             freqs_idx %= len(freqs)
             if freqs_idx < 0 do freqs_idx += len(freqs) // wrap around
 
-            reset_strobe_display()
+            // reset_strobe_display()
             target_freq = freqs[freqs_idx]
 
-            set_strobes(target_freq)
+            // set_strobes(target_freq)
 
             // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
             target_interval = 2.0 * f64(SAMPLERATE) / target_freq
@@ -132,29 +128,7 @@ main :: proc() {
         }
         note := find_note(f32(target_freq))
 
-        // Pitch detection, use the first ringbuffer
-        // TODO: run in a loop until all samples in ringbuffer are exhausted???
-        // 44100 / 60fps = 735 samples, is 1000 a safe bet?
-        new_count := read_ringbuffer(&pitch_ringbuffer, new_samples, 1000)
-
-        if new_count > 0 {
-
-            // move old samples back to make room for new samples
-            copy(samples, samples[new_count:])
-
-            // copy over new samples into the freed space
-            copy(samples[u32(len(samples))-new_count:], new_samples[:new_count])
-
-            detected_freq = ac_pitch_detect(&ac, samples)
-            if detected_freq >= MIN_FREQ  && detected_freq <= MAX_FREQ {
-                detected_freq_mean = ewma_filter(detected_freq, 0.2, detected_freq_mean)
-                // detected_freq_mean = run_smooth(&smooth, detected_freq)
-                detected_note = find_note(detected_freq)
-                // fmt.println(detected_freq, detected_freq_mean)
-            }
-
-        }
-
+        pitch_info = run_pitch_detection(&pitch_detector, pitch_info)
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -163,8 +137,8 @@ main :: proc() {
 
             rl.DrawFPS(700, 20)
 
-            draw_strobe_display(target_freq, target_interval, show_pattern)
-            draw_note(&note, {20, 20}, 64)
+            // draw_strobe_display(target_freq, target_interval, show_pattern)
+            draw_note(note, {20, 20}, 64)
 
 
             // Show target frequency & interval
@@ -173,26 +147,25 @@ main :: proc() {
 
 
             // Detected note - auto correlation
-            if freq_in_range(detected_freq) {
-                draw_note(&detected_note, {20, 250}, 48)
-                rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", detected_freq), {20, 300}, 24, 0, rl.PURPLE)
+            if freq_in_range(pitch_info.detected_freq) {
+                draw_note(pitch_info.detected_note, {20, 250}, 48)
+                rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq), {20, 300}, 24, 0, rl.PURPLE)
             }
 
-            draw_nsdf(rl.Rectangle{160, 200, SCREEN_WIDTH-180, 200}, &ac, peak)
+            draw_nsdf(rl.Rectangle{160, 200, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr, pitch_info.nsdf_peak)
 
-            // draw_autocorrelation(rl.Rectangle{160, 450, SCREEN_WIDTH-180, 200}, &ac)
 
-            draw_note_meter(rl.Rectangle{160, 400, 400, 100}, &detected_note, detected_freq)
-            rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", detected_freq), {100, 450}, 18, 0, rl.GREEN)
+            draw_note_meter(rl.Rectangle{160, 400, 400, 100}, pitch_info.detected_note, pitch_info.detected_freq)
+            rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq), {100, 450}, 18, 0, rl.GREEN)
 
-            draw_note_meter(rl.Rectangle{160, 500, 400, 100}, &detected_note, detected_freq_mean)
-            rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", detected_freq_mean), {100, 550}, 18, 0, rl.GREEN)
+            draw_note_meter(rl.Rectangle{160, 500, 400, 100}, pitch_info.detected_note, pitch_info.detected_freq_mean)
+            rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq_mean), {100, 550}, 18, 0, rl.GREEN)
 
             // rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {20, 620}, 24, 0, rl.PINK)
             // rl.DrawRectangleV({20, 650}, {100 * flatness, 4.0}, rl.PINK)
 
-            rl.DrawTextEx(font, fmt.ctprintf("%.4f", clarity), {20, 660}, 24, 0, rl.LIME)
-            rl.DrawRectangleV({20, 690}, {100 * clarity, 4.0}, rl.LIME)
+            // rl.DrawTextEx(font, fmt.ctprintf("%.4f", clarity), {20, 660}, 24, 0, rl.LIME)
+            // rl.DrawRectangleV({20, 690}, {100 * clarity, 4.0}, rl.LIME)
         }
     }
 }

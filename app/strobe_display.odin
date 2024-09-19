@@ -4,10 +4,9 @@ import "core:fmt"
 import "core:math"
 import rl "vendor:raylib"
 
-
+/*
 StrobeDisplay :: struct {
     samples: [STROBE_SAMPLE_SIZE]f32,
-    pattern_image: rl.Image,
     pattern_texture: rl.Texture2D,
     points: [STROBE_SAMPLE_SIZE]rl.Vector2,
     framerate_state: FramerateState,
@@ -19,15 +18,12 @@ strobe_displays: [STROBE_COUNT]StrobeDisplay
 
 init_strobe_display :: proc () {
     for i in 0..<STROBE_COUNT {
-        strobe_displays[i].pattern_image = rl.GenImageColor(1024, 1, {100, 0, 0, 255})
         strobe_displays[i].framerate_state = init_framerate()
     }
 }
 
 destroy_strobe_display :: proc () {
-    for i in 0..<STROBE_COUNT {
-        rl.UnloadImage(strobe_displays[i].pattern_image)
-    }
+    // pass
 }
 
 
@@ -94,36 +90,7 @@ draw_strobe_lines :: proc(
     rl.DrawLineStrip(raw_data(strobe_display.points[:]), i32(frame_count), rl.PINK)
 }
 
-@(private)
-draw_strobe_pattern :: proc() {
 
-    // max := find_abs_max(strobe_samples[:frame_count])
-    // factor := 1.0 / max
-
-    // for j in 0..<frame_count {
-    //     // convert from range -1.0 - 1.0 to range 0 - 255
-    //     val := u8(f32(factor) * strobe_samples[i+int(j)] * 127.5 + 127.5)
-    //     // val := u8(255)
-    //     // freq := f32(10.0)
-    //     // val := u8(math.sin_f32(f32(j)/256.0 * 2.0 * math.PI * freq) * 127.5 + 127.5)
-    //     rl.ImageDrawPixel(&pattern_image, i32(frame_count-j-1), 0, {val, val, val, 255})
-    // }
-
-    // pattern_texture = rl.LoadTextureFromImage(pattern_image)
-    // defer rl.UnloadTexture(pattern_texture)
-
-    // rl.DrawTexturePro(
-    //     texture=pattern_texture,
-    //     source={0, 0, f32(frame_count), 1},
-    //     dest={50, f32(y), 800, 100},
-    //     origin={},
-    //     rotation=0,
-    //     tint=rl.WHITE,
-    // )
-}
-
-
-prev_phase:f32 = 0.0
 
 experiment :: proc(
     rect: rl.Rectangle,
@@ -171,42 +138,12 @@ experiment :: proc(
     phase := -math.atan2(sin, cos)
 
 
-    phase_diff := phase - prev_phase
-    prev_phase = phase
-
 
     // fmt.println(phase, magnitude(dft))
 
     rl.DrawCircleLines(700, 600, 80, rl.GRAY)
     rl.DrawCircleV(rl.Vector2{700.0 - 80.0 * math.cos(phase), 600.0 - 80.0 * math.sin(phase)}, 6.0, rl.PINK)
     rl.DrawCircleV(rl.Vector2{700.0 - 80.0 * math.cos(phase+math.PI), 600.0 - 80.0 * math.sin(phase+math.PI)}, 6.0, rl.PINK)
-
-
-    // try drawing phase diff as needle -----------------
-
-    // r := rl.Rectangle{160, 600, 400, 100}
-
-    // // "needle"
-    // needle_width: f32 = 4.0
-    // needle_height: f32 = 16.0
-
-    // // horizontal line, ie "rail"
-    // rail_y := r.y + r.height - needle_height/2
-    // rl.DrawRectangleV({r.x, rail_y - 2.0}, {r.width, 4.0}, rl.GRAY)
-
-    // // vertical notches
-    // rl.DrawRectangleV({r.x + r.width/2.0 - 0.5, rail_y - 8.0}, {1.0, 16.0}, rl.GRAY)
-    // rl.DrawRectangleV({r.x, rail_y - 8.0}, {1.0, 16.0}, rl.GRAY)
-    // rl.DrawRectangleV({r.x + r.width - 0.5, rail_y - 8.0}, {1.0, 16.0}, rl.GRAY)
-
-
-    // // draw needle
-    // rl.DrawRectangleV(
-    //     {r.x + r.width/2.0 + r.width * phase_diff / math.PI - needle_width/2.0, r.y + rect.height - needle_height},
-    //     {needle_width, needle_height},
-    //     rl.LIGHTGRAY
-    // )
-
 
 
     // ============
@@ -236,13 +173,4 @@ experiment :: proc(
 }
 
 
-find_abs_max :: proc (slice: []f32) -> f32 {
-    max: f32 = 0.0
-    for i in 0..<len(slice) {
-        abs_val := abs(slice[i])
-        if abs_val > max {
-            max = abs_val
-        }
-    }
-    return max
-}
+*/

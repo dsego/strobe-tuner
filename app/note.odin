@@ -10,14 +10,14 @@ import "core:unicode/utf8"
 
 
 Note :: struct {
-    name: u8, // note name does not include the accidental
+    name: rune, // note name does not include the accidental
     semitone_index: int,  // C = 0, C# = 1, ... B = 11
     is_accidental: bool,
     octave: int,
     cents: int,
     frequency: f32,
     pitch_standard: f32,
-    // cents_offset: f32,
+    cents_offset: f32,
 }
 
 freq_to_cents :: proc (freq: f32, pitch_standard: f32 = 440.0) -> f32 {
@@ -107,7 +107,7 @@ test_freq_to_octave :: proc(t: ^testing.T) {
     testing.expect_value(t, octave, 8)
 }
 
-note_names: []u8 = {'C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B'}
+note_names: []rune = {'C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B'}
 
 
 cents_to_note :: proc (cents: f32, pitch_standard: f32 = 440.0) -> (note: Note) {

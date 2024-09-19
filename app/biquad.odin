@@ -3,8 +3,6 @@ package app
 import "core:math"
 
 
-MAX_BIQUADS :: 10
-
 Biquad :: struct {
     // delay line z1 = x[n-1], z2 = x[n-2]
     z1: [4]f64,

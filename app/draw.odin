@@ -30,9 +30,9 @@ destroy_drawing_context :: proc() {
 }
 
 
-draw_note :: proc(note: ^Note, pos: [2]f32, size: f32, color: rl.Color = rl.PURPLE) {
+draw_note :: proc(note: Note, pos: [2]f32, size: f32, color: rl.Color = rl.PURPLE) {
     // Note name
-    rl.DrawTextEx(font, cstring(&note.name), pos, size, 0, color)
+    rl.DrawTextEx(font, fmt.ctprintf("%v", note.name), pos, size, 0, color)
 
     // Sharp sign
     if note.is_accidental {
@@ -247,7 +247,7 @@ draw_freq_spectrum :: proc(rect: rl.Rectangle, spectrum: []f32, fft_size: int, s
 
 
 
-draw_note_meter :: proc (rect: rl.Rectangle, detected_note: ^Note, freq: f32) {
+draw_note_meter :: proc (rect: rl.Rectangle, detected_note: Note, freq: f32) {
 
     // outline for visual debugging
     // rl.DrawRectangleLinesEx(rect, 1.0, rl.ORANGE)
