@@ -38,7 +38,7 @@ destroy_pitch_detector :: proc(self: ^PicthDetector) {
 }
 
 pitch_audio_callback :: proc (ctx: ^AudioCaptureNode, input: []f32) {
-    self := cast(^PicthDetector) ctx
+    self := container_of(ctx, PicthDetector, "node")
     write_to_ringbuffer(&self.ringbuffer, input)
 }
 
