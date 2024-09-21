@@ -10,7 +10,7 @@ main :: proc() {
 
     bass_freqs: []f64 = {
         41.20344, // E1
-        55.00000,  // A1
+        55.00000, // A1
         73.41619, // D2
         97.99886, // G2
     }
@@ -153,19 +153,19 @@ main :: proc() {
             }
 
             draw_nsdf(rl.Rectangle{160, 200, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr, pitch_info.nsdf_peak)
+            draw_autocorrelation(rl.Rectangle{160, 500, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
 
+            // draw_note_meter(rl.Rectangle{160, 400, 400, 100}, pitch_info.detected_note, pitch_info.detected_freq)
+            // rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq), {100, 450}, 18, 0, rl.GREEN)
 
-            draw_note_meter(rl.Rectangle{160, 400, 400, 100}, pitch_info.detected_note, pitch_info.detected_freq)
-            rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq), {100, 450}, 18, 0, rl.GREEN)
-
-            draw_note_meter(rl.Rectangle{160, 500, 400, 100}, pitch_info.detected_note, pitch_info.detected_freq_mean)
-            rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq_mean), {100, 550}, 18, 0, rl.GREEN)
+            // draw_note_meter(rl.Rectangle{160, 500, 400, 100}, pitch_info.detected_note, pitch_info.detected_freq_mean)
+            // rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq_mean), {100, 550}, 18, 0, rl.GREEN)
 
             // rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {20, 620}, 24, 0, rl.PINK)
             // rl.DrawRectangleV({20, 650}, {100 * flatness, 4.0}, rl.PINK)
 
-            // rl.DrawTextEx(font, fmt.ctprintf("%.4f", clarity), {20, 660}, 24, 0, rl.LIME)
-            // rl.DrawRectangleV({20, 690}, {100 * clarity, 4.0}, rl.LIME)
+            rl.DrawTextEx(font, fmt.ctprintf("%.6f", pitch_info.clarity), {20, 660}, 24, 0, rl.LIME)
+            rl.DrawRectangleV({20, 690}, {100 * pitch_info.clarity, 4.0}, rl.LIME)
         }
     }
 }

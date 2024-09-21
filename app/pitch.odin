@@ -2,7 +2,6 @@ package app
 
 import "core:fmt"
 
-
 PicthDetector :: struct {
     using node: AudioCaptureNode,
     autocorr: AcConfig,
@@ -14,10 +13,9 @@ PicthDetector :: struct {
 
 PitchInfo :: struct {
     detected_freq: f32,
-    detected_freq_mean: f32,
     detected_note: Note,
     clarity: f32,
-    nsdf_peak: Vec2,
+    nsdf_peak: Vec3,
 }
 
 
@@ -61,17 +59,12 @@ run_pitch_detection :: proc (self: ^PicthDetector, prev_info: PitchInfo) -> Pitc
         // copy over new samples into the freed space
         pos := len(self.samples) - new_count
         read_ringbuffer(&self.ringbuffer, self.samples[pos:], u32(new_count))
-
     } else {
         read_ringbuffer(&self.ringbuffer, self.samples, u32(len(self.samples)))
     }
 
-
     info.detected_freq, info.nsdf_peak = ac_pitch_detect(&self.autocorr, self.samples)
-    // info.clarity
-
-    alpha: f32 = 0.2
-    info.detected_freq_mean = ewma_filter(info.detected_freq, alpha, prev_info.detected_freq_mean)
+    info.clarity = info.nsdf_peak.z
 
     // detected_freq_mean = run_smooth(&smooth, detected_freq)
     info.detected_note = find_note(info.detected_freq)

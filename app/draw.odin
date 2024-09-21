@@ -94,7 +94,7 @@ draw_autocorrelation :: proc(
 draw_nsdf :: proc(
     rect: rl.Rectangle,
     ac: ^AcConfig,
-    peak: Vec2,
+    peak: Vec3,
 ) {
     points: [FFT_SIZE]rl.Vector2 = {}
 

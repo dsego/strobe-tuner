@@ -9,7 +9,7 @@ import "../pffft"
 //  Pitch detection based on auto correlation
 // ------------------------------------------------------------------------------------------------
 
-Vec2 :: [2]f32
+Vec3 :: [3]f32
 
 AcConfig :: struct {
     pffft_setup: rawptr,
@@ -20,7 +20,7 @@ AcConfig :: struct {
     samplerate: int,
     padded_samples: []f32,
     autocorr_peaks: [dynamic]int,
-    nsdf_peaks: [dynamic]Vec2,
+    nsdf_peaks: [dynamic]Vec3,
     chosen_peak_idx: int,
 }
 
@@ -46,20 +46,18 @@ ac_destroy :: proc (config: ^AcConfig) {
 }
 
 
-
 // Detect pitch via auto-correlation
-ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, Vec2) {
+ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, Vec3) {
     ac_process_samples(config, samples)
 
     // ac_find_autocorr_peaks(config)
 
     ac_nsdf(config, samples)
-    peak, ok := ac_find_nsdf_peak(config).?
+    peak := ac_find_nsdf_peak(config)
 
-    estimated_freq: f32 = 0.0
-    normalized_val: f32 = 0.0
+    estimated_freq:f32 = 0.0
 
-    if ok {
+    if peak.x > 0.0 {
         estimated_freq =  f32(samplerate) / peak.x
     }
 
@@ -69,6 +67,7 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, Vec2)
 // Generate the auto-correlation
 //   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,
 //    then taking the inverse FFT will give us the cyclic auto-correlation.
+@(private)
 ac_process_samples :: proc (using config: ^AcConfig, samples: []f32) {
     assert(len(samples) <= fft_size/2)
 
@@ -101,6 +100,7 @@ ac_process_samples :: proc (using config: ^AcConfig, samples: []f32) {
 }
 
 
+@(private)
 ac_find_autocorr_peaks :: proc (using config: ^AcConfig) {
     lag := 0
     peak_idx := 0
@@ -138,8 +138,8 @@ ac_find_autocorr_peaks :: proc (using config: ^AcConfig) {
     }
 }
 
-
-ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Maybe(Vec2)  {
+@(private)
+ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Vec3 {
     // clear out peaks from the previous run
     clear(&nsdf_peaks)
 
@@ -150,7 +150,7 @@ ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Maybe(Vec2)  {
     // throw away the negative lags and ignore the right most area that's glitching
     n := len(nsdf) / 2 - len(nsdf) / 16
 
-    max_peak := Vec2{0.0, 0.0}
+    max_peak := Vec3{0.0, 0.0, 0.0}
 
     // enumerate all the candidate peaks
     i := 1
@@ -179,11 +179,21 @@ ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Maybe(Vec2)  {
                 nsdf[lag],
                 nsdf[lag+1]
             )
+
+            // auto-correlation magnitude is a measure of clarity
+            _, clarity := parabolic(
+                autocorr[lag-1],
+                autocorr[lag],
+                autocorr[lag+1]
+            )
+            clarity = autocorr[lag] / autocorr[0]
+
             improved_lag := f32(lag) + peak_location
-            append(&nsdf_peaks, Vec2{improved_lag, magnitude})
+            peak := Vec3{improved_lag, magnitude, clarity}
+            append(&nsdf_peaks, peak)
 
             if magnitude >= max_peak.y {
-                max_peak = Vec2{improved_lag, magnitude}
+                max_peak = peak
             }
         }
 
@@ -192,7 +202,8 @@ ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Maybe(Vec2)  {
     }
 
     THRESHOLD: f32 = 0.8
-    chosen_peak: Maybe(Vec2) = nil
+    chosen_peak: Vec3 = {}
+    chosen_peak_idx = 0
 
     // take the first key maximum above this threshold
     for p, idx in nsdf_peaks {
@@ -203,11 +214,13 @@ ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Maybe(Vec2)  {
         }
     }
 
+
     return chosen_peak
 }
 
 // Normalized Square Difference Function (through autocorrelation)
 // http://riogrande.cs.tcu.edu/1516Ribbit/resources/A_Smarter_Way_to_Find_Pitch.pdf
+@(private)
 ac_nsdf :: proc (using config: ^AcConfig, samples: []f32) {
     n := len(samples)
     copy(nsdf, autocorr[:n])
