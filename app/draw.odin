@@ -247,21 +247,15 @@ draw_freq_spectrum :: proc(rect: rl.Rectangle, spectrum: []f32, fft_size: int, s
 
 
 
-draw_note_meter :: proc (rect: rl.Rectangle, detected_note: Note, freq: f32) {
+draw_note_meter :: proc (rect: rl.Rectangle, pitch_info: PitchInfo, cents_error: f32) {
 
     // outline for visual debugging
     // rl.DrawRectangleLinesEx(rect, 1.0, rl.ORANGE)
 
-    if freq_in_range(freq) {
-        draw_note(detected_note, {rect.x + rect.width/2.0 - 20.0, rect.y}, 64)
-    }
-
-    // convert to cents, because we need the log scale
-    cents := freq_to_cents(freq)
-    cents_error := cents - f32(detected_note.cents)
+    draw_note(pitch_info.detected_note, {rect.x + rect.width/2.0 - 20.0, rect.y}, 64)
+    rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq), {20, 450}, 24, 0, rl.GREEN)
 
     px := rect.width / 100.0
-
     pos := rect.width/2 + cents_error * px
 
     // "needle"

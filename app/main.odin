@@ -3,7 +3,7 @@ package app
 import rl "vendor:raylib"
 import "core:fmt"
 import "core:strings"
-
+import "core:math"
 
 
 main :: proc() {
@@ -91,8 +91,8 @@ main :: proc() {
     // set initial frequency
     freq_changed := true
     pitch_info := PitchInfo{}
-
-    smooth := init_smoothing(15)
+    cents_error_mean := f32(0.0)
+    // smooth := init_smoothing(15)
 
     for !rl.WindowShouldClose() {
 
@@ -146,20 +146,29 @@ main :: proc() {
             rl.DrawTextEx(font, fmt.ctprintf("%.4f", target_interval), {20, 150}, 16, 0, rl.SKYBLUE)
 
 
-            // Detected note - auto correlation
-            if freq_in_range(pitch_info.detected_freq) {
-                draw_note(pitch_info.detected_note, {20, 250}, 48)
-                rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq), {20, 300}, 24, 0, rl.PURPLE)
+            draw_nsdf(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr, pitch_info.nsdf_peak)
+            // draw_autocorrelation(rl.Rectangle{160, 500, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
+
+
+            // convert to cents, because we need the log scale
+            cents := freq_to_cents(pitch_info.detected_freq)
+            cents_error := cents - f32(pitch_info.detected_note.cents)
+
+
+            draw_note_meter(rl.Rectangle{160, 420, 400, 100}, pitch_info, cents_error)
+
+            // Smooth the meter by applying a weighted mean average
+            // Applying to the relative cents error measurement instead of frequency to
+            //  prevent the meter needle from jumping around.
+            if math.is_inf(cents) {
+                cents_error_mean = 0.0
+            } else {
+                alpha: f32 = 0.2
+                cents_error_mean = ewma_filter(cents_error, alpha, cents_error_mean)
             }
 
-            draw_nsdf(rl.Rectangle{160, 200, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr, pitch_info.nsdf_peak)
-            draw_autocorrelation(rl.Rectangle{160, 500, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
-
-            // draw_note_meter(rl.Rectangle{160, 400, 400, 100}, pitch_info.detected_note, pitch_info.detected_freq)
-            // rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq), {100, 450}, 18, 0, rl.GREEN)
-
-            // draw_note_meter(rl.Rectangle{160, 500, 400, 100}, pitch_info.detected_note, pitch_info.detected_freq_mean)
-            // rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq_mean), {100, 550}, 18, 0, rl.GREEN)
+            draw_note_meter(rl.Rectangle{160, 560, 400, 100}, pitch_info, cents_error_mean)
+            // rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq), {100, 550}, 18, 0, rl.GREEN)
 
             // rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {20, 620}, 24, 0, rl.PINK)
             // rl.DrawRectangleV({20, 650}, {100 * flatness, 4.0}, rl.PINK)
