@@ -159,7 +159,7 @@ main :: proc() {
 
             // Smooth the meter by applying a weighted mean average
             // Applying to the relative cents error measurement instead of frequency to
-            //  prevent the meter needle from jumping around.
+            //  prevent the meter needle from making big jumps.
             if math.is_inf(cents) {
                 cents_error_mean = 0.0
             } else {

@@ -2,26 +2,6 @@
 TODO
 
 
-apply smoothing (ewma) to needle position, not frequency, this will make sure it doesn't jump around ?
-no wema if prev position outside of the track
-
-
-
-RMS + clarity
-
-
-only consider new frequency if clarity is good, otherwise stay on the same note but hide the "needle"
-
-
-
-
-
-The clarity is simply taken as the correlation value of the chosen key maximum. If no key maxima are found, it is set to zero.
-
-We use the clarity measure in combonation with the RMS power to weight the alpha value (translucency)
-of the pitch contour at a given point in time.
-
-
 
 -------
 
@@ -31,16 +11,7 @@ low-pass fft filter to improve pitch detection?
 
 - need to convert fft anyway, could apply lp fft and compare
 
-
-
-
-
 ----
-
-
-
-
-how to smooth freq meter? ewma + logic to reset initial state (ignore zero freqs) and remove outliers
 
 
 
