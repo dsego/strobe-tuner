@@ -4,53 +4,46 @@ import "core:fmt"
 import "core:math"
 import rl "vendor:raylib"
 
-/*
+
 StrobeDisplay :: struct {
-    samples: [STROBE_SAMPLE_SIZE]f32,
-    pattern_texture: rl.Texture2D,
-    points: [STROBE_SAMPLE_SIZE]rl.Vector2,
-    framerate_state: FramerateState,
+    strobe: ^Strobe,
+    bands: [dynamic]StrobeBandDisplay,
 }
 
+StrobeBandDisplay :: struct {
+    samples: []f32,
+    points: []rl.Vector2,
+}
 
-strobe_displays: [STROBE_COUNT]StrobeDisplay
+init_strobe_display :: proc (size: int, strobe: ^Strobe) -> (self: StrobeDisplay) {
+    for band in strobe.bands {
+        band_display := StrobeBandDisplay{}
+        band_display.samples = make([]f32, size)
+        band_display.points = make([]rl.Vector2, size)
+        append(&self.bands, band_display)
+    }
+    self.strobe = strobe
+    return
+}
 
-
-init_strobe_display :: proc () {
-    for i in 0..<STROBE_COUNT {
-        strobe_displays[i].framerate_state = init_framerate()
+destroy_strobe_display :: proc (self: ^StrobeDisplay) {
+    for band_display in self.bands {
+        delete(band_display.samples)
+        delete(band_display.points)
     }
 }
 
-destroy_strobe_display :: proc () {
-    // pass
-}
-
-
-draw_strobe_display :: proc(target_freq: f64, target_interval: f64, show_pattern: bool = false) {
-    for i in 0..<STROBE_COUNT {
-        rect := rl.Rectangle{160, f32(50 + 110 * i), 800, 100}
+draw_strobe_display :: proc(self: ^StrobeDisplay) {
+    for &band, i in self.strobe.bands {
         frame_count, drift := read_framerate_samples(
-            &strobe_displays[i].framerate_state,
-            rb_ptr=&strobe_ringbuffers[i],
-            samples=strobe_displays[i].samples[:],
-            target_interval=target_interval,
+            &band.framerate_state,
+            rb_ptr=&band.ringbuffer,
+            samples=self.bands[i].samples,
+            target_interval=f64(band.target_interval),
         )
-
-
-        experiment(rect, &strobe_displays[i], target_interval, frame_count, drift, target_freq)
-
-        draw_strobe_lines(rect, &strobe_displays[i], target_interval, frame_count, drift)
-
-        if show_pattern {
-            // draw_strobe_pattern(rect, &strobe_displays[i], target_interval, frame)
-        }
-    }
-}
-
-reset_strobe_display :: proc() {
-    for i in 0..<STROBE_COUNT {
-        reset_framerate(&strobe_displays[i].framerate_state)
+        rect := rl.Rectangle{160, f32(50 + 110 * i), 800, 100}
+        draw_strobe_lines(rect, &self.bands[i], band.target_interval, frame_count, drift)
+        // experiment(rect, &strobe_displays[i], target_interval, frame_count, drift, target_freq)
     }
 }
 
@@ -58,8 +51,8 @@ reset_strobe_display :: proc() {
 @(private)
 draw_strobe_lines :: proc(
     rect: rl.Rectangle,
-    strobe_display: ^StrobeDisplay,
-    target_interval: f64,
+    band_display: ^StrobeBandDisplay,
+    target_interval: f32,
     frame_count: u32,
     drift: f64,
 ) {
@@ -72,25 +65,27 @@ draw_strobe_lines :: proc(
 
     x:f32 = f32(rect.x) + f32(rect.width) - drift_adj
 
-    factor := (rect.height/2.0 - 1.0)
+    gain:f32 = 20.0 // find_abs_max(band_display.samples)
+
+    factor := (rect.height/2.0 - 1.0) * gain
 
     // TODO: resample by linear interpolation to fit the pixels
     // e.g. from 300 samples produce a value for each of the 800 pixels
 
     for i in 0..<frame_count {
         // note that y is flipped (negative)
-        y := rect.y + rect.height/2.0 - strobe_display.samples[i] * factor
-        strobe_display.points[i] = { x, y }
+        y := rect.y + rect.height/2.0 - band_display.samples[i] * factor
+        band_display.points[i] = { x, y }
         x -= resolution
     }
 
 
     // target_interval = 2.0 * f64(SAMPLERATE) / target_freq
 
-    rl.DrawLineStrip(raw_data(strobe_display.points[:]), i32(frame_count), rl.PINK)
+    rl.DrawLineStrip(raw_data(band_display.points), i32(frame_count), rl.PINK)
 }
 
-
+/*
 
 experiment :: proc(
     rect: rl.Rectangle,

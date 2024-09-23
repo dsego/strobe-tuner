@@ -61,13 +61,11 @@ main :: proc() {
     init_drawing_context()
     defer destroy_drawing_context()
 
-    // strobe_display := init_strobe_display(&strobe)
-    // defer destroy_strobe_display(&strobe_display)
-
+    strobe_display := init_strobe_display(FFT_SIZE, &strobe)
+    defer destroy_strobe_display(&strobe_display)
 
     register_audio_node(audio_capture, &pitch_detector)
     register_audio_node(audio_capture, &strobe)
-
 
     start_audio_capture(audio_capture)
 
@@ -109,9 +107,6 @@ main :: proc() {
 
             // set_strobes(target_freq)
 
-            // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
-            target_interval = 2.0 * f64(SAMPLERATE) / target_freq
-            // target_interval = 4.0 * f64(SAMPLERATE) / target_freq
 
             freq_changed = false
         }
@@ -126,7 +121,7 @@ main :: proc() {
 
             rl.DrawFPS(700, 20)
 
-            // draw_strobe_display(target_freq, target_interval, show_pattern)
+            draw_strobe_display(&strobe_display)
             draw_note(note, {20, 20}, 64)
 
 
@@ -135,7 +130,7 @@ main :: proc() {
             rl.DrawTextEx(font, fmt.ctprintf("%.4f", target_interval), {20, 150}, 16, 0, rl.SKYBLUE)
 
 
-            draw_nsdf(rl.Rectangle{160, 180, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr, pitch_info.nsdf_peak)
+            draw_nsdf(rl.Rectangle{160, 280, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr, pitch_info.nsdf_peak)
             // draw_autocorrelation(rl.Rectangle{160, 500, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
 
 
@@ -144,7 +139,7 @@ main :: proc() {
             cents_error := cents - f32(pitch_info.detected_note.cents)
 
 
-            draw_note_meter(rl.Rectangle{160, 420, 400, 100}, pitch_info, cents_error)
+            draw_note_meter(rl.Rectangle{160, 500, 400, 100}, pitch_info, cents_error)
 
             // Smooth the meter by applying a weighted mean average
             // Applying to the relative cents error measurement instead of frequency to
@@ -156,7 +151,7 @@ main :: proc() {
                 cents_error_mean = ewma_filter(cents_error, alpha, cents_error_mean)
             }
 
-            draw_note_meter(rl.Rectangle{160, 560, 400, 100}, pitch_info, cents_error_mean)
+            draw_note_meter(rl.Rectangle{160, 600, 400, 100}, pitch_info, cents_error_mean)
             // rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq), {100, 550}, 18, 0, rl.GREEN)
 
             // rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {20, 620}, 24, 0, rl.PINK)

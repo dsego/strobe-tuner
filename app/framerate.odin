@@ -28,7 +28,7 @@ reset_framerate :: proc(using state: ^FramerateState) {
 
 read_framerate_samples :: proc(
     using state: ^FramerateState,
-    rb_ptr: ^pa_rb.RingBuffer,
+    rb_ptr: ^RingBuffer,
     samples: []f32,
     target_interval: f64
 ) -> (u32, f64) {
@@ -62,7 +62,7 @@ read_framerate_samples :: proc(
         }
     } else {
         // Next period to read not adjacent, skip a number of intervals and read an entire interval of samples
-        advance_ringbuffer(rb_ptr, i32(frames_to_skip)) // skip old samples to pick up slack and catch up with the writer
+        advance_ringbuffer_read(rb_ptr, i32(frames_to_skip)) // skip old samples to pick up slack and catch up with the writer
         read_ringbuffer(rb_ptr, samples, frames_to_read)
     }
 

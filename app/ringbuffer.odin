@@ -2,6 +2,7 @@ package app
 
 import "core:fmt"
 import "core:slice"
+import "base:runtime"
 
 import pa_rb "../pa_ringbuffer"
 
@@ -16,8 +17,12 @@ init_ringbuffer :: proc(size: int) -> (RingBuffer, []u8) {
     return rb, rb_data
 }
 
-advance_ringbuffer :: proc (rb_ptr: ^RingBuffer, frames_to_skip: i32) -> i32 {
+advance_ringbuffer_read :: proc (rb_ptr: ^RingBuffer, frames_to_skip: i32) -> i32 {
     return pa_rb.AdvanceRingBufferReadIndex(rb_ptr, frames_to_skip)
+}
+
+advance_ringbuffer_write :: proc (rb_ptr: ^RingBuffer, frames_to_skip: i32) -> i32 {
+    return pa_rb.AdvanceRingBufferWriteIndex(rb_ptr, frames_to_skip)
 }
 
 frames_available_in_ringbuffer:: proc (rb_ptr: ^RingBuffer) -> i32 {
@@ -47,14 +52,17 @@ read_ringbuffer :: proc(
     return u32(num_read)
 }
 
-get_ringbuffer_write_regions :: proc(rb_ptr: ^RingBuffer, frame_count: int) -> ([]f32, []f32) {
+get_ringbuffer_write_regions :: proc(rb_ptr: ^RingBuffer, frame_count: int) -> ([]f32, []f32, int) {
+    // context = runtime.default_context()
+
     // ringbuffer write regions
     region1: rawptr
     size1: i32
+
     region2: rawptr
     size2: i32
 
-    pa_rb.GetRingBufferWriteRegions(
+    num_written := pa_rb.GetRingBufferWriteRegions(
         rb_ptr,
         i32(frame_count),
         &region1,
@@ -63,9 +71,13 @@ get_ringbuffer_write_regions :: proc(rb_ptr: ^RingBuffer, frame_count: int) -> (
         &size2
     )
 
+    if size1 < 0 do size1 = 0
+    if size2 < 0 do size2 = 0
+
     out1: []f32 = slice.from_ptr(cast([^]f32) region1, int(size1))
     out2: []f32 = slice.from_ptr(cast([^]f32) region2, int(size2))
-    return out1, out2
+
+    return out1, out2, int(num_written)
 }
 
 
