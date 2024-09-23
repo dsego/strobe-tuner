@@ -39,24 +39,9 @@ main :: proc() {
 
     target_interval := 0.0
 
-    // target_freq = 2500
-    // target_freq = 88
-    // target_freq = 1567.982
-    // target_freq = 7902.133
 
-    // target_freq = 440.0000 // A
-    // target_freq = 329.6276 // E
-    // target_freq = 261.6256 // C
-    // target_freq = 391.9954 // G
-
-    // strobes: [dynamic]Strobe
-    // defer delete(strobes)
-
-    // s1 := init_strobe(target_freq, SAMPLERATE)
-    // s2 := init_strobe(target_freq * 2.0, SAMPLERATE)
-    // append(&strobes, s1)
-    // append(&strobes, s2)
-
+    strobe := init_strobe(110, SAMPLERATE, 2)
+    defer destroy_strobe(&strobe)
 
     pitch_detector := init_pitch_detector()
     defer destroy_pitch_detector(&pitch_detector)
@@ -76,15 +61,19 @@ main :: proc() {
     init_drawing_context()
     defer destroy_drawing_context()
 
-    // init_strobe_display()
-    // defer destroy_strobe_display()
+    // strobe_display := init_strobe_display(&strobe)
+    // defer destroy_strobe_display(&strobe_display)
+
+
     register_audio_node(audio_capture, &pitch_detector)
+    register_audio_node(audio_capture, &strobe)
+
+
     start_audio_capture(audio_capture)
 
     show_pattern := false
 
     // flatness: f32
-
     // freq_estimate: f32 = 260.0
     // freq_estimate_error:f32 = 0.5
 
@@ -163,7 +152,7 @@ main :: proc() {
             if math.is_inf(cents) {
                 cents_error_mean = 0.0
             } else {
-                alpha: f32 = 0.2
+                alpha: f32 = 0.1
                 cents_error_mean = ewma_filter(cents_error, alpha, cents_error_mean)
             }
 

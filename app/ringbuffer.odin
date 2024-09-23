@@ -1,6 +1,7 @@
 package app
 
 import "core:fmt"
+import "core:slice"
 
 import pa_rb "../pa_ringbuffer"
 
@@ -45,6 +46,29 @@ read_ringbuffer :: proc(
     num_read := pa_rb.ReadRingBuffer(rb_ptr, raw_data(samples), i32(frame_count))
     return u32(num_read)
 }
+
+get_ringbuffer_write_regions :: proc(rb_ptr: ^RingBuffer, frame_count: int) -> ([]f32, []f32) {
+    // ringbuffer write regions
+    region1: rawptr
+    size1: i32
+    region2: rawptr
+    size2: i32
+
+    pa_rb.GetRingBufferWriteRegions(
+        rb_ptr,
+        i32(frame_count),
+        &region1,
+        &size1,
+        &region2,
+        &size2
+    )
+
+    out1: []f32 = slice.from_ptr(cast([^]f32) region1, int(size1))
+    out2: []f32 = slice.from_ptr(cast([^]f32) region2, int(size2))
+    return out1, out2
+}
+
+
 
 
 // read_interleaved_ringbuffer :: proc(
