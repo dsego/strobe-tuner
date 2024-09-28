@@ -5,7 +5,6 @@ import "core:fmt"
 import "core:strings"
 import "core:math"
 
-
 main :: proc() {
 
     bass_freqs: []f64 = {
@@ -31,16 +30,14 @@ main :: proc() {
         440.0000, // A4
     }
 
-    freqs_idx := 1
-
-    target_freq := 55.0
-    freqs: []f64 = guitar_freqs
-
+    freqs: []f64 = bass_freqs
+    freqs_idx := 0
+    target_freq := freqs[freqs_idx]
 
     target_interval := 0.0
 
 
-    strobe := init_strobe(110, SAMPLERATE, 2)
+    strobe := init_strobe(f32(target_freq), SAMPLERATE, 2)
     defer destroy_strobe(&strobe)
 
     pitch_detector := init_pitch_detector()
@@ -61,7 +58,7 @@ main :: proc() {
     init_drawing_context()
     defer destroy_drawing_context()
 
-    strobe_display := init_strobe_display(FFT_SIZE, &strobe)
+    strobe_display := init_strobe_display(MAX_SPECTRUM_DISPLAY_LEN, &strobe)
     defer destroy_strobe_display(&strobe_display)
 
     register_audio_node(audio_capture, &pitch_detector)
@@ -121,6 +118,7 @@ main :: proc() {
 
             rl.DrawFPS(700, 20)
 
+            /*
             draw_strobe_display(&strobe_display)
             draw_note(note, {20, 20}, 64)
 
@@ -128,11 +126,12 @@ main :: proc() {
             // Show target frequency & interval
             rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", target_freq), {20, 100}, 32, 0, rl.PURPLE)
             rl.DrawTextEx(font, fmt.ctprintf("%.4f", target_interval), {20, 150}, 16, 0, rl.SKYBLUE)
+            */
 
-
-            draw_nsdf(rl.Rectangle{160, 280, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr, pitch_info.nsdf_peak)
-            // draw_autocorrelation(rl.Rectangle{160, 500, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
-
+            if DEBUG_NSDF {
+                draw_autocorrelation(rl.Rectangle{130, 50, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
+                draw_nsdf(rl.Rectangle{130, 300, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr, pitch_info.nsdf_peak)
+            }
 
             // convert to cents, because we need the log scale
             cents := freq_to_cents(pitch_info.detected_freq)
@@ -159,6 +158,8 @@ main :: proc() {
 
             rl.DrawTextEx(font, fmt.ctprintf("%.6f", pitch_info.clarity), {20, 660}, 24, 0, rl.LIME)
             rl.DrawRectangleV({20, 690}, {100 * pitch_info.clarity, 4.0}, rl.LIME)
+
+
         }
     }
 }

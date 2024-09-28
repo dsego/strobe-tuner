@@ -9,7 +9,7 @@ import "../pffft"
 //  Pitch detection based on auto correlation
 // ------------------------------------------------------------------------------------------------
 
-Vec3 :: [3]f32
+Vec2 :: [2]f32
 
 AcConfig :: struct {
     pffft_setup: rawptr,
@@ -20,7 +20,7 @@ AcConfig :: struct {
     samplerate: int,
     padded_samples: []f32,
     autocorr_peaks: [dynamic]int,
-    nsdf_peaks: [dynamic]Vec3,
+    nsdf_peaks: [dynamic]Vec2,
     chosen_peak_idx: int,
 }
 
@@ -29,7 +29,7 @@ ac_init :: proc (fft_size: int, samplerate: int) -> (config: AcConfig = {}) {
     config.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
     config.fft = make([]complex64, fft_size)
     config.autocorr = make([]f32, fft_size)
-    config.nsdf = make([]f32, fft_size)
+    config.nsdf = make([]f32, fft_size/2)
     config.samplerate = samplerate
     config.padded_samples = make([]f32, fft_size)
     return
@@ -47,7 +47,7 @@ ac_destroy :: proc (config: ^AcConfig) {
 
 
 // Detect pitch via auto-correlation
-ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, Vec3) {
+ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, Vec2) {
     ac_process_samples(config, samples)
 
     // ac_find_autocorr_peaks(config)
@@ -73,6 +73,7 @@ ac_process_samples :: proc (using config: ^AcConfig, samples: []f32) {
 
     // pad samples with zeros to avoid cyclic convolution
     mem.zero_slice(padded_samples)
+    mem.zero_slice(autocorr)
     copy(padded_samples, samples)
 
     // FFT transform
@@ -97,6 +98,11 @@ ac_process_samples :: proc (using config: ^AcConfig, samples: []f32) {
         nil,
         pffft.Direction.BACKWARD
     )
+
+    // scale by 1/N
+    for i in 0..<len(autocorr) {
+        autocorr[i] = autocorr[i] / f32(fft_size)
+    }
 }
 
 
@@ -139,18 +145,14 @@ ac_find_autocorr_peaks :: proc (using config: ^AcConfig) {
 }
 
 @(private)
-ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Vec3 {
+ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Vec2 {
     // clear out peaks from the previous run
     clear(&nsdf_peaks)
 
-    found := false
-
+    n := len(nsdf)
     MIN_PEAK_VALUE := 0.5 * nsdf[0]
 
-    // throw away the negative lags and ignore the right most area that's glitching
-    n := len(nsdf) / 2 - len(nsdf) / 16
-
-    max_peak := Vec3{0.0, 0.0, 0.0}
+    max_peak := Vec2{0.0, 0.0}
 
     // enumerate all the candidate peaks
     i := 1
@@ -180,16 +182,8 @@ ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Vec3 {
                 nsdf[lag+1]
             )
 
-            // auto-correlation magnitude is a measure of clarity
-            _, clarity := parabolic(
-                autocorr[lag-1],
-                autocorr[lag],
-                autocorr[lag+1]
-            )
-            clarity = autocorr[lag] / autocorr[0]
-
             improved_lag := f32(lag) + peak_location
-            peak := Vec3{improved_lag, magnitude, clarity}
+            peak := Vec2{improved_lag, magnitude}
             append(&nsdf_peaks, peak)
 
             if magnitude >= max_peak.y {
@@ -201,9 +195,9 @@ ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Vec3 {
         i += 1
     }
 
-    THRESHOLD: f32 = 0.8
-    chosen_peak: Vec3 = {}
-    chosen_peak_idx = 0
+    THRESHOLD: f32 = 0.9
+    chosen_peak: Vec2 = {}
+    chosen_peak_idx = -1
 
     // take the first key maximum above this threshold
     for p, idx in nsdf_peaks {
@@ -226,14 +220,14 @@ ac_nsdf :: proc (using config: ^AcConfig, samples: []f32) {
     copy(nsdf, autocorr[:n])
 
     // left-hand summation for zero lag
-    lhsum := 2.0 * nsdf[0] / f32(len(nsdf))
+    lhsum := 2.0 * nsdf[0]
 
     for i in 0..<n {
         if lhsum > 0.0 {
             nsdf[i] *= 2.0 / lhsum
+            lhsum -= samples[i] * samples[i] + samples[n-i-1] * samples[n-i-1]
         } else {
             nsdf[i] = 0.0
         }
-        lhsum -= samples[i] * samples[i] + samples[n-i-1] * samples[n-i-1]
     }
 }

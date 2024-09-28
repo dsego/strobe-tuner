@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pitchy Test</title>
+
+    <style type="text/css">
+
+      body {
+        font-family: sans-serif;
+      }
+
+      canvas {
+        border: 1px solid #c9c9c9;
+        border-radius: 4px;
+      }
+
+      body {
+        display: flex;
+        padding: 20px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+      }
+
+      .label {
+        font-weight: bold;
+      }
+    </style>
+</head>
+<body>
+<div>
+  <span class="label">Pitch:</span>
+  <span id="pitch">0</span>
+</div>
+
+<div>
+  <span class="label">Clarity:</span>
+  <span id="clarity">0</span>
+</div>
+
+<div>
+  <span class="label">FFT size:</span>
+  <span id="fft-size"></span>
+</div>
+
+<button id="resume-button">Resume audio context</button>
+
+
+<div>
+  <h4>Auto-correlation (4096)</h4>
+  <canvas id="ac-canvas" width="800" height="200" />
+</div>
+<div>
+  <h4>NSDF</h4>
+  <canvas id="nsdf-canvas" width="800" height="200" />
+</div>
+
+<script type="module">
+  import { PitchDetector } from "https://esm.sh/pitchy@4";
+
+
+  function drawAutocorrelation(detector) {
+    const buffer = detector._autocorrelator._inverseBuffer
+
+    const ac = []
+    for (let i = 0; i < buffer.length/2; i++) {
+      ac[i] = buffer[2 * i];
+    }
+
+    const res = 800 / ac.length
+    const gain = 100 / ac[0]
+
+    const canvas = document.getElementById('ac-canvas')
+    const ctx = canvas.getContext('2d')
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    // horizontal line
+    ctx.beginPath()
+    ctx.lineWidth = 0.5
+    ctx.strokeStyle = '#808b96'
+    ctx.moveTo(0, 100)
+    ctx.lineTo(800, 100)
+    ctx.stroke()
+
+    // vertical lines
+    ctx.beginPath()
+    ctx.strokeStyle = '#808b96'
+    ctx.lineWidth = 0.5
+    ctx.font = "10px sans-serif"
+    ctx.fillStyle = '#808b96'
+
+    for (let i = 0; i < ac.length; i += 256) {
+      ctx.moveTo(i * res, 0)
+      ctx.lineTo(i * res, 200)
+      ctx.fillText(i, i * res + 5, 190);
+    }
+    ctx.stroke()
+    ctx.fillText(ac[0].toFixed(2), 0 + 5, 10);
+
+
+    ctx.beginPath()
+    ctx.strokeStyle = 'orange'
+    ctx.lineWidth = 2
+
+    for (let i = 0; i < ac.length - 1; i++) {
+      ctx.moveTo(i * res, 100 - gain * ac[i])
+      ctx.lineTo(i * res, 100 - gain * ac[i+1])
+    }
+    ctx.stroke()
+  }
+
+  function drawNSDF(detector) {
+    const nsdf = detector._nsdfBuffer
+
+    const canvas = document.getElementById('nsdf-canvas')
+    const ctx = canvas.getContext('2d')
+
+    const res = 800 / nsdf.length
+    const gain = 100 / nsdf[0]
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    // horizontal line
+    ctx.beginPath()
+    ctx.lineWidth = 0.5
+    ctx.strokeStyle = '#808b96'
+    ctx.moveTo(0, 100)
+    ctx.lineTo(800, 100)
+    ctx.stroke()
+
+    // vertical lines
+    ctx.beginPath()
+    ctx.strokeStyle = '#808b96'
+    ctx.lineWidth = 0.5
+    ctx.font = "10px sans-serif"
+    ctx.fillStyle = '#808b96'
+    for (let i = 0; i < nsdf.length; i += 256) {
+      ctx.moveTo(i * res, 0)
+      ctx.lineTo(i * res, 200)
+      ctx.fillText(i, i * res + 5, 190);
+    }
+    ctx.stroke()
+
+
+
+    ctx.beginPath()
+    ctx.strokeStyle = 'steelblue'
+    ctx.lineWidth = 2
+    for (let i = 0; i < nsdf.length-1; i++) {
+      ctx.moveTo(i * res, 100 - gain * nsdf[i])
+      ctx.lineTo(i * res, 100 - gain * nsdf[i+1])
+    }
+    ctx.stroke()
+  }
+
+  function updatePitch(analyserNode, detector, input, sampleRate) {
+    analyserNode.getFloatTimeDomainData(input);
+    const [pitch, clarity] = detector.findPitch(input, sampleRate);
+
+
+
+    document.getElementById("pitch").textContent = `${
+      Math.round(pitch * 10) / 10
+    } Hz`;
+    document.getElementById("clarity").textContent = `${Math.round(
+      clarity * 100,
+    )} %`;
+    window.setTimeout(
+      () => updatePitch(analyserNode, detector, input, sampleRate),
+      100,
+    );
+
+
+    drawAutocorrelation(detector)
+    drawNSDF(detector)
+
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const audioContext = new window.AudioContext();
+    const analyserNode = audioContext.createAnalyser();
+
+    document
+      .getElementById("resume-button")
+      .addEventListener("click", () => audioContext.resume());
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+      audioContext.createMediaStreamSource(stream).connect(analyserNode);
+
+
+
+      document.getElementById("fft-size").textContent = analyserNode.fftSize
+
+      const detector = PitchDetector.forFloat32Array(analyserNode.fftSize);
+      detector.minVolumeDecibels = -20;
+      const input = new Float32Array(detector.inputLength);
+      updatePitch(analyserNode, detector, input, audioContext.sampleRate);
+    });
+  });
+
+  /*----------
+
+  function parabolic(alpha, beta, gamma) {
+    const location = 0.5 * (alpha - gamma) / (alpha - 2.0 * beta + gamma)
+    const magnitude = beta - 0.25 * (alpha - gamma) * location
+    return [location, magnitude]
+  }
+
+  // refineResultIndex - from pitchy.js
+  function refine(index, data) {
+    const [x0, x1, x2] = [index - 1, index, index + 1];
+    const [y0, y1, y2] = [data[x0], data[x1], data[x2]];
+
+    const a = y0 / 2 - y1 + y2 / 2;
+    const b = -(y0 / 2) * (x1 + x2) + y1 * (x0 + x2) - (y2 / 2) * (x0 + x1);
+    const c = (y0 * x1 * x2) / 2 - y1 * x0 * x2 + (y2 * x0 * x1) / 2;
+
+    const xMax = -b / (2 * a);
+    const yMax = a * xMax * xMax + b * xMax + c;
+    return [xMax, yMax];
+  }
+
+  {
+    const data = [14, 17, 9]
+    console.log(refine(1, data))
+    const [x, y] = parabolic(...data)
+    console.log(1 + x, y)
+  }
+
+  {
+    const data = [10, 100, 4]
+    console.log(refine(1, data))
+    const [x, y] = parabolic(...data)
+    console.log(1 + x, y)
+  }
+
+
+  {
+    const data = [2, 2, 1]
+    console.log(refine(1, data))
+    const [x, y] = parabolic(...data)
+    console.log(1 + x, y)
+  }
+
+  */
+
+</script>
+</body>
+</html>

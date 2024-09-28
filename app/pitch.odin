@@ -15,7 +15,7 @@ PitchInfo :: struct {
     detected_freq: f32,
     detected_note: Note,
     clarity: f32,
-    nsdf_peak: Vec3,
+    nsdf_peak: Vec2,
 }
 
 
@@ -64,7 +64,7 @@ run_pitch_detection :: proc (self: ^PicthDetector, prev_info: PitchInfo) -> Pitc
     }
 
     info.detected_freq, info.nsdf_peak = ac_pitch_detect(&self.autocorr, self.samples)
-    info.clarity = info.nsdf_peak.z
+    info.clarity = info.nsdf_peak.y
 
     // detected_freq_mean = run_smooth(&smooth, detected_freq)
     info.detected_note = find_note(info.detected_freq)

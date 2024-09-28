@@ -51,7 +51,7 @@ draw_autocorrelation :: proc(
     points: [FFT_SIZE]rl.Vector2 = {}
 
     start := 0 // enables me to move the start to zoom into a portion of the graph
-    end := len(ac.autocorr) / 2
+    end := len(ac.autocorr)
     len := end - start
 
     // stretch samples to fit the box width
@@ -66,7 +66,7 @@ draw_autocorrelation :: proc(
         x += px_per_sample
     }
 
-    draw_time_plot(rect, len, 9.0)
+    draw_time_plot(rect, len, 256)
     rl.DrawLineStrip(raw_data(points[:]), i32(len), rl.GOLD)
 
     // Mark peak positions with a cross
@@ -89,17 +89,19 @@ draw_autocorrelation :: proc(
         rl.DrawLineEx({cx-7.0, cy}, {cx+7.0, cy}, 2.0, rl.PINK)
         rl.DrawLineEx({cx, cy-7.0}, {cx, cy+7.0}, 2.0, rl.PINK)
     }
+
+    rl.DrawTextEx(font, fmt.ctprintf("%.2f",  ac.autocorr[0]), {rect.x, rect.y}, 16, 0, rl.BLUE)
 }
 
 draw_nsdf :: proc(
     rect: rl.Rectangle,
     ac: ^AcConfig,
-    peak: Vec3,
+    peak: Vec2,
 ) {
-    points: [FFT_SIZE]rl.Vector2 = {}
+    points: [FFT_SIZE/2]rl.Vector2 = {}
 
     start := 0 // enables me to move the start to zoom into a portion of the graph
-    end := len(ac.nsdf) / 2
+    end := len(ac.nsdf)
     len := end - start
 
     // stretch samples to fit the box width
@@ -114,7 +116,7 @@ draw_nsdf :: proc(
         x += px_per_sample
     }
 
-    draw_time_plot(rect, len, 9.0)
+    draw_time_plot(rect, len, 100)
     rl.DrawLineStrip(raw_data(points[:]), i32(len), rl.GOLD)
 
     // Mark peak positions with a cross
@@ -143,6 +145,8 @@ draw_nsdf :: proc(
         rl.DrawLineEx({cx-7.0, cy}, {cx+7.0, cy}, 2.0, color)
         rl.DrawLineEx({cx, cy-7.0}, {cx, cy+7.0}, 2.0, color)
     }
+
+    rl.DrawTextEx(font, fmt.ctprintf("%.2f",  ac.nsdf[0]), {rect.x, rect.y}, 16, 0, rl.BLUE)
 }
 
 draw_cepstrum :: proc(
@@ -165,7 +169,7 @@ draw_cepstrum :: proc(
         x += px_per_sample
     }
 
-    draw_time_plot(rect, l, 9.0)
+    draw_time_plot(rect, l, 100)
     rl.DrawLineStrip(raw_data(points[:]), i32(l), rl.GOLD)
 
     // Mark lag position with a cross
@@ -178,7 +182,7 @@ draw_cepstrum :: proc(
 }
 
 
-draw_time_plot :: proc(using rect: rl.Rectangle, len_samples: int, div_ms: f32) {
+draw_time_plot :: proc(using rect: rl.Rectangle, len_samples: int, div_samples: int) {
     // Horizontal lines at 1,0,-1
     rl.DrawLineEx({x, y}, {x+width, y}, 0.5, rl.GRAY)
     rl.DrawTextEx(font, "1", {x-16, y-8}, 16, 0, rl.GRAY)
@@ -189,15 +193,15 @@ draw_time_plot :: proc(using rect: rl.Rectangle, len_samples: int, div_ms: f32) 
     rl.DrawLineEx({x, y+height}, {x+width, y+height}, 0.5, rl.GRAY)
     rl.DrawTextEx(font, "-1", {x-24, y+height-8}, 16, 0, rl.GRAY)
 
-    // Vertical lines every x ms
-    len_ms : f32 = 1000.0 * f32(len_samples) / f32(SAMPLERATE)
-    px_per_ms := f32(width) / len_ms
+    // Vertical lines every x samples
+    px_per_sample := width / f32(len_samples)
 
-    for d := f32(0); d < len_ms; d += div_ms {
-        px := x + d * px_per_ms
+    for d := 0; d < len_samples; d += div_samples {
+        px := x + f32(d) * px_per_sample
         rl.DrawLineEx({px, y}, {px, y+height}, 0.5, rl.GRAY)
-        rl.DrawTextEx(font, fmt.ctprintf("%.0fms", d), {px, y+height+8}, 16, 0, rl.GRAY)
+        rl.DrawTextEx(font, fmt.ctprintf("%v", d), {px, y+height+8}, 16, 0, rl.GRAY)
     }
+    rl.DrawLineEx({x + width, y}, {x + width, y+height}, 0.5, rl.GRAY)
 }
 
 
@@ -277,6 +281,7 @@ draw_note_meter :: proc (rect: rl.Rectangle, pitch_info: PitchInfo, cents_error:
     rl.DrawRectangleV(
         {rect.x + pos - needle_width/2.0, rect.y + rect.height - needle_height},
         {needle_width, needle_height},
-        rl.ColorAlpha(rl.PURPLE, pitch_info.clarity),
+        rl.ColorAlpha(rl.PURPLE, 1.0),
+        // rl.ColorAlpha(rl.PURPLE, pitch_info.clarity),
     )
 }
