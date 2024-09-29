@@ -151,11 +151,11 @@ main :: proc() {
             draw_note_meter(rl.Rectangle{300, 600, 400, 100}, pitch_info, cents_error_smooth)
             rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq), {100, 550}, 18, 0, rl.GREEN)
 
-            rl.DrawTextEx(font, fmt.ctprintf("%.4f", pitch_info.rms), {20, 620}, 24, 0, rl.PINK)
+            rl.DrawTextEx(font, fmt.ctprintf("RMS %.4f", pitch_info.rms), {20, 620}, 24, 0, rl.PINK)
             rl.DrawRectangleV({20, 650}, {200 * pitch_info.rms, 4.0}, rl.PINK)
             rl.DrawRectangleLinesEx({20, 650, 200, 5}, 1, rl.PINK)
 
-            rl.DrawTextEx(font, fmt.ctprintf("%.4f", pitch_info.clarity), {20, 660}, 24, 0, rl.ORANGE)
+            rl.DrawTextEx(font, fmt.ctprintf("Cla %.4f", pitch_info.clarity), {20, 660}, 24, 0, rl.ORANGE)
             rl.DrawRectangleV({20, 690}, {200 * pitch_info.clarity, 4.0}, rl.ORANGE)
             rl.DrawRectangleLinesEx({20, 690, 200, 5}, 1, rl.ORANGE)
         }

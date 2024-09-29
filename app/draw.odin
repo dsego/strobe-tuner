@@ -10,7 +10,7 @@ root_dir := filepath.dir(#file)
 
 SHARP :: "♯"
 
-font_atlas : cstring = "ABCDEFGHz♯♭/-1234567890.msckFPS"
+font_atlas : cstring = "ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuwvxyzz♯♭/-1234567890.:"
 font: rl.Font
 
 
@@ -250,13 +250,13 @@ draw_freq_spectrum :: proc(rect: rl.Rectangle, spectrum: []f32, fft_size: int, s
 }
 
 
-
+// TODO: draw past good note/position greyed out if new pitch is not found
 draw_note_meter :: proc (rect: rl.Rectangle, pitch_info: PitchInfo, cents_error: f32) {
 
     // outline for visual debugging
     // rl.DrawRectangleLinesEx(rect, 1.0, rl.ORANGE)
 
-    if freq_in_range(pitch_info.detected_freq) {
+    if pitch_info.found {
         draw_note(pitch_info.detected_note, {rect.x + rect.width/2.0 - 20.0, rect.y}, 64)
         rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq), {20, 450}, 24, 0, rl.GREEN)
     }
