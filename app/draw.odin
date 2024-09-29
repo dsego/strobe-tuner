@@ -278,10 +278,12 @@ draw_note_meter :: proc (rect: rl.Rectangle, pitch_info: PitchInfo, cents_error:
     rl.DrawRectangleV({rect.x + rect.width - 0.5, rail_y - 10.0}, {1.0, 20.0}, rl.GRAY)
 
     // draw needle
-    rl.DrawRectangleV(
-        {rect.x + pos - needle_width/2.0, rect.y + rect.height - needle_height},
-        {needle_width, needle_height},
-        rl.ColorAlpha(rl.PURPLE, 1.0),
-        // rl.ColorAlpha(rl.PURPLE, pitch_info.clarity),
-    )
+    if pitch_info.found {
+        rl.DrawRectangleV(
+            {rect.x + pos - needle_width/2.0, rect.y + rect.height - needle_height},
+            {needle_width, needle_height},
+            rl.ColorAlpha(rl.PURPLE, 1.0),
+            // rl.ColorAlpha(rl.PURPLE, pitch_info.clarity),
+        )
+    }
 }

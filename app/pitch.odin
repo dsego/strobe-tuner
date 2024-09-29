@@ -1,6 +1,9 @@
 package app
 
 import "core:fmt"
+import "core:math"
+
+
 
 PicthDetector :: struct {
     using node: AudioCaptureNode,
@@ -16,6 +19,8 @@ PitchInfo :: struct {
     detected_note: Note,
     clarity: f32,
     nsdf_peak: Vec2,
+    rms: f32,
+    found: bool,
 }
 
 
@@ -65,9 +70,20 @@ run_pitch_detection :: proc (self: ^PicthDetector, prev_info: PitchInfo) -> Pitc
 
     info.detected_freq, info.nsdf_peak = ac_pitch_detect(&self.autocorr, self.samples)
     info.clarity = info.nsdf_peak.y
+    info.rms = calculate_rms(self.samples)
 
-    // detected_freq_mean = run_smooth(&smooth, detected_freq)
     info.detected_note = find_note(info.detected_freq)
 
+
+    // -20dB
+    info.found = info.rms >= 0.01 && info.clarity >= 0.98
+
     return info
+}
+
+
+calculate_rms :: proc (samples: []f32) -> f32 {
+    square_sum: f32 = 0
+    for s in samples do square_sum += s * s
+    return math.sqrt(square_sum / f32(len(samples)))
 }

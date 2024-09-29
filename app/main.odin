@@ -1,9 +1,13 @@
 package app
 
-import rl "vendor:raylib"
 import "core:fmt"
 import "core:strings"
 import "core:math"
+
+import rl "vendor:raylib"
+import oef "../one_euro_filter"
+
+
 
 main :: proc() {
 
@@ -66,24 +70,16 @@ main :: proc() {
 
     start_audio_capture(audio_capture)
 
-    show_pattern := false
-
-    // flatness: f32
-    // freq_estimate: f32 = 260.0
-    // freq_estimate_error:f32 = 0.5
-
     // set initial frequency
     freq_changed := true
     pitch_info := PitchInfo{}
-    cents_error_mean := f32(0.0)
-    // smooth := init_smoothing(15)
+    cents_error_smooth := f32(0.0)
+
+    // oe_filter_ptr := oef.Create(60, 1, 1, 1)
+    // defer oef.Destroy(oe_filter_ptr)
+
 
     for !rl.WindowShouldClose() {
-
-        // Toggle between scope view and strobe view
-        if rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
-            show_pattern = !show_pattern
-        }
 
         // Pick next or previous ukulele string
         if rl.IsKeyPressed(rl.KeyboardKey.RIGHT) {
@@ -138,28 +134,30 @@ main :: proc() {
             cents_error := cents - f32(pitch_info.detected_note.cents)
 
 
-            draw_note_meter(rl.Rectangle{160, 500, 400, 100}, pitch_info, cents_error)
+            draw_note_meter(rl.Rectangle{300, 500, 400, 100}, pitch_info, cents_error)
+
 
             // Smooth the meter by applying a weighted mean average
             // Applying to the relative cents error measurement instead of frequency to
             //  prevent the meter needle from making big jumps.
             if math.is_inf(cents) {
-                cents_error_mean = 0.0
+                cents_error_smooth = 0.0
             } else {
                 alpha: f32 = 0.1
-                cents_error_mean = ewma_filter(cents_error, alpha, cents_error_mean)
+                cents_error_smooth = ewma_filter(cents_error, alpha, cents_error_smooth)
+                // cents_error_smooth = oef.Do(oe_filter_ptr, cents_error)
             }
 
-            draw_note_meter(rl.Rectangle{160, 600, 400, 100}, pitch_info, cents_error_mean)
-            // rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq), {100, 550}, 18, 0, rl.GREEN)
+            draw_note_meter(rl.Rectangle{300, 600, 400, 100}, pitch_info, cents_error_smooth)
+            rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq), {100, 550}, 18, 0, rl.GREEN)
 
-            // rl.DrawTextEx(font, fmt.ctprintf("%.4f", flatness), {20, 620}, 24, 0, rl.PINK)
-            // rl.DrawRectangleV({20, 650}, {100 * flatness, 4.0}, rl.PINK)
+            rl.DrawTextEx(font, fmt.ctprintf("%.4f", pitch_info.rms), {20, 620}, 24, 0, rl.PINK)
+            rl.DrawRectangleV({20, 650}, {200 * pitch_info.rms, 4.0}, rl.PINK)
+            rl.DrawRectangleLinesEx({20, 650, 200, 5}, 1, rl.PINK)
 
-            rl.DrawTextEx(font, fmt.ctprintf("%.6f", pitch_info.clarity), {20, 660}, 24, 0, rl.LIME)
-            rl.DrawRectangleV({20, 690}, {100 * pitch_info.clarity, 4.0}, rl.LIME)
-
-
+            rl.DrawTextEx(font, fmt.ctprintf("%.4f", pitch_info.clarity), {20, 660}, 24, 0, rl.ORANGE)
+            rl.DrawRectangleV({20, 690}, {200 * pitch_info.clarity, 4.0}, rl.ORANGE)
+            rl.DrawRectangleLinesEx({20, 690, 200, 5}, 1, rl.ORANGE)
         }
     }
 }

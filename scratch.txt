@@ -3,13 +3,12 @@ TODO
 
 
 
--------
+build in some imprecision, meaning paint the needle in predefined increments?
+this is to prevent the needle from jerking around.
 
 
-low-pass fft filter to improve pitch detection?
+flatness (with or without windowing?)
 
-
-- need to convert fft anyway, could apply lp fft and compare
 
 ----
 
@@ -29,38 +28,6 @@ try 2 DFTs one for base, one for 2x freq - compare that fender ukulele, see if p
 
 
 reson - how to improve bass note filtering to remove harmonic?
-
-
----------
-
-
-
-
-strobe display pattern -> draw line graph overlayed on top
-
--> algorithm - detect zero crossings, ie take the sign function:
-  if signal > 0, then +1
-  if signal < 0, then -1
-
--> then fill in the holes smaller than the estimated period
-
-
-
-
-
-
-----
-
-
-i know the error rate based on discrete lag values?
-
-based on the window of sample, the ac lag basically swings left and right between some boundaries
-
-eg for 440hz is 440-441hz ---> why is it biased?
-
-
-kalman filter applied to lags based on known bias/error of the ac
-
 
 
 

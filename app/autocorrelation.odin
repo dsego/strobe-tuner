@@ -149,7 +149,9 @@ ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Vec2 {
     // clear out peaks from the previous run
     clear(&nsdf_peaks)
 
-    n := len(nsdf)
+    // TODO
+    n := len(nsdf) - 256
+
     MIN_PEAK_VALUE := 0.5 * nsdf[0]
 
     max_peak := Vec2{0.0, 0.0}
@@ -195,7 +197,7 @@ ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Vec2 {
         i += 1
     }
 
-    THRESHOLD: f32 = 0.9
+    THRESHOLD: f32 = 0.95
     chosen_peak: Vec2 = {}
     chosen_peak_idx = -1
 
