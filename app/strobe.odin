@@ -23,31 +23,37 @@ init_strobe :: proc (base_freq_hz: f32, samplerate: f32, band_count: int) -> (se
     freq_multiplier :f32 = 1.0
 
     for i in 0..<band_count {
-        freq_hz := freq_multiplier * base_freq_hz
+        band := StrobeBand{}
+        rb, rb_data := init_ringbuffer(DEFAULT_RB_SIZE)
+        band.ringbuffer = rb
+        band.ringbuffer_data = rb_data
+        band.framerate_state = init_framerate()
+        append(&self.bands, band)
+    }
 
+    set_strobe_freq(&self, base_freq_hz, samplerate)
+
+    self.stream_callback = strobe_audio_callback
+    return
+}
+
+set_strobe_freq :: proc (self: ^Strobe, base_freq_hz: f32, samplerate: f32) {
+    freq_multiplier: f32 = 1.0
+
+    for &band in self.bands {
+        freq_hz := freq_multiplier * base_freq_hz
         cents := freq_to_cents(freq_hz)
         bandwidth_hz := cents_to_freq(cents + 50) - cents_to_freq(cents - 50)
         norm_freq := freq_hz / samplerate
         norm_bandwidth := bandwidth_hz / samplerate
 
-        band := StrobeBand{}
         band.biquad = biquad_resonator(f64(norm_freq), f64(norm_bandwidth))
-
-        rb, rb_data := init_ringbuffer(DEFAULT_RB_SIZE)
-        band.ringbuffer = rb
-        band.ringbuffer_data = rb_data
-        band.framerate_state = init_framerate()
+        reset_framerate(&band.framerate_state)
 
         // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
         band.target_interval = 2.0 * samplerate / base_freq_hz
-
-        append(&self.bands, band)
-
         freq_multiplier *= 2.0
     }
-
-    self.stream_callback = strobe_audio_callback
-    return
 }
 
 reset_strobe :: proc(self: ^Strobe) {

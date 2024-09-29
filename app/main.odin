@@ -95,17 +95,21 @@ main :: proc() {
             freqs_idx %= len(freqs)
             if freqs_idx < 0 do freqs_idx += len(freqs) // wrap around
 
-            // reset_strobe_display()
+
             target_freq = freqs[freqs_idx]
 
-            // set_strobes(target_freq)
+            set_strobe_freq(&strobe, f32(target_freq), SAMPLERATE)
 
 
             freq_changed = false
         }
+
         note := find_note(f32(target_freq))
 
+        // TODO: turn of pitch detector if rms is weak?
+        prev_pitch_info := PitchInfo{}
         pitch_info = run_pitch_detection(&pitch_detector, pitch_info)
+
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -114,7 +118,7 @@ main :: proc() {
 
             rl.DrawFPS(700, 20)
 
-            /*
+
             draw_strobe_display(&strobe_display)
             draw_note(note, {20, 20}, 64)
 
@@ -122,12 +126,10 @@ main :: proc() {
             // Show target frequency & interval
             rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", target_freq), {20, 100}, 32, 0, rl.PURPLE)
             rl.DrawTextEx(font, fmt.ctprintf("%.4f", target_interval), {20, 150}, 16, 0, rl.SKYBLUE)
-            */
 
-            if DEBUG_NSDF {
-                draw_autocorrelation(rl.Rectangle{130, 50, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
-                draw_nsdf(rl.Rectangle{130, 300, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr, pitch_info.nsdf_peak)
-            }
+
+            // draw_autocorrelation(rl.Rectangle{130, 50, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
+            // draw_nsdf(rl.Rectangle{130, 300, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr, pitch_info.nsdf_peak)
 
             // convert to cents, because we need the log scale
             cents := freq_to_cents(pitch_info.detected_freq)

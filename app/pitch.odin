@@ -74,9 +74,7 @@ run_pitch_detection :: proc (self: ^PicthDetector, prev_info: PitchInfo) -> Pitc
 
     info.detected_note = find_note(info.detected_freq)
 
-
-    // -20dB
-    info.found = info.rms >= 0.01 && info.clarity >= 0.98
+    info.found = true // info.rms >= 0.001 && info.clarity >= 0.9
 
     return info
 }
