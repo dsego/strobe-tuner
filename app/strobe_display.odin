@@ -42,8 +42,11 @@ draw_strobe_display :: proc(self: ^StrobeDisplay) {
             target_interval=f64(band.target_interval),
         )
         rect := rl.Rectangle{160, f32(50 + 110 * i), 800, 100}
+
+        rl.DrawRectangleLinesEx({rect.x-1, rect.y-1, rect.width+2, rect.height+2}, 1.0, rl.LIGHTGRAY)
+
+        draw_strobe_band_pattern(rect, &self.bands[i], band.target_interval, frame_count, drift)
         draw_strobe_lines(rect, &self.bands[i], band.target_interval, frame_count, drift)
-        // experiment(rect, &strobe_displays[i], target_interval, frame_count, drift, target_freq)
     }
 }
 
@@ -57,15 +60,12 @@ draw_strobe_lines :: proc(
     drift: f64,
 ) {
     // fmt.println(target_interval, frame_count, drift)
-    rl.DrawRectangleLinesEx({rect.x-1, rect.y-1, rect.width+2, rect.height+2}, 1.0, rl.GRAY)
-    rl.DrawLineEx({rect.x, rect.y + rect.height/2.0}, {rect.x+rect.width, rect.y + rect.height/2.0}, 1.0, rl.GRAY)
-
     resolution := rect.width / f32(target_interval-1.0)
     drift_adj := f32(drift) * resolution
 
     x:f32 = f32(rect.x) + f32(rect.width) - drift_adj
 
-    gain:f32 = 20.0 // find_abs_max(band_display.samples)
+    gain:f32 = 10.0 // find_abs_max(band_display.samples)
 
     factor := (rect.height/2.0 - 1.0) * gain
 
@@ -85,87 +85,25 @@ draw_strobe_lines :: proc(
     rl.DrawLineStrip(raw_data(band_display.points), i32(frame_count), rl.PINK)
 }
 
-/*
-
-experiment :: proc(
+draw_strobe_band_pattern :: proc (
     rect: rl.Rectangle,
-    using strobe_display: ^StrobeDisplay,
-    target_interval: f64,
+    band_display: ^StrobeBandDisplay,
+    target_interval: f32,
     frame_count: u32,
     drift: f64,
-    target_freq: f64,
 ) {
+    resolution := rect.width / f32(target_interval-1.0)
+    drift_adj := f32(drift) * resolution
+    x:f32 = f32(rect.x) + f32(rect.width) - drift_adj
+    gain:f32 = 1.0 // find_abs_max(band_display.samples)
+    factor := (rect.height/2.0 - 1.0) * gain
 
-    // buffers: [802][1024]f32
-
-    // period := f32(SAMPLERATE / target_freq)
-
-    // flip := false
-    // next_edge := period
-
-    // for shift in 0..<len(buffers) {
-    //     next_edge = period - f32(shift)
-
-    //     // draw one black-white stripe pattern
-    //     for i in 0..<frame_count {
-    //         k := strobe_display.samples[i]
-    //         buffers[shift][i] = flip ? 1.0 : -1.0
-    //         buffers[shift][i] *= strobe_display.samples[shift]
-    //         if f32(i) > next_edge {
-    //             flip = !flip
-    //             next_edge += period
-    //         }
-    //     }
-    // }
-
-    // for i in 0..<frame_count {
-    //     for shift in 1..<len(buffers) {
-    //         buffers[0][i] += buffers[shift][i] / f32(len(buffers))
-    //     }
-    // }
-
-    // draw strobe pattern by calculating DFT phase
-    dft := run_dft(f32(target_freq), strobe_display.samples[:], SAMPLERATE)
-    sin := real(dft)
-    cos := imag(dft)
-
-    //  how to account for the small drift here
-    phase := -math.atan2(sin, cos)
-
-
-
-    // fmt.println(phase, magnitude(dft))
-
-    rl.DrawCircleLines(700, 600, 80, rl.GRAY)
-    rl.DrawCircleV(rl.Vector2{700.0 - 80.0 * math.cos(phase), 600.0 - 80.0 * math.sin(phase)}, 6.0, rl.PINK)
-    rl.DrawCircleV(rl.Vector2{700.0 - 80.0 * math.cos(phase+math.PI), 600.0 - 80.0 * math.sin(phase+math.PI)}, 6.0, rl.PINK)
-
-
-    // ============
-
-    // draw strobe pattern directly from samples
-
-    dx := rect.width / f32(target_interval - 1.0)
-    drift_adj := f32(drift) * dx
-
-    pos := rect.x + rect.width //- drift_adj
     for i in 0..<frame_count {
-
         // convert from range -1.0 - 1.0 to range 0 - 255
-
-        val := (5 * strobe_display.samples[i] + 1.0) / 2.0
-        // val := (5 * buffers[0][i] + 1.0) / 2.0
-
+        val := (factor * band_display.samples[i] + 1.0) / 2.0
         val = math.max(math.min(val, 1.0), 0.0)
-
         byte_val := u8(val * 255)
-        rl.DrawLineEx({pos, rect.y}, {pos, rect.y + 10}, dx, rl.Color{255, 255, 255, u8(byte_val)})
-
-        // val = u8(buffers[400][i] * 255)
-        // rl.DrawLineEx({pos, rect.y + 10}, {pos, rect.y + 20}, dx, rl.Color{255, 255, 255, u8(val)})
-        pos -= dx
+        rl.DrawLineEx({x, rect.y}, {x, rect.y + rect.height}, resolution, rl.Color{255, 255, 255, u8(byte_val)})
+        x -= resolution
     }
 }
-
-
-*/
