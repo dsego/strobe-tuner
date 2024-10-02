@@ -60,7 +60,13 @@ reconstruct_from_dft :: proc(
     freq_bin := freq_hz * f32(len(samples)) / samplerate
     phase_angle: f32 = 2.0 * math.PI / f32(len(samples))
 
-    for sample, i in samples {
+
+    // apply windowing
+    for i in 0..<len(samples) {
+        output[i] = samples[i] //* blackman_harris(f32(i), f32(len(samples)))
+    }
+
+    for sample, i in output {
         // 2πt
         time := phase_angle * f32(i)
 
@@ -68,7 +74,7 @@ reconstruct_from_dft :: proc(
         ft := freq_bin * time // 2πft
 
         re := sample * math.cos(ft)
-        im := -sample * math.sin(ft)
+        im := sample * math.sin(ft)
 
         dft += complex(re, im)
     }
@@ -82,10 +88,10 @@ reconstruct_from_dft :: proc(
 
     for _, i in samples {
         time := phase_angle * f32(i)
-        output[i] = amp * math.sin(freq_bin * time - phase)
+        output[i] = amp * math.sin(freq_bin * time + phase)
         output[i] /= f32(len(output))
     }
 
-    return amp
+    return phase
 }
 

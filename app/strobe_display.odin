@@ -129,8 +129,8 @@ draw_strobe_band_pattern :: proc (
     // gain := 100.0 / peak
 
 
-    amp := reconstruct_from_dft(target_freq, band_display.samples[:], band_display.filtered_samples[:], SAMPLERATE)
-    rl.DrawText(fmt.ctprintf("%.2f", amp), 120, i32(rect.y) + 50, 14, rl.GRAY)
+    // amp := reconstruct_from_dft(target_freq, band_display.samples[:], band_display.filtered_samples[:], SAMPLERATE)
+    // rl.DrawText(fmt.ctprintf("%.2f", amp), 120, i32(rect.y) + 50, 14, rl.GRAY)
 
     factor := (rect.height/2.0 - 1.0) * gain
 
@@ -150,8 +150,8 @@ draw_strobe_band_pattern :: proc (
 
     for i in 0..<frame_count {
         // convert from range -1.0 - 1.0 to range 0 - 255
-        val := 0.5 * factor * band_display.filtered_samples[i] + 0.5
-        // val := 0.5 * factor * band_display.samples[i] + 0.5
+        // val := 0.5 * factor * band_display.filtered_samples[i] + 0.5
+        val := 0.5 * factor * band_display.samples[i] + 0.5
         val = math.max(math.min(val, 1.0), 0.0)
 
         r := u8(f32(color_b.r) + f32(dr) * val)

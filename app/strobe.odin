@@ -92,7 +92,7 @@ process_strobe_band :: proc (band: ^StrobeBand, input: []f32)  {
 
 write_to_rb_region :: proc(band: ^StrobeBand, output: []f32, input: []f32) {
     for out, i in output {
-        output[i] = input[i]
-        // output[i] = biquad_process_sample(&band.biquad, input[i])
+        // output[i] = input[i]
+        output[i] = biquad_process_sample(&band.biquad, input[i])
     }
 }
