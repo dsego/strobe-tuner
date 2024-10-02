@@ -123,11 +123,14 @@ draw_strobe_band_pattern :: proc (
 
     peak: f32 = find_abs_max(band_display.samples)
 
-    // limit gain
+    // Limit gain
+    // eg max gain = 10/0.2 = 50
     gain := 10.0 / (peak + 0.2)
     // gain := 100.0 / peak
 
-    reconstruct_from_dft(target_freq, band_display.samples[:], band_display.filtered_samples[:], SAMPLERATE)
+
+    amp := reconstruct_from_dft(target_freq, band_display.samples[:], band_display.filtered_samples[:], SAMPLERATE)
+    rl.DrawText(fmt.ctprintf("%.2f", amp), 120, i32(rect.y) + 50, 14, rl.GRAY)
 
     factor := (rect.height/2.0 - 1.0) * gain
 

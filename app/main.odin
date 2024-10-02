@@ -34,7 +34,7 @@ main :: proc() {
         440.0000, // A4
     }
 
-    freqs: []f64 = bass_freqs
+    freqs: []f64 = guitar_freqs
     freqs_idx := 0
     target_freq := freqs[freqs_idx]
 

@@ -55,8 +55,8 @@ reconstruct_from_dft :: proc(
     samples: []f32,
     output: []f32,
     samplerate: f32,
-) {
-    dft: complex64
+) -> f32 {
+    dft: complex64 = complex(0, 0)
     freq_bin := freq_hz * f32(len(samples)) / samplerate
     phase_angle: f32 = 2.0 * math.PI / f32(len(samples))
 
@@ -78,12 +78,14 @@ reconstruct_from_dft :: proc(
     phase := math.atan2(sin, cos)
     amp := magnitude(dft)
 
-    fmt.println(amp)
+    // fmt.println(amp)
 
     for _, i in samples {
         time := phase_angle * f32(i)
         output[i] = amp * math.sin(freq_bin * time - phase)
         output[i] /= f32(len(output))
     }
+
+    return amp
 }
 
