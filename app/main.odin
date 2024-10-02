@@ -34,7 +34,7 @@ main :: proc() {
         440.0000, // A4
     }
 
-    freqs: []f64 = guitar_freqs
+    freqs: []f64 = bass_freqs
     freqs_idx := 0
     target_freq := freqs[freqs_idx]
 
@@ -129,7 +129,7 @@ main :: proc() {
 
 
             // draw_autocorrelation(rl.Rectangle{130, 50, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
-            draw_nsdf(rl.Rectangle{130, 280, SCREEN_WIDTH-200, 180}, &pitch_detector.autocorr, pitch_info.nsdf_peak)
+            draw_nsdf(rl.Rectangle{130, 280, SCREEN_WIDTH-200, 180}, &pitch_detector.nsdf, pitch_info.nsdf_peak)
 
             // convert to cents, because we need the log scale
             cents := freq_to_cents(pitch_info.detected_freq)

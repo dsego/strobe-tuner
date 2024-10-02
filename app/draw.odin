@@ -46,22 +46,22 @@ draw_note :: proc(note: Note, pos: [2]f32, size: f32, color: rl.Color = rl.PURPL
 
 draw_autocorrelation :: proc(
     rect: rl.Rectangle,
-    ac: ^AcConfig,
+    nsdf: ^NSDFConfig,
 ) {
     points: [FFT_SIZE]rl.Vector2 = {}
 
     start := 0 // enables me to move the start to zoom into a portion of the graph
-    end := len(ac.autocorr)
+    end := len(nsdf.autocorr)
     len := end - start
 
     // stretch samples to fit the box width
     px_per_sample := f32(rect.width) / f32(len - 1)
 
     x := rect.x
-    gain: = 1.0 / ac.autocorr[0]
+    gain: = 1.0 / nsdf.autocorr[0]
 
     for i in 0..<len {
-        y := rect.y + (rect.height/2.0) - ac.autocorr[start+i] * (rect.height / 2.0) * gain
+        y := rect.y + (rect.height/2.0) - nsdf.autocorr[start+i] * (rect.height / 2.0) * gain
         points[i] = { x, y }
         x += px_per_sample
     }
@@ -70,8 +70,8 @@ draw_autocorrelation :: proc(
     rl.DrawLineStrip(raw_data(points[:]), i32(len), rl.GOLD)
 
     // Mark peak positions with a cross
-    for peak in ac.autocorr_peaks {
-        val := ac.autocorr[peak] / ac.autocorr[0]
+    for peak in nsdf.autocorr_peaks {
+        val := nsdf.autocorr[peak] / nsdf.autocorr[0]
         rel_lag := f32(peak) - f32(start)
 
         cx := rect.x + rel_lag * f32(rect.width) / f32(len - 1)
@@ -90,28 +90,28 @@ draw_autocorrelation :: proc(
         rl.DrawLineEx({cx, cy-7.0}, {cx, cy+7.0}, 2.0, rl.PINK)
     }
 
-    rl.DrawTextEx(font, fmt.ctprintf("%.2f",  ac.autocorr[0]), {rect.x, rect.y}, 16, 0, rl.BLUE)
+    rl.DrawTextEx(font, fmt.ctprintf("%.2f",  nsdf.autocorr[0]), {rect.x, rect.y}, 16, 0, rl.BLUE)
 }
 
 draw_nsdf :: proc(
     rect: rl.Rectangle,
-    ac: ^AcConfig,
+    nsdf: ^NSDFConfig,
     peak: Vec2,
 ) {
     points: [FFT_SIZE/2]rl.Vector2 = {}
 
     start := 0 // enables me to move the start to zoom into a portion of the graph
-    end := len(ac.nsdf)
+    end := len(nsdf.nsdf)
     len := end - start
 
     // stretch samples to fit the box width
     px_per_sample := f32(rect.width) / f32(len - 1)
 
     x := rect.x
-    gain: = 1.0 / ac.nsdf[0]
+    gain: = 1.0 / nsdf.nsdf[0]
 
     for i in 0..<len {
-        y := rect.y + (rect.height/2.0) - ac.nsdf[start+i] * (rect.height / 2.0) * gain
+        y := rect.y + (rect.height/2.0) - nsdf.nsdf[start+i] * (rect.height / 2.0) * gain
         points[i] = { x, y }
         x += px_per_sample
     }
@@ -120,8 +120,8 @@ draw_nsdf :: proc(
     rl.DrawLineStrip(raw_data(points[:]), i32(len), rl.GOLD)
 
     // Mark peak positions with a cross
-    for peak, i in ac.nsdf_peaks {
-        val := peak.y / ac.nsdf[0]
+    for peak, i in nsdf.nsdf_peaks {
+        val := peak.y / nsdf.nsdf[0]
         rel_lag := f32(peak.x) - f32(start)
 
         cx := rect.x + rel_lag * f32(rect.width) / f32(len - 1)
@@ -139,14 +139,14 @@ draw_nsdf :: proc(
 
         // X marker - cross
         color := rl.GRAY
-        if ac.chosen_peak_idx == i {
+        if nsdf.chosen_peak_idx == i {
             color = rl.PINK
         }
         rl.DrawLineEx({cx-7.0, cy}, {cx+7.0, cy}, 2.0, color)
         rl.DrawLineEx({cx, cy-7.0}, {cx, cy+7.0}, 2.0, color)
     }
 
-    rl.DrawTextEx(font, fmt.ctprintf("%.2f",  ac.nsdf[0]), {rect.x, rect.y}, 16, 0, rl.BLUE)
+    rl.DrawTextEx(font, fmt.ctprintf("%.2f",  nsdf.nsdf[0]), {rect.x, rect.y}, 16, 0, rl.BLUE)
 }
 
 draw_cepstrum :: proc(

@@ -49,3 +49,41 @@ run_dft :: proc(freq_hz: f32, samples: []f32, samplerate: f32) -> (dft: complex6
     return
 }
 
+
+reconstruct_from_dft :: proc(
+    freq_hz: f32,
+    samples: []f32,
+    output: []f32,
+    samplerate: f32,
+) {
+    dft: complex64
+    freq_bin := freq_hz * f32(len(samples)) / samplerate
+    phase_angle: f32 = 2.0 * math.PI / f32(len(samples))
+
+    for sample, i in samples {
+        // 2πt
+        time := phase_angle * f32(i)
+
+        // Fourier formula: cos(2πft) - i×sin(2πft)
+        ft := freq_bin * time // 2πft
+
+        re := sample * math.cos(ft)
+        im := -sample * math.sin(ft)
+
+        dft += complex(re, im)
+    }
+
+    sin := real(dft)
+    cos := imag(dft)
+    phase := math.atan2(sin, cos)
+    amp := magnitude(dft)
+
+    fmt.println(amp)
+
+    for _, i in samples {
+        time := phase_angle * f32(i)
+        output[i] = amp * math.sin(freq_bin * time - phase)
+        output[i] /= f32(len(output))
+    }
+}
+

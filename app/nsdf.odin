@@ -6,12 +6,12 @@ import "core:math"
 import "../pffft"
 
 // -------------------------------------------------------------------------------------------------
-//  Pitch detection based on auto correlation
+//  Pitch detection based on NSDF
 // ------------------------------------------------------------------------------------------------
 
 Vec2 :: [2]f32
 
-AcConfig :: struct {
+NSDFConfig :: struct {
     pffft_setup: rawptr,
     fft_size: int,
     fft: []complex64,
@@ -24,7 +24,7 @@ AcConfig :: struct {
     chosen_peak_idx: int,
 }
 
-ac_init :: proc (fft_size: int, samplerate: int) -> (config: AcConfig = {}) {
+nsdf_init :: proc (fft_size: int, samplerate: int) -> (config: NSDFConfig = {}) {
     config.fft_size = fft_size
     config.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
     config.fft = make([]complex64, fft_size)
@@ -35,7 +35,7 @@ ac_init :: proc (fft_size: int, samplerate: int) -> (config: AcConfig = {}) {
     return
 }
 
-ac_destroy :: proc (config: ^AcConfig) {
+nsdf_destroy :: proc (config: ^NSDFConfig) {
     pffft.destroy_setup(config.pffft_setup)
     delete(config.fft)
     delete(config.autocorr)
@@ -45,15 +45,12 @@ ac_destroy :: proc (config: ^AcConfig) {
     delete(config.nsdf_peaks)
 }
 
+nsdf_pitch_detect :: proc (using config: ^NSDFConfig, samples: []f32) -> (f32, Vec2) {
 
-// Detect pitch via auto-correlation
-ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, Vec2) {
-    ac_process_samples(config, samples)
+    nsdf_process_samples(config, samples)
+    nsdf_run_nsdf(config, samples)
 
-    // ac_find_autocorr_peaks(config)
-
-    ac_nsdf(config, samples)
-    peak := ac_find_nsdf_peak(config)
+    peak := nsdf_find_nsdf_peak(config)
 
     estimated_freq:f32 = 0.0
 
@@ -68,7 +65,7 @@ ac_pitch_detect :: proc (using config: ^AcConfig, samples: []f32) -> (f32, Vec2)
 //   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,
 //    then taking the inverse FFT will give us the cyclic auto-correlation.
 @(private)
-ac_process_samples :: proc (using config: ^AcConfig, samples: []f32) {
+nsdf_process_samples :: proc (using config: ^NSDFConfig, samples: []f32) {
     assert(len(samples) <= fft_size/2)
 
     // pad samples with zeros to avoid cyclic convolution
@@ -86,6 +83,8 @@ ac_process_samples :: proc (using config: ^AcConfig, samples: []f32) {
     )
 
     // multiply FFT with conjugate
+    // - conjugation in the frequency domain is equivalent to reversal in the time domain
+    // (the difference between cross-correlation and convolution is a time reversal on one of the inputs)
     for i in 0..<len(fft) {
         fft[i] = fft[i] * conj(fft[i])
     }
@@ -107,45 +106,7 @@ ac_process_samples :: proc (using config: ^AcConfig, samples: []f32) {
 
 
 @(private)
-ac_find_autocorr_peaks :: proc (using config: ^AcConfig) {
-    lag := 0
-    peak_idx := 0
-    i := 1
-
-    // throw away the negative lags
-    n := len(autocorr) / 2
-
-    // clear out peaks from the previous run
-    clear(&autocorr_peaks)
-
-    for i < n {
-        // go down the slope until we reach the local minimum
-        for i < n && autocorr[i+1] < autocorr[i] do i += 1
-
-        // no slope, we're on flat grounds
-        if i == 1 do break
-
-        // the min is our starting point
-        lag = i
-
-        // search for the max peak across the whole buffer
-        for i < n {
-            if autocorr[i+1] > autocorr[lag] do lag = i + 1
-            i += 1
-        }
-
-        // we didn't find a max
-        if i == lag do break
-
-        append(&autocorr_peaks, lag)
-
-        // continue search for other max peaks from this lag
-        i = lag + 1
-    }
-}
-
-@(private)
-ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Vec2 {
+nsdf_find_nsdf_peak :: proc (using config: ^NSDFConfig) -> Vec2 {
     // clear out peaks from the previous run
     clear(&nsdf_peaks)
 
@@ -217,7 +178,7 @@ ac_find_nsdf_peak :: proc (using config: ^AcConfig) -> Vec2 {
 // Normalized Square Difference Function (through autocorrelation)
 // http://riogrande.cs.tcu.edu/1516Ribbit/resources/A_Smarter_Way_to_Find_Pitch.pdf
 @(private)
-ac_nsdf :: proc (using config: ^AcConfig, samples: []f32) {
+nsdf_run_nsdf :: proc (using config: ^NSDFConfig, samples: []f32) {
     n := len(samples)
     copy(nsdf, autocorr[:n])
 

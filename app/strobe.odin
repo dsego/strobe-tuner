@@ -9,6 +9,7 @@ StrobeBand :: struct {
     ringbuffer: RingBuffer,
     ringbuffer_data: []u8,
     framerate_state: FramerateState,
+    freq_hz: f32,
     target_interval: f32,
 }
 
@@ -51,6 +52,7 @@ set_strobe_freq :: proc (self: ^Strobe, base_freq_hz: f32, samplerate: f32) {
         reset_framerate(&band.framerate_state)
 
         // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
+        band.freq_hz = freq_hz
         band.target_interval = 2.0 * samplerate / base_freq_hz
         freq_multiplier *= 2.0
     }
@@ -90,6 +92,7 @@ process_strobe_band :: proc (band: ^StrobeBand, input: []f32)  {
 
 write_to_rb_region :: proc(band: ^StrobeBand, output: []f32, input: []f32) {
     for out, i in output {
-        output[i] = biquad_process_sample(&band.biquad, input[i])
+        output[i] = input[i]
+        // output[i] = biquad_process_sample(&band.biquad, input[i])
     }
 }

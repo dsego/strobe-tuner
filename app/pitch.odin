@@ -7,7 +7,7 @@ import "core:math"
 
 PicthDetector :: struct {
     using node: AudioCaptureNode,
-    autocorr: AcConfig,
+    nsdf: NSDFConfig,
     ringbuffer: RingBuffer,
     ringbuffer_data: []u8,
     samples: []f32,
@@ -26,7 +26,7 @@ PitchInfo :: struct {
 
 init_pitch_detector :: proc() -> (self: PicthDetector) {
     self.samples = make([]f32, FFT_SIZE/2)
-    self.autocorr = ac_init(FFT_SIZE, SAMPLERATE)
+    self.nsdf = nsdf_init(FFT_SIZE, SAMPLERATE)
     rb, rb_data := init_ringbuffer(DEFAULT_RB_SIZE)
     self.ringbuffer = rb
     self.ringbuffer_data = rb_data
@@ -35,7 +35,7 @@ init_pitch_detector :: proc() -> (self: PicthDetector) {
 }
 
 destroy_pitch_detector :: proc(self: ^PicthDetector) {
-    ac_destroy(&self.autocorr)
+    nsdf_destroy(&self.nsdf)
     delete(self.samples)
     delete(self.ringbuffer_data)
 }
@@ -68,7 +68,7 @@ run_pitch_detection :: proc (self: ^PicthDetector, prev_info: PitchInfo) -> Pitc
         read_ringbuffer(&self.ringbuffer, self.samples, u32(len(self.samples)))
     }
 
-    info.detected_freq, info.nsdf_peak = ac_pitch_detect(&self.autocorr, self.samples)
+    info.detected_freq, info.nsdf_peak = nsdf_pitch_detect(&self.nsdf, self.samples)
     info.clarity = info.nsdf_peak.y
     info.rms = calculate_rms(self.samples)
 

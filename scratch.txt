@@ -1,37 +1,11 @@
 
 TODO
 
+use flatness ?
 
 
 build in some imprecision, meaning paint the needle in predefined increments?
 this is to prevent the needle from jerking around.
-
-
-flatness (with or without windowing?)
-
-
-----
-
-
-
-for phase driven strobe -> generate pattern, move by phase
-
-
-DFT -> draw magnitude bar -> determine if I can use to blur/fade the strobe pattern
-
-
-
-try 2 DFTs one for base, one for 2x freq - compare that fender ukulele, see if patterns move independently
-
-->>>> the 2 DFTs should be pre-filtered or not?
-
-
-
-reson - how to improve bass note filtering to remove harmonic?
-
-
-
-
 
 ---------------------
 
@@ -87,25 +61,6 @@ resample strobe in strobe display
 
 
 ------------------------------------
-
-
-4 channel ringbuffer
-    - apply iir filtering in the audio callback, 4 iir filter for 4 channels
-    - read ringbuffer in one iteration for frame rate calculations
-    - peak read one sample before & after -> re-interpolate based on sub-sample drift
-
-
-
-
-
-
-show tone indication, the notes move left & right, the marker is static
-          V
---|---|---|---|---|--
-  C2  C#2 D2 D#2  E2
-
-
------
 
 how to improve IIR response at low frequency????
 oversample, decimate ??
