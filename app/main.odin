@@ -113,6 +113,11 @@ main :: proc() {
             pitch_info = prev_pitch_info
         }
 
+        if pitch_info.detected_note.cents != prev_pitch_info.detected_note.cents {
+            // fmt.println("NEW NOTE")
+            set_strobe_freq(&strobe, pitch_info.detected_note.frequency, SAMPLERATE)
+        }
+
         rl.BeginDrawing()
         defer rl.EndDrawing()
         {
@@ -122,13 +127,14 @@ main :: proc() {
 
 
             draw_strobe_display(&strobe_display)
-            draw_note(note, {20, 20}, 64)
 
+            /*
+            draw_note(note, {20, 20}, 64)
 
             // Show target frequency & interval
             rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", target_freq), {20, 100}, 32, 0, rl.PURPLE)
             rl.DrawTextEx(font, fmt.ctprintf("%.4f", target_interval), {20, 150}, 16, 0, rl.SKYBLUE)
-
+            */
 
             // draw_autocorrelation(rl.Rectangle{130, 50, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
             draw_nsdf(rl.Rectangle{130, 280, SCREEN_WIDTH-200, 180}, &pitch_detector.nsdf, pitch_info.nsdf_peak)
