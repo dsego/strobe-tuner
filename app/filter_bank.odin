@@ -60,7 +60,6 @@ reconstruct_from_dft :: proc(
     freq_bin := freq_hz * f32(len(samples)) / samplerate
     phase_angle: f32 = 2.0 * math.PI / f32(len(samples))
 
-
     // apply windowing
     for i in 0..<len(samples) {
         output[i] = samples[i] //* blackman_harris(f32(i), f32(len(samples)))
@@ -92,6 +91,6 @@ reconstruct_from_dft :: proc(
         output[i] /= f32(len(output))
     }
 
-    return phase
+    return amp
 }
 

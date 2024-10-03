@@ -49,6 +49,9 @@ set_strobe_freq :: proc (self: ^Strobe, base_freq_hz: f32, samplerate: f32) {
         norm_bandwidth := bandwidth_hz / samplerate
 
         band.biquad = biquad_resonator(f64(norm_freq), f64(norm_bandwidth))
+
+        flush_ringbuffer(&band.ringbuffer)
+
         reset_framerate(&band.framerate_state)
 
         // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
@@ -92,7 +95,7 @@ process_strobe_band :: proc (band: ^StrobeBand, input: []f32)  {
 
 write_to_rb_region :: proc(band: ^StrobeBand, output: []f32, input: []f32) {
     for out, i in output {
-        // output[i] = input[i]
-        output[i] = biquad_process_sample(&band.biquad, input[i])
+        output[i] = input[i]
+        // output[i] = biquad_process_sample(&band.biquad, input[i])
     }
 }

@@ -106,10 +106,12 @@ main :: proc() {
 
         note := find_note(f32(target_freq))
 
-        // TODO: turn of pitch detector if rms is weak?
-        prev_pitch_info := PitchInfo{}
+        // TODO: turn off pitch detector if rms is weak?
+        prev_pitch_info := pitch_info
         pitch_info = run_pitch_detection(&pitch_detector, pitch_info)
-
+        if pitch_info.clarity < 0.98 || pitch_info.rms < 0.02 {
+            pitch_info = prev_pitch_info
+        }
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -145,7 +147,7 @@ main :: proc() {
             if math.is_inf(cents) {
                 cents_error_smooth = 0.0
             } else {
-                alpha: f32 = 0.1
+                alpha: f32 = 0.5
                 cents_error_smooth = ewma_filter(cents_error, alpha, cents_error_smooth)
                 // cents_error_smooth = oef.Do(oe_filter_ptr, cents_error)
             }
