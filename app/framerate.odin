@@ -73,6 +73,7 @@ read_framerate_samples :: proc(
         overlap_sample = samples[count-1]
     }
 
+    // TODO: rename to jitter?
     // correct for sub-sample drift
     return count, fractional_part
 }

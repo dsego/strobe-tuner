@@ -251,15 +251,14 @@ draw_freq_spectrum :: proc(rect: rl.Rectangle, spectrum: []f32, fft_size: int, s
 
 
 // TODO: draw past good note/position greyed out if new pitch is not found
-draw_note_meter :: proc (rect: rl.Rectangle, pitch_info: PitchInfo, cents_error: f32) {
+draw_note_meter :: proc (rect: rl.Rectangle, freq: f32, note: Note, cents_error: f32) {
 
     // outline for visual debugging
     // rl.DrawRectangleLinesEx(rect, 1.0, rl.ORANGE)
 
-    if pitch_info.found {
-        draw_note(pitch_info.detected_note, {rect.x + rect.width/2.0 - 20.0, rect.y}, 64)
-        rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq), {20, 450}, 24, 0, rl.GREEN)
-    }
+    draw_note(note, {rect.x + rect.width/2.0 - 20.0, rect.y}, 64)
+    rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", freq), {20, 450}, 24, 0, rl.GREEN)
+
 
     px := rect.width / 100.0
     pos := rect.width/2 + cents_error * px
@@ -278,12 +277,9 @@ draw_note_meter :: proc (rect: rl.Rectangle, pitch_info: PitchInfo, cents_error:
     rl.DrawRectangleV({rect.x + rect.width - 0.5, rail_y - 10.0}, {1.0, 20.0}, rl.GRAY)
 
     // draw needle
-    if pitch_info.found {
-        rl.DrawRectangleV(
-            {rect.x + pos - needle_width/2.0, rect.y + rect.height - needle_height},
-            {needle_width, needle_height},
-            rl.ColorAlpha(rl.PURPLE, 1.0),
-            // rl.ColorAlpha(rl.PURPLE, pitch_info.clarity),
-        )
-    }
+    rl.DrawRectangleV(
+        {rect.x + pos - needle_width/2.0, rect.y + rect.height - needle_height},
+        {needle_width, needle_height},
+        rl.ColorAlpha(rl.PURPLE, 1.0),
+    )
 }

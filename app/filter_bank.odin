@@ -50,6 +50,10 @@ run_dft :: proc(freq_hz: f32, samples: []f32, samplerate: f32) -> (dft: complex6
 }
 
 
+// TODO
+// TODO
+// TODO
+//  Precalculate sin/cos stuff (phase_angle) just once per frequency
 reconstruct_from_dft :: proc(
     freq_hz: f32,
     samples: []f32,

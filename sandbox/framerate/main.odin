@@ -270,7 +270,7 @@ draw_screen :: proc() {
 
     frame_count, drift := read_samples()
 
-    fmt.println(target_interval, frame_count, drift)
+    // fmt.println(target_interval, frame_count, drift)
 
     // stretch samples to fit the screen width
     resolution := f32(SCREEN_WIDTH-40) / f32(target_interval-1)

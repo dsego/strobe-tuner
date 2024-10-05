@@ -75,6 +75,9 @@ main :: proc() {
     pitch_info := PitchInfo{}
     cents_error_smooth := f32(0.0)
 
+    detected_note: = Note{}
+    detected_freq:f32 = 0.0
+
     // oe_filter_ptr := oef.Create(60, 1, 1, 1)
     // defer oef.Destroy(oe_filter_ptr)
 
@@ -107,15 +110,17 @@ main :: proc() {
         note := find_note(f32(target_freq))
 
         // TODO: turn off pitch detector if rms is weak?
-        prev_pitch_info := pitch_info
         pitch_info = run_pitch_detection(&pitch_detector, pitch_info)
-        if pitch_info.clarity < 0.98 || pitch_info.rms < 0.02 {
-            pitch_info = prev_pitch_info
-        }
 
-        if pitch_info.detected_note.cents != prev_pitch_info.detected_note.cents {
-            // fmt.println("NEW NOTE")
-            set_strobe_freq(&strobe, pitch_info.detected_note.frequency, SAMPLERATE)
+        // Keep previous measurement if there is no detected note
+        if is_strong_pitch(pitch_info) {
+            if detected_note.cents != pitch_info.detected_note.cents &&
+                valid_strobe_freq(pitch_info.detected_note.frequency) {
+
+                detected_note = pitch_info.detected_note
+                set_strobe_freq(&strobe, detected_note.frequency, SAMPLERATE)
+            }
+            detected_freq = pitch_info.detected_freq
         }
 
         rl.BeginDrawing()
@@ -126,7 +131,7 @@ main :: proc() {
             rl.DrawFPS(SCREEN_WIDTH-100, 10)
 
 
-            draw_strobe_display(&strobe_display)
+            draw_strobe_display(&strobe_display, pitch_info.rms)
 
             /*
             draw_note(note, {20, 20}, 64)
@@ -140,11 +145,11 @@ main :: proc() {
             draw_nsdf(rl.Rectangle{130, 280, SCREEN_WIDTH-200, 180}, &pitch_detector.nsdf, pitch_info.nsdf_peak)
 
             // convert to cents, because we need the log scale
-            cents := freq_to_cents(pitch_info.detected_freq)
-            cents_error := cents - f32(pitch_info.detected_note.cents)
+            cents := freq_to_cents(detected_freq)
+            cents_error := cents - f32(detected_note.cents)
 
 
-            draw_note_meter(rl.Rectangle{300, 500, 400, 100}, pitch_info, cents_error)
+            draw_note_meter(rl.Rectangle{300, 500, 400, 100}, detected_freq, detected_note, cents_error)
 
 
             // Smooth the meter by applying a weighted mean average
@@ -158,7 +163,7 @@ main :: proc() {
                 // cents_error_smooth = oef.Do(oe_filter_ptr, cents_error)
             }
 
-            draw_note_meter(rl.Rectangle{300, 600, 400, 100}, pitch_info, cents_error_smooth)
+            draw_note_meter(rl.Rectangle{300, 600, 400, 100}, detected_freq, detected_note, cents_error_smooth)
             rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq), {100, 550}, 18, 0, rl.GREEN)
 
             rl.DrawTextEx(font, fmt.ctprintf("RMS %.4f", pitch_info.rms), {20, 620}, 24, 0, rl.PINK)

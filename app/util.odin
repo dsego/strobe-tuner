@@ -55,10 +55,6 @@ blackman_harris :: proc (i: f32, num: f32) -> f32 {
     return res
 }
 
-freq_in_range :: proc (freq: f32) -> bool {
-    return freq > MIN_FREQ && freq < MAX_FREQ
-}
-
 // Complex number magnitude
 magnitude :: proc (cpx: complex64) -> f32 {
     return math.sqrt(real(cpx) * real(cpx) + imag(cpx) * imag(cpx))

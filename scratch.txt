@@ -1,6 +1,11 @@
 
 TODO
 
+
+low pass FIR filter to remove above 8000 Hz ?
+
+
+
 use flatness ?
 
 
@@ -81,3 +86,16 @@ IIR scaling filter gain  / page 300
 
 
 --------
+
+
+SETTINGS
+
+pitch detection - clarity, rms
+limit pitch detection to instrument
+  chromatic - all notes
+  guitar - eg pick note close to D4, meter shows offset to E4 (high guitar string), not D4
+  ukulele, bass, etc
+  ...
+pitch standard 440Hz
+cents offset per note -> save as preset (sweetened tuning)
+strobe -> sweep speed (2x, 3x, ... periods)

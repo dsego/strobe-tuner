@@ -99,3 +99,7 @@ write_to_rb_region :: proc(band: ^StrobeBand, output: []f32, input: []f32) {
         // output[i] = biquad_process_sample(&band.biquad, input[i])
     }
 }
+
+valid_strobe_freq :: proc (freq: f32) -> bool {
+    return freq > MIN_STROBE_FREQ && freq < MAX_STROBE_FREQ
+}

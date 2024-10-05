@@ -45,7 +45,7 @@ destroy_strobe_display :: proc (self: ^StrobeDisplay) {
     rl.UnloadTexture(self.texture)
 }
 
-draw_strobe_display :: proc(self: ^StrobeDisplay) {
+draw_strobe_display :: proc(self: ^StrobeDisplay, rms: f32) {
     for &band, i in self.strobe.bands {
         frame_count, drift := read_framerate_samples(
             &band.framerate_state,
@@ -57,7 +57,11 @@ draw_strobe_display :: proc(self: ^StrobeDisplay) {
 
         rl.DrawRectangleLinesEx({rect.x-1, rect.y-1, rect.width+2, rect.height+2}, 1.0, rl.LIGHTGRAY)
 
-        draw_strobe_band_pattern(rect, &self.bands[i], band.target_interval, band.freq_hz, frame_count, drift)
+        if band.target_interval >= MAX_SPECTRUM_DISPLAY_LEN {
+            continue
+        }
+
+        draw_strobe_band_pattern(rect, &self.bands[i], band.target_interval, band.freq_hz, frame_count, drift, rms)
         // draw_fake_strobe_band_pattern(
         //     rect,
         //     self.texture,
@@ -117,20 +121,25 @@ draw_strobe_band_pattern :: proc (
     target_freq: f32,
     frame_count: u32,
     drift: f64,
+    rms: f32,
 ) {
     resolution := rect.width / f32(target_interval-1.0)
     drift_adj := f32(drift) * resolution
     x: f32 = f32(rect.x) + f32(rect.width) - drift_adj
 
-    peak: f32 = find_abs_max(band_display.samples)
+
+    // TODO: Auto ain based on RMS or max peak???
+
 
     // Limit gain, eg max gain = 10/0.1 = 100
-    gain := 20.0 / (peak + 0.2)
-    // gain := 100.0 / peak
+    // peak: f32 = find_abs_max(band_display.samples)
+    // gain := 100.0 / (peak + 0.1)
+
+    target_rms := f32(5.0)
+    gain := target_rms / (rms + 0.01)
 
     // zero out the filtered array ?
     for s, i in band_display.filtered_samples do band_display.filtered_samples[i] = 0
-
 
     amp := reconstruct_from_dft(target_freq, band_display.samples[:frame_count], band_display.filtered_samples[:], SAMPLERATE)
     rl.DrawText(fmt.ctprintf("%.2f", amp), 120, i32(rect.y) + 50, 14, rl.GRAY)

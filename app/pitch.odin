@@ -20,7 +20,6 @@ PitchInfo :: struct {
     clarity: f32,
     nsdf_peak: Vec2,
     rms: f32,
-    found: bool,
 }
 
 
@@ -74,8 +73,6 @@ run_pitch_detection :: proc (self: ^PicthDetector, prev_info: PitchInfo) -> Pitc
 
     info.detected_note = find_note(info.detected_freq)
 
-    info.found = true // info.rms >= 0.001 && info.clarity >= 0.9
-
     return info
 }
 
@@ -84,4 +81,8 @@ calculate_rms :: proc (samples: []f32) -> f32 {
     square_sum: f32 = 0
     for s in samples do square_sum += s * s
     return math.sqrt(square_sum / f32(len(samples)))
+}
+
+is_strong_pitch :: proc (pitch_info: PitchInfo) -> bool {
+    return pitch_info.clarity > 0.95 && pitch_info.rms > 0.01
 }
