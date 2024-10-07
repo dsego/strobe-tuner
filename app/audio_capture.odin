@@ -33,14 +33,13 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (bool, ^AudioCapture) {
     fmt.println("Initialized PortAudio")
 
     device_count := pa.GetDeviceCount()
+    self.active_device = pa.GetDefaultInputDevice()
 
     for i in 0..<device_count {
         info := pa.GetDeviceInfo(i)
         str := "  %v  ‣  %s (%v ch)\n"
-        if info.name == "BlackHole 2ch" {
-        // if info.name == "MacBook Pro Microphone" {
+        if i == self.active_device {
             str = "  %v [‣] %s (%v ch)\n"
-            self.active_device = i
         }
         fmt.printf(str, i, info.name, info.maxInputChannels)
     }

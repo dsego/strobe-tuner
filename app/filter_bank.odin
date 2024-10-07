@@ -33,8 +33,8 @@ run_filters :: proc (dft_freqs: []f32, samples: []f32, samplerate: f32) {
 
 // A brute force implementation that executes the Fourier formula directly
 run_dft :: proc(freq_hz: f32, samples: []f32, samplerate: f32) -> (dft: complex64) {
-    freq_bin := freq_hz * f32(len(samples)) / samplerate
-    phase_angle:f32 = 2.0 * math.PI / f32(len(samples))
+    freq_bin := freq_hz / samplerate
+    phase_angle:f32 = 2.0 * math.PI
 
     for sample, i in samples {
         time := phase_angle * f32(i)
@@ -61,12 +61,13 @@ reconstruct_from_dft :: proc(
     samplerate: f32,
 ) -> f32 {
     dft: complex64 = complex(0, 0)
-    freq_bin := freq_hz * f32(len(samples)) / samplerate
-    phase_angle: f32 = 2.0 * math.PI / f32(len(samples))
+    freq_bin := freq_hz / samplerate
+    phase_angle: f32 = 2.0 * math.PI
 
-    // apply windowing
+    // apply windowing?
     for i in 0..<len(samples) {
-        output[i] = samples[i] //* blackman_harris(f32(i), f32(len(samples)))
+        output[i] = samples[i]
+        // output[i] = samples[i] * blackman_harris(f32(i), f32(len(samples)))
     }
 
     for sample, i in output {
