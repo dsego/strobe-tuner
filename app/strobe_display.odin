@@ -61,7 +61,7 @@ draw_strobe_display :: proc(self: ^StrobeDisplay, rms: f32) {
             continue
         }
 
-        // draw_strobe_band_pattern(rect, &self.bands[i], band.target_interval, band.freq_hz, frame_count, drift, rms)
+        draw_strobe_band_pattern(rect, &self.bands[i], band.target_interval, band.freq_hz, frame_count, drift, rms)
         // draw_fake_strobe_band_pattern(
         //     rect,
         //     self.texture,
@@ -72,7 +72,7 @@ draw_strobe_display :: proc(self: ^StrobeDisplay, rms: f32) {
         //     drift,
         //     i,
         // )
-        draw_strobe_lines(rect, &self.bands[i], band.target_interval, frame_count, drift)
+        // draw_strobe_lines(rect, &self.bands[i], band.target_interval, frame_count, drift)
     }
 }
 
@@ -120,12 +120,9 @@ draw_strobe_band_pattern :: proc (
     drift: f64,
     rms: f32,
 ) {
-    resolution := rect.width / f32(target_interval-1.0)
-    drift_adj := f32(drift) * resolution
-    x: f32 = f32(rect.x) + f32(rect.width) - drift_adj
-
-
-    // TODO: Auto ain based on RMS or max peak???
+    resolution := rect.width / f32(frame_count)
+    // drift_adj := f32(drift) * resolution
+    x: f32 = f32(rect.x) + f32(rect.width)   //- drift_adj
 
 
     // Limit gain, eg max gain = 10/0.1 = 100
@@ -169,7 +166,12 @@ draw_strobe_band_pattern :: proc (
 
 
         // byte_val := u8(val * 255)
-        rl.DrawLineEx({x, rect.y}, {x, rect.y + rect.height}, resolution, rl.Color{r, g, b, 255})
+        rl.DrawLineEx(
+            {x - resolution/2, rect.y},
+            {x - resolution/2, rect.y + rect.height},
+            resolution,
+            rl.Color{r, g, b, 255},
+        )
         x -= resolution
     }
 }
