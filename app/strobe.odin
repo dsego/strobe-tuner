@@ -56,7 +56,11 @@ set_strobe_freq :: proc (self: ^Strobe, base_freq_hz: f32, samplerate: f32) {
 
         // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
         band.freq_hz = freq_hz
-        band.target_interval = 2.0 * samplerate / base_freq_hz
+        // band.target_interval = 2.0 * samplerate / base_freq_hz
+
+        octave, nearest := cents_to_octave(cents)
+        band.target_interval = octave * samplerate / base_freq_hz
+
         freq_multiplier *= 2.0
     }
 }
