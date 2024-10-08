@@ -5,7 +5,7 @@ import "core:log"
 import "core:os"
 import "core:math"
 import "core:mem"
-import "core:runtime"
+import "base:runtime"
 
 import rl "vendor:raylib"
 import ma "vendor:miniaudio"
@@ -88,7 +88,7 @@ main :: proc() {
     //         0.3 * math.sin(2.0 * math.PI * 440.0 * f32(i) / SAMPLERATE)
     // }
 
-    ctx.filter_config = filter_init(impulse_response_size=400)
+    ctx.filter_config = filter_init(impulse_response_size=200)
     defer filter_destroy(ctx.filter_config)
     filter_process(
         ctx.filter_config,

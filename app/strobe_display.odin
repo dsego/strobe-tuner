@@ -61,7 +61,7 @@ draw_strobe_display :: proc(self: ^StrobeDisplay, rms: f32) {
             continue
         }
 
-        draw_strobe_band_pattern(rect, &self.bands[i], band.target_interval, band.freq_hz, frame_count, drift, rms)
+        // draw_strobe_band_pattern(rect, &self.bands[i], band.target_interval, band.freq_hz, frame_count, drift, rms)
         // draw_fake_strobe_band_pattern(
         //     rect,
         //     self.texture,
@@ -86,7 +86,7 @@ draw_strobe_lines :: proc(
     drift: f64,
 ) {
     // fmt.println(target_interval, frame_count, drift)
-    resolution := rect.width / f32(target_interval-1.0)
+    resolution := rect.width / f32(target_interval)
     drift_adj := f32(drift) * resolution
 
     x:f32 = f32(rect.x) + f32(rect.width) - drift_adj
@@ -96,9 +96,6 @@ draw_strobe_lines :: proc(
 
     factor := (rect.height/2.0 - 1.0) * gain
 
-    // TODO: resample by linear interpolation to fit the pixels
-    // e.g. from 300 samples produce a value for each of the 800 pixels
-
     for i in 0..<frame_count {
         // note that y is flipped (negative)
         y := rect.y + rect.height/2.0 - band_display.samples[i] * factor
@@ -106,10 +103,10 @@ draw_strobe_lines :: proc(
         x -= resolution
     }
 
-
-    // target_interval = 2.0 * f64(SAMPLERATE) / target_freq
+    // fmt.println(band_display.samples[:frame_count], target_interval, frame_count, drift)
 
     rl.DrawLineStrip(raw_data(band_display.points), i32(frame_count), rl.PINK)
+
 }
 
 

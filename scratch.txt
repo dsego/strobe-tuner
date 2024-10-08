@@ -1,47 +1,59 @@
 
+
+
+
+framerate adjustment
+
+
+instead of taking 2 * interval samples, take interval for some base frequency interval
+
+--> this means higher frequencies will have more stripes, thus having the same sweeping "speed"
+
+
+
+TODO
+TODO
+TODO
+TODO
+I need the "overlap" sample to calculate the DFT correctly!!!!!
+
+
+
+filter by zero padding, converting to fft, removing freqs and inverse fft
+
+
+
+
+// Experiment with a FIR narrow band pass filter
+// 1. FFT of zero padded signal
+// 2. keep only one or a handful freq bins of interest
+// 3. do inverse FFT
+// https://youtu.be/jzVy6OWbAB8?t=770
+---------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
 TODO
 
 
 low pass FIR filter to remove above 8000 Hz ?
 
 
-
-use flatness ?
-
-
 build in some imprecision, meaning paint the needle in predefined increments?
 this is to prevent the needle from jerking around.
+
+
+sensitivity ---> less periods in sweep, more sensitive, fill in the strobe pattern by doubling pattern frequency (deconstruct method)
 
 ---------------------
 
 
 
-Idea, DFTs for selected freq bins, how to reduce side lobes
-
-  -> try goertzel or SDFT for single bin freqs - page 745...both also suffers spectral leakage :(
-
-
--- the cause is discontinuities due to the limited window, can we be smarter about probing with sin/cos
-maybe we can detect the zero crossings instead of using the whole length for the DFT
-
----
-
 Flatness vs normalized AC value for activating strobe and gain.
-
-
-Set the strobe framerate based on detected pitch - make sure there are no glitches
--> noise gate, auto gain
-
--> CLEAR RINGBUFFER when changing frequency ?
-
-
-Peak trigger (schmitt?) to generate an improved strobe display (bands)
-
-
-Frequency Locked Synth -> AGC and a Period Trigger
-
-
-Kalman filters, g-h filter (alpha-beta) for smoothing
 
 
 -----
@@ -53,40 +65,7 @@ foreign import portaudio "system:/opt/homebrew/Cellar/portaudio/19.7.0/lib/libpo
 
 
 
-
-
 --------
-
-
-minimalistic flat ui inspired by ableton
-
-add zeros to filter out harmonics? - copy resonator
-
-resample strobe in strobe display
-
-
-------------------------------------
-
-how to improve IIR response at low frequency????
-oversample, decimate ??
-
-
------
-
-
-FSF filter / pg 392
-
-two pole / many zeroes iir filter ?
-
-goertzel?
-
-
-IIR scaling filter gain  / page 300
-
-
-
---------
-
 
 SETTINGS
 

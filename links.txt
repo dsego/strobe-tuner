@@ -139,3 +139,14 @@ A SMARTER WAY TO FIND PITCH
 http://riogrande.cs.tcu.edu/1516Ribbit/resources/A_Smarter_Way_to_Find_Pitch.pdf
 https://github.com/ianprime0509/pitchy/blob/main/index.js
 https://muted.io/tuner/
+
+
+Matched filter
+https://en.wikipedia.org/wiki/Matched_filter
+
+
+Convolution in the time domain
+https://www.youtube.com/watch?v=9Hk-RAIzOaw
+
+Convolution as spectral multiplication
+https://youtu.be/hj7j4Q8T3Ck
