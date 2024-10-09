@@ -1,45 +1,3 @@
-/*
-
-
-
-CRAZY IDEA
-
-get the frequency for 10 samples instead of 10,5350944062
-
-44100 / 10
-
-calculate the phase  ---- then what?
-
-compare to that new freq, if phase is zero we are offset by 223,991Hz  ?
-
-
-
-4410 vs 4186,009
-
-
-
-
-
-
-44100/4186,009
-
-
-interval
-
-10,5350944062
-
-
-sine wave with freq 4186,009, sum should be zero,
-
-generate sine with different phases, take dft and compare phase
-
-
-windowing, more than one interval?
-
-
-
-*/
-
 package sweep
 
 import "core:fmt"
@@ -91,6 +49,9 @@ main :: proc () {
 
         // Apply windowing
         for i in 0..<len(samples) {
+            // win_samples[i] = blackmann_window(f64(i), f64(len(samples)))
+            // win_samples[i] = samples[i] * gaussian_window(f64(i), f64(len(samples)), 4.0)
+            // win_samples[i] = samples[i] * flattop_window(f64(i), f64(len(samples)))
             win_samples[i] = samples[i] * blackmann_window(f64(i), f64(len(samples)))
         }
 
@@ -217,6 +178,29 @@ magnitude :: proc (cpx: complex128) -> f64 {
 }
 
 blackmann_window :: proc (k: f64, size: f64) -> f64 {
-    l : f64 = 2.0 * math.PI * k / (2.0 * size/2 - 1.0)
-    return 0.42 - 0.5 * math.cos(l) + 0.08 * math.cos(2.0 * l)
+    a0 := 0.42
+    a1 := 0.5
+    a2 := 0.08
+
+    l:f64 = 2.0 * math.PI * k / (2.0 * size/2 - 1.0)
+    return a0 - a1 * math.cos(l) + a2 * math.cos(2.0 * l)
 }
+
+
+// https://ccrma.stanford.edu/~jos/Windows/Windows_2up.pdf
+gaussian_window :: proc (k: f64, size: f64, sigma: f64) -> f64 {
+    n := k - (size -1) / 2.0
+    return math.exp(-n * n / (2.0 * sigma * sigma))
+}
+
+// https://www.recordingblogs.com/wiki/flat-top-window
+flattop_window :: proc (k: f64, size: f64) -> f64 {
+    return (
+        0.21557895
+        - 0.41663158  * math.cos(2 * math.PI * k / (size - 1))
+        + 0.277263158 * math.cos(4 * math.PI * k / (size - 1))
+        - 0.083578947 * math.cos(6 * math.PI * k / (size - 1))
+        + 0.006947368 * math.cos(8 * math.PI * k / (size - 1))
+    )
+}
+
