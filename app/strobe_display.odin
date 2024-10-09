@@ -139,7 +139,8 @@ draw_strobe_band_pattern :: proc (
         target_freq,
         band_display.samples[:frame_count],
         band_display.filtered_samples[:],
-        SAMPLERATE
+        SAMPLERATE,
+        drift,
     )
     rl.DrawText(fmt.ctprintf("%.2f", amp), 120, i32(rect.y) + 50, 14, rl.GRAY)
 

@@ -1,8 +1,74 @@
 
 
+NEW IDEA
 
-overlap processing ?
 
+upsample by factor of 10x, eg
+
+B4
+493,8833Hz
+
+44100 / 493,8833  = 89,2923490225   samples per period
+
+4 periods in display = 4 * 89,2923490225 = 357,16939609
+
+upsample to 35717 samples
+44100 / 357,17 = 123,4706162332
+
+123,4706162332 * 4 = 493,8824649328 Hz
+
+difference of 0.0029296875 cents (?)
+
+
+
+A0
+27.5
+
+44100 / 27,5  = 1603,6363636364   samples per period
+
+1 period in display = 1603,6363636364
+
+upsample to 16036 samples
+44100 / 1603,6 = 27,5006235969
+
+difference 0.0390625 cents
+
+
+2 period in display = 3207,2727272728
+
+upsample to 32073 samples
+44100 / 3207,3 = 13,7498830792
+
+2 * 13,7498830792 = 27,4997661584
+
+difference 0.0146484375 cents
+
+
+
+C8
+44100 / 4186,009 = 10,5350944062
+
+8 periods = 84,2807552496
+
+upsample to 8428
+
+44100 / 84,28 = 523,2558139535
+
+523,2558139535 * 8 = 4186,046511628
+
+difference 0.015625 cents
+
+
+
+Questions:
+
+do I need to upsample everything or just generate the missing samples ?
+
+
+
+
+
+--------
 
 
 filter by zero padding, converting to fft, removing freqs and inverse fft

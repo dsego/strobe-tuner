@@ -81,6 +81,7 @@ main :: proc() {
     // oe_filter_ptr := oef.Create(60, 1, 1, 1)
     // defer oef.Destroy(oe_filter_ptr)
 
+    fmt.println(freq_to_cents(4186.046511628)-freq_to_cents(4186.009))
 
     for !rl.WindowShouldClose() {
 

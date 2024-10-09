@@ -149,15 +149,6 @@ run_dft :: proc(freq_hz: f64, samples: []f64, samplerate: f64, interval: f64) ->
         dft += complex(re, im)
     }
 
-    // take care of the fractional part
-    {
-        // fraction := interval - math.floor(interval)
-        // sample := samples[l-2] + fraction * (samples[l-1] - samples[l-2])
-        // re := sample * math.cos(2.0 * math.PI * freq_bin * interval)
-        // im := sample * math.sin(2.0 * math.PI * freq_bin * interval)
-        // dft += complex(re, im)
-    }
-
     return
 }
 
