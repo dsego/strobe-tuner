@@ -135,7 +135,12 @@ draw_strobe_band_pattern :: proc (
     // zero out the filtered array ?
     for s, i in band_display.filtered_samples do band_display.filtered_samples[i] = 0
 
-    amp := reconstruct_from_dft(target_freq, band_display.samples[:frame_count], band_display.filtered_samples[:], SAMPLERATE)
+    amp := reconstruct_from_dft(
+        target_freq,
+        band_display.samples[:frame_count],
+        band_display.filtered_samples[:],
+        SAMPLERATE
+    )
     rl.DrawText(fmt.ctprintf("%.2f", amp), 120, i32(rect.y) + 50, 14, rl.GRAY)
 
     factor := (rect.height/2.0 - 1.0) * gain

@@ -233,7 +233,8 @@ filter_process :: proc(
     }
 }
 
-
+// TODO: is this correct?
+// It produces only the right side lobe
 blackmann_window :: proc (k: f32, size: f32) -> f32 {
     shift : f32 = math.PI
     l : f32 = shift + 2.0 * math.PI * k / (2.0 * size - 1.0)

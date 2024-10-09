@@ -2,23 +2,6 @@
 
 
 
-framerate adjustment
-
-
-instead of taking 2 * interval samples, take interval for some base frequency interval
-
---> this means higher frequencies will have more stripes, thus having the same sweeping "speed"
-
-
-
-TODO
-TODO
-TODO
-TODO
-I need the "overlap" sample to calculate the DFT correctly!!!!!
-
-
-
 filter by zero padding, converting to fft, removing freqs and inverse fft
 
 

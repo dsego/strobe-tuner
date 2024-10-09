@@ -54,7 +54,7 @@ run_dft :: proc(freq_hz: f32, samples: []f32, samplerate: f32) -> (dft: complex6
 // TODO
 // TODO
 //  Precalculate sin/cos stuff (phase_angle) just once per frequency
-reconstruct_from_dft :: proc(
+_reconstruct_from_dft :: proc(
     freq_hz: f32,
     samples: []f32,
     output: []f32,
@@ -62,7 +62,6 @@ reconstruct_from_dft :: proc(
 ) -> f32 {
     dft: complex64 = complex(0, 0)
     freq_bin := freq_hz / samplerate
-    phase_angle: f32 = 2.0 * math.PI
 
     // apply windowing?
     for i in 0..<len(samples) {
@@ -71,11 +70,8 @@ reconstruct_from_dft :: proc(
     }
 
     for sample, i in output {
-        // 2πt
-        time := phase_angle * f32(i)
-
         // Fourier formula: cos(2πft) - i×sin(2πft)
-        ft := freq_bin * time // 2πft
+        ft := freq_bin * 2.0 * math.PI * f32(i) // 2πft
 
         re := sample * math.cos(ft)
         im := sample * math.sin(ft)
@@ -91,8 +87,56 @@ reconstruct_from_dft :: proc(
     // fmt.println(amp)
 
     for _, i in samples {
-        time := phase_angle * f32(i)
-        output[i] = amp * math.sin(freq_bin * time + phase)
+        output[i] = amp * math.sin(freq_bin * 2.0 * math.PI * f32(i) + phase)
+        output[i] /= f32(len(output))
+    }
+
+    return amp
+}
+
+
+
+reconstruct_from_dft :: proc(
+    freq_hz: f32,
+    samples: []f32,
+    output: []f32,
+    samplerate: f32,
+) -> f32 {
+    dft: complex64 = complex(0, 0)
+
+    // interval := samplerate/freq_hz
+    // trunc_interval := math.trunc(interval)
+    // fraction := interval - trunc_interval
+    // freq_hz := samplerate / trunc_interval
+
+    freq_bin := freq_hz / samplerate
+
+
+    // apply windowing?
+    for i in 0..<len(samples) {
+        output[i] = samples[i]
+        // output[i] = samples[i] * blackman_harris(f32(i), f32(len(samples)))
+    }
+
+    for sample, i in output {
+        // Fourier formula: cos(2πft) - i×sin(2πft)
+        ft := freq_bin * 2.0 * math.PI * f32(i) // 2πft
+
+        re := sample * math.cos(ft)
+        im := sample * math.sin(ft)
+
+        dft += complex(re, im)
+    }
+
+    sin := real(dft)
+    cos := imag(dft)
+    phase := math.atan2(sin, cos)
+    amp := magnitude(dft)
+
+    // fmt.println(amp)
+
+    for _, i in samples {
+        output[i] = amp * math.sin(freq_bin * 2.0 * math.PI * f32(i) + phase)
         output[i] /= f32(len(output))
     }
 
