@@ -32,17 +32,16 @@ run_filters :: proc (dft_freqs: []f32, samples: []f32, samplerate: f32) {
 
 
 // A brute force implementation that executes the Fourier formula directly
-run_dft :: proc(freq_hz: f32, samples: []f32, samplerate: f32) -> (dft: complex64) {
+run_dft :: proc(freq_hz: f32, samples: []f32, samplerate: f32, drift: f32 = 0.0) -> (dft: complex64) {
     freq_bin := freq_hz / samplerate
-    phase_angle:f32 = 2.0 * math.PI
 
     for sample, i in samples {
-        time := phase_angle * f32(i)
+        time := 2.0 * math.PI * (f32(i) + drift)
 
         // Fourier formula: cos(2πft) - i×sin(2πft)
         ft := freq_bin * time
         re := sample * math.cos(ft)
-        im := -sample * math.sin(ft)
+        im := sample * math.sin(ft)
 
         dft += complex(re, im)
     }
@@ -83,36 +82,27 @@ reconstruct_from_dft :: proc(
     for sample, i in output {
         // Fourier formula: cos(2πft) - i×sin(2πft)
         // -----------------------------------------------
-        // PROMISING! Makes the strobe pattern stationary
+        // PROMISING! Makes the strobe pattern stationary - not quite?
         // -----------------------------------------------
         ft := freq_bin * 2.0 * math.PI * (f32(i) + f32(drift)) // 2πft
+
         // -----------------------------------------------
 
         re := sample * math.cos(ft) //*blackmann_window(f32(i), n)
         im := sample * math.sin(ft) //*blackmann_window(f32(i), n)
 
 
-
         dft += complex(re, im)
     }
+    // one bin DFT overly aggressive filtering??
 
     sin := real(dft)
     cos := imag(dft)
     phase := math.atan2(sin, cos)
-    amp := 2.0 * magnitude(dft)
+    amp := magnitude(dft)
 
-    // fmt.println(amp)
-    // ?????
-    // phase_adj for each sample ? ----- or just resample and be done with it
-
-    // APPLY TIME SHIFT PROEPRTY????
-    // Time shift property: • F{f (t − t0)} = e−iωt0 F (ω)
-
-
-    phase_adj:f32 = 0.0 // 2.0 * math.PI * f32(1.0 - drift)
 
     for _, i in output {
-        // output[i] = 1.0 * math.sin(freq_bin * 2.0 * math.PI * f32(i))
         output[i] = amp * math.sin(freq_bin * 2.0 * math.PI * f32(i) + phase)
         output[i] /= f32(len(output))
     }

@@ -1,5 +1,25 @@
 
 
+Without resampling the wobble won't go away!!!
+Need to oversample for smooth motion in higher frequencies where there are only tens of samples per period.
+
+
+Tested with the original Strobie, the pattern is stable, need to resample!!!
+
+
+
+
+Upsample via fft... try to filter by throwing away freq bands
+
+
+
+
+
+
+==============================
+
+
+
 NEW IDEA
 
 

@@ -38,6 +38,9 @@ main :: proc() {
     freqs_idx := 0
     target_freq := freqs[freqs_idx]
 
+    // TODO: remove
+    // target_freq = 1975.533
+
     target_interval := 0.0
 
 
@@ -98,9 +101,10 @@ main :: proc() {
         if freq_changed {
             freqs_idx %= len(freqs)
             if freqs_idx < 0 do freqs_idx += len(freqs) // wrap around
-
-
             target_freq = freqs[freqs_idx]
+
+            // TODO: remove
+            // target_freq = 1975.533
 
             set_strobe_freq(&strobe, f32(target_freq), SAMPLERATE)
 
@@ -114,15 +118,15 @@ main :: proc() {
         pitch_info = run_pitch_detection(&pitch_detector, pitch_info)
 
         // Keep previous measurement if there is no detected note
-        if is_strong_pitch(pitch_info) {
-            if detected_note.cents != pitch_info.detected_note.cents &&
-                valid_strobe_freq(pitch_info.detected_note.frequency) {
+        // if is_strong_pitch(pitch_info) {
+        //     if detected_note.cents != pitch_info.detected_note.cents &&
+        //         valid_strobe_freq(pitch_info.detected_note.frequency) {
 
-                detected_note = pitch_info.detected_note
-                set_strobe_freq(&strobe, detected_note.frequency, SAMPLERATE)
-            }
-            detected_freq = pitch_info.detected_freq
-        }
+        //         detected_note = pitch_info.detected_note
+        //         set_strobe_freq(&strobe, detected_note.frequency, SAMPLERATE)
+        //     }
+        //     detected_freq = pitch_info.detected_freq
+        // }
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -134,8 +138,8 @@ main :: proc() {
 
             draw_strobe_display(&strobe_display, pitch_info.rms)
 
-            /*
             draw_note(note, {20, 20}, 64)
+            /*
 
             // Show target frequency & interval
             rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", target_freq), {20, 100}, 32, 0, rl.PURPLE)

@@ -44,11 +44,11 @@ set_strobe_freq :: proc (self: ^Strobe, base_freq_hz: f32, samplerate: f32) {
     for &band in self.bands {
         freq_hz := freq_multiplier * base_freq_hz
         cents := freq_to_cents(freq_hz)
-        bandwidth_hz := cents_to_freq(cents + 50) - cents_to_freq(cents - 50)
+        bandwidth_hz := cents_to_freq(cents + 100) - cents_to_freq(cents - 100)
         norm_freq := freq_hz / samplerate
         norm_bandwidth := bandwidth_hz / samplerate
 
-        band.biquad = biquad_resonator(f64(norm_freq), f64(norm_bandwidth))
+        band.biquad = biquad_resonator(f64(norm_freq), f64(norm_bandwidth), 2)
 
         flush_ringbuffer(&band.ringbuffer)
 
@@ -56,12 +56,12 @@ set_strobe_freq :: proc (self: ^Strobe, base_freq_hz: f32, samplerate: f32) {
 
         // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
         band.freq_hz = freq_hz
-        band.target_interval = 2.0 * samplerate / base_freq_hz
+        // band.target_interval = 4.0 * samplerate / base_freq_hz
 
-        // samples_per_period := samplerate / base_freq_hz
-        // k := math.floor(800.0 / samples_per_period)
-        // if k < 1 do k = 1
-        // band.target_interval = k * samplerate / base_freq_hz
+        samples_per_period := samplerate / base_freq_hz
+        k := math.floor(800.0 / samples_per_period)
+        if k < 1 do k = 1
+        band.target_interval = k * samplerate / base_freq_hz
 
 
         freq_multiplier *= 2.0

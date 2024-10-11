@@ -44,17 +44,6 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (bool, ^AudioCapture) {
         fmt.printf(str, i, info.name, info.maxInputChannels)
     }
 
-    // err = pa.OpenDefaultStream(
-    //     stream=&stream,
-    //     numInputChannels=1,
-    //     numOutputChannels=0,
-    //     sampleFormat=pa.Float32,
-    //     sampleRate=f64(samplerate),
-    //     framesPerBuffer=pa.FramesPerBufferUnspecified,
-    //     streamCallback=stream_callback,
-    //     userData=nil,
-    // )
-
     stream_params := pa.StreamParameters {
         device=self.active_device,
         channelCount=1,
