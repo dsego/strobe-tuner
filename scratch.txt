@@ -1,5 +1,14 @@
 
 
+Comb filter to filter out other frequencies ?
+
+
+The sliding Goertzel is essentially a comb filter (with a delay set to N samples) followed by a second order IIR.
+You need only compute the complex spectral coefficient every hop samples.
+
+
+
+
 Without resampling the wobble won't go away!!!
 Need to oversample for smooth motion in higher frequencies where there are only tens of samples per period.
 

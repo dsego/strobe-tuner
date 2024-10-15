@@ -11,6 +11,7 @@ StrobeBand :: struct {
     framerate_state: FramerateState,
     freq_hz: f32,
     target_interval: f32,
+    time_reference: int,
 }
 
 Strobe :: struct {
@@ -56,12 +57,12 @@ set_strobe_freq :: proc (self: ^Strobe, base_freq_hz: f32, samplerate: f32) {
 
         // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
         band.freq_hz = freq_hz
-        // band.target_interval = 4.0 * samplerate / base_freq_hz
+        band.target_interval = 4.0 * samplerate / base_freq_hz
 
-        samples_per_period := samplerate / base_freq_hz
-        k := math.floor(800.0 / samples_per_period)
-        if k < 1 do k = 1
-        band.target_interval = k * samplerate / base_freq_hz
+        // samples_per_period := samplerate / base_freq_hz
+        // k := math.floor(800.0 / samples_per_period)
+        // if k < 1 do k = 1
+        // band.target_interval = k * samplerate / base_freq_hz
 
 
         freq_multiplier *= 2.0
@@ -101,12 +102,39 @@ process_strobe_band :: proc (band: ^StrobeBand, input: []f32)  {
 
 
 write_to_rb_region :: proc(band: ^StrobeBand, output: []f32, input: []f32) {
+    // NEW IDEA
+    // Generate the reference signal and calculate a cross correlation between the input & reference
+    // Let's draw the reference, input & cross-correlation to see what we get.
+    angular_freq := 2.0 * math.PI * band.freq_hz / 44100.0
+
+    reference_signal: [1024]f32 = {}
+
     for out, i in output {
-        output[i] = input[i]
+        // reference_signal[i] = 0.5 * math.sin(angular_freq * f32(band.time_reference))
+        // band.time_reference += 1
+        // output[i] = reference_signal[i]
         // output[i] = biquad_process_sample(&band.biquad, input[i])
+        output[i] = input[i]
     }
+
+    for out, i in output {
+
+
+    }
+
+    // TODO reset time reference
+    // if band.time_reference >= 400909 do band.time_reference = 0
 }
 
 valid_strobe_freq :: proc (freq: f32) -> bool {
     return freq > MIN_STROBE_FREQ && freq < MAX_STROBE_FREQ
+}
+
+
+convolve :: proc (input: []f32, kernel: []f32, output: []f32) {
+    for i in 0..<len(kernel) {
+        for j in 0..<len(input) {
+            output[i+j] += kernel[i] * input[i]
+        }
+    }
 }

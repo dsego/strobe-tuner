@@ -150,3 +150,12 @@ https://www.youtube.com/watch?v=9Hk-RAIzOaw
 
 Convolution as spectral multiplication
 https://youtu.be/hj7j4Q8T3Ck
+
+
+5. Impulse Signal and its Response - Digital Filter Basics
+NORMALIZED SINC!
+https://youtu.be/vsj7wUaTYdY
+
+
+Portaudio Hotplug
+https://github.com/PortAudio/portaudio/wiki/HotPlug

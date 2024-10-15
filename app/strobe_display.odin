@@ -80,10 +80,14 @@ draw_strobe_display :: proc(self: ^StrobeDisplay, rms: f32) {
 
         band_display := &self.bands[i]
         max_peak := find_abs_max(band_display.samples)
-        gain:f32 = 100.0 / (max_peak + 0.1)
+        gain: f32 = 10.0 / (max_peak + 0.01)
+        // gain: f32 = 1.0
 
-        // for k in 0..<frame_count do band_display.filtered_samples[k] = band_display.samples[k]
 
+
+        for k in 0..<frame_count do band_display.filtered_samples[k] = band_display.samples[k]
+
+        // TODO test with FIR filter instead
         amp := reconstruct_from_dft(
             band.freq_hz,
             band_display.samples[:frame_count],
@@ -101,7 +105,7 @@ draw_strobe_display :: proc(self: ^StrobeDisplay, rms: f32) {
         // draw_strobe_lines_drift(rect, &self.bands[i], band.target_interval, frame_count, drift)
 
         draw_strobe_band_pattern(rect, &self.bands[i], band.target_interval, band.freq_hz, frame_count, gain)
-        // draw_strobe_lines(rect, &self.bands[i], band.target_interval, frame_count, gain)
+        draw_strobe_lines(rect, &self.bands[i], band.target_interval, frame_count, gain)
     }
 }
 
@@ -121,7 +125,7 @@ draw_strobe_lines :: proc(
 
     for i in 0..<frame_count {
         // note that y is flipped (negative)
-        y := rect.y + rect.height/2.0 - band_display.filtered_samples[i] * factor
+        y := rect.y + rect.height/2.0 + band_display.filtered_samples[i] * factor
         band_display.points[i] = { x, y }
         x -= resolution
     }
@@ -153,7 +157,7 @@ draw_strobe_lines_drift :: proc(
 
     for i in 0..<frame_count {
         // note that y is flipped (negative)
-        y := rect.y + rect.height/2.0 - band_display.samples[i] * factor
+        y := rect.y + rect.height/2.0 + band_display.samples[i] * factor
         band_display.points[i] = { x, y }
         x -= resolution
     }

@@ -22,6 +22,9 @@ AudioCapture :: struct {
 }
 
 
+
+// TODO can't listen to default input device refresh without hotplug
+// https://github.com/PortAudio/portaudio/wiki/HotPlug
 init_audio_capture :: proc(samplerate: u32 = 44100) -> (bool, ^AudioCapture) {
     err: pa.Error
 
@@ -118,6 +121,7 @@ stream_callback :: proc "c" (
     userData: rawptr,
 ) -> int {
     context = runtime.default_context()
+
     input_slice: []f32 = slice.from_ptr(cast([^]f32) input, int(frameCount))
 
     self := cast(^AudioCapture) userData

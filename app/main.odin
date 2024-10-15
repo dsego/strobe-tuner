@@ -40,6 +40,7 @@ main :: proc() {
 
     // TODO: remove
     // target_freq = 1975.533
+    // target_freq = 110.0
 
     target_interval := 0.0
 
@@ -84,8 +85,6 @@ main :: proc() {
     // oe_filter_ptr := oef.Create(60, 1, 1, 1)
     // defer oef.Destroy(oe_filter_ptr)
 
-    fmt.println(freq_to_cents(4186.046511628)-freq_to_cents(4186.009))
-
     for !rl.WindowShouldClose() {
 
         // Pick next or previous ukulele string
@@ -105,6 +104,7 @@ main :: proc() {
 
             // TODO: remove
             // target_freq = 1975.533
+            // target_freq = 110.0
 
             set_strobe_freq(&strobe, f32(target_freq), SAMPLERATE)
 
@@ -118,15 +118,15 @@ main :: proc() {
         pitch_info = run_pitch_detection(&pitch_detector, pitch_info)
 
         // Keep previous measurement if there is no detected note
-        // if is_strong_pitch(pitch_info) {
-        //     if detected_note.cents != pitch_info.detected_note.cents &&
-        //         valid_strobe_freq(pitch_info.detected_note.frequency) {
+        if is_strong_pitch(pitch_info) {
+            if detected_note.cents != pitch_info.detected_note.cents &&
+                valid_strobe_freq(pitch_info.detected_note.frequency) {
 
-        //         detected_note = pitch_info.detected_note
-        //         set_strobe_freq(&strobe, detected_note.frequency, SAMPLERATE)
-        //     }
-        //     detected_freq = pitch_info.detected_freq
-        // }
+                detected_note = pitch_info.detected_note
+                set_strobe_freq(&strobe, detected_note.frequency, SAMPLERATE)
+            }
+            detected_freq = pitch_info.detected_freq
+        }
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
