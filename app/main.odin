@@ -35,7 +35,7 @@ main :: proc() {
     }
 
     freqs: []f64 = ukulele_freqs
-    freqs_idx := 0
+    freqs_idx := 1
     target_freq := freqs[freqs_idx]
 
     // TODO: remove
@@ -65,9 +65,6 @@ main :: proc() {
 
     init_drawing_context()
     defer destroy_drawing_context()
-
-    strobe_display := init_strobe_display(MAX_SPECTRUM_DISPLAY_LEN, &strobe)
-    defer destroy_strobe_display(&strobe_display)
 
     register_audio_node(audio_capture, &pitch_detector)
     register_audio_node(audio_capture, &strobe)
@@ -118,15 +115,18 @@ main :: proc() {
         pitch_info = run_pitch_detection(&pitch_detector, pitch_info)
 
         // Keep previous measurement if there is no detected note
-        if is_strong_pitch(pitch_info) {
-            if detected_note.cents != pitch_info.detected_note.cents &&
-                valid_strobe_freq(pitch_info.detected_note.frequency) {
 
-                detected_note = pitch_info.detected_note
-                set_strobe_freq(&strobe, detected_note.frequency, SAMPLERATE)
-            }
-            detected_freq = pitch_info.detected_freq
-        }
+        // TODO: detect note onset?
+
+        // if is_strong_pitch(pitch_info) {
+        //     if detected_note.cents != pitch_info.detected_note.cents &&
+        //         valid_strobe_freq(pitch_info.detected_note.frequency) {
+
+        //         detected_note = pitch_info.detected_note
+        //         set_strobe_freq(&strobe, detected_note.frequency, SAMPLERATE)
+        //     }
+        //     detected_freq = pitch_info.detected_freq
+        // }
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -136,7 +136,7 @@ main :: proc() {
             rl.DrawFPS(SCREEN_WIDTH-100, 10)
 
 
-            draw_strobe_display(&strobe_display, pitch_info.rms)
+            draw_strobe(&strobe, pitch_info.rms)
 
             draw_note(note, {20, 20}, 64)
             /*

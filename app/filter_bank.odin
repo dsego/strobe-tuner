@@ -101,9 +101,17 @@ reconstruct_from_dft :: proc(
     phase := math.atan2(sin, cos)
     amp := magnitude(dft)
 
+    state := 1
+    half_interval := samplerate / freq_hz / 2.0
+    next_flip := half_interval * phase / math.PI
 
     for _, i in output {
         output[i] = amp * math.sin(freq_bin * 2.0 * math.PI * f32(i) + phase)
+        // if f32(i) > next_flip {
+        //     state = -state
+        //     next_flip += interval
+        // }
+        // output[i] = amp * f32(state)
         output[i] /= f32(len(output))
     }
 
@@ -119,3 +127,20 @@ blackmann_window :: proc (k: f32, size: f32) -> f32 {
     l:f32 = 2.0 * math.PI * k / (2.0 * size/2 - 1.0)
     return a0 - a1 * math.cos(l) + a2 * math.cos(2.0 * l)
 }
+
+
+
+// TODO instead of  generating a sine, generate a square wave with amp modulating the "strength"
+
+
+// goertzl 740 ?
+
+
+// matched filter? - wavelet cross correlation
+
+
+// add more poles to reson???
+
+// TODO TODO TOD bandpass fir filter
+
+
