@@ -2,6 +2,7 @@ package app
 
 import "core:math"
 import "core:fmt"
+import rl "vendor:raylib"
 
 
 // Parabolic interpolation to find the more accurate peak location
@@ -90,3 +91,34 @@ find_abs_max :: proc (slice: []f32) -> f32 {
     }
     return max
 }
+
+
+lerp :: proc (a: f32, b: f32, t: f32) -> f32 {
+  return a + t * (b - a)
+}
+
+convert_to_rgba :: proc (value: f32) -> rl.Color {
+    value := value
+
+    color_a := rl.Color{226, 101, 70, 255}
+    color_b := rl.Color{84, 32, 43, 255}
+
+    // TODO optimize, no need to calculate per sample
+    dr := color_a.r - color_b.r
+    dg := color_a.g - color_b.g
+    db := color_a.b - color_b.b
+
+
+    // convert from range -1.0 - 1.0 to range 0 - 255
+    value = 0.5 * value + 0.5
+    // val := 0.5 * factor * band_display.samples[i] + 0.5
+    value = math.max(math.min(value, 1.0), 0.0)
+
+    r := u8(f32(color_b.r) + f32(dr) * value)
+    g := u8(f32(color_b.g) + f32(dg) * value)
+    b := u8(f32(color_b.b) + f32(db) * value)
+
+    return rl.Color{r, g, b, 255}
+}
+
+

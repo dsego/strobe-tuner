@@ -35,18 +35,23 @@ main :: proc() {
     }
 
     freqs: []f64 = ukulele_freqs
-    freqs_idx := 1
+    freqs_idx := 0
     target_freq := freqs[freqs_idx]
 
     // TODO: remove
     // target_freq = 1975.533
-    // target_freq = 110.0
+    target_freq = 55.0
 
     target_interval := 0.0
 
 
     strobe := init_strobe(f32(target_freq), SAMPLERATE, 2)
     defer destroy_strobe(&strobe)
+
+
+    phase_tracker := init_phase_tracker(f32(target_freq), SAMPLERATE, 2)
+    defer destroy_phase_tracker(&phase_tracker)
+
 
     pitch_detector := init_pitch_detector()
     defer destroy_pitch_detector(&pitch_detector)
@@ -66,8 +71,9 @@ main :: proc() {
     init_drawing_context()
     defer destroy_drawing_context()
 
-    register_audio_node(audio_capture, &pitch_detector)
+    // register_audio_node(audio_capture, &pitch_detector)
     register_audio_node(audio_capture, &strobe)
+    register_audio_node(audio_capture, &phase_tracker)
 
     start_audio_capture(audio_capture)
 
@@ -101,9 +107,10 @@ main :: proc() {
 
             // TODO: remove
             // target_freq = 1975.533
-            // target_freq = 110.0
+            target_freq = 55.0
 
-            set_strobe_freq(&strobe, f32(target_freq), SAMPLERATE)
+            set_strobe_freq(&strobe, f32(target_freq))
+            set_phase_tracker_freq(&phase_tracker, f32(target_freq))
 
 
             freq_changed = false
@@ -112,7 +119,7 @@ main :: proc() {
         note := find_note(f32(target_freq))
 
         // TODO: turn off pitch detector if rms is weak?
-        pitch_info = run_pitch_detection(&pitch_detector, pitch_info)
+        // pitch_info = run_pitch_detection(&pitch_detector, pitch_info)
 
         // Keep previous measurement if there is no detected note
 
@@ -136,7 +143,8 @@ main :: proc() {
             rl.DrawFPS(SCREEN_WIDTH-100, 10)
 
 
-            draw_strobe(&strobe, pitch_info.rms)
+            // draw_strobe(&strobe)
+            draw_phase_tracker_display(&phase_tracker)
 
             draw_note(note, {20, 20}, 64)
             /*

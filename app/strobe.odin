@@ -1,3 +1,14 @@
+/* ------------------------------------------------------------------------------------------------
+
+
+
+    Sweeping strobe - based on matching the sweep interval to desired frequency
+
+
+
+ ------------------------------------------------------------------------------------------------ */
+
+
 package app
 
 import "core:math"
@@ -25,12 +36,11 @@ StrobeBandDisplay :: struct {
 Strobe :: struct {
     using node: AudioCaptureNode,
     bands: [dynamic]StrobeBand,
+    samplerate: f32,
 }
 
 
-
 init_strobe :: proc (base_freq_hz: f32, samplerate: f32, band_count: int) -> (self: Strobe) {
-
     freq_multiplier :f32 = 1.0
 
     for i in 0..<band_count {
@@ -45,9 +55,10 @@ init_strobe :: proc (base_freq_hz: f32, samplerate: f32, band_count: int) -> (se
         append(&self.bands, band)
     }
 
-    set_strobe_freq(&self, base_freq_hz, samplerate)
-
+    self.samplerate = samplerate
     self.stream_callback = strobe_audio_callback
+
+    set_strobe_freq(&self, base_freq_hz)
 
     return
 }
@@ -62,15 +73,15 @@ destroy_strobe :: proc(self: ^Strobe) {
     delete(self.bands)
 }
 
-set_strobe_freq :: proc (self: ^Strobe, base_freq_hz: f32, samplerate: f32) {
+set_strobe_freq :: proc (self: ^Strobe, base_freq_hz: f32) {
     freq_multiplier: f32 = 1.0
 
     for &band in self.bands {
         freq_hz := freq_multiplier * base_freq_hz
         cents := freq_to_cents(freq_hz)
         bandwidth_hz := cents_to_freq(cents + 100) - cents_to_freq(cents - 100)
-        norm_freq := freq_hz / samplerate
-        norm_bandwidth := bandwidth_hz / samplerate
+        norm_freq := freq_hz / self.samplerate
+        norm_bandwidth := bandwidth_hz / self.samplerate
 
         band.biquad = biquad_resonator(f64(norm_freq), f64(norm_bandwidth), 2)
 
@@ -80,12 +91,12 @@ set_strobe_freq :: proc (self: ^Strobe, base_freq_hz: f32, samplerate: f32) {
 
         // for strobe aim at a double interval, to show more of the wave shape and slow down the strobe movement
         band.freq_hz = freq_hz
-        band.target_interval = 4.0 * samplerate / base_freq_hz
+        band.target_interval = 4.0 * self.samplerate / base_freq_hz
 
-        // samples_per_period := samplerate / base_freq_hz
+        // samples_per_period := self.samplerate / base_freq_hz
         // k := math.floor(800.0 / samples_per_period)
         // if k < 1 do k = 1
-        // band.target_interval = k * samplerate / base_freq_hz
+        // band.target_interval = k * self.samplerate / base_freq_hz
 
 
         freq_multiplier *= 2.0
@@ -117,30 +128,12 @@ process_strobe_band :: proc (band: ^StrobeBand, input: []f32)  {
     advance_ringbuffer_write(&band.ringbuffer, i32(num_written))
 }
 
-
+@(private="file")
+// TODO: just use copy
 write_to_rb_region :: proc(band: ^StrobeBand, output: []f32, input: []f32) {
-    // NEW IDEA
-    // Generate the reference signal and calculate a cross correlation between the input & reference
-    // Let's draw the reference, input & cross-correlation to see what we get.
-    angular_freq := 2.0 * math.PI * band.freq_hz / 44100.0
-
-    reference_signal: [1024]f32 = {}
-
     for out, i in output {
-        // reference_signal[i] = 0.5 * math.sin(angular_freq * f32(band.time_reference))
-        // band.time_reference += 1
-        // output[i] = reference_signal[i]
-        // output[i] = biquad_process_sample(&band.biquad, input[i])
         output[i] = input[i]
     }
-
-    for out, i in output {
-
-
-    }
-
-    // TODO reset time reference
-    // if band.time_reference >= 400909 do band.time_reference = 0
 }
 
 valid_strobe_freq :: proc (freq: f32) -> bool {
@@ -164,15 +157,15 @@ convolve :: proc (input: []f32, kernel: []f32, output: []f32) {
 // -------------------------------------------------------------------------------------------------
 
 
-draw_strobe :: proc(self: ^Strobe, rms: f32) {
-    for &band, i in self.bands {
+draw_strobe :: proc(self: ^Strobe) {
+    for &band, band_idx in self.bands {
         frame_count, drift := read_framerate_samples(
             &band.framerate_state,
             rb_ptr=&band.ringbuffer,
-            samples=self.bands[i].display.samples,
+            samples=band.display.samples,
             target_interval=f64(band.target_interval),
         )
-        rect := rl.Rectangle{160, f32(50 + 110 * i), 800, 100}
+        rect := rl.Rectangle{160, f32(50 + 110 * band_idx), 800, 100}
 
         rl.DrawRectangleLinesEx({rect.x-1, rect.y-1, rect.width+2, rect.height+2}, 1.0, rl.LIGHTGRAY)
 
@@ -180,9 +173,9 @@ draw_strobe :: proc(self: ^Strobe, rms: f32) {
             continue
         }
 
-        rl.DrawTextEx(font, fmt.ctprintf("Drift %.6f", drift), {50, 20}, 20, 0, rl.PINK)
-        rl.DrawRectangleV({220, 30}, {200 * f32(drift), 4.0}, rl.PINK)
-        rl.DrawRectangleLinesEx({220, 30, 200, 5}, 1, rl.PINK)
+        // rl.DrawTextEx(font, fmt.ctprintf("Drift %.6f", drift), {20, 90 + 110 * f32(band_idx)}, 20, 0, rl.PINK)
+        // rl.DrawRectangleV({20, 120 + 110 * f32(band_idx)}, {120 * f32(drift), 4.0}, rl.PINK)
+        // rl.DrawRectangleLinesEx({20, 120 + 110 * f32(band_idx), 120, 5}, 1, rl.PINK)
 
         // draw_fake_strobe_band_pattern(
         //     rect,
@@ -195,21 +188,20 @@ draw_strobe :: proc(self: ^Strobe, rms: f32) {
         //     i,
         // )
 
-        band_display := &self.bands[i].display
-        max_peak := find_abs_max(band_display.samples)
+        max_peak := find_abs_max(band.display.samples[:frame_count])
         gain: f32 = 100.0 / (max_peak + 0.01)
-        // gain: f32 = 1.0
+        // gain= 1.0
 
 
 
-        for k in 0..<frame_count do band_display.filtered_samples[k] = band_display.samples[k]
+        for k in 0..<frame_count do band.display.filtered_samples[k] = band.display.samples[k]
 
-        // TODO test with FIR filter instead
+        // TODO test with FIR filter instead ?
         amp := reconstruct_from_dft(
             band.freq_hz,
-            band_display.samples[:frame_count],
-            band_display.filtered_samples[:frame_count],
-            SAMPLERATE,
+            band.display.samples[:frame_count],
+            band.display.filtered_samples[:frame_count],
+            self.samplerate,
             drift,
         )
 
@@ -220,8 +212,8 @@ draw_strobe :: proc(self: ^Strobe, rms: f32) {
 
         // draw_strobe_lines_drift(rect, &self.bands[i], band.target_interval, frame_count, drift)
 
-        draw_strobe_band_pattern(rect, &self.bands[i].display, band.target_interval, band.freq_hz, frame_count, gain)
-        // draw_strobe_lines(rect, &self.bands[i], band.target_interval, frame_count, gain)
+        draw_strobe_band_pattern(rect, &band.display, band.target_interval, band.freq_hz, frame_count, gain)
+        // draw_strobe_lines(rect, &band.display, band.target_interval, frame_count, gain)
     }
 }
 
@@ -240,7 +232,6 @@ draw_strobe_lines :: proc(
     factor := (rect.height/2.0 - 1.0) * gain
 
     for i in 0..<frame_count {
-        // note that y is flipped (negative)
         y := rect.y + rect.height/2.0 + band_display.filtered_samples[i] * factor
         band_display.points[i] = { x, y }
         x -= resolution
@@ -266,13 +257,12 @@ draw_strobe_lines_drift :: proc(
 
     x:f32 = f32(rect.x) + f32(rect.width) - drift_adj
 
-    peak: f32 = find_abs_max(band_display.samples)
-    gain := 1.0 / (peak + 0.2)
+    peak: f32 = find_abs_max(band_display.samples[:frame_count])
+    gain := 1.0 / (peak + 0.1)
 
     factor := (rect.height/2.0 - 1.0) * gain
 
     for i in 0..<frame_count {
-        // note that y is flipped (negative)
         y := rect.y + rect.height/2.0 + band_display.samples[i] * factor
         band_display.points[i] = { x, y }
         x -= resolution
@@ -356,78 +346,72 @@ draw_strobe_band_pattern :: proc (
 
 }
 
-lerp :: proc (a: f32, b: f32, t: f32) -> f32 {
-  return a + t * (b - a)
-}
 
-
-convert_to_rgba :: proc (value: f32) -> rl.Color {
-    value := value
-
-    color_a := rl.Color{226, 101, 70, 255}
-    color_b := rl.Color{84, 32, 43, 255}
-
-    // TODO optimize, no need to calculate per sample
-    dr := color_a.r - color_b.r
-    dg := color_a.g - color_b.g
-    db := color_a.b - color_b.b
-
-
-    // convert from range -1.0 - 1.0 to range 0 - 255
-    value = 0.5 * value + 0.5
-    // val := 0.5 * factor * band_display.samples[i] + 0.5
-    value = math.max(math.min(value, 1.0), 0.0)
-
-    r := u8(f32(color_b.r) + f32(dr) * value)
-    g := u8(f32(color_b.g) + f32(dg) * value)
-    b := u8(f32(color_b.b) + f32(db) * value)
-
-    return rl.Color{r, g, b, 255}
-}
-
-
-// draw strobe pattern by calculating DFT phase
-draw_fake_strobe_band_pattern :: proc (
-    rect: rl.Rectangle,
-    texture: rl.Texture2D,
-    band_display: ^StrobeBandDisplay,
-    target_freq: f32,
-    target_interval: f32,
-    frame_count: u32,
+// TODO
+// TODO
+// TODO
+//  Precalculate sin/cos stuff (phase_angle) just once per frequency
+reconstruct_from_dft :: proc(
+    freq_hz: f32,
+    samples: []f32,
+    output: []f32,
+    samplerate: f32,
     drift: f64,
-    band_index: int,
-) {
-    resolution := rect.width / f32(target_interval-1.0)
-    x:f32 = f32(rect.x) + f32(rect.width)
-    gain:f32 = 1.0 // find_abs_max(band_display.samples)
-    factor := (rect.height/2.0 - 1.0) * gain
+) -> f32 {
+    dft: complex64 = complex(0, 0)
+
+    // interval := samplerate/freq_hz
+    // trunc_interval := math.trunc(interval)
+    // fraction := interval - trunc_interval
+    // freq_hz := samplerate / trunc_interval
+
+    freq_bin := freq_hz / samplerate
 
 
-    dft := run_dft(target_freq, band_display.samples[:], SAMPLERATE, f32(drift))
+    // apply windowing?
+    n := f32(len(samples))
+
+    for i in 0..<len(samples) {
+        output[i] = samples[i] // * blackmann_window(f32(i), n)
+        // output[i] = samples[i] * blackman_harris(f32(i), f32(len(samples)))
+    }
+
+
+    for sample, i in output {
+        // Fourier formula: cos(2πft) - i×sin(2πft)
+        // -----------------------------------------------
+        // PROMISING! Makes the strobe pattern stationary - not quite?
+        // -----------------------------------------------
+        ft := freq_bin * 2.0 * math.PI * (f32(i) + f32(drift)) // 2πft
+
+        // -----------------------------------------------
+
+        re := sample * math.cos(ft) //*blackmann_window(f32(i), n)
+        im := sample * math.sin(ft) //*blackmann_window(f32(i), n)
+
+
+        dft += complex(re, im)
+    }
+    // one bin DFT overly aggressive filtering??
+
     sin := real(dft)
     cos := imag(dft)
-
     phase := math.atan2(sin, cos)
-    mag := magnitude(dft)
+    amp := magnitude(dft)
 
-    repeats := 2 * (band_index + 1)
+    state := 1
+    half_interval := samplerate / freq_hz / 2.0
+    next_flip := half_interval * phase / math.PI
 
-    // convert phase from -PI to PI to -64 to 64 (pattern width = 128)
-    phase *= 64.0 / math.PI
+    for _, i in output {
+        output[i] = amp * math.sin(freq_bin * 2.0 * math.PI * f32(i) + phase)
+        // if f32(i) > next_flip {
+        //     state = -state
+        //     next_flip += interval
+        // }
+        // output[i] = amp * f32(state)
+        output[i] /= f32(len(output))
+    }
 
-    rl.DrawTexturePro(
-        texture=texture,
-        source={phase, 0, 128 * f32(repeats), 64},
-        dest=rect,
-        origin={0, 0},
-        rotation=0.0,
-        // tint=rl.WHITE,
-        tint=rl.ColorAlpha(rl.WHITE, 0.1* mag)
-    )
-
-
-    rl.DrawCircleLines(700, 600, 80, rl.GRAY)
-    rl.DrawCircleV(rl.Vector2{700.0 - 80.0 * math.cos(phase), 600.0 - 80.0 * math.sin(phase)}, 6.0, rl.PINK)
-    rl.DrawCircleV(rl.Vector2{700.0 - 80.0 * math.cos(phase+math.PI), 600.0 - 80.0 * math.sin(phase+math.PI)}, 6.0, rl.PINK)
+    return amp
 }
-
