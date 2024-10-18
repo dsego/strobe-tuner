@@ -159,3 +159,7 @@ https://youtu.be/vsj7wUaTYdY
 
 Portaudio Hotplug
 https://github.com/PortAudio/portaudio/wiki/HotPlug
+
+
+A Better Approach to Spectral Analysis
+https://youtu.be/0-q9gwYZZ1o

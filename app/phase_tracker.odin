@@ -21,9 +21,9 @@ import rl "vendor:raylib"
 PhaseTrackerBand :: struct {
     ringbuffer: RingBuffer,
     ringbuffer_data: []u8,
-    reference_phase: f32,
+    phase_correction: f32,
     freq_hz: f32,
-    time_reference: int,
+    time_reference: f32,
     display: PhaseTrackerBandDisplay,
 }
 
@@ -79,7 +79,7 @@ set_phase_tracker_freq :: proc (self: ^PhaseTracker, base_freq_hz: f32) {
     for &band in self.bands {
         freq_hz := freq_multiplier * base_freq_hz
         band.freq_hz = freq_hz
-        band.reference_phase = 0.0
+        band.phase_correction = 0.0
         flush_ringbuffer(&band.ringbuffer)
         freq_multiplier *= 2.0
     }
@@ -126,15 +126,14 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
 
 
         window_size := 1024
-
         available := frames_available_in_ringbuffer(&band.ringbuffer)
+        has_new_samples := int(available) > window_size
 
         // IMPORTANT: keep the sweep interval consistent
-        if int(available) > window_size {
+        // only read in new samples if we can draw a new window, otherwise draw the existing samples
+        if has_new_samples {
             read_ringbuffer(&band.ringbuffer, band.display.samples[:window_size], u32(window_size))
         }
-
-
 
         // Generate ref. signal
         vertical_gain := (rect.height/2.0 - 1.0)
@@ -145,8 +144,8 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
 
         for i in 0..<window_size {
             // 2πft
-            // ft := 2.0 * math.PI * normalized_freq * (f32(i) + band.reference_phase)
-            ref_signal_value: f32 = band.display.samples[i] // math.sin(ft)
+            ft := 2.0 * math.PI * normalized_freq * (f32(i) + band.time_reference + band.phase_correction)
+            ref_signal_value: f32 = math.sin(ft)
             band.display.reference_points[i] = {
                 x,
                 rect.y + rect.height/2.0 + ref_signal_value * vertical_gain
@@ -156,51 +155,46 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
         rl.DrawLineStrip(raw_data(band.display.reference_points), i32(window_size), rl.GOLD)
 
 
-        // dft: complex64 = complex(0, 0)
-        // for i in 0..<window_size {
-        //     // Fourier formula: cos(2πft) - i×sin(2πft)
-        //     ft := normalized_freq * 2.0 * math.PI * (f32(i) - band.reference_phase)  // 2πft
-        //     blackmann: f32 = 1.0 //blackmann_window(f32(i), f32(window_size))
-        //     re := band.display.samples[i] * blackmann * math.cos(ft)
-        //     im := band.display.samples[i] * blackmann * math.sin(ft)
-        //     dft += complex(re, im)
-        // }
+        if has_new_samples {
+            dft: complex64 = complex(0, 0)
+            for i in 0..<window_size {
+                // Fourier formula: cos(2πft) - i×sin(2πft)
+                ft := normalized_freq * 2.0 * math.PI * f32(i)  // 2πft
+                blackmann: f32 = blackmann_window(f32(i), f32(window_size))
+                re := band.display.samples[i] * blackmann * math.cos(ft)
+                im := band.display.samples[i] * blackmann * math.sin(ft)
+                dft += complex(re, im)
+            }
 
-        // cos := real(dft)
-        // sin := imag(dft)
-        // phase := math.atan2(sin, cos) // [-pi, pi]
-        // amp := magnitude(dft) / f32(window_size)
+            cos := real(dft)
+            sin := imag(dft)
+            phase := math.atan2(sin, cos) // [-pi, pi]
+            amp := magnitude(dft) / f32(window_size)
 
-        // x = rect.x + f32(rect.width)
+            max_peak := find_abs_max(band.display.samples[:window_size])
+            signal_gain: f32 = 20.0 / (max_peak + 0.1)
 
+            x = rect.x
+            for i in 0..<window_size {
+                signal_value := amp * math.sin(normalized_freq * 2.0 * math.PI * (f32(i) - band.phase_correction) + phase)
+                band.display.sample_points[i] = {
+                    x,
+                    rect.y + rect.height/2.0 + signal_value * vertical_gain * signal_gain
+                }
+                x += dx
+            }
+        }
 
-        // correct phase by diffing against reference
-        // phase = phase / math.PI + 1.0
-        // fmt.println(phase)
-        // normalized_phase := reference_interval * phase / math.PI
-
-        // fmt.println(normalized_phase, band.reference_phase)
-
-        // max_peak := find_abs_max(band.display.samples[:window_size])
-        // signal_gain: f32 = 1.0 // 1.0 / (max_peak + 0.1)
-
-
-        // for i in 0..<window_size {
-        //     signal_value := amp * math.sin(normalized_freq * 2.0 * math.PI * (f32(i) + band.reference_phase) + phase)
-        //     band.display.sample_points[i] = {
-        //         x,
-        //         rect.y + rect.height/2.0 + signal_value * vertical_gain * signal_gain
-        //     }
-        //     x -= dx
-        // }
-
-        // rl.DrawLineStrip(raw_data(band.display.sample_points), i32(window_size), rl.PINK)
+        rl.DrawLineStrip(raw_data(band.display.sample_points), i32(window_size), rl.PINK)
 
 
-
-        // reference_interval := self.samplerate / band.freq_hz
-
-
+        if has_new_samples {
+            band.time_reference += f32(window_size)
+            reference_interval := self.samplerate / band.freq_hz
+            num_periods := band.time_reference / reference_interval
+            band.phase_correction = math.ceil(num_periods) * reference_interval - band.time_reference
+        }
 
     }
 }
+

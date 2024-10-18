@@ -196,7 +196,7 @@ draw_strobe :: proc(self: ^Strobe) {
 
         for k in 0..<frame_count do band.display.filtered_samples[k] = band.display.samples[k]
 
-        // TODO test with FIR filter instead ?
+        // TODO test with FIR filter instead ? --- goertzel (filter bank)
         amp := reconstruct_from_dft(
             band.freq_hz,
             band.display.samples[:frame_count],

@@ -40,7 +40,7 @@ main :: proc() {
 
     // TODO: remove
     // target_freq = 1975.533
-    target_freq = 55.0
+    target_freq = 110.0
 
     target_interval := 0.0
 
@@ -107,7 +107,7 @@ main :: proc() {
 
             // TODO: remove
             // target_freq = 1975.533
-            target_freq = 55.0
+            target_freq = 110.0
 
             set_strobe_freq(&strobe, f32(target_freq))
             set_phase_tracker_freq(&phase_tracker, f32(target_freq))
