@@ -29,6 +29,7 @@ PhaseTrackerBand :: struct {
 
 PhaseTrackerBandDisplay :: struct {
     samples: []f32,
+    color_values: []f32,
     sample_points: []rl.Vector2,
     reference_points: []rl.Vector2,
 }
@@ -51,6 +52,7 @@ init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int)
         band.ringbuffer = rb
         band.ringbuffer_data = rb_data
         band.display.samples = make([]f32, MAX_SPECTRUM_DISPLAY_LEN)
+        band.display.color_values = make([]f32, MAX_SPECTRUM_DISPLAY_LEN)
         band.display.sample_points = make([]rl.Vector2, MAX_SPECTRUM_DISPLAY_LEN)
         band.display.reference_points = make([]rl.Vector2, MAX_SPECTRUM_DISPLAY_LEN)
         append(&self.bands, band)
@@ -67,6 +69,7 @@ destroy_phase_tracker :: proc(self: ^PhaseTracker) {
     for band in self.bands {
         delete(band.ringbuffer_data)
         delete(band.display.samples)
+        delete(band.display.color_values)
         delete(band.display.sample_points)
         delete(band.display.reference_points)
     }
@@ -137,11 +140,12 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
 
         // Generate ref. signal
         vertical_gain := (rect.height/2.0 - 1.0)
-        dx := rect.width / f32(window_size)
-        x := rect.x + f32(rect.width)
+        dx := rect.width / f32(window_size+1)
 
         normalized_freq := band.freq_hz / self.samplerate
 
+        /*
+        x := rect.x + f32(rect.width)
         for i in 0..<window_size {
             // 2πft
             ft := 2.0 * math.PI * normalized_freq * (f32(i) + band.time_reference + band.phase_correction)
@@ -153,7 +157,7 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
             x -= dx
         }
         rl.DrawLineStrip(raw_data(band.display.reference_points), i32(window_size), rl.GOLD)
-
+        */
 
         if has_new_samples {
             dft: complex64 = complex(0, 0)
@@ -172,11 +176,12 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
             amp := magnitude(dft) / f32(window_size)
 
             max_peak := find_abs_max(band.display.samples[:window_size])
-            signal_gain: f32 = 20.0 / (max_peak + 0.1)
+            signal_gain: f32 = 1000.0 / (max_peak + 0.1)
 
-            x = rect.x
+            x := rect.x + 1.0
             for i in 0..<window_size {
                 signal_value := amp * math.sin(normalized_freq * 2.0 * math.PI * (f32(i) - band.phase_correction) + phase)
+                band.display.color_values[i] = signal_value * signal_gain
                 band.display.sample_points[i] = {
                     x,
                     rect.y + rect.height/2.0 + signal_value * vertical_gain * signal_gain
@@ -185,7 +190,21 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
             }
         }
 
-        rl.DrawLineStrip(raw_data(band.display.sample_points), i32(window_size), rl.PINK)
+        // rl.DrawLineStrip(raw_data(band.display.sample_points), i32(window_size), rl.PINK)
+
+        // Draw strobe pattern
+        x := rect.x + 1
+        for i in 0..<window_size {
+            color := convert_to_rgba(band.display.color_values[i])
+            // color := rl.Color{100, 100, 100, 255}
+            rl.DrawLineEx(
+                {x - dx/2, rect.y},
+                {x - dx/2, rect.y + rect.height},
+                dx,
+                color,
+            )
+            x += dx
+        }
 
 
         if has_new_samples {
@@ -197,4 +216,5 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
 
     }
 }
+
 
