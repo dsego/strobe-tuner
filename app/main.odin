@@ -34,13 +34,13 @@ main :: proc() {
         440.0000, // A4
     }
 
-    freqs: []f64 = ukulele_freqs
+    freqs: []f64 = guitar_freqs
     freqs_idx := 0
     target_freq := freqs[freqs_idx]
 
     // TODO: remove
     // target_freq = 1975.533
-    target_freq = 110.0
+    // target_freq = 82.4068892282175
 
     target_interval := 0.0
 
@@ -74,7 +74,6 @@ main :: proc() {
     // register_audio_node(audio_capture, &pitch_detector)
     register_audio_node(audio_capture, &strobe)
     register_audio_node(audio_capture, &phase_tracker)
-
     start_audio_capture(audio_capture)
 
     // set initial frequency
@@ -107,7 +106,7 @@ main :: proc() {
 
             // TODO: remove
             // target_freq = 1975.533
-            target_freq = 110.0
+            // target_freq = 82.4068892282175
 
             set_strobe_freq(&strobe, f32(target_freq))
             set_phase_tracker_freq(&phase_tracker, f32(target_freq))
@@ -143,19 +142,17 @@ main :: proc() {
             rl.DrawFPS(SCREEN_WIDTH-100, 10)
 
 
-            // draw_strobe(&strobe)
             draw_phase_tracker_display(&phase_tracker)
-
+            draw_strobe(&strobe)
             draw_note(note, {20, 20}, 64)
-            /*
+
 
             // Show target frequency & interval
             rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", target_freq), {20, 100}, 32, 0, rl.PURPLE)
             rl.DrawTextEx(font, fmt.ctprintf("%.4f", target_interval), {20, 150}, 16, 0, rl.SKYBLUE)
-            */
 
             // draw_autocorrelation(rl.Rectangle{130, 50, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
-            draw_nsdf(rl.Rectangle{130, 280, SCREEN_WIDTH-200, 180}, &pitch_detector.nsdf, pitch_info.nsdf_peak)
+            // draw_nsdf(rl.Rectangle{130, 280, SCREEN_WIDTH-200, 180}, &pitch_detector.nsdf, pitch_info.nsdf_peak)
 
             // convert to cents, because we need the log scale
             cents := freq_to_cents(detected_freq)

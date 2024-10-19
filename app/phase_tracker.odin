@@ -24,6 +24,7 @@ PhaseTrackerBand :: struct {
     phase_correction: f32,
     freq_hz: f32,
     time_reference: f32,
+    phase: f32,
     display: PhaseTrackerBandDisplay,
 }
 
@@ -119,16 +120,21 @@ write_to_rb_region :: proc(band: ^PhaseTrackerBand, output: []f32, input: []f32)
 //  Drawing methods
 // -------------------------------------------------------------------------------------------------
 
-
+// TODO: only need one ringbuffer in this case + one phase diff calculation
+// TODO: take 4096 frames, overlap by 512
 draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
-    for &band, band_idx in self.bands {
+    rl.DrawTextEx(font, "phase", {160, 280}, 14, 0, rl.GOLD)
 
+    for &band, band_idx in self.bands {
         // Draw frame
-        rect := rl.Rectangle{160, f32(50 + 110 * band_idx), 800, 100}
+        // rect := rl.Rectangle{160, f32(50 + 110 * band_idx), 800, 100}
+        rect := rl.Rectangle{160, f32(300 + 110 * band_idx), 800, 100}
+
         rl.DrawRectangleLinesEx({rect.x-1, rect.y-1, rect.width+2, rect.height+2}, 1.0, rl.LIGHTGRAY)
 
 
-        window_size := 1024
+        // TODO: overlapping windows
+        window_size := 2048
         available := frames_available_in_ringbuffer(&band.ringbuffer)
         has_new_samples := int(available) > window_size
 
@@ -142,6 +148,7 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
         vertical_gain := (rect.height/2.0 - 1.0)
         dx := rect.width / f32(window_size+1)
 
+        reference_interval := self.samplerate / band.freq_hz
         normalized_freq := band.freq_hz / self.samplerate
 
         /*
@@ -158,29 +165,32 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
         }
         rl.DrawLineStrip(raw_data(band.display.reference_points), i32(window_size), rl.GOLD)
         */
+        phase := band.phase
 
         if has_new_samples {
             dft: complex64 = complex(0, 0)
             for i in 0..<window_size {
                 // Fourier formula: cos(2πft) - i×sin(2πft)
-                ft := normalized_freq * 2.0 * math.PI * f32(i)  // 2πft
-                blackmann: f32 = blackmann_window(f32(i), f32(window_size))
-                re := band.display.samples[i] * blackmann * math.cos(ft)
-                im := band.display.samples[i] * blackmann * math.sin(ft)
+                time := f32(i)
+                ft := normalized_freq * 2.0 * math.PI * time  // 2πft
+                win: f32 = blackmann_window(time, f32(window_size))
+                re := band.display.samples[i] * win * math.cos(ft)
+                im := band.display.samples[i] * win * math.sin(ft)
                 dft += complex(re, im)
             }
-
             cos := real(dft)
             sin := imag(dft)
-            phase := math.atan2(sin, cos) // [-pi, pi]
-            amp := magnitude(dft) / f32(window_size)
+            phase = math.atan2(sin, cos) // [-pi, pi]
+
+            amp := magnitude(dft)
 
             max_peak := find_abs_max(band.display.samples[:window_size])
-            signal_gain: f32 = 1000.0 / (max_peak + 0.1)
+            signal_gain: f32 = 1.0 // (max_peak + 0.1)
 
             x := rect.x + 1.0
             for i in 0..<window_size {
-                signal_value := amp * math.sin(normalized_freq * 2.0 * math.PI * (f32(i) - band.phase_correction) + phase)
+                time := f32(i)
+                signal_value := amp * math.sin(normalized_freq * 2.0 * math.PI * (time - band.phase_correction) + phase)
                 band.display.color_values[i] = signal_value * signal_gain
                 band.display.sample_points[i] = {
                     x,
@@ -206,13 +216,25 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
             x += dx
         }
 
+        rl.DrawTextEx(
+            font,
+            fmt.ctprintf("%.4f", phase + 2.0 * math.PI * band.phase_correction/self.samplerate),
+            {20, 280 + 110 * f32(band_idx)},
+            22,
+            0,
+            rl.GOLD
+        )
+
 
         if has_new_samples {
             band.time_reference += f32(window_size)
-            reference_interval := self.samplerate / band.freq_hz
             num_periods := band.time_reference / reference_interval
             band.phase_correction = math.ceil(num_periods) * reference_interval - band.time_reference
         }
+
+        // TODO:
+        // calculate freq difference based on phase delta
+
 
     }
 }

@@ -38,24 +38,6 @@ geometric_mean :: proc (array: []f32) -> f32 {
     return geometric_mean
 }
 
-
-// Symmetric Blackmann-Harris
-// https://en.wikipedia.org/wiki/Window_function
-// https://github.com/JvanKatwijk/filter-demo/blob/master/blackman-harris.cpp#L18-L24
-blackman_harris :: proc (i: f32, num: f32) -> f32 {
-    a0 :: 0.35875
-    a1 :: 0.48829
-    a2 :: 0.14128
-    a3 :: 0.01168
-
-    seg1 := a1 * math.cos(2.0 * math.PI * i / (num - 1.0))
-    seg2 := a2 * math.cos(4.0 * math.PI * i / (num - 1.0))
-    seg3 := a3 * math.cos(6.0 * math.PI * i / (num - 1.0))
-    res := a0 - seg1 + seg2 - seg3
-
-    return res
-}
-
 // Complex number magnitude
 magnitude :: proc (cpx: complex64) -> f32 {
     return math.sqrt(real(cpx) * real(cpx) + imag(cpx) * imag(cpx))
@@ -122,3 +104,41 @@ convert_to_rgba :: proc (value: f32) -> rl.Color {
 }
 
 
+blackmann_window :: proc (k: f32, size: f32) -> f32 {
+    a0:f32 = 0.42
+    a1:f32 = 0.5
+    a2:f32 = 0.08
+
+    l:f32 = 2.0 * math.PI * k / (2.0 * size/2 - 1.0)
+    return a0 - a1 * math.cos(l) + a2 * math.cos(2.0 * l)
+}
+
+
+// https://www.recordingblogs.com/wiki/flat-top-window
+flattop_window :: proc (k: f32, size: f32) -> f32 {
+    return (
+        0.21557895
+        - 0.41663158  * math.cos(2 * math.PI * k / (size - 1))
+        + 0.277263158 * math.cos(4 * math.PI * k / (size - 1))
+        - 0.083578947 * math.cos(6 * math.PI * k / (size - 1))
+        + 0.006947368 * math.cos(8 * math.PI * k / (size - 1))
+    )
+}
+
+
+// Symmetric Blackmann-Harris
+// https://en.wikipedia.org/wiki/Window_function
+// https://github.com/JvanKatwijk/filter-demo/blob/master/blackman-harris.cpp#L18-L24
+blackman_harris :: proc (i: f32, num: f32) -> f32 {
+    a0 :: 0.35875
+    a1 :: 0.48829
+    a2 :: 0.14128
+    a3 :: 0.01168
+
+    seg1 := a1 * math.cos(2.0 * math.PI * i / (num - 1.0))
+    seg2 := a2 * math.cos(4.0 * math.PI * i / (num - 1.0))
+    seg3 := a3 * math.cos(6.0 * math.PI * i / (num - 1.0))
+    res := a0 - seg1 + seg2 - seg3
+
+    return res
+}

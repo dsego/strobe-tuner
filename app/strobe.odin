@@ -133,6 +133,7 @@ process_strobe_band :: proc (band: ^StrobeBand, input: []f32)  {
 write_to_rb_region :: proc(band: ^StrobeBand, output: []f32, input: []f32) {
     for out, i in output {
         output[i] = input[i]
+        // output[i] = biquad_process_sample(&band.biquad, input[i])
     }
 }
 
@@ -158,6 +159,8 @@ convolve :: proc (input: []f32, kernel: []f32, output: []f32) {
 
 
 draw_strobe :: proc(self: ^Strobe) {
+    rl.DrawTextEx(font, "strobe", {160, 30}, 14, 0, rl.GOLD)
+
     for &band, band_idx in self.bands {
         frame_count, drift := read_framerate_samples(
             &band.framerate_state,
@@ -166,7 +169,6 @@ draw_strobe :: proc(self: ^Strobe) {
             target_interval=f64(band.target_interval),
         )
         rect := rl.Rectangle{160, f32(50 + 110 * band_idx), 800, 100}
-
         rl.DrawRectangleLinesEx({rect.x-1, rect.y-1, rect.width+2, rect.height+2}, 1.0, rl.LIGHTGRAY)
 
         if band.target_interval >= MAX_SPECTRUM_DISPLAY_LEN {
@@ -367,8 +369,6 @@ reconstruct_from_dft :: proc(
 
     freq_bin := freq_hz / samplerate
 
-
-    // apply windowing?
     n := f32(len(samples))
 
     for i in 0..<len(samples) {
@@ -382,12 +382,13 @@ reconstruct_from_dft :: proc(
         // -----------------------------------------------
         // PROMISING! Makes the strobe pattern stationary - not quite?
         // -----------------------------------------------
-        ft := freq_bin * 2.0 * math.PI * (f32(i) + f32(drift)) // 2πft
+        time := f32(i)
+        ft := freq_bin * 2.0 * math.PI * (time + f32(drift)) // 2πft
 
         // -----------------------------------------------
-
-        re := sample * math.cos(ft) //*blackmann_window(f32(i), n)
-        im := sample * math.sin(ft) //*blackmann_window(f32(i), n)
+        win := blackmann_window(time, f32(n))
+        re := sample * math.cos(ft) * win
+        im := sample * math.sin(ft) * win
 
 
         dft += complex(re, im)

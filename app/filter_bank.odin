@@ -49,14 +49,7 @@ run_dft :: proc(freq_hz: f32, samples: []f32, samplerate: f32, drift: f32 = 0.0)
 }
 
 
-blackmann_window :: proc (k: f32, size: f32) -> f32 {
-    a0:f32 = 0.42
-    a1:f32 = 0.5
-    a2:f32 = 0.08
 
-    l:f32 = 2.0 * math.PI * k / (2.0 * size/2 - 1.0)
-    return a0 - a1 * math.cos(l) + a2 * math.cos(2.0 * l)
-}
 
 
 
