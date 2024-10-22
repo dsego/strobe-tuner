@@ -3,8 +3,8 @@
 
     Phase tracker
     - Generates a reference signal and detects the phase difference between the reference
-      and target. The reference phase is calculated in the drawing method and assumes
-      it isn't skipping any samples from the input ring buffer. Alternatively, this could be
+      and target. The reference phase is calculated in the drawing method and synthesizes a strobe
+      based on detected phase difference. Alternatively, this could be
       done in the audio callback (TBD).
 
 
@@ -207,7 +207,7 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
 
             amp := magnitude(dft)
 
-            // Generate sinusoid based on detected phase & amplitude
+            // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
             x := rect.x + 1.0
 
 
