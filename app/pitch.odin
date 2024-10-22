@@ -52,7 +52,7 @@ run_pitch_detection :: proc (self: ^PicthDetector, prev_info: PitchInfo) -> Pitc
     new_count := int(frames_available_in_ringbuffer(&self.ringbuffer))
 
     // no new audio samples available, skip pitch detection
-    if new_count <= 0 do return info
+    if new_count <= 0 do return prev_info
 
     // TODO test if this introduces discontinuities !!!
 

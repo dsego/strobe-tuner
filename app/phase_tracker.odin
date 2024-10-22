@@ -23,7 +23,8 @@ PhaseTrackerBand :: struct {
     phase: f32,
     display: PhaseTrackerBandDisplay,
     biquad: Biquad,
-    phase_correction: f32,
+    estimated_freq_hz: f32,
+    angle: f32,
 }
 
 PhaseTrackerBandDisplay :: struct {
@@ -95,7 +96,7 @@ set_phase_tracker_freq :: proc (self: ^PhaseTracker, base_freq_hz: f32) {
         norm_bandwidth := bandwidth_hz / self.samplerate
         band.biquad = biquad_resonator(f64(norm_freq), f64(norm_bandwidth), 2)
         band.freq_hz = freq_hz
-        band.phase_correction = 0.0
+        // band.phase_correction = 0.0
     }
 }
 
@@ -126,10 +127,11 @@ write_to_rb_region :: proc(output: []f32, input: []f32) {
 // -------------------------------------------------------------------------------------------------
 
 draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
-    rl.DrawTextEx(font, "phase", {160, 280}, 14, 0, rl.GOLD)
+    rl.DrawTextEx(font, "phase", {160, 30}, 14, 0, rl.GOLD)
 
     available := frames_available_in_ringbuffer(&self.ringbuffer)
     has_new_samples := available > 0
+    // phase_correction_diff: f32 = 0.0
 
 
     // read 512 samples while available > 512, run dft, find phase, re-run and average?
@@ -147,13 +149,16 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
         self.time_reference += f32(available)
 
         num_periods := self.time_reference / reference_interval
-        self.phase_correction = math.ceil(num_periods) * reference_interval - self.time_reference
+        new_phase_correction := math.ceil(num_periods) * reference_interval - self.time_reference
+        // phase_correction_diff = new_phase_correction - self.phase_correction
+        self.phase_correction = new_phase_correction
     }
 
     for &band, band_idx in self.bands {
         // Draw frame
-        // rect := rl.Rectangle{160, f32(50 + 110 * band_idx), 800, 100}
-        rect := rl.Rectangle{160, f32(300 + 110 * band_idx), 800, 100}
+        rect := rl.Rectangle{160, f32(50 + 110 * band_idx), 800, 100}
+        // rect := rl.Rectangle{160, f32(300 + 110 * band_idx), 800, 100}
+
 
         rl.DrawRectangleLinesEx({rect.x-1, rect.y-1, rect.width+2, rect.height+2}, 1.0, rl.LIGHTGRAY)
 
@@ -176,7 +181,6 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
         }
         rl.DrawLineStrip(raw_data(band.display.reference_points), i32(window_size), rl.GOLD)
         */
-        phase := band.phase
         time_stretch_factor := 4.0 * reference_interval/ f32(self.window_size)
 
         if has_new_samples {
@@ -199,15 +203,18 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
             }
             cos := real(dft)
             sin := imag(dft)
-            phase = math.atan2(sin, cos) // [-pi, pi]
+            phase := math.atan2(sin, cos) // [-pi, pi]
 
             amp := magnitude(dft)
 
             // Generate sinusoid based on detected phase & amplitude
             x := rect.x + 1.0
 
+
             for i in 0..<self.window_size {
                 time := f32(i) * time_stretch_factor
+                // TODO: can I apply identities to precalculate things?
+                // sin(A + B) = sinA cosB + cosA sinB
                 signal_value := amp * math.sin(normalized_freq * 2.0 * math.PI * (time - self.phase_correction) + phase)
                 band.display.color_values[i] = signal_value
                 band.display.sample_points[i] = {
@@ -216,7 +223,48 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
                 }
                 x += dx
             }
+
+            if band_idx == 0 && has_new_samples {
+
+
+                angle :=  normalized_freq * 2.0 * math.PI * (0.0 - self.phase_correction) + phase
+
+
+                phase_diff := angle - band.angle
+                band.angle = angle
+
+
+                // Unwrap phase diff
+                //  shifts the angles by adding multiples of ±2π until the jump is less than π
+                for phase_diff >= math.PI {
+                    phase_diff -= 2.0 * math.PI
+                }
+
+                for phase_diff <= -math.PI {
+                    phase_diff += 2.0 * math.PI
+                }
+
+                time_delta := f32(available) / f32(self.samplerate)
+
+                freq_diff_hz := (phase_diff / time_delta) / (2.0 * math.PI)
+                // band.estimated_freq_hz = band.freq_hz - freq_diff_hz
+
+                estimated_freq := band.freq_hz - freq_diff_hz
+                band.estimated_freq_hz = math.round(estimated_freq * 100.0) / 100.0
+            }
+
+
+
         }
+
+        rl.DrawTextEx(
+            font,
+            fmt.ctprintf("%+.2fHz", band.estimated_freq_hz),
+            {20, 280 + 110 * f32(band_idx)},
+            22,
+            0,
+            rl.GOLD
+        )
 
         // Draw strobe pattern
         // ------------------------------------------------
@@ -248,16 +296,7 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
         // rl.DrawLineStrip(raw_data(points[:]), i32(self.window_size), rl.PINK)
         // ------------------------------------------------
 
-        // rl.DrawTextEx(
-        //     font,
-        //     fmt.ctprintf("%.4f, %v", phase, available),
-        //     {20, 280 + 110 * f32(band_idx)},
-        //     22,
-        //     0,
-        //     rl.GOLD
-        // )
-        // TODO:
-        // calculate freq difference based on phase delta
+
     }
 
 

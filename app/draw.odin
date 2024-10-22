@@ -10,7 +10,7 @@ root_dir := filepath.dir(#file)
 
 SHARP :: "♯"
 
-font_atlas : cstring = "ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuwvxyzz♯♭/-1234567890.:"
+font_atlas : cstring = "ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuwvxyzz♯♭/+-1234567890.:"
 font: rl.Font
 
 

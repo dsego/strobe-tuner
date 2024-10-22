@@ -72,7 +72,7 @@ main :: proc() {
     init_drawing_context()
     defer destroy_drawing_context()
 
-    // register_audio_node(audio_capture, &pitch_detector)
+    register_audio_node(audio_capture, &pitch_detector)
     // register_audio_node(audio_capture, &strobe)
     register_audio_node(audio_capture, &phase_tracker)
     start_audio_capture(audio_capture)
@@ -120,7 +120,7 @@ main :: proc() {
         note := find_note(f32(target_freq))
 
         // TODO: turn off pitch detector if rms is weak?
-        // pitch_info = run_pitch_detection(&pitch_detector, pitch_info)
+        pitch_info = run_pitch_detection(&pitch_detector, pitch_info)
 
         // Keep previous measurement if there is no detected note
 
@@ -130,8 +130,8 @@ main :: proc() {
         //     if detected_note.cents != pitch_info.detected_note.cents &&
         //         valid_strobe_freq(pitch_info.detected_note.frequency) {
 
-        //         detected_note = pitch_info.detected_note
-        //         set_strobe_freq(&strobe, detected_note.frequency, SAMPLERATE)
+                // detected_note = pitch_info.detected_note
+        //         // set_strobe_freq(&strobe, detected_note.frequency, SAMPLERATE)
         //     }
         //     detected_freq = pitch_info.detected_freq
         // }
@@ -154,7 +154,7 @@ main :: proc() {
             rl.DrawTextEx(font, fmt.ctprintf("%.4f", target_interval), {20, 150}, 16, 0, rl.SKYBLUE)
 
             // draw_autocorrelation(rl.Rectangle{130, 50, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
-            // draw_nsdf(rl.Rectangle{130, 280, SCREEN_WIDTH-200, 180}, &pitch_detector.nsdf, pitch_info.nsdf_peak)
+            draw_nsdf(rl.Rectangle{130, 280, SCREEN_WIDTH-200, 180}, &pitch_detector.nsdf, pitch_info.nsdf_peak)
 
             // convert to cents, because we need the log scale
             cents := freq_to_cents(detected_freq)
@@ -176,7 +176,7 @@ main :: proc() {
             }
 
             draw_note_meter(rl.Rectangle{300, 600, 400, 100}, detected_freq, detected_note, cents_error_smooth)
-            rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", pitch_info.detected_freq), {100, 550}, 18, 0, rl.GREEN)
+            rl.DrawTextEx(font, fmt.ctprintf("% .2fHz", math.round(pitch_info.detected_freq * 100.0) / 100.0), {100, 550}, 18, 0, rl.GREEN)
 
             rl.DrawTextEx(font, fmt.ctprintf("RMS %.4f", pitch_info.rms), {20, 620}, 24, 0, rl.PINK)
             rl.DrawRectangleV({20, 650}, {200 * pitch_info.rms, 4.0}, rl.PINK)
