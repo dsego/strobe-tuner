@@ -39,14 +39,15 @@ main :: proc() {
     target_freq := freqs[freqs_idx]
 
     // TODO: remove
+    // target_freq = 100
     // target_freq = 1975.533
     // target_freq = 82.4068892282175
 
     target_interval := 0.0
 
 
-    strobe := init_strobe(f32(target_freq), SAMPLERATE, 2)
-    defer destroy_strobe(&strobe)
+    // strobe := init_strobe(f32(target_freq), SAMPLERATE, 2)
+    // defer destroy_strobe(&strobe)
 
 
     phase_tracker := init_phase_tracker(f32(target_freq), SAMPLERATE, 2)
@@ -63,7 +64,7 @@ main :: proc() {
 
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
-    rl.SetTargetFPS(60)
+    // rl.SetTargetFPS(60)
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
     defer rl.CloseWindow()
@@ -72,7 +73,7 @@ main :: proc() {
     defer destroy_drawing_context()
 
     // register_audio_node(audio_capture, &pitch_detector)
-    register_audio_node(audio_capture, &strobe)
+    // register_audio_node(audio_capture, &strobe)
     register_audio_node(audio_capture, &phase_tracker)
     start_audio_capture(audio_capture)
 
@@ -105,10 +106,11 @@ main :: proc() {
             target_freq = freqs[freqs_idx]
 
             // TODO: remove
+            // target_freq = 100
             // target_freq = 1975.533
             // target_freq = 82.4068892282175
 
-            set_strobe_freq(&strobe, f32(target_freq))
+            // set_strobe_freq(&strobe, f32(target_freq))
             set_phase_tracker_freq(&phase_tracker, f32(target_freq))
 
 
@@ -143,7 +145,7 @@ main :: proc() {
 
 
             draw_phase_tracker_display(&phase_tracker)
-            draw_strobe(&strobe)
+            // draw_strobe(&strobe)
             draw_note(note, {20, 20}, 64)
 
 

@@ -19,17 +19,14 @@ import rl "vendor:raylib"
 
 
 PhaseTrackerBand :: struct {
-    ringbuffer: RingBuffer,
-    ringbuffer_data: []u8,
-    phase_correction: f32,
     freq_hz: f32,
-    time_reference: f32,
     phase: f32,
     display: PhaseTrackerBandDisplay,
+    biquad: Biquad,
+    phase_correction: f32,
 }
 
 PhaseTrackerBandDisplay :: struct {
-    samples: []f32,
     color_values: []f32,
     sample_points: []rl.Vector2,
     reference_points: []rl.Vector2,
@@ -37,6 +34,13 @@ PhaseTrackerBandDisplay :: struct {
 
 PhaseTracker :: struct {
     using node: AudioCaptureNode,
+    sample_buffer: []f32,
+    window_size: int,
+    overlap_size: int,
+    ringbuffer: RingBuffer,
+    ringbuffer_data: []u8,
+    phase_correction: f32,
+    time_reference: f32,
     bands: [dynamic]PhaseTrackerBand,
     samplerate: f32,
 }
@@ -44,15 +48,16 @@ PhaseTracker :: struct {
 
 
 init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int) -> (self: PhaseTracker) {
+    self.window_size = 4096
+    self.overlap_size = 256
 
-    freq_multiplier :f32 = 1.0
+    rb, rb_data := init_ringbuffer(DEFAULT_RB_SIZE)
+    self.ringbuffer = rb
+    self.ringbuffer_data = rb_data
+    self.sample_buffer = make([]f32, self.window_size)
 
     for i in 0..<band_count {
         band := PhaseTrackerBand{}
-        rb, rb_data := init_ringbuffer(DEFAULT_RB_SIZE)
-        band.ringbuffer = rb
-        band.ringbuffer_data = rb_data
-        band.display.samples = make([]f32, MAX_SPECTRUM_DISPLAY_LEN)
         band.display.color_values = make([]f32, MAX_SPECTRUM_DISPLAY_LEN)
         band.display.sample_points = make([]rl.Vector2, MAX_SPECTRUM_DISPLAY_LEN)
         band.display.reference_points = make([]rl.Vector2, MAX_SPECTRUM_DISPLAY_LEN)
@@ -67,9 +72,9 @@ init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int)
 }
 
 destroy_phase_tracker :: proc(self: ^PhaseTracker) {
+    delete(self.ringbuffer_data)
+    delete(self.sample_buffer)
     for band in self.bands {
-        delete(band.ringbuffer_data)
-        delete(band.display.samples)
         delete(band.display.color_values)
         delete(band.display.sample_points)
         delete(band.display.reference_points)
@@ -78,40 +83,40 @@ destroy_phase_tracker :: proc(self: ^PhaseTracker) {
 }
 
 set_phase_tracker_freq :: proc (self: ^PhaseTracker, base_freq_hz: f32) {
-    freq_multiplier: f32 = 1.0
+    self.phase_correction = 0.0
+    flush_ringbuffer(&self.ringbuffer)
 
-    for &band in self.bands {
-        freq_hz := freq_multiplier * base_freq_hz
+    for &band, i in self.bands {
+        freq_hz := f32(i + 1) * base_freq_hz
+
+        cents := freq_to_cents(freq_hz)
+        bandwidth_hz := cents_to_freq(cents + 100) - cents_to_freq(cents - 100)
+        norm_freq := freq_hz / self.samplerate
+        norm_bandwidth := bandwidth_hz / self.samplerate
+        band.biquad = biquad_resonator(f64(norm_freq), f64(norm_bandwidth), 2)
         band.freq_hz = freq_hz
         band.phase_correction = 0.0
-        flush_ringbuffer(&band.ringbuffer)
-        freq_multiplier *= 2.0
     }
 }
 
 
 phase_tracker_audio_callback :: proc (ctx: ^AudioCaptureNode, input: []f32) {
     self := container_of(ctx, PhaseTracker, "node")
-    for &band in self.bands {
-        process_phase_tracker_band(&band, input)
-    }
-}
 
+    out1, out2, num_written := get_ringbuffer_write_regions(&self.ringbuffer, len(input))
 
-process_phase_tracker_band :: proc (band: ^PhaseTrackerBand, input: []f32)  {
-    out1, out2, num_written := get_ringbuffer_write_regions(&band.ringbuffer, len(input))
+    if len(out1) > 0 do write_to_rb_region(out1, input[:len(out1)])
+    if len(out2) > 0 do write_to_rb_region(out2, input[len(out1):])
 
-    if len(out1) > 0 do write_to_rb_region(band, out1, input[:len(out1)])
-    if len(out2) > 0 do write_to_rb_region(band, out2, input[len(out1):])
-
-    advance_ringbuffer_write(&band.ringbuffer, i32(num_written))
+    advance_ringbuffer_write(&self.ringbuffer, i32(num_written))
 }
 
 // TODO: filtering ??
 @(private="file")
-write_to_rb_region :: proc(band: ^PhaseTrackerBand, output: []f32, input: []f32) {
+write_to_rb_region :: proc(output: []f32, input: []f32) {
     for out, i in output {
         output[i] = input[i]
+        // output[i] = biquad_process_sample(&band.biquad, input[i])
     }
 }
 
@@ -120,10 +125,30 @@ write_to_rb_region :: proc(band: ^PhaseTrackerBand, output: []f32, input: []f32)
 //  Drawing methods
 // -------------------------------------------------------------------------------------------------
 
-// TODO: only need one ringbuffer in this case + one phase diff calculation
-// TODO: take 4096 frames, overlap by 512
 draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
     rl.DrawTextEx(font, "phase", {160, 280}, 14, 0, rl.GOLD)
+
+    available := frames_available_in_ringbuffer(&self.ringbuffer)
+    has_new_samples := available > 0
+
+
+    // read 512 samples while available > 512, run dft, find phase, re-run and average?
+
+    reference_interval := self.samplerate / self.bands[0].freq_hz
+
+    // copy over new samples into the freed space
+    if has_new_samples {
+        copy(self.sample_buffer, self.sample_buffer[available:self.window_size])
+        offset := self.window_size - int(available)
+        read_ringbuffer(&self.ringbuffer, self.sample_buffer[offset:], u32(available))
+
+
+        // phase runaway compensation
+        self.time_reference += f32(available)
+
+        num_periods := self.time_reference / reference_interval
+        self.phase_correction = math.ceil(num_periods) * reference_interval - self.time_reference
+    }
 
     for &band, band_idx in self.bands {
         // Draw frame
@@ -132,23 +157,9 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
 
         rl.DrawRectangleLinesEx({rect.x-1, rect.y-1, rect.width+2, rect.height+2}, 1.0, rl.LIGHTGRAY)
 
-
-        // TODO: overlapping windows
-        window_size := 2048
-        available := frames_available_in_ringbuffer(&band.ringbuffer)
-        has_new_samples := int(available) > window_size
-
-        // IMPORTANT: keep the sweep interval consistent
-        // only read in new samples if we can draw a new window, otherwise draw the existing samples
-        if has_new_samples {
-            read_ringbuffer(&band.ringbuffer, band.display.samples[:window_size], u32(window_size))
-        }
-
         // Generate ref. signal
         vertical_gain := (rect.height/2.0 - 1.0)
-        dx := rect.width / f32(window_size+1)
-
-        reference_interval := self.samplerate / band.freq_hz
+        dx: f32 = (rect.width - 1.0) / f32(self.window_size)
         normalized_freq := band.freq_hz / self.samplerate
 
         /*
@@ -166,16 +177,24 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
         rl.DrawLineStrip(raw_data(band.display.reference_points), i32(window_size), rl.GOLD)
         */
         phase := band.phase
+        time_stretch_factor := 4.0 * reference_interval/ f32(self.window_size)
 
         if has_new_samples {
+
+            // phase runaway compensation
+            // reference_interval := self.samplerate / band.freq_hz
+            // num_periods := self.time_reference / reference_interval
+            // band.phase_correction = math.ceil(num_periods) * reference_interval - self.time_reference
+
+            // Calculate DFT
             dft: complex64 = complex(0, 0)
-            for i in 0..<window_size {
+            for i in 0..<self.window_size {
                 // Fourier formula: cos(2πft) - i×sin(2πft)
                 time := f32(i)
                 ft := normalized_freq * 2.0 * math.PI * time  // 2πft
-                win: f32 = blackmann_window(time, f32(window_size))
-                re := band.display.samples[i] * win * math.cos(ft)
-                im := band.display.samples[i] * win * math.sin(ft)
+                win: f32 = blackmann_window(time, f32(self.window_size))
+                re := self.sample_buffer[i] * win * math.cos(ft)
+                im := self.sample_buffer[i] * win * math.sin(ft)
                 dft += complex(re, im)
             }
             cos := real(dft)
@@ -184,27 +203,25 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
 
             amp := magnitude(dft)
 
-            max_peak := find_abs_max(band.display.samples[:window_size])
-            signal_gain: f32 = 1.0 // (max_peak + 0.1)
-
+            // Generate sinusoid based on detected phase & amplitude
             x := rect.x + 1.0
-            for i in 0..<window_size {
-                time := f32(i)
-                signal_value := amp * math.sin(normalized_freq * 2.0 * math.PI * (time - band.phase_correction) + phase)
-                band.display.color_values[i] = signal_value * signal_gain
+
+            for i in 0..<self.window_size {
+                time := f32(i) * time_stretch_factor
+                signal_value := amp * math.sin(normalized_freq * 2.0 * math.PI * (time - self.phase_correction) + phase)
+                band.display.color_values[i] = signal_value
                 band.display.sample_points[i] = {
                     x,
-                    rect.y + rect.height/2.0 + signal_value * vertical_gain * signal_gain
+                    rect.y + rect.height/2.0 + signal_value * vertical_gain
                 }
                 x += dx
             }
         }
 
-        // rl.DrawLineStrip(raw_data(band.display.sample_points), i32(window_size), rl.PINK)
-
         // Draw strobe pattern
+        // ------------------------------------------------
         x := rect.x + 1
-        for i in 0..<window_size {
+        for i in 0..<self.window_size {
             color := convert_to_rgba(band.display.color_values[i])
             // color := rl.Color{100, 100, 100, 255}
             rl.DrawLineEx(
@@ -215,28 +232,36 @@ draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
             )
             x += dx
         }
+        // ------------------------------------------------
 
-        rl.DrawTextEx(
-            font,
-            fmt.ctprintf("%.4f", phase + 2.0 * math.PI * band.phase_correction/self.samplerate),
-            {20, 280 + 110 * f32(band_idx)},
-            22,
-            0,
-            rl.GOLD
-        )
+        // DRAW INPUT SAMPLES TO DEBUG
+        // ------------------------------------------------
+        // points: [4096]rl.Vector2
+        // x := rect.x + rect.width - 1.0
+        // for i in 0..<4096 {
+        //     points[i] = {
+        //         x,
+        //         rect.y + rect.height/2.0 + self.sample_buffer[i] * vertical_gain
+        //     }
+        //     x -= dx
+        // }
+        // rl.DrawLineStrip(raw_data(points[:]), i32(self.window_size), rl.PINK)
+        // ------------------------------------------------
 
-
-        if has_new_samples {
-            band.time_reference += f32(window_size)
-            num_periods := band.time_reference / reference_interval
-            band.phase_correction = math.ceil(num_periods) * reference_interval - band.time_reference
-        }
-
+        // rl.DrawTextEx(
+        //     font,
+        //     fmt.ctprintf("%.4f, %v", phase, available),
+        //     {20, 280 + 110 * f32(band_idx)},
+        //     22,
+        //     0,
+        //     rl.GOLD
+        // )
         // TODO:
         // calculate freq difference based on phase delta
-
-
     }
+
+
+
 }
 
 
