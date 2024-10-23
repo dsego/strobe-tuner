@@ -30,7 +30,7 @@ PhaseTrackerBand :: struct {
 PhaseTrackerBandDisplay :: struct {
     strobe_buffer: []f32,
     sample_points: []rl.Vector2,
-    reference_points: []rl.Vector2,
+    // reference_points: []rl.Vector2,
 }
 
 PhaseTracker :: struct {
@@ -61,7 +61,7 @@ init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int)
         band := PhaseTrackerBand{}
         band.display.strobe_buffer = make([]f32, MAX_SPECTRUM_DISPLAY_LEN)
         band.display.sample_points = make([]rl.Vector2, MAX_SPECTRUM_DISPLAY_LEN)
-        band.display.reference_points = make([]rl.Vector2, MAX_SPECTRUM_DISPLAY_LEN)
+        // band.display.reference_points = make([]rl.Vector2, MAX_SPECTRUM_DISPLAY_LEN)
         append(&self.bands, band)
     }
 
@@ -78,7 +78,7 @@ destroy_phase_tracker :: proc(self: ^PhaseTracker) {
     for band in self.bands {
         delete(band.display.strobe_buffer)
         delete(band.display.sample_points)
-        delete(band.display.reference_points)
+        // delete(band.display.reference_points)
     }
     delete(self.bands)
 }
@@ -158,6 +158,9 @@ draw_strobe_bands :: proc (self: ^PhaseTracker) {
             )
             x += dx
         }
+
+        // debugging
+        // rl.DrawLineStrip(raw_data(band.display.sample_points), i32(self.window_size), rl.GOLD)
 
         rl.DrawTextEx(
             font,
