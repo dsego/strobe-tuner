@@ -114,10 +114,11 @@ phase_tracker_audio_callback :: proc (ctx: ^AudioCaptureNode, input: []f32) {
 // TODO: filtering ??
 @(private="file")
 write_to_rb_region :: proc(output: []f32, input: []f32) {
-    for out, i in output {
-        output[i] = input[i]
-        // output[i] = biquad_process_sample(&band.biquad, input[i])
-    }
+    copy(output, input)
+    // for out, i in output {
+    //     output[i] = input[i]
+    //     // output[i] = biquad_process_sample(&band.biquad, input[i])
+    // }
 }
 
 

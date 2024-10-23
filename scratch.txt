@@ -1,14 +1,8 @@
 
 
-@TODO
-  - fix phase tracker overlapping windows by 512 (win size = 2048)
-
-  - figure out the phase shift ??
-  - figure out how to calculate current frequency offset based on phase difference
 
 
 - green book smoothing
-
 
 
 
@@ -18,15 +12,6 @@ Aligning your DFT frame so the main tone is roughly a whole number of cycles and
     The parameters are read from four values of the DFT instead of two, so inherently more noise resistant.
 
     The second harmonic will fall near a whole number of cycles and thus not have much leakage.
-
-
-
-
-
-
-
-
-
 
 
 
