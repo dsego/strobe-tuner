@@ -4,8 +4,7 @@
     Phase tracker
     - Generates a reference signal and detects the phase difference between the reference
       and target. The reference phase is calculated in the drawing method and synthesizes a strobe
-      based on detected phase difference. Alternatively, this could be
-      done in the audio callback (TBD).
+      based on the detected phase difference.
 
 
  -------------------------------------------------------------------------------------------------*/
@@ -173,92 +172,78 @@ draw_strobe_bands :: proc (self: ^PhaseTracker) {
     }
 }
 
-draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
+run_dft_analysis :: proc(self: ^PhaseTracker) {
     available := frames_available_in_ringbuffer(&self.ringbuffer)
-    has_new_samples := available > 0
+
+    if available <= 0 do return
 
     reference_interval := self.samplerate / self.bands[0].freq_hz
 
-    // copy over new samples into the freed space
-    if has_new_samples {
-        copy(self.sample_buffer, self.sample_buffer[available:self.window_size])
-        offset := self.window_size - int(available)
-        read_ringbuffer(&self.ringbuffer, self.sample_buffer[offset:], u32(available))
+    copy(self.sample_buffer, self.sample_buffer[available:self.window_size])
+    offset := self.window_size - int(available)
+    read_ringbuffer(&self.ringbuffer, self.sample_buffer[offset:], u32(available))
 
 
-        // phase runaway compensation
-        self.time_reference += f32(available)
+    // phase runaway compensation
+    self.time_reference += f32(available)
 
-        num_periods := self.time_reference / reference_interval
-        new_phase_correction := math.ceil(num_periods) * reference_interval - self.time_reference
-        // phase_correction_diff = new_phase_correction - self.phase_correction
-        self.phase_correction = new_phase_correction
-    }
+    num_periods := self.time_reference / reference_interval
+    self.phase_correction = math.ceil(num_periods) * reference_interval - self.time_reference
 
     for &band, band_idx in self.bands {
         normalized_freq := band.freq_hz / self.samplerate
 
-        if has_new_samples {
-
-            // phase runaway compensation
-            // reference_interval := self.samplerate / band.freq_hz
-            // num_periods := self.time_reference / reference_interval
-            // band.phase_correction = math.ceil(num_periods) * reference_interval - self.time_reference
-
-            // Calculate DFT
-            dft: complex64 = complex(0, 0)
-            for i in 0..<self.window_size {
-                // Fourier formula: cos(2πft) - i×sin(2πft)
-                time := f32(i)
-                ft := normalized_freq * 2.0 * math.PI * time  // 2πft
-                win: f32 = blackmann_window(time, f32(self.window_size))
-                re := self.sample_buffer[i] * win * math.cos(ft)
-                im := self.sample_buffer[i] * win * math.sin(ft)
-                dft += complex(re, im)
-            }
-            cos := real(dft)
-            sin := imag(dft)
-            phase := math.atan2(sin, cos) // [-pi, pi]
-
-            amp := magnitude(dft)
-
-            time_stretch_factor := 4.0 * reference_interval/ f32(self.window_size)
-
-            // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
-            for i in 0..<self.window_size {
-                time := f32(i) * time_stretch_factor
-                // TODO: can I apply identities to precalculate things?
-                // sin(A + B) = sinA cosB + cosA sinB
-                signal_value := amp * math.sin(normalized_freq * 2.0 * math.PI * (time - self.phase_correction) + phase)
-                band.display.strobe_buffer[i] = signal_value
-            }
-
-            // Calculate estimated frequency
-            angle :=  normalized_freq * 2.0 * math.PI * (0.0 - self.phase_correction) + phase
-            phase_diff := angle - band.angle
-            band.angle = angle
-
-            // Unwrap phase diff
-            //  shifts the angles by adding multiples of ±2π until the jump is less than π
-            for phase_diff >= math.PI {
-                phase_diff -= 2.0 * math.PI
-            }
-
-            for phase_diff <= -math.PI {
-                phase_diff += 2.0 * math.PI
-            }
-
-            time_delta := f32(available) / f32(self.samplerate)
-
-            freq_diff_hz := (phase_diff / time_delta) / (2.0 * math.PI)
-            // band.estimated_freq_hz = band.freq_hz - freq_diff_hz
-
-            estimated_freq := band.freq_hz - freq_diff_hz
-            band.estimated_freq_hz = math.round(estimated_freq * 100.0) / 100.0
-
+        // Calculate DFT for this band
+        dft: complex64 = complex(0, 0)
+        for i in 0..<self.window_size {
+            // Fourier formula: cos(2πft) - i×sin(2πft)
+            time := f32(i)
+            ft := normalized_freq * 2.0 * math.PI * time  // 2πft
+            // We need to window to suppress inaccuracies due to edge effects
+            win: f32 = blackmann_window(time, f32(self.window_size))
+            re := self.sample_buffer[i] * win * math.cos(ft)
+            im := self.sample_buffer[i] * win * math.sin(ft)
+            dft += complex(re, im)
         }
-    }
+        cos := real(dft)
+        sin := imag(dft)
+        phase := math.atan2(sin, cos) // [-pi, pi]
 
+        amp := magnitude(dft)
+
+        time_stretch_factor := 4.0 * reference_interval/ f32(self.window_size)
+
+        // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
+        for i in 0..<self.window_size {
+            time := f32(i) * time_stretch_factor
+            signal_value := amp * math.sin(normalized_freq * 2.0 * math.PI * (time - self.phase_correction) + phase)
+            band.display.strobe_buffer[i] = signal_value
+        }
+
+        // Calculate estimated frequency
+        angle :=  normalized_freq * 2.0 * math.PI * (0.0 - self.phase_correction) + phase
+        phase_diff := angle - band.angle
+        band.angle = angle
+
+        // Unwrap phase diff
+        //  shifts the angles by adding multiples of ±2π until the jump is less than π
+        for phase_diff >= math.PI {
+            phase_diff -= 2.0 * math.PI
+        }
+
+        for phase_diff <= -math.PI {
+            phase_diff += 2.0 * math.PI
+        }
+
+        time_delta := f32(available) / f32(self.samplerate)
+        freq_diff_hz := (phase_diff / time_delta) / (2.0 * math.PI)
+        estimated_freq := band.freq_hz - freq_diff_hz
+        band.estimated_freq_hz = math.round(estimated_freq * 100.0) / 100.0
+    }
+}
+
+draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
+    run_dft_analysis(self)
     draw_strobe_bands(self)
 }
 
