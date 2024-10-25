@@ -19,11 +19,13 @@ import rl "vendor:raylib"
 
 PhaseTrackerBand :: struct {
     freq_hz: f32,
+    freq_diff_hz: f32,
     phase: f32,
     display: PhaseTrackerBandDisplay,
-    biquad: Biquad,
+    // biquad: Biquad,
     estimated_freq_hz: f32,
     angle: f32,
+    dft: SingleFreqDFT,
 }
 
 PhaseTrackerBandDisplay :: struct {
@@ -61,8 +63,12 @@ init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int)
         band.display.strobe_buffer = make([]f32, MAX_SPECTRUM_DISPLAY_LEN)
         band.display.sample_points = make([]rl.Vector2, MAX_SPECTRUM_DISPLAY_LEN)
         // band.display.reference_points = make([]rl.Vector2, MAX_SPECTRUM_DISPLAY_LEN)
+        band.dft = init_dft(self.window_size)
+
         append(&self.bands, band)
     }
+
+
 
     set_phase_tracker_freq(&self, base_freq_hz)
 
@@ -74,9 +80,10 @@ init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int)
 destroy_phase_tracker :: proc(self: ^PhaseTracker) {
     delete(self.ringbuffer_data)
     delete(self.sample_buffer)
-    for band in self.bands {
+    for &band in self.bands {
         delete(band.display.strobe_buffer)
         delete(band.display.sample_points)
+        destory_dft(&band.dft)
         // delete(band.display.reference_points)
     }
     delete(self.bands)
@@ -88,14 +95,15 @@ set_phase_tracker_freq :: proc (self: ^PhaseTracker, base_freq_hz: f32) {
 
     for &band, i in self.bands {
         freq_hz := f32(i + 1) * base_freq_hz
-
-        cents := freq_to_cents(freq_hz)
-        bandwidth_hz := cents_to_freq(cents + 100) - cents_to_freq(cents - 100)
-        norm_freq := freq_hz / self.samplerate
-        norm_bandwidth := bandwidth_hz / self.samplerate
-        band.biquad = biquad_resonator(f64(norm_freq), f64(norm_bandwidth), 2)
         band.freq_hz = freq_hz
+
+        // cents := freq_to_cents(freq_hz)
+        // bandwidth_hz := cents_to_freq(cents + 100) - cents_to_freq(cents - 100)
+        // norm_bandwidth := bandwidth_hz / self.samplerate
+        // band.biquad = biquad_resonator(f64(norm_freq), f64(norm_bandwidth), 2)
         // band.phase_correction = 0.0
+        norm_freq := freq_hz / self.samplerate
+        set_dft_freq(&band.dft, norm_freq)
     }
 }
 
@@ -162,9 +170,11 @@ draw_strobe_bands :: proc (self: ^PhaseTracker) {
         // debugging
         // rl.DrawLineStrip(raw_data(band.display.sample_points), i32(self.window_size), rl.GOLD)
 
+
+
         rl.DrawTextEx(
             font,
-            fmt.ctprintf("%+.2fHz", band.estimated_freq_hz),
+            fmt.ctprintf("%+.4fHz", band.estimated_freq_hz),
             {20, 280 + 110 * f32(band_idx)},
             22,
             0,
@@ -195,51 +205,68 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         normalized_freq := band.freq_hz / self.samplerate
 
         // Calculate DFT for this band
-        dft: complex64 = complex(0, 0)
-        for i in 0..<self.window_size {
-            // Fourier formula: cos(2πft) - i×sin(2πft)
-            time := f32(i)
-            ft := normalized_freq * 2.0 * math.PI * time  // 2πft
-            // We need to window to suppress inaccuracies due to edge effects
-            win: f32 = blackmann_window(time, f32(self.window_size))
-            re := self.sample_buffer[i] * win * math.cos(ft)
-            im := self.sample_buffer[i] * win * math.sin(ft)
-            dft += complex(re, im)
-        }
+        // dft: complex64 = complex(0, 0)
+        // for i in 0..<self.window_size {
+        //     // Fourier formula: cos(2πft) - i×sin(2πft)
+        //     time := f32(i)
+        //     ft := normalized_freq * 2.0 * math.PI * time  // 2πft
+        //     // We need to window to suppress inaccuracies due to edge effects
+        //     win: f32 = blackmann_window(time, f32(self.window_size))
+        //     re := self.sample_buffer[i] * win * math.cos(ft)
+        //     im := self.sample_buffer[i] * win * math.sin(ft)
+        //     dft += complex(re, im)
+        // }
+        dft := run_single_dft(&band.dft, self.sample_buffer[:self.window_size])
+
         cos := real(dft)
         sin := imag(dft)
         phase := math.atan2(sin, cos) // [-pi, pi]
-
         amp := magnitude(dft)
 
         time_stretch_factor := 4.0 * reference_interval/ f32(self.window_size)
 
+
         // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
         for i in 0..<self.window_size {
             time := f32(i) * time_stretch_factor
-            signal_value := amp * math.sin(normalized_freq * 2.0 * math.PI * (time - self.phase_correction) + phase)
+            signal_value := amp * math.sin(normalized_freq * math.TAU * (time - self.phase_correction) + phase)
             band.display.strobe_buffer[i] = signal_value
         }
 
         // Calculate estimated frequency
-        angle :=  normalized_freq * 2.0 * math.PI * (0.0 - self.phase_correction) + phase
+        angle :=  phase - normalized_freq * math.TAU * self.phase_correction
         phase_diff := angle - band.angle
         band.angle = angle
+
 
         // Unwrap phase diff
         //  shifts the angles by adding multiples of ±2π until the jump is less than π
         for phase_diff >= math.PI {
-            phase_diff -= 2.0 * math.PI
+            phase_diff -= math.TAU
         }
 
         for phase_diff <= -math.PI {
-            phase_diff += 2.0 * math.PI
+            phase_diff += math.TAU
         }
 
         time_delta := f32(available) / f32(self.samplerate)
-        freq_diff_hz := (phase_diff / time_delta) / (2.0 * math.PI)
-        estimated_freq := band.freq_hz - freq_diff_hz
-        band.estimated_freq_hz = math.round(estimated_freq * 100.0) / 100.0
+        band.freq_diff_hz = -(phase_diff / time_delta) / math.TAU
+
+
+        // interval / 4 --- limit to phase tracking before it gets confused about freq diff
+
+        estimated_freq := band.freq_hz + band.freq_diff_hz
+        // if band_idx == 0 {
+        //     // fmt.println(phase)
+        //     fmt.println(
+        //         band.freq_diff_hz,
+        //         reference_interval,
+        //         self.samplerate / estimated_freq,
+        //         reference_interval - self.samplerate / estimated_freq,
+        //         phase_diff,
+        //     )
+        // }
+        band.estimated_freq_hz = estimated_freq
     }
 }
 

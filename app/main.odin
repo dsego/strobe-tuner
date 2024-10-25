@@ -34,7 +34,7 @@ main :: proc() {
         440.0000, // A4
     }
 
-    freqs: []f64 = ukulele_freqs
+    freqs: []f64 = guitar_freqs
     freqs_idx := 0
     target_freq := freqs[freqs_idx]
 
@@ -176,7 +176,7 @@ main :: proc() {
             }
 
             draw_note_meter(rl.Rectangle{300, 600, 400, 100}, detected_freq, detected_note, cents_error_smooth)
-            rl.DrawTextEx(font, fmt.ctprintf("% .2fHz", math.round(pitch_info.detected_freq * 100.0) / 100.0), {100, 550}, 18, 0, rl.GREEN)
+            rl.DrawTextEx(font, fmt.ctprintf("%+.5fHz", pitch_info.detected_freq), {100, 550}, 18, 0, rl.GREEN)
 
             rl.DrawTextEx(font, fmt.ctprintf("RMS %.4f", pitch_info.rms), {20, 620}, 24, 0, rl.PINK)
             rl.DrawRectangleV({20, 650}, {200 * pitch_info.rms, 4.0}, rl.PINK)

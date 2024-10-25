@@ -51,7 +51,7 @@ spectrum_pitch_detect :: proc(using config: ^SpectrumConfig, samples: []f32) -> 
     )
 
     // calculate the spectrum
-    for i in 0..<len(fft) {
+    for i in 0..<fft_size/2 {
         spectrum[i] = magnitude(fft[i])
     }
 

@@ -1,5 +1,8 @@
 
 
+- control saturation with rms level, eg low sound -> gray ?
+imitates how lamps work on the analogue tuner
+
 
 
 - green book smoothing

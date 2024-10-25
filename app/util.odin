@@ -104,12 +104,13 @@ convert_to_rgba :: proc (value: f32) -> rl.Color {
 }
 
 
+// TODO: cache cosines to optimize?
 blackmann_window :: proc (k: f32, size: f32) -> f32 {
     a0:f32 = 0.42
     a1:f32 = 0.5
     a2:f32 = 0.08
 
-    l:f32 = 2.0 * math.PI * k / (2.0 * size/2 - 1.0)
+    l:f32 = math.TAU * k / (size - 1.0)
     return a0 - a1 * math.cos(l) + a2 * math.cos(2.0 * l)
 }
 
@@ -141,4 +142,17 @@ blackman_harris :: proc (i: f32, num: f32) -> f32 {
     res := a0 - seg1 + seg2 - seg3
 
     return res
+}
+
+// Impulsive-noise smoothing algorithm, Lyons book, page 770
+// collect N+2 samples, discard the max and the min sample
+// compute arithmetic mean of the N samples
+smooth_impulsive_noise :: proc(block: []f32) {
+
+    // remove min & max
+
+    // calculate mean
+
+
+    // corrected_mean := mean +
 }
