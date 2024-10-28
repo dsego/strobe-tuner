@@ -20,9 +20,7 @@ import rl "vendor:raylib"
 PhaseTrackerBand :: struct {
     freq_hz: f32,
     freq_diff_hz: f32,
-    phase: f32,
     display: PhaseTrackerBandDisplay,
-    // biquad: Biquad,
     estimated_freq_hz: f32,
     angle: f32,
     dft: SingleFreqDFT,
@@ -30,8 +28,7 @@ PhaseTrackerBand :: struct {
 
 PhaseTrackerBandDisplay :: struct {
     strobe_buffer: []f32,
-    sample_points: []rl.Vector2,
-    // reference_points: []rl.Vector2,
+    // width, height, etc
 }
 
 PhaseTracker :: struct {
@@ -61,8 +58,6 @@ init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int)
     for i in 0..<band_count {
         band := PhaseTrackerBand{}
         band.display.strobe_buffer = make([]f32, MAX_SPECTRUM_DISPLAY_LEN)
-        band.display.sample_points = make([]rl.Vector2, MAX_SPECTRUM_DISPLAY_LEN)
-        // band.display.reference_points = make([]rl.Vector2, MAX_SPECTRUM_DISPLAY_LEN)
         band.dft = init_dft(self.window_size)
 
         append(&self.bands, band)
@@ -82,9 +77,7 @@ destroy_phase_tracker :: proc(self: ^PhaseTracker) {
     delete(self.sample_buffer)
     for &band in self.bands {
         delete(band.display.strobe_buffer)
-        delete(band.display.sample_points)
         destory_dft(&band.dft)
-        // delete(band.display.reference_points)
     }
     delete(self.bands)
 }
@@ -96,12 +89,6 @@ set_phase_tracker_freq :: proc (self: ^PhaseTracker, base_freq_hz: f32) {
     for &band, i in self.bands {
         freq_hz := f32(i + 1) * base_freq_hz
         band.freq_hz = freq_hz
-
-        // cents := freq_to_cents(freq_hz)
-        // bandwidth_hz := cents_to_freq(cents + 100) - cents_to_freq(cents - 100)
-        // norm_bandwidth := bandwidth_hz / self.samplerate
-        // band.biquad = biquad_resonator(f64(norm_freq), f64(norm_bandwidth), 2)
-        // band.phase_correction = 0.0
         norm_freq := freq_hz / self.samplerate
         set_dft_freq(&band.dft, norm_freq)
     }
@@ -123,10 +110,6 @@ phase_tracker_audio_callback :: proc (ctx: ^AudioCaptureNode, input: []f32) {
 @(private="file")
 write_to_rb_region :: proc(output: []f32, input: []f32) {
     copy(output, input)
-    // for out, i in output {
-    //     output[i] = input[i]
-    //     // output[i] = biquad_process_sample(&band.biquad, input[i])
-    // }
 }
 
 
@@ -141,9 +124,6 @@ draw_strobe_bands :: proc (self: ^PhaseTracker) {
     for &band, band_idx in self.bands {
         // Draw frame
         rect := rl.Rectangle{160, f32(50 + 110 * band_idx), 800, 100}
-        // rect := rl.Rectangle{160, f32(300 + 110 * band_idx), 800, 100}
-
-        vertical_gain := (rect.height/2.0 - 1.0)
 
         rl.DrawRectangleLinesEx({rect.x-1, rect.y-1, rect.width+2, rect.height+2}, 1.0, rl.LIGHTGRAY)
         x := rect.x + 1.0
@@ -152,10 +132,6 @@ draw_strobe_bands :: proc (self: ^PhaseTracker) {
         for i in 0..<self.window_size {
             signal_value := band.display.strobe_buffer[i]
             color := convert_to_rgba(band.display.strobe_buffer[i])
-            band.display.sample_points[i] = {
-                x,
-                rect.y + rect.height/2.0 + signal_value * vertical_gain
-            }
 
             // Draw strobe pattern
             rl.DrawLineEx(
@@ -166,11 +142,6 @@ draw_strobe_bands :: proc (self: ^PhaseTracker) {
             )
             x += dx
         }
-
-        // debugging
-        // rl.DrawLineStrip(raw_data(band.display.sample_points), i32(self.window_size), rl.GOLD)
-
-
 
         rl.DrawTextEx(
             font,
@@ -202,20 +173,9 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
     self.phase_correction = math.ceil(num_periods) * reference_interval - self.time_reference
 
     for &band, band_idx in self.bands {
-        normalized_freq := band.freq_hz / self.samplerate
+        normalized_freq:f32 = band.freq_hz / self.samplerate
 
         // Calculate DFT for this band
-        // dft: complex64 = complex(0, 0)
-        // for i in 0..<self.window_size {
-        //     // Fourier formula: cos(2πft) - i×sin(2πft)
-        //     time := f32(i)
-        //     ft := normalized_freq * 2.0 * math.PI * time  // 2πft
-        //     // We need to window to suppress inaccuracies due to edge effects
-        //     win: f32 = blackmann_window(time, f32(self.window_size))
-        //     re := self.sample_buffer[i] * win * math.cos(ft)
-        //     im := self.sample_buffer[i] * win * math.sin(ft)
-        //     dft += complex(re, im)
-        // }
         dft := run_single_dft(&band.dft, self.sample_buffer[:self.window_size])
 
         cos := real(dft)
@@ -225,18 +185,19 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
 
         time_stretch_factor := 4.0 * reference_interval/ f32(self.window_size)
 
-
         // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
         for i in 0..<self.window_size {
             time := f32(i) * time_stretch_factor
+            gain: f32 = 30.0 / (amp + 0.1)
             signal_value := amp * math.sin(normalized_freq * math.TAU * (time - self.phase_correction) + phase)
-            band.display.strobe_buffer[i] = signal_value
+            band.display.strobe_buffer[i] = signal_value * gain
         }
 
         // Calculate estimated frequency
         angle :=  phase - normalized_freq * math.TAU * self.phase_correction
         phase_diff := angle - band.angle
         band.angle = angle
+
 
 
         // Unwrap phase diff

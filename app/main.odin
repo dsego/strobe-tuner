@@ -45,10 +45,14 @@ main :: proc() {
 
     target_interval := 0.0
 
+    rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
+    rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
+    rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
+    defer rl.CloseWindow()
+
 
     // strobe := init_strobe(f32(target_freq), SAMPLERATE, 2)
     // defer destroy_strobe(&strobe)
-
 
     phase_tracker := init_phase_tracker(f32(target_freq), SAMPLERATE, 2)
     defer destroy_phase_tracker(&phase_tracker)
@@ -62,12 +66,6 @@ main :: proc() {
     if !ok do return
     defer destroy_audio_capture(audio_capture)
 
-
-    rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
-    // rl.SetTargetFPS(60)
-    rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
-    rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
-    defer rl.CloseWindow()
 
     init_drawing_context()
     defer destroy_drawing_context()
@@ -126,23 +124,23 @@ main :: proc() {
 
         // TODO: detect note onset?
 
-        // if is_strong_pitch(pitch_info) {
+        // TODO: different clarity for locking onto pitch and tracking frequency?
+        // TODO: apply impulse noise smoothing algorithm to freq measurement
+        if is_strong_pitch(pitch_info) {
         //     if detected_note.cents != pitch_info.detected_note.cents &&
         //         valid_strobe_freq(pitch_info.detected_note.frequency) {
 
-                // detected_note = pitch_info.detected_note
+            detected_note = pitch_info.detected_note
         //         // set_strobe_freq(&strobe, detected_note.frequency, SAMPLERATE)
         //     }
-        //     detected_freq = pitch_info.detected_freq
-        // }
+
+            detected_freq = pitch_info.detected_freq
+        }
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
         {
             rl.ClearBackground(rl.BLACK)
-
-            rl.DrawFPS(SCREEN_WIDTH-100, 10)
-
 
             draw_phase_tracker_display(&phase_tracker)
             // draw_strobe(&strobe)
@@ -185,6 +183,8 @@ main :: proc() {
             rl.DrawTextEx(font, fmt.ctprintf("Cla %.4f", pitch_info.clarity), {20, 660}, 24, 0, rl.ORANGE)
             rl.DrawRectangleV({20, 690}, {200 * pitch_info.clarity, 4.0}, rl.ORANGE)
             rl.DrawRectangleLinesEx({20, 690, 200, 5}, 1, rl.ORANGE)
+
+            rl.DrawFPS(SCREEN_WIDTH-100, 10)
         }
     }
 }

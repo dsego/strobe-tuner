@@ -1,8 +1,10 @@
 
 
+- figure out the min/max phase that I can track, show freq & cents offset, test with diff. freqs
+
+
 - control saturation with rms level, eg low sound -> gray ?
 imitates how lamps work on the analogue tuner
-
 
 
 - green book smoothing
@@ -15,9 +17,6 @@ Aligning your DFT frame so the main tone is roughly a whole number of cycles and
     The parameters are read from four values of the DFT instead of two, so inherently more noise resistant.
 
     The second harmonic will fall near a whole number of cycles and thus not have much leakage.
-
-
-
 
 
 -----------------------------------
