@@ -1,15 +1,46 @@
 package app
 
+import "core:fmt"
+import "core:math"
+import "core:testing"
+
 
 // Impulsive-noise smoothing algorithm, Lyons book, page 770
-// collect N+2 samples, discard the max and the min sample
-// compute arithmetic mean of the N samples
-smooth_impulsive_noise :: proc(block: []f32) {
+smooth_impulsive_noise :: proc(block: []f32) -> f32 {
+    // obtain arithmetic mean
+    sum :f32 = 0.0
+    for value in block do sum += value
 
-    // remove min & max
+    n := f32(len(block))
+    mean := sum / n
 
-    // calculate mean
+    // find the correction term
+    pos := 0 // count of values greater than mean
+    neg := 0 // count of values less than mean
+    dev :f32 = 0.0 // sum of deviations from the mean (only positive or negative)
+
+    for value, i in block {
+        if value < mean {
+            neg += 1
+            dev += (mean - value)
+        }
+        else if value > mean {
+            pos += 1
+        }
+    }
+
+    n_squared := n * n
+    corrected_mean := mean + (f32(pos) - f32(neg)) * math.abs(dev) / n_squared
+    return corrected_mean
+}
 
 
-    // corrected_mean := mean +
+
+@(test)
+test_smooth_impulsive_noise :: proc(t: ^testing.T) {
+    data :[]f32 = {
+        10, 10, 11, 9, 10, 10, 13, 10, 10, 10
+    }
+    result := smooth_impulsive_noise(data)
+    testing.expect_value(t, result, 10.096)
 }

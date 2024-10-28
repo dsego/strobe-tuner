@@ -45,6 +45,22 @@ main :: proc() {
 
     target_interval := 0.0
 
+    // set initial frequency
+    freq_changed := true
+    pitch_info := PitchInfo{}
+    cents_error_smooth := f32(0.0)
+
+    detected_note: = Note{}
+    detected_freq:f32 = 0.0
+    freq_mean: f32 = 0.0
+    freq_ewma: f32 = 0.0
+    freq_measurements : [20]f32;
+
+    time := 0.0
+
+
+
+
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
@@ -75,13 +91,7 @@ main :: proc() {
     register_audio_node(audio_capture, &phase_tracker)
     start_audio_capture(audio_capture)
 
-    // set initial frequency
-    freq_changed := true
-    pitch_info := PitchInfo{}
-    cents_error_smooth := f32(0.0)
 
-    detected_note: = Note{}
-    detected_freq:f32 = 0.0
 
     // oe_filter_ptr := oef.Create(60, 1, 1, 1)
     // defer oef.Destroy(oe_filter_ptr)
@@ -119,6 +129,22 @@ main :: proc() {
 
         // TODO: turn off pitch detector if rms is weak?
         pitch_info = run_pitch_detection(&pitch_detector, pitch_info)
+        for i in 0..<len(freq_measurements) - 1 {
+            freq_measurements[i+1] = freq_measurements[i]
+        }
+        freq_measurements[0] = pitch_info.detected_freq
+
+        // Update freq measurement 5 times per second
+        new_time := rl.GetTime()
+
+        if new_time - time > 0.1 {
+            freq_mean = smooth_impulsive_noise(freq_measurements[:])
+            time = new_time
+
+        }
+
+
+
 
         // Keep previous measurement if there is no detected note
 
@@ -155,26 +181,31 @@ main :: proc() {
             draw_nsdf(rl.Rectangle{130, 280, SCREEN_WIDTH-200, 180}, &pitch_detector.nsdf, pitch_info.nsdf_peak)
 
             // convert to cents, because we need the log scale
-            cents := freq_to_cents(detected_freq)
-            cents_error := cents - f32(detected_note.cents)
-
-
-            draw_note_meter(rl.Rectangle{300, 500, 400, 100}, detected_freq, detected_note, cents_error)
-
-
-            // Smooth the meter by applying a weighted mean average
-            // Applying to the relative cents error measurement instead of frequency to
-            //  prevent the meter needle from making big jumps.
-            if math.is_inf(cents) {
-                cents_error_smooth = 0.0
-            } else {
-                alpha: f32 = 0.5
-                cents_error_smooth = ewma_filter(cents_error, alpha, cents_error_smooth)
-                // cents_error_smooth = oef.Do(oe_filter_ptr, cents_error)
+            {
+                cents := freq_to_cents(detected_freq)
+                cents_error := cents - f32(detected_note.cents)
+                draw_note_meter(rl.Rectangle{500, 550, 200, 25}, detected_freq, detected_note, cents_error, rl.BEIGE)
+                rl.DrawTextEx(font, fmt.ctprintf("%+.2fHz", pitch_info.detected_freq), {400, 550}, 22, 0, rl.BEIGE)
             }
 
-            draw_note_meter(rl.Rectangle{300, 600, 400, 100}, detected_freq, detected_note, cents_error_smooth)
-            rl.DrawTextEx(font, fmt.ctprintf("%+.5fHz", pitch_info.detected_freq), {100, 550}, 18, 0, rl.GREEN)
+            {
+                cents := freq_to_cents(freq_mean)
+                cents_error := cents - f32(detected_note.cents)
+                rl.DrawTextEx(font, fmt.ctprintf("%+.2fHz", freq_mean), {400, 580}, 22, 0, rl.PURPLE)
+                draw_note_meter(rl.Rectangle{500, 580, 200, 25}, freq_mean, detected_note, cents_error, rl.PURPLE)
+            }
+
+            {
+                alpha: f32 = 0.5
+                freq_ewma = ewma_filter(pitch_info.detected_freq, alpha, freq_ewma)
+                cents := freq_to_cents(freq_ewma)
+                cents_error := cents - f32(detected_note.cents)
+
+                rl.DrawTextEx(font, fmt.ctprintf("%+.2fHz", freq_ewma), {400, 610}, 22, 0, rl.SKYBLUE)
+                draw_note_meter(rl.Rectangle{500, 610, 200, 25}, freq_ewma, detected_note, cents_error, rl.SKYBLUE)
+            }
+
+
 
             rl.DrawTextEx(font, fmt.ctprintf("RMS %.4f", pitch_info.rms), {20, 620}, 24, 0, rl.PINK)
             rl.DrawRectangleV({20, 650}, {200 * pitch_info.rms, 4.0}, rl.PINK)

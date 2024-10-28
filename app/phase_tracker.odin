@@ -183,23 +183,10 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         phase := math.atan2(sin, cos) // [-pi, pi]
         amp := magnitude(dft)
 
-        time_stretch_factor := 4.0 * reference_interval/ f32(self.window_size)
-
-        // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
-        for i in 0..<self.window_size {
-            time := f32(i) * time_stretch_factor
-            gain: f32 = 30.0 / (amp + 0.1)
-            signal_value := amp * math.sin(normalized_freq * math.TAU * (time - self.phase_correction) + phase)
-            band.display.strobe_buffer[i] = signal_value * gain
-        }
-
         // Calculate estimated frequency
         angle :=  phase - normalized_freq * math.TAU * self.phase_correction
         phase_diff := angle - band.angle
         band.angle = angle
-
-
-
         // Unwrap phase diff
         //  shifts the angles by adding multiples of ±2π until the jump is less than π
         for phase_diff >= math.PI {
@@ -212,22 +199,27 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
 
         time_delta := f32(available) / f32(self.samplerate)
         band.freq_diff_hz = -(phase_diff / time_delta) / math.TAU
-
-
-        // interval / 4 --- limit to phase tracking before it gets confused about freq diff
-
         estimated_freq := band.freq_hz + band.freq_diff_hz
-        // if band_idx == 0 {
-        //     // fmt.println(phase)
-        //     fmt.println(
-        //         band.freq_diff_hz,
-        //         reference_interval,
-        //         self.samplerate / estimated_freq,
-        //         reference_interval - self.samplerate / estimated_freq,
-        //         phase_diff,
-        //     )
-        // }
         band.estimated_freq_hz = estimated_freq
+
+        time_stretch_factor := 4.0 * reference_interval/ f32(self.window_size)
+        gain: f32 = 1.0 // (amp + 0.1)
+
+        // TODO can I fade out the band when the freq difference is significant
+        // if band.freq_diff_hz > 15.0 || band.freq_diff_hz < -15.0 do gain = 1.0
+
+        // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
+        for i in 0..<self.window_size {
+            time := f32(i) * time_stretch_factor
+
+            signal_value := amp * math.sin(normalized_freq * math.TAU * (time - self.phase_correction) + phase)
+            band.display.strobe_buffer[i] = signal_value * gain
+        }
+
+
+
+
+
     }
 }
 

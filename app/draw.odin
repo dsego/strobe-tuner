@@ -251,35 +251,27 @@ draw_freq_spectrum :: proc(rect: rl.Rectangle, spectrum: []f32, fft_size: int, s
 
 
 // TODO: draw past good note/position greyed out if new pitch is not found
-draw_note_meter :: proc (rect: rl.Rectangle, freq: f32, note: Note, cents_error: f32) {
-
-    // outline for visual debugging
+draw_note_meter :: proc (rect: rl.Rectangle, freq: f32, note: Note, cents_error: f32, color: rl.Color) {
     // rl.DrawRectangleLinesEx(rect, 1.0, rl.ORANGE)
-
-    draw_note(note, {rect.x + rect.width/2.0 - 20.0, rect.y}, 64)
-    rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", freq), {20, 450}, 24, 0, rl.GREEN)
-
-
     px := rect.width / 100.0
-    pos := rect.width/2 + cents_error * px
 
     // "needle"
-    needle_width:f32 = 6.0
-    needle_height: f32 = 24.0
+    needle_width:f32 = 5.0
+    needle_height: f32 = rect.height
+    needle_pos := rect.width/2 + cents_error * px
 
     // horizontal line, ie "rail"
-    rail_y := rect.y + rect.height - needle_height/2
-    rl.DrawRectangleV({rect.x, rail_y - 2.0}, {rect.width, 4.0}, rl.GRAY)
+    rl.DrawRectangleV({rect.x, rect.y + rect.height/2}, {rect.width, 4.0}, rl.GRAY)
 
     // vertical notches
-    rl.DrawRectangleV({rect.x + rect.width/2.0 - 0.5, rail_y - 10.0}, {1.0, 20.0}, rl.GRAY)
-    rl.DrawRectangleV({rect.x, rail_y - 10.0}, {1.0, 20.0}, rl.GRAY)
-    rl.DrawRectangleV({rect.x + rect.width - 0.5, rail_y - 10.0}, {1.0, 20.0}, rl.GRAY)
+    rl.DrawRectangleV({rect.x + rect.width/2.0 - 0.5, rect.y}, {1.0, rect.height}, rl.GRAY)
+    rl.DrawRectangleV({rect.x, rect.y}, {1.0, rect.height}, rl.GRAY)
+    rl.DrawRectangleV({rect.x + rect.width - 0.5, rect.y}, {1.0, rect.height}, rl.GRAY)
 
     // draw needle
     rl.DrawRectangleV(
-        {rect.x + pos - needle_width/2.0, rect.y + rect.height - needle_height},
+        {rect.x + needle_pos - needle_width/2.0, rect.y},
         {needle_width, needle_height},
-        rl.ColorAlpha(rl.PURPLE, 1.0),
+        color,
     )
 }
