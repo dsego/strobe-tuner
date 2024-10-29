@@ -19,15 +19,21 @@ import rl "vendor:raylib"
 
 PhaseTrackerBand :: struct {
     freq_hz: f32,
+    norm_freq: f32,
     freq_diff_hz: f32,
     display: PhaseTrackerBandDisplay,
     estimated_freq_hz: f32,
     angle: f32,
     dft: SingleFreqDFT,
+    time_stretch: f32,
+    phase: f32,
+    amp: f32,
 }
 
 PhaseTrackerBandDisplay :: struct {
     strobe_buffer: []f32,
+    color_delta: [3]f32,
+    base_color: [3]f32,
 }
 
 PhaseTracker :: struct {
@@ -41,9 +47,23 @@ PhaseTracker :: struct {
     time_reference: f32,
     bands: [dynamic]PhaseTrackerBand,
     samplerate: f32,
-    // shader: rl.Shader,
-}
 
+    // GL Shader
+    shader: rl.Shader,
+
+    // this is just a dummy texture to get the texture coordinates working right in the fragment shader
+    texture: rl.Texture,
+
+    // shader uniform locations
+    base_color_loc: i32,
+    color_delta_loc: i32,
+    time_stretch_loc: i32,
+    phase_correction_loc: i32,
+    phase_loc: i32,
+    amp_loc: i32,
+    norm_freq_loc: i32,
+    win_size_loc: i32,
+}
 
 
 init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int) -> (self: PhaseTracker) {
@@ -54,15 +74,36 @@ init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int)
     self.ringbuffer = rb
     self.ringbuffer_data = rb_data
     self.sample_buffer = make([]f32, self.window_size)
-    // self.shader = rl.LoadShaderFromMemory(nil, FRAGMENT_SHADER)
+
+    imgRed := rl.GenImageColor(800, 100, rl.Color{ 255, 0, 0, 255 })
+    self.texture = rl.LoadTextureFromImage(imgRed)
+    rl.UnloadImage(imgRed)
+    self.shader = rl.LoadShaderFromMemory(nil, FRAGMENT_SHADER)
+
+    // TODO: extract
+    color_a := rl.Color{226, 101, 70, 255}
+    color_b := rl.Color{84, 32, 43, 255}
+    dr := color_a.r - color_b.r
+    dg := color_a.g - color_b.g
+    db := color_a.b - color_b.b
+
+    // Get uniform locations
+    self.base_color_loc = rl.GetShaderLocation(self.shader, "baseColor")
+    self.color_delta_loc = rl.GetShaderLocation(self.shader, "colorDelta")
+    self.time_stretch_loc = rl.GetShaderLocation(self.shader, "timeStretch")
+    self.phase_correction_loc = rl.GetShaderLocation(self.shader, "phaseCorrection")
+    self.phase_loc = rl.GetShaderLocation(self.shader, "phase")
+    self.amp_loc = rl.GetShaderLocation(self.shader, "amp")
+    self.norm_freq_loc = rl.GetShaderLocation(self.shader, "normFreq")
+    self.win_size_loc = rl.GetShaderLocation(self.shader, "winSize")
+
 
     for i in 0..<band_count {
         band := PhaseTrackerBand{}
         band.display.strobe_buffer = make([]f32, MAX_SPECTRUM_DISPLAY_LEN)
-        // band.display.resolution_loc = rl.GetShaderLocation(self.shader, "resolution")
-        // rl.SetShaderValue(self.shader, band.display.resolution_loc, &band.display.resolution, rl.ShaderUniformDataType.VEC2)
+        band.display.base_color = {f32(color_b.r)/255.0, f32(color_b.g)/255.0, f32(color_b.b)/255.0}
+        band.display.color_delta = {f32(dr)/255.0, f32(dg)/255.0, f32(db)/255.0}
         band.dft = init_dft(self.window_size)
-
         append(&self.bands, band)
     }
 
@@ -78,7 +119,7 @@ init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int)
 destroy_phase_tracker :: proc(self: ^PhaseTracker) {
     delete(self.ringbuffer_data)
     delete(self.sample_buffer)
-    // rl.UnloadShader(self.shader)
+    rl.UnloadShader(self.shader)
     for &band in self.bands {
         delete(band.display.strobe_buffer)
         destory_dft(&band.dft)
@@ -93,8 +134,8 @@ set_phase_tracker_freq :: proc (self: ^PhaseTracker, base_freq_hz: f32) {
     for &band, i in self.bands {
         freq_hz := f32(i + 1) * base_freq_hz
         band.freq_hz = freq_hz
-        norm_freq := freq_hz / self.samplerate
-        set_dft_freq(&band.dft, norm_freq)
+        band.norm_freq = freq_hz / self.samplerate
+        set_dft_freq(&band.dft, band.norm_freq )
     }
 }
 
@@ -122,8 +163,11 @@ write_to_rb_region :: proc(output: []f32, input: []f32) {
 // -------------------------------------------------------------------------------------------------
 
 
-draw_strobe_bands :: proc (self: ^PhaseTracker) {
+draw_strobe_bands :: proc (self: ^PhaseTracker, use_shader: bool) {
     rl.DrawTextEx(font, "phase", {160, 30}, 14, 0, rl.GOLD)
+
+    rl.SetShaderValue(self.shader, self.win_size_loc, &self.window_size,  rl.ShaderUniformDataType.INT)
+    rl.SetShaderValue(self.shader, self.phase_correction_loc, &self.phase_correction,  rl.ShaderUniformDataType.FLOAT)
 
     for &band, band_idx in self.bands {
         // Draw frame
@@ -135,28 +179,38 @@ draw_strobe_bands :: proc (self: ^PhaseTracker) {
         }
 
         rl.DrawRectangleLinesEx({rect.x-1, rect.y-1, rect.width+2, rect.height+2}, 1.0, rl.LIGHTGRAY)
-        x := rect.x + 1.0
-        dx: f32 = (rect.width - 1.0) / f32(self.window_size)
 
-        for i in 0..<self.window_size {
-            signal_value := band.display.strobe_buffer[i]
-            color := convert_to_rgba(band.display.strobe_buffer[i])
+        if use_shader {
+            rl.SetShaderValue(self.shader, self.color_delta_loc, raw_data(band.display.color_delta[:]),  rl.ShaderUniformDataType.VEC3)
+            rl.SetShaderValue(self.shader, self.base_color_loc, raw_data(band.display.base_color[:]),  rl.ShaderUniformDataType.VEC3)
+            rl.SetShaderValue(self.shader, self.time_stretch_loc, &band.time_stretch,  rl.ShaderUniformDataType.FLOAT)
+            rl.SetShaderValue(self.shader, self.phase_loc, &band.phase,  rl.ShaderUniformDataType.FLOAT)
+            rl.SetShaderValue(self.shader, self.amp_loc, &band.amp,  rl.ShaderUniformDataType.FLOAT)
+            rl.SetShaderValue(self.shader, self.norm_freq_loc, &band.norm_freq,  rl.ShaderUniformDataType.FLOAT)
 
-            // Draw strobe pattern
-            rl.DrawLineEx(
-                {x - dx/2, rect.y},
-                {x - dx/2, rect.y + rect.height},
-                dx,
-                color,
-            )
-            x += dx
+            {
+                rl.BeginShaderMode(self.shader)
+                rl.DrawTextureV(self.texture, {rect.x, rect.y}, rl.WHITE);
+                rl.EndShaderMode()
+            }
+        } else {
+            x := rect.x + 1.0
+            dx: f32 = (rect.width - 1.0) / f32(self.window_size)
+
+            for i in 0..<self.window_size {
+                signal_value := band.display.strobe_buffer[i]
+                color := convert_to_rgba(band.display.strobe_buffer[i])
+
+                // Draw strobe pattern
+                rl.DrawLineEx(
+                    {x - dx/2, rect.y},
+                    {x - dx/2, rect.y + rect.height},
+                    dx,
+                    color,
+                )
+                x += dx
+            }
         }
-
-        // {
-        //     rl.BeginShaderMode(self.shader)
-        //     rl.DrawRectangleRec(rect, rl.WHITE);
-        //     rl.EndShaderMode()
-        // }
 
         rl.DrawTextEx(
             font,
@@ -169,7 +223,7 @@ draw_strobe_bands :: proc (self: ^PhaseTracker) {
     }
 }
 
-run_dft_analysis :: proc(self: ^PhaseTracker) {
+run_dft_analysis :: proc(self: ^PhaseTracker, use_shader: bool) {
     available := frames_available_in_ringbuffer(&self.ringbuffer)
 
     if available <= 0 do return
@@ -202,6 +256,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         angle :=  phase - normalized_freq * math.TAU * self.phase_correction
         phase_diff := angle - band.angle
         band.angle = angle
+
         // Unwrap phase diff
         //  shifts the angles by adding multiples of ±2π until the jump is less than π
         for phase_diff >= math.PI {
@@ -218,29 +273,30 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         band.estimated_freq_hz = estimated_freq
 
         time_stretch_factor := 4.0 * reference_interval/ f32(self.window_size)
-        gain: f32 = 1.0 // (amp + 0.1)
+        // gain: f32 = 1.0 // (amp + 0.1)
 
         // TODO can I fade out the band when the freq difference is significant
         // if band.freq_diff_hz > 15.0 || band.freq_diff_hz < -15.0 do gain = 1.0
 
         // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
-        for i in 0..<self.window_size {
-            time := f32(i) * time_stretch_factor
+        band.time_stretch = time_stretch_factor
+        band.phase = phase
+        band.amp = amp
 
-            signal_value := amp * math.sin(normalized_freq * math.TAU * (time - self.phase_correction) + phase)
-            band.display.strobe_buffer[i] = signal_value * gain
+        if !use_shader {
+            for i in 0..<self.window_size {
+                time := f32(i) * time_stretch_factor
+
+                signal_value := amp * math.sin(normalized_freq * math.TAU * (time - self.phase_correction) + phase)
+                band.display.strobe_buffer[i] = signal_value
+            }
         }
-
-
-
-
-
     }
 }
 
-draw_phase_tracker_display :: proc(self: ^PhaseTracker) {
-    run_dft_analysis(self)
-    draw_strobe_bands(self)
+draw_phase_tracker_display :: proc(self: ^PhaseTracker, use_shader: bool) {
+    run_dft_analysis(self, use_shader)
+    draw_strobe_bands(self, use_shader)
 }
 
 

@@ -59,9 +59,10 @@ main :: proc() {
     time := 0.0
 
 
-
+    use_shader := false
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
+    // rl.SetTargetFPS(120)
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
     defer rl.CloseWindow()
@@ -106,6 +107,10 @@ main :: proc() {
         if rl.IsKeyPressed(rl.KeyboardKey.LEFT) {
             freqs_idx -= 1
             freq_changed = true
+        }
+
+        if rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
+            use_shader = !use_shader
         }
 
         if freq_changed {
@@ -163,10 +168,11 @@ main :: proc() {
         {
             rl.ClearBackground(rl.BLACK)
 
-            draw_phase_tracker_display(&phase_tracker)
+            draw_phase_tracker_display(&phase_tracker, use_shader)
             // draw_strobe(&strobe)
             draw_note(note, {20, 20}, 64)
 
+            rl.DrawTextEx(font, "Shader: ON" if use_shader else "Shader: OFF", {10, 10}, 14, 0, rl.GRAY)
 
             // Show target frequency & interval
             rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", target_freq), {20, 100}, 32, 0, rl.PURPLE)
