@@ -134,16 +134,11 @@ main :: proc() {
         }
         freq_measurements[0] = pitch_info.detected_freq
 
+        // TODO:
         // Update freq measurement 5 times per second
-        new_time := rl.GetTime()
+        // new_time := rl.GetTime()
 
-        if new_time - time > 0.1 {
-            freq_mean = smooth_impulsive_noise(freq_measurements[:])
-            time = new_time
-
-        }
-
-
+        freq_mean = smooth_impulsive_noise(freq_measurements[:])
 
 
         // Keep previous measurement if there is no detected note

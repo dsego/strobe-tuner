@@ -28,7 +28,6 @@ PhaseTrackerBand :: struct {
 
 PhaseTrackerBandDisplay :: struct {
     strobe_buffer: []f32,
-    // width, height, etc
 }
 
 PhaseTracker :: struct {
@@ -42,6 +41,7 @@ PhaseTracker :: struct {
     time_reference: f32,
     bands: [dynamic]PhaseTrackerBand,
     samplerate: f32,
+    // shader: rl.Shader,
 }
 
 
@@ -54,10 +54,13 @@ init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int)
     self.ringbuffer = rb
     self.ringbuffer_data = rb_data
     self.sample_buffer = make([]f32, self.window_size)
+    // self.shader = rl.LoadShaderFromMemory(nil, FRAGMENT_SHADER)
 
     for i in 0..<band_count {
         band := PhaseTrackerBand{}
         band.display.strobe_buffer = make([]f32, MAX_SPECTRUM_DISPLAY_LEN)
+        // band.display.resolution_loc = rl.GetShaderLocation(self.shader, "resolution")
+        // rl.SetShaderValue(self.shader, band.display.resolution_loc, &band.display.resolution, rl.ShaderUniformDataType.VEC2)
         band.dft = init_dft(self.window_size)
 
         append(&self.bands, band)
@@ -75,6 +78,7 @@ init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int)
 destroy_phase_tracker :: proc(self: ^PhaseTracker) {
     delete(self.ringbuffer_data)
     delete(self.sample_buffer)
+    // rl.UnloadShader(self.shader)
     for &band in self.bands {
         delete(band.display.strobe_buffer)
         destory_dft(&band.dft)
@@ -123,7 +127,12 @@ draw_strobe_bands :: proc (self: ^PhaseTracker) {
 
     for &band, band_idx in self.bands {
         // Draw frame
-        rect := rl.Rectangle{160, f32(50 + 110 * band_idx), 800, 100}
+        rect := rl.Rectangle{
+            160,
+            f32(50 + 110 * band_idx),
+            800,
+            100
+        }
 
         rl.DrawRectangleLinesEx({rect.x-1, rect.y-1, rect.width+2, rect.height+2}, 1.0, rl.LIGHTGRAY)
         x := rect.x + 1.0
@@ -142,6 +151,12 @@ draw_strobe_bands :: proc (self: ^PhaseTracker) {
             )
             x += dx
         }
+
+        // {
+        //     rl.BeginShaderMode(self.shader)
+        //     rl.DrawRectangleRec(rect, rl.WHITE);
+        //     rl.EndShaderMode()
+        // }
 
         rl.DrawTextEx(
             font,
