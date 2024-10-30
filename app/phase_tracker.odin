@@ -65,7 +65,7 @@ PhaseTracker :: struct {
 init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int) -> (self: PhaseTracker) {
     self.window_size = 4096
     self.overlap_size = 256
-    self.band_width = 800
+    self.band_width = 600
     self.band_height = 70
 
     rb, rb_data := init_ringbuffer(DEFAULT_RB_SIZE)
@@ -162,10 +162,13 @@ draw_strobe_bands :: proc (self: ^PhaseTracker, rms_level: f32) {
 
 
     for &band, band_idx in self.bands {
+
+        order := len(self.bands) - 1 - band_idx
+
         // Draw frame
         rect := rl.Rectangle{
             160,
-            f32(50 + (int(self.band_height) + 2) * band_idx),
+            f32(50 + (int(self.band_height) + 2) * order),
             f32(self.band_width),
             f32(self.band_height),
         }
@@ -234,16 +237,16 @@ draw_strobe_bands :: proc (self: ^PhaseTracker, rms_level: f32) {
         rl.DrawTextEx(
             font,
             fmt.ctprintf("%+.4fHz", band.estimated_freq_hz),
-            {20, 280 + 110 * f32(band_idx)},
-            22,
+            {800, 60 + f32(self.band_height) * f32(order)},
+            18,
             0,
             rl.GOLD
         )
         rl.DrawTextEx(
             font,
             fmt.ctprintf("%+.2fc", err_cents),
-            {20, 320 + 110 * f32(band_idx)},
-            22,
+            {800, 90 + f32(self.band_height) * f32(order)},
+            18,
             0,
             rl.GREEN
         )
