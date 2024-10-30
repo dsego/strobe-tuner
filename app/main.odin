@@ -173,22 +173,25 @@ main :: proc() {
             // draw_autocorrelation(rl.Rectangle{130, 50, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
             draw_nsdf(rl.Rectangle{130, 280, SCREEN_WIDTH-200, 180}, &pitch_detector.nsdf, pitch_info.nsdf_peak)
 
+            // Detected note
+            draw_note(detected_note, {20, 300}, 64, rl.GOLD)
+
             // convert to cents, because we need the log scale
-            {
+            if false {
                 cents := freq_to_cents(detected_freq)
                 cents_error := cents - f32(detected_note.cents)
                 draw_note_meter(rl.Rectangle{500, 550, 200, 25}, detected_freq, detected_note, cents_error, rl.BEIGE)
                 rl.DrawTextEx(font, fmt.ctprintf("%+.2fHz", pitch_info.detected_freq), {400, 550}, 22, 0, rl.BEIGE)
             }
 
-            {
+            if false {
                 cents := freq_to_cents(freq_mean)
                 cents_error := cents - f32(detected_note.cents)
                 rl.DrawTextEx(font, fmt.ctprintf("%+.2fHz", freq_mean), {400, 580}, 22, 0, rl.PURPLE)
                 draw_note_meter(rl.Rectangle{500, 580, 200, 25}, freq_mean, detected_note, cents_error, rl.PURPLE)
             }
 
-            {
+            if false {
                 alpha: f32 = 0.5
                 freq_ewma = ewma_filter(pitch_info.detected_freq, alpha, freq_ewma)
                 cents := freq_to_cents(freq_ewma)
@@ -197,7 +200,6 @@ main :: proc() {
                 rl.DrawTextEx(font, fmt.ctprintf("%+.2fHz", freq_ewma), {400, 610}, 22, 0, rl.SKYBLUE)
                 draw_note_meter(rl.Rectangle{500, 610, 200, 25}, freq_ewma, detected_note, cents_error, rl.SKYBLUE)
             }
-
 
 
             rl.DrawTextEx(font, fmt.ctprintf("RMS %.4f", pitch_info.rms), {20, 620}, 24, 0, rl.PINK)
