@@ -1,6 +1,7 @@
 package app
 
 import "core:math"
+import "core:testing"
 import "core:fmt"
 import rl "vendor:raylib"
 
@@ -142,4 +143,21 @@ blackman_harris :: proc (i: f32, num: f32) -> f32 {
     res := a0 - seg1 + seg2 - seg3
 
     return res
+}
+
+
+snap_number :: proc (value: f32, eps: f32) -> f32 {
+    rounded := math.round(value)
+    if math.abs(rounded - value) <= eps {
+        return rounded
+    }
+    return value
+}
+
+@(test)
+test_snap_number :: proc(t: ^testing.T) {
+    testing.expect_value(t, snap_number(0.99, 0.01), 1.00)
+    testing.expect_value(t, snap_number(0.98, 0.01), 0.98)
+    testing.expect_value(t, snap_number(0.01, 0.01), 0.00)
+    testing.expect_value(t, snap_number(0.02, 0.01), 0.02)
 }

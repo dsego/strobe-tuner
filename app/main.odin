@@ -43,7 +43,6 @@ main :: proc() {
     // target_freq = 1975.533
     // target_freq = 82.4068892282175
 
-    target_interval := 0.0
 
     // set initial frequency
     freq_changed := true
@@ -65,10 +64,6 @@ main :: proc() {
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
     defer rl.CloseWindow()
 
-
-    // strobe := init_strobe(f32(target_freq), SAMPLERATE, 2)
-    // defer destroy_strobe(&strobe)
-
     phase_tracker := init_phase_tracker(f32(target_freq), SAMPLERATE, 2)
     defer destroy_phase_tracker(&phase_tracker)
 
@@ -86,7 +81,6 @@ main :: proc() {
     defer destroy_drawing_context()
 
     register_audio_node(audio_capture, &pitch_detector)
-    // register_audio_node(audio_capture, &strobe)
     register_audio_node(audio_capture, &phase_tracker)
     start_audio_capture(audio_capture)
 
@@ -116,8 +110,6 @@ main :: proc() {
             // target_freq = 100
             // target_freq = 1975.533
             // target_freq = 82.4068892282175
-
-            // set_strobe_freq(&strobe, f32(target_freq))
             set_phase_tracker_freq(&phase_tracker, f32(target_freq))
 
 
@@ -128,18 +120,11 @@ main :: proc() {
 
         // TODO: turn off pitch detector if rms is weak?
         pitch_info = run_pitch_detection(&pitch_detector, pitch_info)
-        for i in 0..<len(freq_measurements) - 1 {
-            freq_measurements[i+1] = freq_measurements[i]
-        }
-        freq_measurements[0] = pitch_info.detected_freq
+
 
         // TODO:
         // Update freq measurement 5 times per second
         // new_time := rl.GetTime()
-
-        freq_mean = smooth_impulsive_noise(freq_measurements[:])
-
-
         // Keep previous measurement if there is no detected note
 
         // TODO: detect note onset?
@@ -148,12 +133,7 @@ main :: proc() {
         // TODO: apply impulse noise smoothing algorithm to freq measurement
         if is_strong_pitch(pitch_info) {
         //     if detected_note.cents != pitch_info.detected_note.cents &&
-        //         valid_strobe_freq(pitch_info.detected_note.frequency) {
-
             detected_note = pitch_info.detected_note
-        //         // set_strobe_freq(&strobe, detected_note.frequency, SAMPLERATE)
-        //     }
-
             detected_freq = pitch_info.detected_freq
         }
 
@@ -163,12 +143,10 @@ main :: proc() {
             rl.ClearBackground(rl.BLACK)
 
             draw_phase_tracker_display(&phase_tracker, pitch_info.rms)
-            // draw_strobe(&strobe)
-            draw_note(note, {20, 20}, 64)
+            draw_note(note, {20, 20}, 96)
 
-            // Show target frequency & interval
-            rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", target_freq), {20, 100}, 32, 0, rl.PURPLE)
-            rl.DrawTextEx(font, fmt.ctprintf("%.4f", target_interval), {20, 150}, 16, 0, rl.SKYBLUE)
+            // Show target frequency
+            rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", target_freq), {20, 120}, 24, 0, rl.PURPLE)
 
             // draw_autocorrelation(rl.Rectangle{130, 50, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
             draw_nsdf(rl.Rectangle{130, 280, SCREEN_WIDTH-200, 180}, &pitch_detector.nsdf, pitch_info.nsdf_peak)
@@ -184,12 +162,12 @@ main :: proc() {
                 rl.DrawTextEx(font, fmt.ctprintf("%+.2fHz", pitch_info.detected_freq), {400, 550}, 22, 0, rl.BEIGE)
             }
 
-            if false {
-                cents := freq_to_cents(freq_mean)
-                cents_error := cents - f32(detected_note.cents)
-                rl.DrawTextEx(font, fmt.ctprintf("%+.2fHz", freq_mean), {400, 580}, 22, 0, rl.PURPLE)
-                draw_note_meter(rl.Rectangle{500, 580, 200, 25}, freq_mean, detected_note, cents_error, rl.PURPLE)
-            }
+            // if false {
+            //     cents := freq_to_cents(freq_mean)
+            //     cents_error := cents - f32(detected_note.cents)
+            //     rl.DrawTextEx(font, fmt.ctprintf("%+.2fHz", freq_mean), {400, 580}, 22, 0, rl.PURPLE)
+            //     draw_note_meter(rl.Rectangle{500, 580, 200, 25}, freq_mean, detected_note, cents_error, rl.PURPLE)
+            // }
 
             if false {
                 alpha: f32 = 0.5

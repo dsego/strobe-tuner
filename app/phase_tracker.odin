@@ -233,18 +233,17 @@ draw_strobe_bands :: proc (self: ^PhaseTracker, rms_level: f32) {
             rl.EndShaderMode()
         }
 
-
         rl.DrawTextEx(
             font,
-            fmt.ctprintf("%+.4fHz", band.estimated_freq_hz),
-            {800, 60 + f32(self.band_height) * f32(order)},
+            fmt.ctprintf("%+.1fHz", band.estimated_freq_hz),
+            {870, 60 + f32(self.band_height) * f32(order)},
             18,
             0,
             rl.GOLD
         )
         rl.DrawTextEx(
             font,
-            fmt.ctprintf("%+.2fc", err_cents),
+            fmt.ctprintf("%+.1fc", err_cents),
             {800, 90 + f32(self.band_height) * f32(order)},
             18,
             0,

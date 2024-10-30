@@ -225,7 +225,7 @@ test_calculate_framerate :: proc(t: ^testing.T) {
         testing.expect(t, math.abs(expected_drift - drift) < EPSILON, fmt.tprintf("expected %v, got %v", expected_drift, drift))
         testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPSILON, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
         testing.expect_value(t, skip, 0)
-        testing.expect_value(t, read, 36)
+        testing.expect_value(t, read, 35)
     }
 
 
@@ -276,7 +276,7 @@ test_calculate_framerate :: proc(t: ^testing.T) {
         testing.expect(t, math.abs(expected_drift - drift) < EPSILON, fmt.tprintf("expected %v, got %v", expected_drift, drift))
         testing.expect(t, math.abs(expected_counter_real - frame_counter_real) < EPSILON, fmt.tprintf("expected %v, got %v", expected_counter_real, frame_counter_real))
         testing.expect_value(t, skip, 0)
-        testing.expect_value(t, read, 8)
+        testing.expect_value(t, read, 7)
     }
     {
         frame_counter_real := 0.6

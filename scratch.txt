@@ -1,4 +1,7 @@
-
+for i in 0..<len(freq_measurements) - 1 {
+    freq_measurements[i+1] = freq_measurements[i]
+}
+freq_measurements[0] = pitch_info.detected_freq
 
 
 MVP:
