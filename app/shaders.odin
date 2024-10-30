@@ -16,8 +16,8 @@ out vec4 finalColor;
 const float TAU = 6.28318530717958647692528676655900576;
 
 // Uniforms
-uniform vec3 baseColor;
-uniform vec3 colorDelta;
+uniform vec3 colorA;
+uniform vec3 colorB;
 uniform float timeStretch;
 uniform float phaseCorrection;
 uniform float phase;
@@ -34,7 +34,8 @@ void main()
     value = 0.5 * value + 0.5;
     value = max(min(value, 1.0), 0.0);
 
-    vec3 rgb = baseColor + colorDelta * value;
+    // Blend colors
+    vec3 rgb = mix(colorA, colorB, value);
 
     finalColor = vec4(rgb, 1.0);
 }
