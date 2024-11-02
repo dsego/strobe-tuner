@@ -20,6 +20,10 @@ Note :: struct {
     cents_offset: f32,
 }
 
+
+// TODO: new note from string, eg new_note("A#2")
+
+
 freq_to_cents :: proc (freq: f32, pitch_standard: f32 = 440.0) -> f32 {
     return 1200.0 * math.log2(freq / pitch_standard)
 }

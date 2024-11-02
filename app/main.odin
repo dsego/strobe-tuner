@@ -11,14 +11,14 @@ import oef "../one_euro_filter"
 
 main :: proc() {
 
-    bass_freqs: []f64 = {
+    bass_freqs: []f32 = {
         41.20344, // E1
         55.00000, // A1
         73.41619, // D2
         97.99886, // G2
     }
 
-    guitar_freqs: []f64 = {
+    guitar_freqs: []f32 = {
         82.40689, // E2
         110.0000, // A2
         146.8324, // D3
@@ -27,14 +27,14 @@ main :: proc() {
         329.6276, // E4
     }
 
-    ukulele_freqs: []f64 = {
+    ukulele_freqs: []f32 = {
         391.9954, // G4
         261.6256, // C4
         329.6276, // E4
         440.0000, // A4
     }
 
-    freqs: []f64 = guitar_freqs
+    freqs: []f32 = guitar_freqs
     freqs_idx := 0
     target_freq := freqs[freqs_idx]
 
@@ -101,22 +101,6 @@ main :: proc() {
             freq_changed = true
         }
 
-        if freq_changed {
-            freqs_idx %= len(freqs)
-            if freqs_idx < 0 do freqs_idx += len(freqs) // wrap around
-            target_freq = freqs[freqs_idx]
-
-            // TODO: remove
-            // target_freq = 100
-            // target_freq = 1975.533
-            // target_freq = 82.4068892282175
-            set_phase_tracker_freq(&phase_tracker, f32(target_freq))
-
-
-            freq_changed = false
-        }
-
-        note := find_note(f32(target_freq))
 
         // TODO: turn off pitch detector if rms is weak?
         pitch_info = run_pitch_detection(&pitch_detector, pitch_info)
@@ -131,11 +115,31 @@ main :: proc() {
 
         // TODO: different clarity for locking onto pitch and tracking frequency?
         // TODO: apply impulse noise smoothing algorithm to freq measurement
-        if is_strong_pitch(pitch_info) {
-        //     if detected_note.cents != pitch_info.detected_note.cents &&
+        if is_strong_pitch(pitch_info) && detected_note.cents != pitch_info.detected_note.cents {
             detected_note = pitch_info.detected_note
             detected_freq = pitch_info.detected_freq
+            target_freq = pitch_info.detected_note.frequency
+            set_phase_tracker_freq(&phase_tracker, target_freq)
         }
+
+
+        if freq_changed {
+            freqs_idx %= len(freqs)
+            if freqs_idx < 0 do freqs_idx += len(freqs) // wrap around
+            target_freq = freqs[freqs_idx]
+
+            // TODO: remove
+            // target_freq = 100
+            // target_freq = 1975.533
+            // target_freq = 82.4068892282175
+            set_phase_tracker_freq(&phase_tracker, target_freq)
+
+
+            freq_changed = false
+        }
+
+        note := find_note(f32(target_freq))
+
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -149,7 +153,7 @@ main :: proc() {
             rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", target_freq), {20, 120}, 24, 0, rl.PURPLE)
 
             // draw_autocorrelation(rl.Rectangle{130, 50, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
-            draw_nsdf(rl.Rectangle{130, 280, SCREEN_WIDTH-200, 180}, &pitch_detector.nsdf, pitch_info.nsdf_peak)
+            // draw_nsdf(rl.Rectangle{130, 280, SCREEN_WIDTH-200, 180}, &pitch_detector.nsdf, pitch_info.nsdf_peak)
 
             // Detected note
             draw_note(detected_note, {20, 300}, 64, rl.GOLD)

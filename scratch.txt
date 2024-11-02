@@ -1,3 +1,23 @@
+
+
+arcsin arccos
+
+arcsin(1)  = π/2
+arcsin(-1) = -π/2
+arcsin(0) = 0
+
+
+arccos(0) = π/2
+arccos(1) = 0
+arccos(-1) = π
+
+
+
+
+
+
+
+
 for i in 0..<len(freq_measurements) - 1 {
     freq_measurements[i+1] = freq_measurements[i]
 }

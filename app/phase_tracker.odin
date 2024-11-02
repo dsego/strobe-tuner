@@ -65,8 +65,8 @@ PhaseTracker :: struct {
 init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int) -> (self: PhaseTracker) {
     self.window_size = 4096
     self.overlap_size = 256
-    self.band_width = 600
-    self.band_height = 70
+    self.band_width = 300
+    self.band_height = 300
 
     rb, rb_data := init_ringbuffer(DEFAULT_RB_SIZE)
     self.ringbuffer = rb

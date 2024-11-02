@@ -36,7 +36,7 @@ draw_note :: proc(note: Note, pos: [2]f32, size: f32, color: rl.Color = rl.PURPL
 
     // Sharp sign
     if note.is_accidental {
-        rl.DrawTextEx(font, SHARP, {pos.x+size/2, pos.y}, size/1.5, 0, color)
+        rl.DrawTextEx(font, SHARP, {pos.x+size/2.0, pos.y}, size/2.0, 0, color)
     }
 
     // Octave number

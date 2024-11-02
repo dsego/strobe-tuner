@@ -27,6 +27,40 @@ uniform float normFreq;
 
 void main()
 {
+
+    float x = 0.5 - fragTexCoord.s;
+    float y = 0.5 - fragTexCoord.t;
+
+    float r = sqrt((x * x) + (y * y));
+    float circle = smoothstep(0.5, 0.498, abs(r)) - smoothstep(0.4, 0.398, abs(r));
+
+    float pi = radians(180);
+    float angle = atan(y, x) + pi;
+    angle = 0.5 * angle / pi;
+
+
+    float time = angle * timeStretch * float(winSize);
+    float value = amp * sin(normFreq * TAU * (time - phaseCorrection) + phase);
+
+    // convert from range [-1, 1] to [0, 1]
+    value = 0.5 * value + 0.5;
+    value = max(min(value, 1.0), 0.0);
+
+
+    // Blend colors
+    vec3 rgb = mix(colorA, colorB, value);
+
+
+
+    finalColor = vec4(circle * rgb, 1.0);
+
+
+
+
+
+    return;
+
+    /*
     float time = fragTexCoord.s * timeStretch * float(winSize);
     float value = amp * sin(normFreq * TAU * (time - phaseCorrection) + phase);
 
@@ -38,6 +72,7 @@ void main()
     vec3 rgb = mix(colorA, colorB, value);
 
     finalColor = vec4(rgb, 1.0);
+    */
 }
 
 ////////////////////////////////////////////

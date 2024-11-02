@@ -83,6 +83,7 @@ calculate_rms :: proc (samples: []f32) -> f32 {
     return math.sqrt(square_sum / f32(len(samples)))
 }
 
+// compare RMS based on dBFS ?
 is_strong_pitch :: proc (pitch_info: PitchInfo) -> bool {
-    return pitch_info.clarity > 0.95 && pitch_info.rms > 0.01
+    return pitch_info.clarity > 0.95 && pitch_info.rms > 0.05
 }
