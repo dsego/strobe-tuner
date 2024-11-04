@@ -50,20 +50,3 @@ run_dft :: proc(freq_hz: f32, samples: []f32, samplerate: f32, drift: f32 = 0.0)
 
 
 
-
-
-
-// TODO instead of  generating a sine, generate a square wave with amp modulating the "strength"
-
-
-// goertzl 740 ?
-
-
-// matched filter? - wavelet cross correlation
-
-
-// add more poles to reson???
-
-// TODO TODO TOD bandpass fir filter
-
-
