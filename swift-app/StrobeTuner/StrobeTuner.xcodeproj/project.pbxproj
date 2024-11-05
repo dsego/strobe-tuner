@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		128D71B22CDA2D0D0023B417 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 128D71B12CDA2D0D0023B417 /* AVFoundation.framework */; };
+		128D71B62CDA2D670023B417 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 128D71B52CDA2D670023B417 /* Foundation.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		126EE4812CCFB4F8008581CB /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,22 +32,28 @@
 		126EE46F2CCFB4F7008581CB /* StrobeTuner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StrobeTuner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		126EE4802CCFB4F8008581CB /* StrobeTunerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrobeTunerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		126EE48A2CCFB4F8008581CB /* StrobeTunerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrobeTunerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		128D71B12CDA2D0D0023B417 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk/System/Library/Frameworks/AVFoundation.framework; sourceTree = DEVELOPER_DIR; };
+		128D71B52CDA2D670023B417 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		128D71B72CDA2DC10023B417 /* AVFAudio.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFAudio.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk/System/Library/Frameworks/AVFAudio.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		128D71B42CDA2D3E0023B417 /* Exceptions for "StrobeTuner" folder in "StrobeTuner" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 126EE46E2CCFB4F6008581CB /* StrobeTuner */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		126EE4712CCFB4F7008581CB /* StrobeTuner */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				128D71B42CDA2D3E0023B417 /* Exceptions for "StrobeTuner" folder in "StrobeTuner" target */,
+			);
 			path = StrobeTuner;
-			sourceTree = "<group>";
-		};
-		126EE4832CCFB4F8008581CB /* StrobeTunerTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = StrobeTunerTests;
-			sourceTree = "<group>";
-		};
-		126EE48D2CCFB4F8008581CB /* StrobeTunerUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = StrobeTunerUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -52,6 +63,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				128D71B22CDA2D0D0023B417 /* AVFoundation.framework in Frameworks */,
+				128D71B62CDA2D670023B417 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -76,8 +89,7 @@
 			isa = PBXGroup;
 			children = (
 				126EE4712CCFB4F7008581CB /* StrobeTuner */,
-				126EE4832CCFB4F8008581CB /* StrobeTunerTests */,
-				126EE48D2CCFB4F8008581CB /* StrobeTunerUITests */,
+				128D71B02CDA2D0D0023B417 /* Frameworks */,
 				126EE4702CCFB4F7008581CB /* Products */,
 			);
 			sourceTree = "<group>";
@@ -90,6 +102,16 @@
 				126EE48A2CCFB4F8008581CB /* StrobeTunerUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		128D71B02CDA2D0D0023B417 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				128D71B72CDA2DC10023B417 /* AVFAudio.framework */,
+				128D71B52CDA2D670023B417 /* Foundation.framework */,
+				128D71B12CDA2D0D0023B417 /* AVFoundation.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -130,9 +152,6 @@
 			dependencies = (
 				126EE4822CCFB4F8008581CB /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				126EE4832CCFB4F8008581CB /* StrobeTunerTests */,
-			);
 			name = StrobeTunerTests;
 			packageProductDependencies = (
 			);
@@ -153,9 +172,6 @@
 			dependencies = (
 				126EE48C2CCFB4F8008581CB /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				126EE48D2CCFB4F8008581CB /* StrobeTunerUITests */,
-			);
 			name = StrobeTunerUITests;
 			packageProductDependencies = (
 			);
@@ -171,7 +187,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1600;
-				LastUpgradeCheck = 1600;
+				LastUpgradeCheck = 1610;
 				TargetAttributes = {
 					126EE46E2CCFB4F6008581CB = {
 						CreatedOnToolsVersion = 16.0;
@@ -303,6 +319,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -364,6 +381,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -391,11 +409,14 @@
 				CODE_SIGN_ENTITLEMENTS = StrobeTuner/StrobeTuner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"StrobeTuner/Preview Content\"";
 				DEVELOPMENT_TEAM = H7NVKG92W7;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = StrobeTuner/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -411,7 +432,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.StrobeTuner;
+				PRODUCT_BUNDLE_IDENTIFIER = StrobeTuner;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
@@ -430,11 +451,14 @@
 				CODE_SIGN_ENTITLEMENTS = StrobeTuner/StrobeTuner.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"StrobeTuner/Preview Content\"";
 				DEVELOPMENT_TEAM = H7NVKG92W7;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = StrobeTuner/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -450,7 +474,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.StrobeTuner;
+				PRODUCT_BUNDLE_IDENTIFIER = StrobeTuner;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
@@ -467,6 +491,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = H7NVKG92W7;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
@@ -490,6 +515,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = H7NVKG92W7;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
@@ -512,6 +538,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = H7NVKG92W7;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
@@ -534,6 +561,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = H7NVKG92W7;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;

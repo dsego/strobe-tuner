@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import MetalKit
 
 struct ContentView: View {
     var body: some View {
@@ -17,8 +18,4 @@ struct ContentView: View {
         }
         .padding()
     }
-}
-
-#Preview {
-    ContentView()
 }
