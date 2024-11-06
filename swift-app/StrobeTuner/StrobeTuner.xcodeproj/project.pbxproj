@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		125133A42CDA76B30012FA5E /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 125133A22CDA76B30012FA5E /* Metal.framework */; };
+		125133A52CDA76B30012FA5E /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 125133A32CDA76B30012FA5E /* MetalKit.framework */; };
 		128D71B22CDA2D0D0023B417 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 128D71B12CDA2D0D0023B417 /* AVFoundation.framework */; };
 		128D71B62CDA2D670023B417 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 128D71B52CDA2D670023B417 /* Foundation.framework */; };
 /* End PBXBuildFile section */
@@ -29,6 +31,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		125133A22CDA76B30012FA5E /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk/System/Library/Frameworks/Metal.framework; sourceTree = DEVELOPER_DIR; };
+		125133A32CDA76B30012FA5E /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk/System/Library/Frameworks/MetalKit.framework; sourceTree = DEVELOPER_DIR; };
 		126EE46F2CCFB4F7008581CB /* StrobeTuner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StrobeTuner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		126EE4802CCFB4F8008581CB /* StrobeTunerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrobeTunerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		126EE48A2CCFB4F8008581CB /* StrobeTunerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrobeTunerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -63,6 +67,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				125133A42CDA76B30012FA5E /* Metal.framework in Frameworks */,
+				125133A52CDA76B30012FA5E /* MetalKit.framework in Frameworks */,
 				128D71B22CDA2D0D0023B417 /* AVFoundation.framework in Frameworks */,
 				128D71B62CDA2D670023B417 /* Foundation.framework in Frameworks */,
 			);
@@ -107,6 +113,8 @@
 		128D71B02CDA2D0D0023B417 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				125133A22CDA76B30012FA5E /* Metal.framework */,
+				125133A32CDA76B30012FA5E /* MetalKit.framework */,
 				128D71B72CDA2DC10023B417 /* AVFAudio.framework */,
 				128D71B52CDA2D670023B417 /* Foundation.framework */,
 				128D71B12CDA2D0D0023B417 /* AVFoundation.framework */,
@@ -435,10 +443,11 @@
 				PRODUCT_BUNDLE_IDENTIFIER = StrobeTuner;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 2.0;
 			};
 			name = Debug;
@@ -477,10 +486,11 @@
 				PRODUCT_BUNDLE_IDENTIFIER = StrobeTuner;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 2.0;
 			};
 			name = Release;
@@ -500,10 +510,11 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.StrobeTunerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StrobeTuner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/StrobeTuner";
 				XROS_DEPLOYMENT_TARGET = 2.0;
 			};
@@ -524,10 +535,11 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.StrobeTunerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StrobeTuner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/StrobeTuner";
 				XROS_DEPLOYMENT_TARGET = 2.0;
 			};
@@ -547,10 +559,11 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.StrobeTunerUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = StrobeTuner;
 				XROS_DEPLOYMENT_TARGET = 2.0;
 			};
@@ -570,10 +583,11 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.StrobeTunerUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = StrobeTuner;
 				XROS_DEPLOYMENT_TARGET = 2.0;
 			};

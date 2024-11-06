@@ -20,13 +20,25 @@ struct AudioCapture {
     }
     
     func startAudio() {
+#if os(iOS)
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.record)
+            try session.setActive(true)
+        } catch {
+            fatalError("Failed to start audio engine.")
+        }
+#endif
         audioEngine.attach(sinkNode)
+            
+        let format = audioEngine.inputNode.inputFormat(forBus: 0)
+        
         audioEngine.connect(
             audioEngine.inputNode,
             to: sinkNode,
-            // TODO: define in a config somewhere
-            format: AVAudioFormat.init(standardFormatWithSampleRate: 48_000, channels: 1)
+            format: format
         )
+        
         do {
             try audioEngine.start()
         } catch {
