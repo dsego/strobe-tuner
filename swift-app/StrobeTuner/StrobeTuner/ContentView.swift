@@ -6,13 +6,19 @@
 //
 
 import SwiftUI
-
-struct ContentView: View {
     
+struct ContentView: View {
+    var shader: Shader {
+        ShaderLibrary.recolor(.color(.red))
+    }
     var body: some View {
         VStack {
             Text("Hello, world!")
-            MetalView()
+            RoundedRectangle(cornerRadius: 40)
+                .frame(height: 400)
+                .padding(.horizontal, 50)
+                .colorEffect(shader, isEnabled: true)
+            Text("Hey")
         }
         .padding()
     }

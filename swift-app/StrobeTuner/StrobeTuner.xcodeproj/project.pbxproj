@@ -7,8 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		125133A42CDA76B30012FA5E /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 125133A22CDA76B30012FA5E /* Metal.framework */; };
-		125133A52CDA76B30012FA5E /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 125133A32CDA76B30012FA5E /* MetalKit.framework */; };
+		12192EB02CDCACBE00D5C3D9 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 12192EAF2CDCACBE00D5C3D9 /* Metal.framework */; };
 		128D71B22CDA2D0D0023B417 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 128D71B12CDA2D0D0023B417 /* AVFoundation.framework */; };
 		128D71B62CDA2D670023B417 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 128D71B52CDA2D670023B417 /* Foundation.framework */; };
 /* End PBXBuildFile section */
@@ -31,8 +30,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		125133A22CDA76B30012FA5E /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk/System/Library/Frameworks/Metal.framework; sourceTree = DEVELOPER_DIR; };
-		125133A32CDA76B30012FA5E /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk/System/Library/Frameworks/MetalKit.framework; sourceTree = DEVELOPER_DIR; };
+		12192EAF2CDCACBE00D5C3D9 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk/System/Library/Frameworks/Metal.framework; sourceTree = DEVELOPER_DIR; };
 		126EE46F2CCFB4F7008581CB /* StrobeTuner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StrobeTuner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		126EE4802CCFB4F8008581CB /* StrobeTunerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrobeTunerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		126EE48A2CCFB4F8008581CB /* StrobeTunerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrobeTunerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -67,9 +65,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				125133A42CDA76B30012FA5E /* Metal.framework in Frameworks */,
-				125133A52CDA76B30012FA5E /* MetalKit.framework in Frameworks */,
 				128D71B22CDA2D0D0023B417 /* AVFoundation.framework in Frameworks */,
+				12192EB02CDCACBE00D5C3D9 /* Metal.framework in Frameworks */,
 				128D71B62CDA2D670023B417 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -113,8 +110,7 @@
 		128D71B02CDA2D0D0023B417 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				125133A22CDA76B30012FA5E /* Metal.framework */,
-				125133A32CDA76B30012FA5E /* MetalKit.framework */,
+				12192EAF2CDCACBE00D5C3D9 /* Metal.framework */,
 				128D71B72CDA2DC10023B417 /* AVFAudio.framework */,
 				128D71B52CDA2D670023B417 /* Foundation.framework */,
 				128D71B12CDA2D0D0023B417 /* AVFoundation.framework */,

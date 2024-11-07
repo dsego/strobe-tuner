@@ -1,16 +1,6 @@
 
 
-arcsin arccos
-
-arcsin(1)  = π/2
-arcsin(-1) = -π/2
-arcsin(0) = 0
-
-
-arccos(0) = π/2
-arccos(1) = 0
-arccos(-1) = π
-
+icon idea - strobe + tuning fork (ala xcode hammer icon)
 
 
 
