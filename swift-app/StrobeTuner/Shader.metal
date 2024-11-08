@@ -18,7 +18,6 @@ struct StrobeBand {
 
 float generateSignal(float freq, float time, float phase, float amplitude) {
     float tau = 2.0 * M_PI_F;
-    float pi = M_PI_2_F;
     
     // Calculate the signal value for this position in the strobe
     float phaseCorrection = 0.0;
@@ -59,7 +58,6 @@ float drawDonut (
                                int sizeBytes
                                ) {
     float tau = 2.0 * M_PI_F;
-    float pi = M_PI_2_F;
     
     half4 outColor = color;
     int count = sizeBytes / sizeof(struct StrobeBand);

@@ -28,6 +28,7 @@ struct ContentView: View {
         VStack {
             Text("Hello, world!")
             RoundedRectangle(cornerRadius: 8)
+                .fill(.black)
 //                .fill(Color(red: 84.0/255.0, green: 32.0/255.0, blue: 43.0/255.0))
                 .frame(height: 400)
                 .colorEffect(shader, isEnabled: true)

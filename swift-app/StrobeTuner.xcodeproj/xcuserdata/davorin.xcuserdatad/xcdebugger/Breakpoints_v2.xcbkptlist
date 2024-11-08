@@ -30,8 +30,8 @@
             filePath = "StrobeTuner/Shader.metal"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "104"
-            endingLineNumber = "104"
+            startingLineNumber = "102"
+            endingLineNumber = "102"
             landmarkName = "recolor( float2 position, half4 color, float4 boundingRect, constant StrobeBand* strobeBands, int sizeBytes )"
             landmarkType = "9">
          </BreakpointContent>
