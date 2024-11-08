@@ -15,9 +15,9 @@ struct StrobeBand {
 struct ContentView: View {
     
     var strobeBands: [StrobeBand] = [
-        StrobeBand(amp: 1.0, phase: 0.0),
-        StrobeBand(amp: 0.5, phase: .pi / 2),
-        StrobeBand(amp: 0.2, phase: .pi / 2),
+        StrobeBand(amp: 2.0, phase: 0.0),
+        StrobeBand(amp: 20.0, phase: .pi / 2),
+        StrobeBand(amp: 20.8, phase: .pi / 4),
     ]
     
     var shader: Shader {
@@ -27,11 +27,10 @@ struct ContentView: View {
     var body: some View {
         VStack {
             Text("Hello, world!")
-            GeometryReader { proxy in
-                RoundedRectangle(cornerRadius: 8)
-                    .frame(height: 400)
-                    .colorEffect(shader, isEnabled: true)
-            }
+            RoundedRectangle(cornerRadius: 8)
+//                .fill(Color(red: 84.0/255.0, green: 32.0/255.0, blue: 43.0/255.0))
+                .frame(height: 400)
+                .colorEffect(shader, isEnabled: true)
             Text("Hey")
         }
         .padding()

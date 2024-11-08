@@ -1,5 +1,17 @@
 
 
+need to adjust phase by freq. factor?
+
+eg these appear correct
+
+StrobeBand(amp: 2.0, phase: 0.0),
+StrobeBand(amp: 20.0, phase: .pi / 2),
+StrobeBand(amp: 20.8, phase: .pi / 4),
+
+
+
+
+
 icon idea - strobe + tuning fork (ala xcode hammer icon)
 
 
