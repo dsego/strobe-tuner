@@ -8,8 +8,10 @@
 #include <metal_stdlib>
 using namespace metal;
 
-[[ stitchable ]] half4 recolor(float2 position, half4 color, half4 replacement) {
-    // Send back the RGB values from the replacement color
-    // factoring in the original alpha to preserve opacity.
-    return replacement * color.a;
+[[ stitchable ]] half4 recolor(float2 position, half4 color, float2 size) {
+        
+    // normalized position
+    float2 p = position / size;
+    
+    return half4(p.x, p.y, 0.0, 1.0);
 }

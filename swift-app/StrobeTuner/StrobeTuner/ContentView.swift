@@ -8,16 +8,24 @@
 import SwiftUI
     
 struct ContentView: View {
+    @State var size: CGSize = CGSize()
+    
     var shader: Shader {
-        ShaderLibrary.recolor(.color(.red))
+        ShaderLibrary.recolor(.float2(size))
     }
     var body: some View {
         VStack {
             Text("Hello, world!")
-            RoundedRectangle(cornerRadius: 40)
-                .frame(height: 400)
-                .padding(.horizontal, 50)
-                .colorEffect(shader, isEnabled: true)
+            GeometryReader { proxy in
+                RoundedRectangle(cornerRadius: 40)
+                    .onGeometryChange(for: CGSize.self) { proxy in
+                        proxy.size
+                    } action: {
+                        size = $0
+                    }
+                    .frame(height: 400)
+                    .colorEffect(shader, isEnabled: true)
+            }
             Text("Hey")
         }
         .padding()
