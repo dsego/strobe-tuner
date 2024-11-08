@@ -17,7 +17,7 @@ struct ContentView: View {
         VStack {
             Text("Hello, world!")
             GeometryReader { proxy in
-                RoundedRectangle(cornerRadius: 40)
+                RoundedRectangle(cornerRadius: 8)
                     .onGeometryChange(for: CGSize.self) { proxy in
                         proxy.size
                     } action: {

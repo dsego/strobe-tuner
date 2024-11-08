@@ -9,22 +9,31 @@
 using namespace metal;
 
 [[ stitchable ]] half4 recolor(float2 position, half4 color, float2 size) {
-    const float TAU = 6.28318530717958647692528676655900576;
+//    float TAU = 6.28318530717958647692528676655900576;
     
-    float2 center = 0.5 * size;
+    float grow = 4.0;
+    float padding = 10.0;
+    float feathering = 2 / grow; // 2 px feathering for smoothstep
     
+    // Calculate the center so the circle touches the top of the viewport vertically and is centered horizontally
+    float2 center = float2(0.5 * size.x, grow * size.y + padding);
+    
+    // Define the thickness of our donut shape
+    float thickness = 80 / grow;
+    float2 donutRadii = float2(size.y - thickness, size.y);
+
+    
+    // This is the pixel position in terms of distance from the circle center
     float2 circle = center - position.xy;
+    float radialPosition = sqrt((circle.x * circle.x) + (circle.y * circle.y)) / grow;
     
-    float feathering = 2; // 2 px feathering for smoothstep
+    // Color the pixel at position based on whether it sits in the donut shape
+    float innerCircle = smoothstep(donutRadii.x, donutRadii.x - feathering, abs(radialPosition));
+    float outerCircle = smoothstep(donutRadii.y, donutRadii.y - feathering, abs(radialPosition));
+    float donut = outerCircle - innerCircle;
     
-    float radius = sqrt((circle.x * circle.x) + (circle.y * circle.y));
     
-    float minSize = min(size.x, size.y);
-    
-    float innerCircle = smoothstep(0.4 * minSize, 0.4 * minSize - feathering, abs(radius));
-    float outerCircle = smoothstep(0.5 * minSize, 0.5 * minSize - feathering, abs(radius));
-    float wheel = outerCircle - innerCircle;
     
     half3 rgb = half3(1.0, 1.0, 1.0);
-    return half4(wheel * rgb, color.a);
+    return half4(donut * rgb, color.a);
 }
