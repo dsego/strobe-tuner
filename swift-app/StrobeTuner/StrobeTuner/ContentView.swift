@@ -6,23 +6,29 @@
 //
 
 import SwiftUI
-    
+
+struct StrobeBand {
+    var amp: Float
+    var phase: Float
+}
+
 struct ContentView: View {
-    @State var size: CGSize = CGSize()
+    
+    var strobeBands: [StrobeBand] = [
+        StrobeBand(amp: 1.0, phase: 0.0),
+        StrobeBand(amp: 0.5, phase: .pi / 2),
+        StrobeBand(amp: 0.2, phase: .pi / 2),
+    ]
     
     var shader: Shader {
-        ShaderLibrary.recolor(.float2(size))
+        let data = Data(bytes: strobeBands, count: MemoryLayout<StrobeBand>.stride * strobeBands.count)
+        return ShaderLibrary.recolor(.boundingRect, .data(data))
     }
     var body: some View {
         VStack {
             Text("Hello, world!")
             GeometryReader { proxy in
                 RoundedRectangle(cornerRadius: 8)
-                    .onGeometryChange(for: CGSize.self) { proxy in
-                        proxy.size
-                    } action: {
-                        size = $0
-                    }
                     .frame(height: 400)
                     .colorEffect(shader, isEnabled: true)
             }
