@@ -33,7 +33,6 @@ PhaseTracker :: struct {
     using node: AudioCaptureNode,
     sample_buffer: []f32,
     window_size: int,
-    overlap_size: int,
     ringbuffer: RingBuffer,
     ringbuffer_data: []u8,
     phase_correction: f32,
@@ -64,7 +63,6 @@ PhaseTracker :: struct {
 
 init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int) -> (self: PhaseTracker) {
     self.window_size = 4096
-    self.overlap_size = 256
     self.band_width = 300
     self.band_height = 300
 
