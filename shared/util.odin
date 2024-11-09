@@ -1,4 +1,4 @@
-package app
+package shared
 
 import "core:math"
 import "core:testing"
@@ -118,13 +118,11 @@ blackmann_window :: proc (k: f32, size: f32) -> f32 {
 
 // https://www.recordingblogs.com/wiki/flat-top-window
 flattop_window :: proc (k: f32, size: f32) -> f32 {
-    return (
-        0.21557895
+    return (0.21557895
         - 0.41663158  * math.cos(2 * math.PI * k / (size - 1))
         + 0.277263158 * math.cos(4 * math.PI * k / (size - 1))
         - 0.083578947 * math.cos(6 * math.PI * k / (size - 1))
-        + 0.006947368 * math.cos(8 * math.PI * k / (size - 1))
-    )
+        + 0.006947368 * math.cos(8 * math.PI * k / (size - 1)))
 }
 
 

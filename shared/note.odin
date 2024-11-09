@@ -1,13 +1,13 @@
-package app
+package shared
+
 
 import "core:testing"
-import "core:fmt"
 import "core:math"
 import "core:c/libc"
 import "core:unicode/utf8"
 
-// Assumes equal temperament
 
+// Assumes equal temperament
 
 Note :: struct {
     name: rune, // note name does not include the accidental

@@ -10,15 +10,13 @@ import "base:runtime"
 
 import pa "../odin-portaudio"
 
+import "../shared"
 
-AudioCaptureNode :: struct {
-    stream_callback: proc (ctx: ^AudioCaptureNode, input: []f32),
-}
 
 AudioCapture :: struct {
     active_device: i32,
     stream: ^pa.Stream,
-    nodes: [dynamic]^AudioCaptureNode,
+    nodes: [dynamic]^shared.AudioCaptureNode,
 }
 
 
@@ -84,7 +82,7 @@ start_audio_capture :: proc(self: ^AudioCapture) -> bool {
     return true
 }
 
-register_audio_node :: proc(self: ^AudioCapture, node: ^AudioCaptureNode) {
+register_audio_node :: proc(self: ^AudioCapture, node: ^shared.AudioCaptureNode) {
     append(&self.nodes, node)
 }
 

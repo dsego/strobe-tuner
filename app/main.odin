@@ -6,7 +6,7 @@ import "core:math"
 
 import rl "vendor:raylib"
 import oef "../one_euro_filter"
-
+import "../shared"
 
 
 main :: proc() {
@@ -46,10 +46,10 @@ main :: proc() {
 
     // set initial frequency
     freq_changed := true
-    pitch_info := PitchInfo{}
+    pitch_info := shared.PitchInfo{}
     cents_error_smooth := f32(0.0)
 
-    detected_note: = Note{}
+    detected_note: = shared.Note{}
     detected_freq:f32 = 0.0
     freq_mean: f32 = 0.0
     freq_ewma: f32 = 0.0
@@ -64,12 +64,15 @@ main :: proc() {
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
     defer rl.CloseWindow()
 
-    phase_tracker := init_phase_tracker(f32(target_freq), SAMPLERATE, 2)
-    defer destroy_phase_tracker(&phase_tracker)
+    phase_tracker := shared.init_phase_tracker(f32(target_freq), SAMPLERATE, 2)
+    defer shared.destroy_phase_tracker(&phase_tracker)
+
+    phase_tracker_display := init_phase_tracker_display()
+    defer destroy_phase_tracker_display(&phase_tracker_display)
 
 
-    pitch_detector := init_pitch_detector()
-    defer destroy_pitch_detector(&pitch_detector)
+    pitch_detector := shared.init_pitch_detector(SAMPLERATE)
+    defer shared.destroy_pitch_detector(&pitch_detector)
 
 
     ok, audio_capture := init_audio_capture(SAMPLERATE)
@@ -103,7 +106,7 @@ main :: proc() {
 
 
         // TODO: turn off pitch detector if rms is weak?
-        pitch_info = run_pitch_detection(&pitch_detector, pitch_info)
+        pitch_info = shared.run_pitch_detection(&pitch_detector, pitch_info)
 
 
         // TODO:
@@ -115,11 +118,11 @@ main :: proc() {
 
         // TODO: different clarity for locking onto pitch and tracking frequency?
         // TODO: apply impulse noise smoothing algorithm to freq measurement
-        if is_strong_pitch(pitch_info) && detected_note.cents != pitch_info.detected_note.cents {
+        if shared.is_strong_pitch(pitch_info) && detected_note.cents != pitch_info.detected_note.cents {
             detected_note = pitch_info.detected_note
             detected_freq = pitch_info.detected_freq
             target_freq = pitch_info.detected_note.frequency
-            set_phase_tracker_freq(&phase_tracker, target_freq)
+            shared.set_phase_tracker_freq(&phase_tracker, target_freq)
         }
 
 
@@ -132,13 +135,13 @@ main :: proc() {
             // target_freq = 100
             // target_freq = 1975.533
             // target_freq = 82.4068892282175
-            set_phase_tracker_freq(&phase_tracker, target_freq)
+            shared.set_phase_tracker_freq(&phase_tracker, target_freq)
 
 
             freq_changed = false
         }
 
-        note := find_note(f32(target_freq))
+        note := shared.find_note(f32(target_freq))
 
 
         rl.BeginDrawing()
@@ -146,7 +149,11 @@ main :: proc() {
         {
             rl.ClearBackground(rl.BLACK)
 
-            draw_phase_tracker_display(&phase_tracker, pitch_info.rms)
+            shared.run_dft_analysis(&phase_tracker)
+
+            draw_phase_tracker_display(&phase_tracker_display, &phase_tracker)
+
+
             draw_note(note, {20, 20}, 96)
 
             // Show target frequency
@@ -160,7 +167,7 @@ main :: proc() {
 
             // convert to cents, because we need the log scale
             if false {
-                cents := freq_to_cents(detected_freq)
+                cents := shared.freq_to_cents(detected_freq)
                 cents_error := cents - f32(detected_note.cents)
                 draw_note_meter(rl.Rectangle{500, 550, 200, 25}, detected_freq, detected_note, cents_error, rl.BEIGE)
                 rl.DrawTextEx(font, fmt.ctprintf("%+.2fHz", pitch_info.detected_freq), {400, 550}, 22, 0, rl.BEIGE)
@@ -175,8 +182,8 @@ main :: proc() {
 
             if false {
                 alpha: f32 = 0.5
-                freq_ewma = ewma_filter(pitch_info.detected_freq, alpha, freq_ewma)
-                cents := freq_to_cents(freq_ewma)
+                freq_ewma = shared.ewma_filter(pitch_info.detected_freq, alpha, freq_ewma)
+                cents := shared.freq_to_cents(freq_ewma)
                 cents_error := cents - f32(detected_note.cents)
 
                 rl.DrawTextEx(font, fmt.ctprintf("%+.2fHz", freq_ewma), {400, 610}, 22, 0, rl.SKYBLUE)
@@ -196,4 +203,3 @@ main :: proc() {
         }
     }
 }
-

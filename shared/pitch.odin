@@ -1,8 +1,7 @@
-package app
+package shared
 
 import "core:fmt"
 import "core:math"
-
 
 
 PicthDetector :: struct {
@@ -23,9 +22,9 @@ PitchInfo :: struct {
 }
 
 
-init_pitch_detector :: proc() -> (self: PicthDetector) {
+init_pitch_detector :: proc(samplerate: int) -> (self: PicthDetector) {
     self.samples = make([]f32, FFT_SIZE/2)
-    self.nsdf = nsdf_init(FFT_SIZE, SAMPLERATE)
+    self.nsdf = nsdf_init(FFT_SIZE, samplerate)
     rb, rb_data := init_ringbuffer(DEFAULT_RB_SIZE)
     self.ringbuffer = rb
     self.ringbuffer_data = rb_data

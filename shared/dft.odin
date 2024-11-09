@@ -1,10 +1,6 @@
-package app
+package shared
 
 import "core:math"
-import "core:time"
-import "core:fmt"
-
-import helpers "../sandbox/helpers"
 
 
 SingleFreqDFT :: struct {

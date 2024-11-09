@@ -8,10 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		12192EB02CDCACBE00D5C3D9 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 12192EAF2CDCACBE00D5C3D9 /* Metal.framework */; };
-		121C62682CDFF92A00B74CC5 /* pffft.h in Frameworks */ = {isa = PBXBuildFile; fileRef = 121C62662CDFF92A00B74CC5 /* pffft.h */; };
-		121C62692CDFF92A00B74CC5 /* pffft.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 121C62672CDFF92A00B74CC5 /* pffft.a */; };
-		121C626C2CDFF9A100B74CC5 /* pa_ringbuffer.h in Frameworks */ = {isa = PBXBuildFile; fileRef = 121C626A2CDFF9A100B74CC5 /* pa_ringbuffer.h */; };
-		121C626D2CDFF9A100B74CC5 /* pa_ringbuffer.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 121C626B2CDFF9A100B74CC5 /* pa_ringbuffer.a */; };
 		128D71B22CDA2D0D0023B417 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 128D71B12CDA2D0D0023B417 /* AVFoundation.framework */; };
 		128D71B62CDA2D670023B417 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 128D71B52CDA2D670023B417 /* Foundation.framework */; };
 /* End PBXBuildFile section */
@@ -73,10 +69,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				121C626C2CDFF9A100B74CC5 /* pa_ringbuffer.h in Frameworks */,
-				121C626D2CDFF9A100B74CC5 /* pa_ringbuffer.a in Frameworks */,
-				121C62682CDFF92A00B74CC5 /* pffft.h in Frameworks */,
-				121C62692CDFF92A00B74CC5 /* pffft.a in Frameworks */,
 				128D71B22CDA2D0D0023B417 /* AVFoundation.framework in Frameworks */,
 				12192EB02CDCACBE00D5C3D9 /* Metal.framework in Frameworks */,
 				128D71B62CDA2D670023B417 /* Foundation.framework in Frameworks */,

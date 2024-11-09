@@ -5,6 +5,8 @@ import "core:strings"
 import "core:fmt"
 import "core:path/filepath"
 
+import "../shared"
+
 // Root directory relative to this file
 root_dir := filepath.dir(#file)
 
@@ -30,7 +32,7 @@ destroy_drawing_context :: proc() {
 }
 
 
-draw_note :: proc(note: Note, pos: [2]f32, size: f32, color: rl.Color = rl.PURPLE) {
+draw_note :: proc(note: shared.Note, pos: [2]f32, size: f32, color: rl.Color = rl.PURPLE) {
     // Note name
     rl.DrawTextEx(font, fmt.ctprintf("%v", note.name), pos, size, 0, color)
 
@@ -46,7 +48,7 @@ draw_note :: proc(note: Note, pos: [2]f32, size: f32, color: rl.Color = rl.PURPL
 
 draw_autocorrelation :: proc(
     rect: rl.Rectangle,
-    nsdf: ^NSDFConfig,
+    nsdf: ^shared.NSDFConfig,
 ) {
     points: [FFT_SIZE]rl.Vector2 = {}
 
@@ -95,8 +97,8 @@ draw_autocorrelation :: proc(
 
 draw_nsdf :: proc(
     rect: rl.Rectangle,
-    nsdf: ^NSDFConfig,
-    peak: Vec2,
+    nsdf: ^shared.NSDFConfig,
+    peak: shared.Vec2,
 ) {
     points: [FFT_SIZE/2]rl.Vector2 = {}
 
@@ -251,7 +253,13 @@ draw_freq_spectrum :: proc(rect: rl.Rectangle, spectrum: []f32, fft_size: int, s
 
 
 // TODO: draw past good note/position greyed out if new pitch is not found
-draw_note_meter :: proc (rect: rl.Rectangle, freq: f32, note: Note, cents_error: f32, color: rl.Color) {
+draw_note_meter :: proc (
+    rect: rl.Rectangle,
+    freq: f32,
+    note: shared.Note,
+    cents_error: f32,
+    color: rl.Color,
+) {
     // rl.DrawRectangleLinesEx(rect, 1.0, rl.ORANGE)
     px := rect.width / 100.0
 
@@ -275,3 +283,5 @@ draw_note_meter :: proc (rect: rl.Rectangle, freq: f32, note: Note, cents_error:
         color,
     )
 }
+
+

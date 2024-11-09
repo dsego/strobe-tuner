@@ -1,4 +1,4 @@
-package app
+package shared
 
 import "core:fmt"
 import "core:slice"

@@ -1,6 +1,6 @@
-package app
+package shared
 
-import "core:fmt"
+
 import "core:math"
 import "core:testing"
 

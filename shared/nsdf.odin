@@ -10,9 +10,10 @@
 ------------------------------------------------------------------------------------------------- */
 
 
-package app
+package shared
+
+
 import "core:mem"
-import "core:fmt"
 import "core:math"
 
 import "../pffft"
@@ -71,8 +72,6 @@ nsdf_pitch_detect :: proc (self: ^NSDFConfig, samples: []f32) -> (f32, Vec2) {
     }
 
     // apply windowing?
-    // spectrum_freq := nsdf_find_spectrum_freq(self, estimated_freq)
-    // fmt.println(estimated_freq, spectrum_freq)
 
     return estimated_freq, peak
 }
