@@ -13,6 +13,7 @@
 package shared
 
 
+import "base:runtime"
 import "core:mem"
 import "core:math"
 
@@ -35,7 +36,11 @@ NSDFConfig :: struct {
     chosen_peak_idx: int,
 }
 
-nsdf_init :: proc (fft_size: int, samplerate: int) -> (self: NSDFConfig = {}) {
+
+@(export)
+nsdf_init :: proc "c" (fft_size: int, samplerate: int) -> (self: NSDFConfig = {}) {
+    context = runtime.default_context()
+
     self.fft_size = fft_size
     self.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
     self.fft = make([]complex64, fft_size)
@@ -47,7 +52,10 @@ nsdf_init :: proc (fft_size: int, samplerate: int) -> (self: NSDFConfig = {}) {
     return
 }
 
-nsdf_destroy :: proc (self: ^NSDFConfig) {
+@(export)
+nsdf_destroy :: proc "c" (self: ^NSDFConfig) {
+    context = runtime.default_context()
+
     pffft.destroy_setup(self.pffft_setup)
     delete(self.fft)
     delete(self.spectrum)
@@ -58,7 +66,9 @@ nsdf_destroy :: proc (self: ^NSDFConfig) {
     delete(self.nsdf_peaks)
 }
 
-nsdf_pitch_detect :: proc (self: ^NSDFConfig, samples: []f32) -> (f32, Vec2) {
+@(export)
+nsdf_pitch_detect :: proc "c" (self: ^NSDFConfig, samples: []f32) -> (f32, Vec2) {
+    context = runtime.default_context()
 
     nsdf_process_samples(self, samples)
     nsdf_run_nsdf(self, samples)
@@ -77,57 +87,13 @@ nsdf_pitch_detect :: proc (self: ^NSDFConfig, samples: []f32) -> (f32, Vec2) {
 }
 
 
-// TODO: remove
-nsdf_find_spectrum_freq :: proc(self: ^NSDFConfig, nsdf_freq: f32) -> f32 {
- // calculate the spectrum
-    for i in 0..<self.fft_size/2 {
-        self.spectrum[i] = magnitude(self.fft[i])
-    }
-
-    bin := 0
-    max_magnitude := f32(0.0)
-
-    mag: f32 = 0.0
-
-    // Keep only the positive frequencies (DC to Nyquist), ignore first 2 bins
-    for i in 2..<self.fft_size/2 {
-        mag := self.spectrum[i]
-
-        // only search around the already found NSDF peak
-        freq_resolution := f32(self.samplerate) / f32(self.fft_size)
-        freq_hz := f32(i) * freq_resolution
-        if freq_hz >= nsdf_freq + freq_resolution {
-            break
-        }
-
-        if mag > max_magnitude {
-            max_magnitude = mag
-            bin = i
-        }
-    }
-
-    // Parabolic interpolation to determine a more accurate pitch
-    peak_location: f32 = 0
-    if bin > 0 {
-        peak_location, _ = parabolic(
-            math.ln(self.spectrum[bin-1]),
-            math.ln(self.spectrum[bin]),
-            math.ln(self.spectrum[bin+1]),
-        )
-    }
-
-    improved_bin := f32(bin) + peak_location
-    freq := improved_bin * f32(self.samplerate) / f32(self.fft_size)
-
-    return freq
-}
-
-
 // Generate the auto-correlation
 //   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,
 //    then taking the inverse FFT will give us the cyclic auto-correlation.
 @(private)
-nsdf_process_samples :: proc (self: ^NSDFConfig, samples: []f32) {
+nsdf_process_samples :: proc "c" (self: ^NSDFConfig, samples: []f32) {
+    context = runtime.default_context()
+
     assert(len(samples) <= self.fft_size/2)
 
     // pad samples with zeros to avoid cyclic convolution
@@ -168,7 +134,9 @@ nsdf_process_samples :: proc (self: ^NSDFConfig, samples: []f32) {
 
 
 @(private)
-nsdf_find_peak :: proc (self: ^NSDFConfig) -> Vec2 {
+nsdf_find_peak :: proc "c" (self: ^NSDFConfig) -> Vec2 {
+    context = runtime.default_context()
+
     // clear out peaks from the previous run
     clear(&self.nsdf_peaks)
 
@@ -239,7 +207,7 @@ nsdf_find_peak :: proc (self: ^NSDFConfig) -> Vec2 {
 // Normalized Square Difference Function (through autocorrelation)
 // http://riogrande.cs.tcu.edu/1516Ribbit/resources/A_Smarter_Way_to_Find_Pitch.pdf
 @(private)
-nsdf_run_nsdf :: proc (self: ^NSDFConfig, samples: []f32) {
+nsdf_run_nsdf :: proc "c" (self: ^NSDFConfig, samples: []f32) {
     n := len(samples)
     copy(self.nsdf, self.autocorr[:n])
 

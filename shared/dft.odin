@@ -1,5 +1,7 @@
 package shared
 
+
+import "base:runtime"
 import "core:math"
 
 
@@ -9,7 +11,10 @@ SingleFreqDFT :: struct {
     window: []f32, // eg Blackmann window
 }
 
-init_dft :: proc (size: int) -> SingleFreqDFT {
+@(export)
+init_dft :: proc "c" (size: int) -> SingleFreqDFT {
+    context = runtime.default_context()
+
     self := SingleFreqDFT{}
     self.size = size
     self.window = make([]f32, size)
@@ -23,7 +28,8 @@ init_dft :: proc (size: int) -> SingleFreqDFT {
     return self
 }
 
-set_dft_freq :: proc (self: ^SingleFreqDFT, norm_freq: f32) {
+@(export)
+set_dft_freq :: proc "c" (self: ^SingleFreqDFT, norm_freq: f32) {
     phase_delta: f32 = math.TAU // f32(self.size) // τ = 2π
     for i in 0..<self.size {
         time := f32(i)
@@ -32,13 +38,18 @@ set_dft_freq :: proc (self: ^SingleFreqDFT, norm_freq: f32) {
     }
 }
 
-destory_dft :: proc (self: ^SingleFreqDFT) {
+@(export)
+destory_dft :: proc "c" (self: ^SingleFreqDFT) {
+    context = runtime.default_context()
+
     delete(self.window)
     delete(self.twiddle_lookup)
 }
 
+@(export)
+run_single_dft :: proc "c" (self: ^SingleFreqDFT, samples: []f32) -> complex64 {
+    context = runtime.default_context()
 
-run_single_dft :: proc (self: ^SingleFreqDFT, samples: []f32) -> complex64 {
     assert(len(samples) >= self.size)
 
     dft: complex64 = complex(0, 0)

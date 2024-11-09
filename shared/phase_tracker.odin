@@ -12,6 +12,7 @@
 
 package shared
 
+import "base:runtime"
 import "core:math"
 
 
@@ -40,7 +41,10 @@ PhaseTracker :: struct {
 }
 
 
-init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int) -> (self: PhaseTracker) {
+@(export)
+init_phase_tracker :: proc "c" (base_freq_hz: f32, samplerate: f32, band_count: int) -> (self: PhaseTracker) {
+    context = runtime.default_context()
+
     self.window_size = 4096
 
     rb, rb_data := init_ringbuffer(DEFAULT_RB_SIZE)
@@ -61,7 +65,10 @@ init_phase_tracker :: proc (base_freq_hz: f32, samplerate: f32, band_count: int)
     return
 }
 
-destroy_phase_tracker :: proc(self: ^PhaseTracker) {
+@(export)
+destroy_phase_tracker :: proc "c" (self: ^PhaseTracker) {
+    context = runtime.default_context()
+
     delete(self.ringbuffer_data)
     delete(self.sample_buffer)
     for &band in self.bands {
@@ -70,7 +77,10 @@ destroy_phase_tracker :: proc(self: ^PhaseTracker) {
     delete(self.bands)
 }
 
-set_phase_tracker_freq :: proc (self: ^PhaseTracker, base_freq_hz: f32) {
+@(export)
+set_phase_tracker_freq :: proc "c" (self: ^PhaseTracker, base_freq_hz: f32) {
+    context = runtime.default_context()
+
     self.phase_correction = 0.0
     flush_ringbuffer(&self.ringbuffer)
     multiplier := 1
@@ -85,7 +95,10 @@ set_phase_tracker_freq :: proc (self: ^PhaseTracker, base_freq_hz: f32) {
 }
 
 
-phase_tracker_audio_callback :: proc (ctx: ^AudioCaptureNode, input: []f32) {
+@(export)
+phase_tracker_audio_callback :: proc "c" (ctx: ^AudioCaptureNode, input: []f32) {
+    context = runtime.default_context()
+
     self := container_of(ctx, PhaseTracker, "node")
 
     out1, out2, num_written := get_ringbuffer_write_regions(&self.ringbuffer, len(input))
@@ -98,12 +111,15 @@ phase_tracker_audio_callback :: proc (ctx: ^AudioCaptureNode, input: []f32) {
 
 // TODO: filtering ??
 @(private="file")
-write_to_rb_region :: proc(output: []f32, input: []f32) {
+write_to_rb_region :: proc "c" (output: []f32, input: []f32) {
     copy(output, input)
 }
 
 
-run_dft_analysis :: proc(self: ^PhaseTracker) {
+@(export)
+run_dft_analysis :: proc "c" (self: ^PhaseTracker) {
+    context = runtime.default_context()
+
     available := frames_available_in_ringbuffer(&self.ringbuffer)
 
     if available <= 0 do return

@@ -1,5 +1,7 @@
 package shared
 
+
+import "base:runtime"
 import "core:fmt"
 import "core:math"
 
@@ -22,7 +24,10 @@ PitchInfo :: struct {
 }
 
 
-init_pitch_detector :: proc(samplerate: int) -> (self: PicthDetector) {
+@(export)
+init_pitch_detector :: proc "c" (samplerate: int) -> (self: PicthDetector) {
+    context = runtime.default_context()
+
     self.samples = make([]f32, FFT_SIZE/2)
     self.nsdf = nsdf_init(FFT_SIZE, samplerate)
     rb, rb_data := init_ringbuffer(DEFAULT_RB_SIZE)
@@ -32,20 +37,29 @@ init_pitch_detector :: proc(samplerate: int) -> (self: PicthDetector) {
     return
 }
 
-destroy_pitch_detector :: proc(self: ^PicthDetector) {
+@(export)
+destroy_pitch_detector :: proc "c" (self: ^PicthDetector) {
+    context = runtime.default_context()
+
     nsdf_destroy(&self.nsdf)
     delete(self.samples)
     delete(self.ringbuffer_data)
 }
 
-pitch_audio_callback :: proc (ctx: ^AudioCaptureNode, input: []f32) {
+@(export)
+pitch_audio_callback :: proc "c" (ctx: ^AudioCaptureNode, input: []f32) {
+    context = runtime.default_context()
+
     self := container_of(ctx, PicthDetector, "node")
     write_to_ringbuffer(&self.ringbuffer, input)
 }
 
 
 // TODO: keep track of previous pitches
-run_pitch_detection :: proc (self: ^PicthDetector, prev_info: PitchInfo) -> PitchInfo {
+@(export)
+run_pitch_detection :: proc "c" (self: ^PicthDetector, prev_info: PitchInfo) -> PitchInfo {
+    context = runtime.default_context()
+
     info := PitchInfo{}
 
     new_count := int(frames_available_in_ringbuffer(&self.ringbuffer))
@@ -76,13 +90,15 @@ run_pitch_detection :: proc (self: ^PicthDetector, prev_info: PitchInfo) -> Pitc
 }
 
 
-calculate_rms :: proc (samples: []f32) -> f32 {
+@(export)
+calculate_rms :: proc "c" (samples: []f32) -> f32 {
     square_sum: f32 = 0
     for s in samples do square_sum += s * s
     return math.sqrt(square_sum / f32(len(samples)))
 }
 
 // compare RMS based on dBFS ?
-is_strong_pitch :: proc (pitch_info: PitchInfo) -> bool {
+@(export)
+is_strong_pitch :: proc "c" (pitch_info: PitchInfo) -> bool {
     return pitch_info.clarity > 0.95 && pitch_info.rms > 0.05
 }

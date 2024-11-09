@@ -23,8 +23,8 @@ Note :: struct {
 
 // TODO: new note from string, eg new_note("A#2")
 
-
-freq_to_cents :: proc (freq: f32, pitch_standard: f32 = 440.0) -> f32 {
+@(export)
+freq_to_cents :: proc "c" (freq: f32, pitch_standard: f32 = 440.0) -> f32 {
     return 1200.0 * math.log2(freq / pitch_standard)
 }
 
@@ -34,10 +34,11 @@ test_freq_to_cents :: proc(t: ^testing.T) {
     testing.expect_value(t, cents, 1200.0)
 }
 
-
-cents_to_freq :: proc (cents: f32, pitch_standard: f32 = 440.0) -> f32 {
+@(export)
+cents_to_freq :: proc "c" (cents: f32, pitch_standard: f32 = 440.0) -> f32 {
     return pitch_standard * libc.exp2(cents / 1200.0)
 }
+
 
 @(test)
 test_cents_to_freq :: proc(t: ^testing.T) {
@@ -46,14 +47,15 @@ test_cents_to_freq :: proc(t: ^testing.T) {
 }
 
 
-
-cents_to_octave :: proc(cents: f32) -> (f32, f32) {
+@(export)
+cents_to_octave :: proc "c" (cents: f32) -> (f32, f32) {
     nearest: f32 = math.round(cents / 100.0)
     octave := math.trunc((nearest/12.0) + 4.75)
     return octave, nearest
 }
 
-freq_to_octave :: proc(freq: f32) -> f32 {
+@(export)
+freq_to_octave :: proc "c" (freq: f32) -> f32 {
     cents := freq_to_cents(freq)
     nearest: f32 = math.round(cents / 100.0)
     octave := math.trunc((nearest/12.0) + 4.75)
@@ -114,7 +116,9 @@ test_freq_to_octave :: proc(t: ^testing.T) {
 note_names: []rune = {'C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B'}
 
 
-cents_to_note :: proc (cents: f32, pitch_standard: f32 = 440.0) -> (note: Note) {
+
+@(export)
+cents_to_note :: proc "c" (cents: f32, pitch_standard: f32 = 440.0) -> (note: Note) {
     octave, nearest := cents_to_octave(cents)
 
     note.pitch_standard = pitch_standard
@@ -150,7 +154,8 @@ test_cents_to_note :: proc(t: ^testing.T) {
 }
 
 
-find_note :: proc (freq: f32, pitch_standard: f32 = 440.0) -> Note {
+@(export)
+find_note :: proc "c" (freq: f32, pitch_standard: f32 = 440.0) -> Note {
     cents := freq_to_cents(freq, pitch_standard)
     note := cents_to_note(cents, pitch_standard)
     return note

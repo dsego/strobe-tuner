@@ -31,10 +31,6 @@
 
 /* Begin PBXFileReference section */
 		12192EAF2CDCACBE00D5C3D9 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk/System/Library/Frameworks/Metal.framework; sourceTree = DEVELOPER_DIR; };
-		121C62662CDFF92A00B74CC5 /* pffft.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = pffft.h; path = ../../../pffft/pffft.h; sourceTree = "<group>"; };
-		121C62672CDFF92A00B74CC5 /* pffft.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = pffft.a; path = ../../../pffft/pffft.a; sourceTree = "<group>"; };
-		121C626A2CDFF9A100B74CC5 /* pa_ringbuffer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = pa_ringbuffer.h; path = ../../../portaudio/src/common/pa_ringbuffer.h; sourceTree = "<group>"; };
-		121C626B2CDFF9A100B74CC5 /* pa_ringbuffer.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = pa_ringbuffer.a; path = ../../../portaudio/src/common/pa_ringbuffer.a; sourceTree = "<group>"; };
 		126EE46F2CCFB4F7008581CB /* StrobeTuner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StrobeTuner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		126EE4802CCFB4F8008581CB /* StrobeTunerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrobeTunerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		126EE48A2CCFB4F8008581CB /* StrobeTunerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StrobeTunerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -114,10 +110,6 @@
 		128D71B02CDA2D0D0023B417 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				121C626A2CDFF9A100B74CC5 /* pa_ringbuffer.h */,
-				121C626B2CDFF9A100B74CC5 /* pa_ringbuffer.a */,
-				121C62662CDFF92A00B74CC5 /* pffft.h */,
-				121C62672CDFF92A00B74CC5 /* pffft.a */,
 				12192EAF2CDCACBE00D5C3D9 /* Metal.framework */,
 				128D71B72CDA2DC10023B417 /* AVFAudio.framework */,
 				128D71B52CDA2D670023B417 /* Foundation.framework */,

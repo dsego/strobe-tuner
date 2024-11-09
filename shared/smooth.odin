@@ -6,7 +6,8 @@ import "core:testing"
 
 
 // Impulsive-noise smoothing algorithm, Lyons book, page 770
-smooth_impulsive_noise :: proc(block: []f32) -> f32 {
+@(export)
+smooth_impulsive_noise :: proc "c" (block: []f32) -> f32 {
     // obtain arithmetic mean
     sum :f32 = 0.0
     for value in block do sum += value
