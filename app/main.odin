@@ -1,12 +1,12 @@
 package app
 
 import "core:fmt"
-import "core:strings"
 import "core:math"
+import "core:strings"
 
-import rl "vendor:raylib"
 import oef "../one_euro_filter"
 import "../shared"
+import rl "vendor:raylib"
 
 
 main :: proc() {
@@ -49,11 +49,11 @@ main :: proc() {
     pitch_info := shared.PitchInfo{}
     cents_error_smooth := f32(0.0)
 
-    detected_note: = shared.Note{}
-    detected_freq:f32 = 0.0
+    detected_note := shared.Note{}
+    detected_freq: f32 = 0.0
     freq_mean: f32 = 0.0
     freq_ewma: f32 = 0.0
-    freq_measurements : [20]f32;
+    freq_measurements: [20]f32
 
     time := 0.0
 
@@ -88,7 +88,6 @@ main :: proc() {
     start_audio_capture(audio_capture)
 
 
-
     // oe_filter_ptr := oef.Create(60, 1, 1, 1)
     // defer oef.Destroy(oe_filter_ptr)
 
@@ -118,7 +117,8 @@ main :: proc() {
 
         // TODO: different clarity for locking onto pitch and tracking frequency?
         // TODO: apply impulse noise smoothing algorithm to freq measurement
-        if shared.is_strong_pitch(pitch_info) && detected_note.cents != pitch_info.detected_note.cents {
+        if shared.is_strong_pitch(pitch_info) &&
+           detected_note.cents != pitch_info.detected_note.cents {
             detected_note = pitch_info.detected_note
             detected_freq = pitch_info.detected_freq
             target_freq = pitch_info.detected_note.frequency
@@ -169,8 +169,21 @@ main :: proc() {
             if false {
                 cents := shared.freq_to_cents(detected_freq)
                 cents_error := cents - f32(detected_note.cents)
-                draw_note_meter(rl.Rectangle{500, 550, 200, 25}, detected_freq, detected_note, cents_error, rl.BEIGE)
-                rl.DrawTextEx(font, fmt.ctprintf("%+.2fHz", pitch_info.detected_freq), {400, 550}, 22, 0, rl.BEIGE)
+                draw_note_meter(
+                    rl.Rectangle{500, 550, 200, 25},
+                    detected_freq,
+                    detected_note,
+                    cents_error,
+                    rl.BEIGE,
+                )
+                rl.DrawTextEx(
+                    font,
+                    fmt.ctprintf("%+.2fHz", pitch_info.detected_freq),
+                    {400, 550},
+                    22,
+                    0,
+                    rl.BEIGE,
+                )
             }
 
             // if false {
@@ -186,20 +199,47 @@ main :: proc() {
                 cents := shared.freq_to_cents(freq_ewma)
                 cents_error := cents - f32(detected_note.cents)
 
-                rl.DrawTextEx(font, fmt.ctprintf("%+.2fHz", freq_ewma), {400, 610}, 22, 0, rl.SKYBLUE)
-                draw_note_meter(rl.Rectangle{500, 610, 200, 25}, freq_ewma, detected_note, cents_error, rl.SKYBLUE)
+                rl.DrawTextEx(
+                    font,
+                    fmt.ctprintf("%+.2fHz", freq_ewma),
+                    {400, 610},
+                    22,
+                    0,
+                    rl.SKYBLUE,
+                )
+                draw_note_meter(
+                    rl.Rectangle{500, 610, 200, 25},
+                    freq_ewma,
+                    detected_note,
+                    cents_error,
+                    rl.SKYBLUE,
+                )
             }
 
 
-            rl.DrawTextEx(font, fmt.ctprintf("RMS %.4f", pitch_info.rms), {20, 620}, 24, 0, rl.PINK)
+            rl.DrawTextEx(
+                font,
+                fmt.ctprintf("RMS %.4f", pitch_info.rms),
+                {20, 620},
+                24,
+                0,
+                rl.PINK,
+            )
             rl.DrawRectangleV({20, 650}, {200 * pitch_info.rms, 4.0}, rl.PINK)
             rl.DrawRectangleLinesEx({20, 650, 200, 5}, 1, rl.PINK)
 
-            rl.DrawTextEx(font, fmt.ctprintf("Cla %.4f", pitch_info.clarity), {20, 660}, 24, 0, rl.ORANGE)
+            rl.DrawTextEx(
+                font,
+                fmt.ctprintf("Cla %.4f", pitch_info.clarity),
+                {20, 660},
+                24,
+                0,
+                rl.ORANGE,
+            )
             rl.DrawRectangleV({20, 690}, {200 * pitch_info.clarity, 4.0}, rl.ORANGE)
             rl.DrawRectangleLinesEx({20, 690, 200, 5}, 1, rl.ORANGE)
 
-            rl.DrawFPS(SCREEN_WIDTH-100, 10)
+            rl.DrawFPS(SCREEN_WIDTH - 100, 10)
         }
     }
 }

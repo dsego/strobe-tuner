@@ -1,9 +1,9 @@
 package app
 
-import rl "vendor:raylib"
-import "core:strings"
 import "core:fmt"
 import "core:path/filepath"
+import "core:strings"
+import rl "vendor:raylib"
 
 import "../shared"
 
@@ -12,7 +12,7 @@ root_dir := filepath.dir(#file)
 
 SHARP :: "♯"
 
-font_atlas : cstring = "ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuwvxyzz♯♭/+-1234567890.:"
+font_atlas: cstring = "ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuwvxyzz♯♭/+-1234567890.:"
 font: rl.Font
 
 
@@ -38,18 +38,22 @@ draw_note :: proc(note: shared.Note, pos: [2]f32, size: f32, color: rl.Color = r
 
     // Sharp sign
     if note.is_accidental {
-        rl.DrawTextEx(font, SHARP, {pos.x+size/2.0, pos.y}, size/2.0, 0, color)
+        rl.DrawTextEx(font, SHARP, {pos.x + size / 2.0, pos.y}, size / 2.0, 0, color)
     }
 
     // Octave number
-    rl.DrawTextEx(font, fmt.ctprintf("%v", note.octave), {pos.x+size/2, pos.y+size/2}, size/2.5, 0, color)
+    rl.DrawTextEx(
+        font,
+        fmt.ctprintf("%v", note.octave),
+        {pos.x + size / 2, pos.y + size / 2},
+        size / 2.5,
+        0,
+        color,
+    )
 }
 
 
-draw_autocorrelation :: proc(
-    rect: rl.Rectangle,
-    nsdf: ^shared.NSDFConfig,
-) {
+draw_autocorrelation :: proc(rect: rl.Rectangle, nsdf: ^shared.NSDFConfig) {
     points: [FFT_SIZE]rl.Vector2 = {}
 
     start := 0 // enables me to move the start to zoom into a portion of the graph
@@ -60,11 +64,11 @@ draw_autocorrelation :: proc(
     px_per_sample := f32(rect.width) / f32(len - 1)
 
     x := rect.x
-    gain: = 1.0 / nsdf.autocorr[0]
+    gain := 1.0 / nsdf.autocorr[0]
 
-    for i in 0..<len {
-        y := rect.y + (rect.height/2.0) - nsdf.autocorr[start+i] * (rect.height / 2.0) * gain
-        points[i] = { x, y }
+    for i in 0 ..< len {
+        y := rect.y + (rect.height / 2.0) - nsdf.autocorr[start + i] * (rect.height / 2.0) * gain
+        points[i] = {x, y}
         x += px_per_sample
     }
 
@@ -77,30 +81,33 @@ draw_autocorrelation :: proc(
         rel_lag := f32(peak) - f32(start)
 
         cx := rect.x + rel_lag * f32(rect.width) / f32(len - 1)
-        cy := rect.y + (rect.height/2.0) - val * (rect.height / 2.0)
+        cy := rect.y + (rect.height / 2.0) - val * (rect.height / 2.0)
 
         // Horizontal ruler
         rl.DrawLineEx({rect.x, cy}, {cx, cy}, 0.5, rl.GRAY)
         rl.DrawTextEx(font, fmt.ctprintf("%.1f", val), {rect.x, cy}, 16, 0, rl.GRAY)
 
         // Vertical ruler
-        rl.DrawLineEx({cx, cy}, {cx, rect.y+rect.height}, 0.5, rl.GRAY)
-        rl.DrawTextEx(font, fmt.ctprintf("%.1f", f32(peak)), {cx, rect.y+rect.height-16}, 16, 0, rl.GRAY)
+        rl.DrawLineEx({cx, cy}, {cx, rect.y + rect.height}, 0.5, rl.GRAY)
+        rl.DrawTextEx(
+            font,
+            fmt.ctprintf("%.1f", f32(peak)),
+            {cx, rect.y + rect.height - 16},
+            16,
+            0,
+            rl.GRAY,
+        )
 
         // X marker - cross
-        rl.DrawLineEx({cx-7.0, cy}, {cx+7.0, cy}, 2.0, rl.PINK)
-        rl.DrawLineEx({cx, cy-7.0}, {cx, cy+7.0}, 2.0, rl.PINK)
+        rl.DrawLineEx({cx - 7.0, cy}, {cx + 7.0, cy}, 2.0, rl.PINK)
+        rl.DrawLineEx({cx, cy - 7.0}, {cx, cy + 7.0}, 2.0, rl.PINK)
     }
 
-    rl.DrawTextEx(font, fmt.ctprintf("%.2f",  nsdf.autocorr[0]), {rect.x, rect.y}, 16, 0, rl.BLUE)
+    rl.DrawTextEx(font, fmt.ctprintf("%.2f", nsdf.autocorr[0]), {rect.x, rect.y}, 16, 0, rl.BLUE)
 }
 
-draw_nsdf :: proc(
-    rect: rl.Rectangle,
-    nsdf: ^shared.NSDFConfig,
-    peak: shared.Vec2,
-) {
-    points: [FFT_SIZE/2]rl.Vector2 = {}
+draw_nsdf :: proc(rect: rl.Rectangle, nsdf: ^shared.NSDFConfig, peak: shared.Vec2) {
+    points: [FFT_SIZE / 2]rl.Vector2 = {}
 
     start := 0 // enables me to move the start to zoom into a portion of the graph
     end := len(nsdf.nsdf)
@@ -110,11 +117,11 @@ draw_nsdf :: proc(
     px_per_sample := f32(rect.width) / f32(len - 1)
 
     x := rect.x
-    gain: = 1.0 / nsdf.nsdf[0]
+    gain := 1.0 / nsdf.nsdf[0]
 
-    for i in 0..<len {
-        y := rect.y + (rect.height/2.0) - nsdf.nsdf[start+i] * (rect.height / 2.0) * gain
-        points[i] = { x, y }
+    for i in 0 ..< len {
+        y := rect.y + (rect.height / 2.0) - nsdf.nsdf[start + i] * (rect.height / 2.0) * gain
+        points[i] = {x, y}
         x += px_per_sample
     }
 
@@ -127,7 +134,7 @@ draw_nsdf :: proc(
         rel_lag := f32(peak.x) - f32(start)
 
         cx := rect.x + rel_lag * f32(rect.width) / f32(len - 1)
-        cy := rect.y + (rect.height/2.0) - val * (rect.height / 2.0)
+        cy := rect.y + (rect.height / 2.0) - val * (rect.height / 2.0)
 
         /*
         // Horizontal ruler
@@ -144,19 +151,14 @@ draw_nsdf :: proc(
         if nsdf.chosen_peak_idx == i {
             color = rl.PINK
         }
-        rl.DrawLineEx({cx-7.0, cy}, {cx+7.0, cy}, 2.0, color)
-        rl.DrawLineEx({cx, cy-7.0}, {cx, cy+7.0}, 2.0, color)
+        rl.DrawLineEx({cx - 7.0, cy}, {cx + 7.0, cy}, 2.0, color)
+        rl.DrawLineEx({cx, cy - 7.0}, {cx, cy + 7.0}, 2.0, color)
     }
 
-    rl.DrawTextEx(font, fmt.ctprintf("%.2f",  nsdf.nsdf[0]), {rect.x, rect.y}, 16, 0, rl.BLUE)
+    rl.DrawTextEx(font, fmt.ctprintf("%.2f", nsdf.nsdf[0]), {rect.x, rect.y}, 16, 0, rl.BLUE)
 }
 
-draw_cepstrum :: proc(
-    rect: rl.Rectangle,
-    buffer: []f32,
-    lag: f32,
-    val: f32,
-) {
+draw_cepstrum :: proc(rect: rl.Rectangle, buffer: []f32, lag: f32, val: f32) {
     points: [FFT_SIZE]rl.Vector2 = {}
     l := len(buffer) / 2
 
@@ -165,9 +167,9 @@ draw_cepstrum :: proc(
 
     x := rect.x
 
-    for i in 0..<l {
-        y := rect.y + (rect.height/2.0) - buffer[i] * (rect.height / 2.0)
-        points[i] = { x, y }
+    for i in 0 ..< l {
+        y := rect.y + (rect.height / 2.0) - buffer[i] * (rect.height / 2.0)
+        points[i] = {x, y}
         x += px_per_sample
     }
 
@@ -176,52 +178,59 @@ draw_cepstrum :: proc(
 
     // Mark lag position with a cross
     cx := rect.x + lag * f32(rect.width) / f32(l - 1)
-    cy := rect.y + (rect.height/2.0) - val * (rect.height / 2.0)
+    cy := rect.y + (rect.height / 2.0) - val * (rect.height / 2.0)
 
-    rl.DrawLineEx({rect.x, cy}, {rect.x+rect.width, cy}, 0.5, rl.GRAY)
-    rl.DrawLineEx({cx-7.0, cy}, {cx+7.0, cy}, 2.0, rl.PINK)
-    rl.DrawLineEx({cx, cy-7.0}, {cx, cy+7.0}, 2.0, rl.PINK)
+    rl.DrawLineEx({rect.x, cy}, {rect.x + rect.width, cy}, 0.5, rl.GRAY)
+    rl.DrawLineEx({cx - 7.0, cy}, {cx + 7.0, cy}, 2.0, rl.PINK)
+    rl.DrawLineEx({cx, cy - 7.0}, {cx, cy + 7.0}, 2.0, rl.PINK)
 }
 
 
 draw_time_plot :: proc(using rect: rl.Rectangle, len_samples: int, div_samples: int) {
     // Horizontal lines at 1,0,-1
-    rl.DrawLineEx({x, y}, {x+width, y}, 0.5, rl.GRAY)
-    rl.DrawTextEx(font, "1", {x-16, y-8}, 16, 0, rl.GRAY)
+    rl.DrawLineEx({x, y}, {x + width, y}, 0.5, rl.GRAY)
+    rl.DrawTextEx(font, "1", {x - 16, y - 8}, 16, 0, rl.GRAY)
 
-    rl.DrawLineEx({x, y+height/2}, {x+width, y+height/2}, 0.5, rl.GRAY)
-    rl.DrawTextEx(font, "0", {x-16, y+height/2-8}, 16, 0, rl.GRAY)
+    rl.DrawLineEx({x, y + height / 2}, {x + width, y + height / 2}, 0.5, rl.GRAY)
+    rl.DrawTextEx(font, "0", {x - 16, y + height / 2 - 8}, 16, 0, rl.GRAY)
 
-    rl.DrawLineEx({x, y+height}, {x+width, y+height}, 0.5, rl.GRAY)
-    rl.DrawTextEx(font, "-1", {x-24, y+height-8}, 16, 0, rl.GRAY)
+    rl.DrawLineEx({x, y + height}, {x + width, y + height}, 0.5, rl.GRAY)
+    rl.DrawTextEx(font, "-1", {x - 24, y + height - 8}, 16, 0, rl.GRAY)
 
     // Vertical lines every x samples
     px_per_sample := width / f32(len_samples)
 
     for d := 0; d < len_samples; d += div_samples {
         px := x + f32(d) * px_per_sample
-        rl.DrawLineEx({px, y}, {px, y+height}, 0.5, rl.GRAY)
-        rl.DrawTextEx(font, fmt.ctprintf("%v", d), {px, y+height+8}, 16, 0, rl.GRAY)
+        rl.DrawLineEx({px, y}, {px, y + height}, 0.5, rl.GRAY)
+        rl.DrawTextEx(font, fmt.ctprintf("%v", d), {px, y + height + 8}, 16, 0, rl.GRAY)
     }
-    rl.DrawLineEx({x + width, y}, {x + width, y+height}, 0.5, rl.GRAY)
+    rl.DrawLineEx({x + width, y}, {x + width, y + height}, 0.5, rl.GRAY)
 }
 
 
 draw_freq_plot :: proc(using rect: rl.Rectangle, len_hz: f32, div_hz: f32) {
     // Horizontal lines at 1,0,-1
-    rl.DrawLineEx({x, y}, {x+width, y}, 0.5, rl.GRAY)
-    rl.DrawTextEx(font, "1", {x-16, y-8}, 16, 0, rl.GRAY)
+    rl.DrawLineEx({x, y}, {x + width, y}, 0.5, rl.GRAY)
+    rl.DrawTextEx(font, "1", {x - 16, y - 8}, 16, 0, rl.GRAY)
 
-    rl.DrawLineEx({x, y+height}, {x+width, y+height}, 0.5, rl.GRAY)
-    rl.DrawTextEx(font, "0", {x-24, y+height-8}, 16, 0, rl.GRAY)
+    rl.DrawLineEx({x, y + height}, {x + width, y + height}, 0.5, rl.GRAY)
+    rl.DrawTextEx(font, "0", {x - 24, y + height - 8}, 16, 0, rl.GRAY)
 
     // Vertical lines every x Hz
     px_per_hz := f32(width) / len_hz
 
     for d := f32(0); d < len_hz; d += div_hz {
         px := x + d * px_per_hz
-        rl.DrawLineEx({px, y}, {px, y+height}, 0.5, rl.GRAY)
-        rl.DrawTextEx(font, fmt.ctprintf("%.1fkHz", d/1000.0), {px, y+height+8}, 16, 0, rl.GRAY)
+        rl.DrawLineEx({px, y}, {px, y + height}, 0.5, rl.GRAY)
+        rl.DrawTextEx(
+            font,
+            fmt.ctprintf("%.1fkHz", d / 1000.0),
+            {px, y + height + 8},
+            16,
+            0,
+            rl.GRAY,
+        )
     }
 }
 
@@ -236,16 +245,16 @@ draw_freq_spectrum :: proc(rect: rl.Rectangle, spectrum: []f32, fft_size: int, s
     px_per_sample := f32(rect.width) / f32(l - 1)
     x := rect.x
 
-    for i in 0..<l {
+    for i in 0 ..< l {
         y := rect.y + rect.height - spectrum[i] * rect.height * 0.1 // HARDCODED gain
-        spectrum_points[i] = { x, y }
+        spectrum_points[i] = {x, y}
         x += px_per_sample
     }
 
     bin_hz := f32(samplerate) / f32(fft_size)
     len_hz := f32(l) * bin_hz // number of bins * Hz covered by bin
 
-    div_hz:f32 = 500.0 // show division every 0.5kHz
+    div_hz: f32 = 500.0 // show division every 0.5kHz
 
     draw_freq_plot(rect, len_hz, div_hz)
     rl.DrawLineStrip(raw_data(spectrum_points[:]), i32(l), rl.LIME)
@@ -253,7 +262,7 @@ draw_freq_spectrum :: proc(rect: rl.Rectangle, spectrum: []f32, fft_size: int, s
 
 
 // TODO: draw past good note/position greyed out if new pitch is not found
-draw_note_meter :: proc (
+draw_note_meter :: proc(
     rect: rl.Rectangle,
     freq: f32,
     note: shared.Note,
@@ -264,24 +273,22 @@ draw_note_meter :: proc (
     px := rect.width / 100.0
 
     // "needle"
-    needle_width:f32 = 5.0
+    needle_width: f32 = 5.0
     needle_height: f32 = rect.height
-    needle_pos := rect.width/2 + cents_error * px
+    needle_pos := rect.width / 2 + cents_error * px
 
     // horizontal line, ie "rail"
-    rl.DrawRectangleV({rect.x, rect.y + rect.height/2}, {rect.width, 4.0}, rl.GRAY)
+    rl.DrawRectangleV({rect.x, rect.y + rect.height / 2}, {rect.width, 4.0}, rl.GRAY)
 
     // vertical notches
-    rl.DrawRectangleV({rect.x + rect.width/2.0 - 0.5, rect.y}, {1.0, rect.height}, rl.GRAY)
+    rl.DrawRectangleV({rect.x + rect.width / 2.0 - 0.5, rect.y}, {1.0, rect.height}, rl.GRAY)
     rl.DrawRectangleV({rect.x, rect.y}, {1.0, rect.height}, rl.GRAY)
     rl.DrawRectangleV({rect.x + rect.width - 0.5, rect.y}, {1.0, rect.height}, rl.GRAY)
 
     // draw needle
     rl.DrawRectangleV(
-        {rect.x + needle_pos - needle_width/2.0, rect.y},
+        {rect.x + needle_pos - needle_width / 2.0, rect.y},
         {needle_width, needle_height},
         color,
     )
 }
-
-

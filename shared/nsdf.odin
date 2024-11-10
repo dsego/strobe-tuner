@@ -14,8 +14,8 @@ package shared
 
 
 import "base:runtime"
-import "core:mem"
 import "core:math"
+import "core:mem"
 
 import "../pffft"
 
@@ -23,16 +23,16 @@ import "../pffft"
 Vec2 :: [2]f32
 
 NSDFConfig :: struct {
-    pffft_setup: rawptr,
-    fft_size: int,
-    fft: []complex64,
-    spectrum: []f32,
-    autocorr: []f32,
-    nsdf: []f32,
-    samplerate: int,
-    padded_samples: []f32,
-    autocorr_peaks: [dynamic]int,
-    nsdf_peaks: [dynamic]Vec2,
+    pffft_setup:     rawptr,
+    fft_size:        int,
+    fft:             []complex64,
+    spectrum:        []f32,
+    autocorr:        []f32,
+    nsdf:            []f32,
+    samplerate:      int,
+    padded_samples:  []f32,
+    autocorr_peaks:  [dynamic]int,
+    nsdf_peaks:      [dynamic]Vec2,
     chosen_peak_idx: int,
 }
 
@@ -46,7 +46,7 @@ nsdf_init :: proc "c" (fft_size: int, samplerate: int) -> (self: NSDFConfig = {}
     self.fft = make([]complex64, fft_size)
     self.autocorr = make([]f32, fft_size)
     self.spectrum = make([]f32, fft_size)
-    self.nsdf = make([]f32, fft_size/2)
+    self.nsdf = make([]f32, fft_size / 2)
     self.samplerate = samplerate
     self.padded_samples = make([]f32, fft_size)
     return
@@ -78,7 +78,7 @@ nsdf_pitch_detect :: proc "c" (self: ^NSDFConfig, samples: []f32) -> (f32, Vec2)
     estimated_freq: f32 = 0.0
 
     if peak.x > 0.0 {
-        estimated_freq =  f32(self.samplerate) / peak.x
+        estimated_freq = f32(self.samplerate) / peak.x
     }
 
     // apply windowing?
@@ -94,7 +94,7 @@ nsdf_pitch_detect :: proc "c" (self: ^NSDFConfig, samples: []f32) -> (f32, Vec2)
 nsdf_process_samples :: proc "c" (self: ^NSDFConfig, samples: []f32) {
     context = runtime.default_context()
 
-    assert(len(samples) <= self.fft_size/2)
+    assert(len(samples) <= self.fft_size / 2)
 
     // pad samples with zeros to avoid cyclic convolution
     mem.zero_slice(self.padded_samples)
@@ -107,13 +107,13 @@ nsdf_process_samples :: proc "c" (self: ^NSDFConfig, samples: []f32) {
         raw_data(self.padded_samples),
         raw_data(mem.slice_data_cast([]f32, self.fft)),
         nil,
-        pffft.Direction.FORWARD
+        pffft.Direction.FORWARD,
     )
 
     // multiply FFT with conjugate
     // - conjugation in the frequency domain is equivalent to reversal in the time domain
     // (the difference between cross-correlation and convolution is a time reversal on one of the inputs)
-    for i in 0..<len(self.fft) {
+    for i in 0 ..< len(self.fft) {
         self.fft[i] = self.fft[i] * conj(self.fft[i])
     }
 
@@ -123,11 +123,11 @@ nsdf_process_samples :: proc "c" (self: ^NSDFConfig, samples: []f32) {
         raw_data(mem.slice_data_cast([]f32, self.fft)),
         raw_data(self.autocorr),
         nil,
-        pffft.Direction.BACKWARD
+        pffft.Direction.BACKWARD,
     )
 
     // scale by 1/N
-    for i in 0..<len(self.autocorr) {
+    for i in 0 ..< len(self.autocorr) {
         self.autocorr[i] = self.autocorr[i] / f32(self.fft_size)
     }
 }
@@ -162,7 +162,9 @@ nsdf_find_peak :: proc "c" (self: ^NSDFConfig) -> Vec2 {
 
         // search for a local max peak in the positive area
         for i < n - 1 && self.nsdf[i] > 0.0 {
-            if self.nsdf[i] > self.nsdf[lag] && self.nsdf[i] > self.nsdf[i+1] && self.nsdf[i] > MIN_PEAK_VALUE {
+            if self.nsdf[i] > self.nsdf[lag] &&
+               self.nsdf[i] > self.nsdf[i + 1] &&
+               self.nsdf[i] > MIN_PEAK_VALUE {
                 lag = i
             }
             i += 1
@@ -170,9 +172,9 @@ nsdf_find_peak :: proc "c" (self: ^NSDFConfig) -> Vec2 {
 
         if lag > min {
             peak_location, magnitude := parabolic(
-                self.nsdf[lag-1],
+                self.nsdf[lag - 1],
                 self.nsdf[lag],
-                self.nsdf[lag+1]
+                self.nsdf[lag + 1],
             )
 
             improved_lag := f32(lag) + peak_location
@@ -214,10 +216,10 @@ nsdf_run_nsdf :: proc "c" (self: ^NSDFConfig, samples: []f32) {
     // left-hand summation for zero lag
     lhsum := 2.0 * self.nsdf[0]
 
-    for i in 0..<n {
+    for i in 0 ..< n {
         if lhsum > 0.0 {
             self.nsdf[i] *= 2.0 / lhsum
-            lhsum -= samples[i] * samples[i] + samples[n-i-1] * samples[n-i-1]
+            lhsum -= samples[i] * samples[i] + samples[n - i - 1] * samples[n - i - 1]
         } else {
             self.nsdf[i] = 0.0
         }

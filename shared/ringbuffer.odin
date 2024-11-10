@@ -1,8 +1,8 @@
 package shared
 
+import "base:runtime"
 import "core:fmt"
 import "core:slice"
-import "base:runtime"
 
 import pa_rb "../pa_ringbuffer"
 
@@ -27,11 +27,11 @@ advance_ringbuffer_write :: proc "c" (rb_ptr: ^RingBuffer, frames_to_skip: i32) 
     return pa_rb.AdvanceRingBufferWriteIndex(rb_ptr, frames_to_skip)
 }
 
-frames_available_in_ringbuffer:: proc "c" (rb_ptr: ^RingBuffer) -> i32 {
+frames_available_in_ringbuffer :: proc "c" (rb_ptr: ^RingBuffer) -> i32 {
     return pa_rb.GetRingBufferReadAvailable(rb_ptr)
 }
 
-flush_ringbuffer:: proc "c" (rb_ptr: ^RingBuffer) {
+flush_ringbuffer :: proc "c" (rb_ptr: ^RingBuffer) {
     pa_rb.FlushRingBuffer(rb_ptr)
 }
 
@@ -40,23 +40,29 @@ write_to_ringbuffer :: proc "c" (rb_ptr: ^RingBuffer, input: []f32) {
 }
 
 
-read_ringbuffer :: proc "c"(
-    rb_ptr: ^RingBuffer,
-    samples: []f32,
-    frame_count: u32,
-) -> u32 {
+read_ringbuffer :: proc "c" (rb_ptr: ^RingBuffer, samples: []f32, frame_count: u32) -> u32 {
     context = runtime.default_context()
 
-    data_ptr : rawptr
-    total_frames_read : u32 = 0
+    data_ptr: rawptr
+    total_frames_read: u32 = 0
 
-    assert(len(samples) >= int(frame_count), fmt.aprintf("frame_count %v larger than samples size %v", frame_count, len(samples)))
+    assert(
+        len(samples) >= int(frame_count),
+        fmt.aprintf("frame_count %v larger than samples size %v", frame_count, len(samples)),
+    )
 
     num_read := pa_rb.ReadRingBuffer(rb_ptr, raw_data(samples), i32(frame_count))
     return u32(num_read)
 }
 
-get_ringbuffer_write_regions :: proc "c" (rb_ptr: ^RingBuffer, frame_count: int) -> ([]f32, []f32, int) {
+get_ringbuffer_write_regions :: proc "c" (
+    rb_ptr: ^RingBuffer,
+    frame_count: int,
+) -> (
+    []f32,
+    []f32,
+    int,
+) {
     // context = runtime.default_context()
 
     // ringbuffer write regions
@@ -72,19 +78,17 @@ get_ringbuffer_write_regions :: proc "c" (rb_ptr: ^RingBuffer, frame_count: int)
         &region1,
         &size1,
         &region2,
-        &size2
+        &size2,
     )
 
     if size1 < 0 do size1 = 0
     if size2 < 0 do size2 = 0
 
-    out1: []f32 = slice.from_ptr(cast([^]f32) region1, int(size1))
-    out2: []f32 = slice.from_ptr(cast([^]f32) region2, int(size2))
+    out1: []f32 = slice.from_ptr(cast([^]f32)region1, int(size1))
+    out2: []f32 = slice.from_ptr(cast([^]f32)region2, int(size2))
 
     return out1, out2, int(num_written)
 }
-
-
 
 
 // read_interleaved_ringbuffer :: proc(

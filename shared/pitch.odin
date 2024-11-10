@@ -7,20 +7,20 @@ import "core:math"
 
 
 PicthDetector :: struct {
-    using node: AudioCaptureNode,
-    nsdf: NSDFConfig,
-    ringbuffer: RingBuffer,
+    using node:      AudioCaptureNode,
+    nsdf:            NSDFConfig,
+    ringbuffer:      RingBuffer,
     ringbuffer_data: []u8,
-    samples: []f32,
+    samples:         []f32,
 }
 
 
 PitchInfo :: struct {
     detected_freq: f32,
     detected_note: Note,
-    clarity: f32,
-    nsdf_peak: Vec2,
-    rms: f32,
+    clarity:       f32,
+    nsdf_peak:     Vec2,
+    rms:           f32,
 }
 
 
@@ -28,7 +28,7 @@ PitchInfo :: struct {
 init_pitch_detector :: proc "c" (samplerate: int) -> (self: PicthDetector) {
     context = runtime.default_context()
 
-    self.samples = make([]f32, FFT_SIZE/2)
+    self.samples = make([]f32, FFT_SIZE / 2)
     self.nsdf = nsdf_init(FFT_SIZE, samplerate)
     rb, rb_data := init_ringbuffer(DEFAULT_RB_SIZE)
     self.ringbuffer = rb

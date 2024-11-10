@@ -1,23 +1,23 @@
 package shared
 
 
-import "core:testing"
-import "core:math"
 import "core:c/libc"
+import "core:math"
+import "core:testing"
 import "core:unicode/utf8"
 
 
 // Assumes equal temperament
 
 Note :: struct {
-    name: rune, // note name does not include the accidental
-    semitone_index: int,  // C = 0, C# = 1, ... B = 11
-    is_accidental: bool,
-    octave: int,
-    cents: int,
-    frequency: f32,
+    name:           rune, // note name does not include the accidental
+    semitone_index: int, // C = 0, C# = 1, ... B = 11
+    is_accidental:  bool,
+    octave:         int,
+    cents:          int,
+    frequency:      f32,
     pitch_standard: f32,
-    cents_offset: f32,
+    cents_offset:   f32,
 }
 
 
@@ -50,7 +50,7 @@ test_cents_to_freq :: proc(t: ^testing.T) {
 @(export)
 cents_to_octave :: proc "c" (cents: f32) -> (f32, f32) {
     nearest: f32 = math.round(cents / 100.0)
-    octave := math.trunc((nearest/12.0) + 4.75)
+    octave := math.trunc((nearest / 12.0) + 4.75)
     return octave, nearest
 }
 
@@ -58,7 +58,7 @@ cents_to_octave :: proc "c" (cents: f32) -> (f32, f32) {
 freq_to_octave :: proc "c" (freq: f32) -> f32 {
     cents := freq_to_cents(freq)
     nearest: f32 = math.round(cents / 100.0)
-    octave := math.trunc((nearest/12.0) + 4.75)
+    octave := math.trunc((nearest / 12.0) + 4.75)
     return octave
 }
 
@@ -116,28 +116,22 @@ test_freq_to_octave :: proc(t: ^testing.T) {
 note_names: []rune = {'C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B'}
 
 
-
 @(export)
 cents_to_note :: proc "c" (cents: f32, pitch_standard: f32 = 440.0) -> (note: Note) {
     octave, nearest := cents_to_octave(cents)
 
     note.pitch_standard = pitch_standard
-    note.cents = cast(int) nearest * 100
-    note.octave = cast(int) octave
+    note.cents = cast(int)nearest * 100
+    note.octave = cast(int)octave
     note.frequency = cents_to_freq(f32(note.cents), note.pitch_standard)
 
-    index := (cast(int) nearest % 12) + 9;  // C = 0
+    index := (cast(int)nearest % 12) + 9 // C = 0
     if index < 0 do index += 12
     else if index > 11 do index -= 12
     note.semitone_index = index
 
     // C#, D#, F#, G#, A#
-    note.is_accidental = (
-        index == 1 ||
-        index == 3 ||
-        index == 6 ||
-        index == 8 ||
-        index == 10)
+    note.is_accidental = (index == 1 || index == 3 || index == 6 || index == 8 || index == 10)
 
     note.name = note_names[index]
 

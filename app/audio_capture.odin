@@ -1,11 +1,11 @@
 package app
 
+import "base:runtime"
+import "core:c"
 import "core:fmt"
 import "core:math"
 import "core:mem"
-import "core:c"
 import "core:slice"
-import "base:runtime"
 
 
 import pa "../odin-portaudio"
@@ -15,10 +15,9 @@ import "../shared"
 
 AudioCapture :: struct {
     active_device: i32,
-    stream: ^pa.Stream,
-    nodes: [dynamic]^shared.AudioCaptureNode,
+    stream:        ^pa.Stream,
+    nodes:         [dynamic]^shared.AudioCaptureNode,
 }
-
 
 
 // TODO can't listen to default input device refresh without hotplug
@@ -36,7 +35,7 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (bool, ^AudioCapture) {
     device_count := pa.GetDeviceCount()
     self.active_device = pa.GetDefaultInputDevice()
 
-    for i in 0..<device_count {
+    for i in 0 ..< device_count {
         info := pa.GetDeviceInfo(i)
         str := "  %v  ‣  %s (%v ch)\n"
         if i == self.active_device {
@@ -46,22 +45,22 @@ init_audio_capture :: proc(samplerate: u32 = 44100) -> (bool, ^AudioCapture) {
     }
 
     stream_params := pa.StreamParameters {
-        device=self.active_device,
-        channelCount=1,
-        sampleFormat=pa.Float32,
-        suggestedLatency=pa.GetDeviceInfo(self.active_device).defaultLowInputLatency,
-        hostApiSpecificStreamInfo=nil,
+        device                    = self.active_device,
+        channelCount              = 1,
+        sampleFormat              = pa.Float32,
+        suggestedLatency          = pa.GetDeviceInfo(self.active_device).defaultLowInputLatency,
+        hostApiSpecificStreamInfo = nil,
     }
 
     err = pa.OpenStream(
-        stream=&self.stream,
-        inputParameters=&stream_params,
-        outputParameters=nil,
-        sampleRate=f64(samplerate),
-        framesPerBuffer=pa.FramesPerBufferUnspecified,
-        streamFlags=0,
-        streamCallback=stream_callback,
-        userData=self,
+        stream = &self.stream,
+        inputParameters = &stream_params,
+        outputParameters = nil,
+        sampleRate = f64(samplerate),
+        framesPerBuffer = pa.FramesPerBufferUnspecified,
+        streamFlags = 0,
+        streamCallback = stream_callback,
+        userData = self,
     )
 
     if check(err) do return false, self
@@ -120,9 +119,9 @@ stream_callback :: proc "c" (
 ) -> int {
     context = runtime.default_context()
 
-    input_slice: []f32 = slice.from_ptr(cast([^]f32) input, int(frameCount))
+    input_slice: []f32 = slice.from_ptr(cast([^]f32)input, int(frameCount))
 
-    self := cast(^AudioCapture) userData
+    self := cast(^AudioCapture)userData
 
     // process all nodes
     for node in self.nodes {

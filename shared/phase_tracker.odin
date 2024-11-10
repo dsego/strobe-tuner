@@ -1,10 +1,10 @@
 /* ------------------------------------------------------------------------------------------------
 
 
-    Phase tracker
-    - Generates a reference signal and detects the phase difference between the reference
-      and target. The reference phase is calculated in the drawing method and synthesizes a strobe
-      based on the detected phase difference.
+        Phase tracker
+        - Generates a reference signal and detects the phase difference between the reference
+            and target. The reference phase is calculated in the drawing method and synthesizes a strobe
+            based on the detected phase difference.
 
 
  -------------------------------------------------------------------------------------------------*/
@@ -17,32 +17,38 @@ import "core:math"
 
 
 StrobeBand :: struct {
-    freq_hz: f32,
-    norm_freq: f32,
-    freq_diff_hz: f32,
+    freq_hz:           f32,
+    norm_freq:         f32,
+    freq_diff_hz:      f32,
     estimated_freq_hz: f32,
-    angle: f32,
-    dft: SingleFreqDFT,
-    time_stretch: f32,
-    phase: f32,
-    amp: f32,
+    angle:             f32,
+    dft:               SingleFreqDFT,
+    time_stretch:      f32,
+    phase:             f32,
+    amp:               f32,
 }
 
 PhaseTracker :: struct {
-    using node: AudioCaptureNode,
-    sample_buffer: []f32,
-    window_size: int,
-    ringbuffer: RingBuffer,
-    ringbuffer_data: []u8,
+    using node:       AudioCaptureNode,
+    sample_buffer:    []f32,
+    window_size:      int,
+    ringbuffer:       RingBuffer,
+    ringbuffer_data:  []u8,
     phase_correction: f32,
-    time_reference: f32,
-    bands: [dynamic]StrobeBand,
-    samplerate: f32,
+    time_reference:   f32,
+    bands:            [dynamic]StrobeBand,
+    samplerate:       f32,
 }
 
 
 @(export)
-init_phase_tracker :: proc "c" (base_freq_hz: f32, samplerate: f32, band_count: int) -> (self: PhaseTracker) {
+init_phase_tracker :: proc "c" (
+    base_freq_hz: f32,
+    samplerate: f32,
+    band_count: int,
+) -> (
+    self: PhaseTracker,
+) {
     context = runtime.default_context()
 
     self.window_size = 4096
@@ -52,7 +58,7 @@ init_phase_tracker :: proc "c" (base_freq_hz: f32, samplerate: f32, band_count: 
     self.ringbuffer_data = rb_data
     self.sample_buffer = make([]f32, self.window_size)
 
-    for i in 0..<band_count {
+    for i in 0 ..< band_count {
         band := StrobeBand{}
         band.dft = init_dft(self.window_size)
         append(&self.bands, band)
@@ -89,7 +95,7 @@ set_phase_tracker_freq :: proc "c" (self: ^PhaseTracker, base_freq_hz: f32) {
         freq_hz := f32(multiplier) * base_freq_hz
         band.freq_hz = freq_hz
         band.norm_freq = freq_hz / self.samplerate
-        set_dft_freq(&band.dft, band.norm_freq )
+        set_dft_freq(&band.dft, band.norm_freq)
         multiplier *= 2
     }
 }
@@ -110,7 +116,7 @@ phase_tracker_audio_callback :: proc "c" (ctx: ^AudioCaptureNode, input: []f32) 
 }
 
 // TODO: filtering ??
-@(private="file")
+@(private = "file")
 write_to_rb_region :: proc "c" (output: []f32, input: []f32) {
     copy(output, input)
 }
@@ -138,7 +144,7 @@ run_dft_analysis :: proc "c" (self: ^PhaseTracker) {
     self.phase_correction = math.ceil(num_periods) * reference_interval - self.time_reference
 
     for &band, band_idx in self.bands {
-        normalized_freq:f32 = band.freq_hz / self.samplerate
+        normalized_freq: f32 = band.freq_hz / self.samplerate
 
         // Calculate DFT for this band
         dft := run_single_dft(&band.dft, self.sample_buffer[:self.window_size])
@@ -149,7 +155,7 @@ run_dft_analysis :: proc "c" (self: ^PhaseTracker) {
         amp := magnitude(dft)
 
         // Calculate estimated frequency
-        angle :=  phase - normalized_freq * math.TAU * self.phase_correction
+        angle := phase - normalized_freq * math.TAU * self.phase_correction
         phase_diff := angle - band.angle
         band.angle = angle
 
@@ -165,7 +171,7 @@ run_dft_analysis :: proc "c" (self: ^PhaseTracker) {
         estimated_freq := band.freq_hz + band.freq_diff_hz
         band.estimated_freq_hz = estimated_freq
 
-        time_stretch_factor := 4.0 * reference_interval/ f32(self.window_size)
+        time_stretch_factor := 4.0 * reference_interval / f32(self.window_size)
         // gain: f32 = 1.0 // (amp + 0.1)
 
         // TODO can I fade out the band when the freq difference is significant
@@ -177,5 +183,3 @@ run_dft_analysis :: proc "c" (self: ^PhaseTracker) {
         band.amp = amp
     }
 }
-
-
