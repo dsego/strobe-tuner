@@ -64,8 +64,8 @@ main :: proc() {
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
     defer rl.CloseWindow()
 
-    phase_tracker := shared.init_phase_tracker(f32(target_freq), SAMPLERATE, 2)
-    defer shared.destroy_phase_tracker(&phase_tracker)
+    phase_tracker := shared.init_phase_tracker(f32(target_freq), SAMPLERATE, STROBE_COUNT)
+    defer shared.destroy_phase_tracker(phase_tracker)
 
     phase_tracker_display := init_phase_tracker_display()
     defer destroy_phase_tracker_display(&phase_tracker_display)
@@ -84,7 +84,7 @@ main :: proc() {
     defer destroy_drawing_context()
 
     register_audio_node(audio_capture, &pitch_detector)
-    register_audio_node(audio_capture, &phase_tracker)
+    register_audio_node(audio_capture, phase_tracker)
     start_audio_capture(audio_capture)
 
 
@@ -122,7 +122,7 @@ main :: proc() {
             detected_note = pitch_info.detected_note
             detected_freq = pitch_info.detected_freq
             target_freq = pitch_info.detected_note.frequency
-            shared.set_phase_tracker_freq(&phase_tracker, target_freq)
+            shared.set_phase_tracker_freq(phase_tracker, target_freq)
         }
 
 
@@ -135,7 +135,7 @@ main :: proc() {
             // target_freq = 100
             // target_freq = 1975.533
             // target_freq = 82.4068892282175
-            shared.set_phase_tracker_freq(&phase_tracker, target_freq)
+            shared.set_phase_tracker_freq(phase_tracker, target_freq)
 
 
             freq_changed = false
@@ -149,10 +149,9 @@ main :: proc() {
         {
             rl.ClearBackground(rl.BLACK)
 
-            shared.run_dft_analysis(&phase_tracker)
+            shared.run_dft_analysis(phase_tracker)
 
-            draw_phase_tracker_display(&phase_tracker_display, &phase_tracker)
-
+            draw_phase_tracker_display(&phase_tracker_display, phase_tracker)
 
             draw_note(note, {20, 20}, 96)
 

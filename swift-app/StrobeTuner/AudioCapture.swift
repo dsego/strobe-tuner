@@ -8,16 +8,21 @@
 import Foundation
 import AVFoundation
 
-struct AudioCapture {
+class AudioCapture {
     var audioEngine: AVAudioEngine
-    var sinkNode: AVAudioSinkNode
+    var phaseTracker: PhaseTracker
     
     init () {
         audioEngine = AVAudioEngine()
-        sinkNode = AVAudioSinkNode(receiverBlock: {(timestamp, frameCount, inputData) -> OSStatus in
-            return noErr
-        })
+        
+        let format = audioEngine.inputNode.inputFormat(forBus: 0)
+        phaseTracker = c_init_phase_tracker(110.0, Float(format.sampleRate), 3)
     }
+    
+    deinit {
+        c_destroy_phase_tracker(phaseTracker)
+    }
+    
     
     func startAudio() {
 #if os(iOS)
@@ -29,8 +34,22 @@ struct AudioCapture {
             fatalError("Failed to start audio engine.")
         }
 #endif
-        audioEngine.attach(sinkNode)
+        
+        let sinkNode = AVAudioSinkNode(receiverBlock: {(timestamp, frameCount, audioBufferList) -> OSStatus in
+            let bufferPointer = audioBufferList.pointee.mBuffers.mData?.assumingMemoryBound(to: Float.self)
+            let frameCount = Int32(frameCount)
             
+            guard let bufferPointer = bufferPointer else {
+                return noErr
+            }
+            
+            if frameCount > 0 {
+                c_phase_tracker_audio_callback(self.phaseTracker, bufferPointer, frameCount)
+            }
+            return noErr
+        })
+        audioEngine.attach(sinkNode)
+        
         let format = audioEngine.inputNode.inputFormat(forBus: 0)
         
         audioEngine.connect(
@@ -45,10 +64,16 @@ struct AudioCapture {
             // TODO: how to best handle ??
             fatalError("Failed to start audio engine.")
         }
-        print("Started input stream.")
+        
+        print("Started input stream at \(format.sampleRate)Hz.")
     }
     
-     func stopAudio() {
+    func runPhaseAnalysis () -> PhaseInfo {
+        let phaseInfo = c_run_dft_analysis(self.phaseTracker)
+        return phaseInfo
+    }
+    
+    func stopAudio() {
         audioEngine.stop()
     }
 }

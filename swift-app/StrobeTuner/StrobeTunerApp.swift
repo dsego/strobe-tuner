@@ -9,13 +9,6 @@ import SwiftUI
 
 @main
 struct StrobeTunerApp: App {
-    var capture: AudioCapture
-    
-    init () {
-        capture = AudioCapture()
-        capture.startAudio()
-    }
-    
     var body: some Scene {
         WindowGroup {
             ContentView()

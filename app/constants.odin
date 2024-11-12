@@ -3,6 +3,7 @@ package app
 
 // DEBUG_NSDF :: true
 
+STROBE_COUNT :: 3
 
 // NOTE: Needs to be a power of 2 for portaudio ring buffers
 DEFAULT_RB_SIZE :: 65536

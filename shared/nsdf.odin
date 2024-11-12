@@ -12,8 +12,6 @@
 
 package shared
 
-
-import "base:runtime"
 import "core:math"
 import "core:mem"
 
@@ -37,10 +35,7 @@ NSDFConfig :: struct {
 }
 
 
-@(export)
-nsdf_init :: proc "c" (fft_size: int, samplerate: int) -> (self: NSDFConfig = {}) {
-    context = runtime.default_context()
-
+nsdf_init :: proc (fft_size: int, samplerate: int) -> (self: NSDFConfig = {}) {
     self.fft_size = fft_size
     self.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
     self.fft = make([]complex64, fft_size)
@@ -52,10 +47,7 @@ nsdf_init :: proc "c" (fft_size: int, samplerate: int) -> (self: NSDFConfig = {}
     return
 }
 
-@(export)
-nsdf_destroy :: proc "c" (self: ^NSDFConfig) {
-    context = runtime.default_context()
-
+nsdf_destroy :: proc (self: ^NSDFConfig) {
     pffft.destroy_setup(self.pffft_setup)
     delete(self.fft)
     delete(self.spectrum)
@@ -66,10 +58,7 @@ nsdf_destroy :: proc "c" (self: ^NSDFConfig) {
     delete(self.nsdf_peaks)
 }
 
-@(export)
-nsdf_pitch_detect :: proc "c" (self: ^NSDFConfig, samples: []f32) -> (f32, Vec2) {
-    context = runtime.default_context()
-
+nsdf_pitch_detect :: proc (self: ^NSDFConfig, samples: []f32) -> (f32, Vec2) {
     nsdf_process_samples(self, samples)
     nsdf_run_nsdf(self, samples)
 
@@ -91,9 +80,7 @@ nsdf_pitch_detect :: proc "c" (self: ^NSDFConfig, samples: []f32) -> (f32, Vec2)
 //   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,
 //    then taking the inverse FFT will give us the cyclic auto-correlation.
 @(private)
-nsdf_process_samples :: proc "c" (self: ^NSDFConfig, samples: []f32) {
-    context = runtime.default_context()
-
+nsdf_process_samples :: proc (self: ^NSDFConfig, samples: []f32) {
     assert(len(samples) <= self.fft_size / 2)
 
     // pad samples with zeros to avoid cyclic convolution
@@ -134,9 +121,7 @@ nsdf_process_samples :: proc "c" (self: ^NSDFConfig, samples: []f32) {
 
 
 @(private)
-nsdf_find_peak :: proc "c" (self: ^NSDFConfig) -> Vec2 {
-    context = runtime.default_context()
-
+nsdf_find_peak :: proc (self: ^NSDFConfig) -> Vec2 {
     // clear out peaks from the previous run
     clear(&self.nsdf_peaks)
 
@@ -209,7 +194,7 @@ nsdf_find_peak :: proc "c" (self: ^NSDFConfig) -> Vec2 {
 // Normalized Square Difference Function (through autocorrelation)
 // http://riogrande.cs.tcu.edu/1516Ribbit/resources/A_Smarter_Way_to_Find_Pitch.pdf
 @(private)
-nsdf_run_nsdf :: proc "c" (self: ^NSDFConfig, samples: []f32) {
+nsdf_run_nsdf :: proc (self: ^NSDFConfig, samples: []f32) {
     n := len(samples)
     copy(self.nsdf, self.autocorr[:n])
 

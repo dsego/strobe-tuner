@@ -8,9 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		12192EB02CDCACBE00D5C3D9 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 12192EAF2CDCACBE00D5C3D9 /* Metal.framework */; };
-		121C62752CE01F8F00B74CC5 /* shared.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 121C62742CE01F8F00B74CC5 /* shared.a */; };
+		122AAF672CE1587D00A4424D /* shared.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 121C62742CE01F8F00B74CC5 /* shared.a */; };
 		128D71B22CDA2D0D0023B417 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 128D71B12CDA2D0D0023B417 /* AVFoundation.framework */; };
 		128D71B62CDA2D670023B417 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 128D71B52CDA2D670023B417 /* Foundation.framework */; };
+		12E5C0C62CE1680F00391F1C /* pa_ringbuffer.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 12E5C0C52CE1680F00391F1C /* pa_ringbuffer.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,6 +41,7 @@
 		128D71B12CDA2D0D0023B417 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk/System/Library/Frameworks/AVFoundation.framework; sourceTree = DEVELOPER_DIR; };
 		128D71B52CDA2D670023B417 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		128D71B72CDA2DC10023B417 /* AVFAudio.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFAudio.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk/System/Library/Frameworks/AVFAudio.framework; sourceTree = DEVELOPER_DIR; };
+		12E5C0C52CE1680F00391F1C /* pa_ringbuffer.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = pa_ringbuffer.a; path = ../pa_ringbuffer/pa_ringbuffer.a; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -68,7 +70,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				121C62752CE01F8F00B74CC5 /* shared.a in Frameworks */,
+				12E5C0C62CE1680F00391F1C /* pa_ringbuffer.a in Frameworks */,
+				122AAF672CE1587D00A4424D /* shared.a in Frameworks */,
 				128D71B22CDA2D0D0023B417 /* AVFoundation.framework in Frameworks */,
 				12192EB02CDCACBE00D5C3D9 /* Metal.framework in Frameworks */,
 				128D71B62CDA2D670023B417 /* Foundation.framework in Frameworks */,
@@ -114,6 +117,7 @@
 		128D71B02CDA2D0D0023B417 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				12E5C0C52CE1680F00391F1C /* pa_ringbuffer.a */,
 				121C62742CE01F8F00B74CC5 /* shared.a */,
 				121C62722CE01ED700B74CC5 /* shared.dylib */,
 				12192EAF2CDCACBE00D5C3D9 /* Metal.framework */,
@@ -442,11 +446,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/StrobeTuner/pffft",
-					"$(PROJECT_DIR)/StrobeTuner/portaudio/lib/.libs",
-				);
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = StrobeTuner;
@@ -457,8 +457,10 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "StrobeTuner/StrobeTuner-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_PRECOMPILE_BRIDGING_HEADER = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				USER_HEADER_SEARCH_PATHS = "";
 				XROS_DEPLOYMENT_TARGET = 2.0;
 			};
 			name = Debug;
@@ -493,11 +495,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/StrobeTuner/pffft",
-					"$(PROJECT_DIR)/StrobeTuner/portaudio/lib/.libs",
-				);
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = StrobeTuner;
@@ -507,8 +505,10 @@
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "StrobeTuner/StrobeTuner-Bridging-Header.h";
+				SWIFT_PRECOMPILE_BRIDGING_HEADER = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				USER_HEADER_SEARCH_PATHS = "";
 				XROS_DEPLOYMENT_TARGET = 2.0;
 			};
 			name = Release;

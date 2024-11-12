@@ -24,10 +24,7 @@ PitchInfo :: struct {
 }
 
 
-@(export)
-init_pitch_detector :: proc "c" (samplerate: int) -> (self: PicthDetector) {
-    context = runtime.default_context()
-
+init_pitch_detector :: proc(samplerate: int) -> (self: PicthDetector) {
     self.samples = make([]f32, FFT_SIZE / 2)
     self.nsdf = nsdf_init(FFT_SIZE, samplerate)
     rb, rb_data := init_ringbuffer(DEFAULT_RB_SIZE)
@@ -37,28 +34,20 @@ init_pitch_detector :: proc "c" (samplerate: int) -> (self: PicthDetector) {
     return
 }
 
-@(export)
-destroy_pitch_detector :: proc "c" (self: ^PicthDetector) {
-    context = runtime.default_context()
-
+destroy_pitch_detector :: proc(self: ^PicthDetector) {
     nsdf_destroy(&self.nsdf)
     delete(self.samples)
     delete(self.ringbuffer_data)
 }
 
-@(export)
-pitch_audio_callback :: proc "c" (ctx: ^AudioCaptureNode, input: []f32) {
-    context = runtime.default_context()
-
+pitch_audio_callback :: proc(ctx: ^AudioCaptureNode, input: []f32) {
     self := container_of(ctx, PicthDetector, "node")
     write_to_ringbuffer(&self.ringbuffer, input)
 }
 
 
 // TODO: keep track of previous pitches
-@(export)
-run_pitch_detection :: proc "c" (self: ^PicthDetector, prev_info: PitchInfo) -> PitchInfo {
-    context = runtime.default_context()
+run_pitch_detection :: proc(self: ^PicthDetector, prev_info: PitchInfo) -> PitchInfo {
 
     info := PitchInfo{}
 
@@ -90,15 +79,13 @@ run_pitch_detection :: proc "c" (self: ^PicthDetector, prev_info: PitchInfo) -> 
 }
 
 
-@(export)
-calculate_rms :: proc "c" (samples: []f32) -> f32 {
+calculate_rms :: proc(samples: []f32) -> f32 {
     square_sum: f32 = 0
     for s in samples do square_sum += s * s
     return math.sqrt(square_sum / f32(len(samples)))
 }
 
 // compare RMS based on dBFS ?
-@(export)
-is_strong_pitch :: proc "c" (pitch_info: PitchInfo) -> bool {
+is_strong_pitch :: proc(pitch_info: PitchInfo) -> bool {
     return pitch_info.clarity > 0.95 && pitch_info.rms > 0.05
 }

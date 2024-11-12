@@ -13,14 +13,18 @@ struct StrobeBand {
 }
 
 struct ContentView: View {
-    
-    var strobeBands: [StrobeBand] = [
-        StrobeBand(amp: 2.0, phase: 0.0),
-        StrobeBand(amp: 20.0, phase: .pi / 2),
-        StrobeBand(amp: 20.8, phase: .pi / 4),
-    ]
+    @StateObject private var displayLinkManager = DisplayLinkManager()
     
     var shader: Shader {
+        
+//        displayLinkManager.phaseInfo.phase_correction
+//
+        let strobeBands: [StrobeBand] = [
+            StrobeBand(amp: 2.0, phase: Float(displayLinkManager.time)),
+            StrobeBand(amp: 20.0, phase: .pi / 2),
+            StrobeBand(amp: 20.8, phase: .pi / 4),
+        ]
+        
         let data = Data(bytes: strobeBands, count: MemoryLayout<StrobeBand>.stride * strobeBands.count)
         return ShaderLibrary.recolor(.boundingRect, .data(data))
     }

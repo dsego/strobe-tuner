@@ -13,7 +13,11 @@
 package shared
 
 import "base:runtime"
+import "core:fmt"
 import "core:math"
+
+
+MAX_BANDS :: 8
 
 
 StrobeBand :: struct {
@@ -37,21 +41,15 @@ PhaseTracker :: struct {
     phase_correction: f32,
     time_reference:   f32,
     bands:            [dynamic]StrobeBand,
+    band_count:       int,
     samplerate:       f32,
 }
 
 
-@(export)
-init_phase_tracker :: proc "c" (
-    base_freq_hz: f32,
-    samplerate: f32,
-    band_count: int,
-) -> (
-    self: PhaseTracker,
-) {
-    context = runtime.default_context()
-
+init_phase_tracker :: proc(base_freq_hz: f32, samplerate: f32, band_count: int) -> ^PhaseTracker {
+    self := new(PhaseTracker)
     self.window_size = 4096
+    assert(band_count <= MAX_BANDS)
 
     rb, rb_data := init_ringbuffer(DEFAULT_RB_SIZE)
     self.ringbuffer = rb
@@ -64,29 +62,22 @@ init_phase_tracker :: proc "c" (
         append(&self.bands, band)
     }
 
-    set_phase_tracker_freq(&self, base_freq_hz)
+    set_phase_tracker_freq(self, base_freq_hz)
 
     self.samplerate = samplerate
     self.stream_callback = phase_tracker_audio_callback
-    return
+    return self
 }
 
-@(export)
-destroy_phase_tracker :: proc "c" (self: ^PhaseTracker) {
-    context = runtime.default_context()
-
+destroy_phase_tracker :: proc(self: ^PhaseTracker) {
     delete(self.ringbuffer_data)
     delete(self.sample_buffer)
     for &band in self.bands {
         destory_dft(&band.dft)
     }
-    delete(self.bands)
 }
 
-@(export)
-set_phase_tracker_freq :: proc "c" (self: ^PhaseTracker, base_freq_hz: f32) {
-    context = runtime.default_context()
-
+set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
     self.phase_correction = 0.0
     flush_ringbuffer(&self.ringbuffer)
     multiplier := 1
@@ -101,11 +92,10 @@ set_phase_tracker_freq :: proc "c" (self: ^PhaseTracker, base_freq_hz: f32) {
 }
 
 
-@(export)
-phase_tracker_audio_callback :: proc "c" (ctx: ^AudioCaptureNode, input: []f32) {
-    context = runtime.default_context()
-
+phase_tracker_audio_callback :: proc(ctx: ^AudioCaptureNode, input: []f32) {
     self := container_of(ctx, PhaseTracker, "node")
+
+    // fmt.println("audio callback", len(input))
 
     out1, out2, num_written := get_ringbuffer_write_regions(&self.ringbuffer, len(input))
 
@@ -117,25 +107,51 @@ phase_tracker_audio_callback :: proc "c" (ctx: ^AudioCaptureNode, input: []f32) 
 
 // TODO: filtering ??
 @(private = "file")
-write_to_rb_region :: proc "c" (output: []f32, input: []f32) {
+write_to_rb_region :: proc(output: []f32, input: []f32) {
     copy(output, input)
 }
 
 
-@(export)
-run_dft_analysis :: proc "c" (self: ^PhaseTracker) {
-    context = runtime.default_context()
+// Return this structure from C code,
+//  needs to be compatible and kept in sync with struct in StrobeTuner-Bridging-Header.h
+PhaseInfo :: struct {
+    phase_correction: f32,
+    time_reference:   f32,
+    band_count:       int,
+    strobes:            [MAX_BANDS]StrobeInfo,
+}
+
+StrobeInfo :: struct {
+    freq_hz:           f32,
+    norm_freq:         f32,
+    freq_diff_hz:      f32,
+    estimated_freq_hz: f32,
+    time_stretch:      f32,
+    phase:             f32,
+    amp:               f32,
+}
+
+run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
+
+    phase_info := PhaseInfo {
+        phase_correction = self.phase_correction,
+        time_reference   = self.time_reference,
+        band_count       = self.band_count,
+    }
 
     available := frames_available_in_ringbuffer(&self.ringbuffer)
 
-    if available <= 0 do return
+    if available <= 0 do return nil
 
     reference_interval := self.samplerate / self.bands[0].freq_hz
 
-    copy(self.sample_buffer, self.sample_buffer[available:self.window_size])
-    offset := self.window_size - int(available)
-    read_ringbuffer(&self.ringbuffer, self.sample_buffer[offset:], u32(available))
-
+    if int(available) >= self.window_size {
+        read_ringbuffer(&self.ringbuffer, self.sample_buffer[:], u32(available))
+    } else {
+        copy(self.sample_buffer, self.sample_buffer[available:self.window_size])
+        offset := self.window_size - int(available)
+        read_ringbuffer(&self.ringbuffer, self.sample_buffer[offset:], u32(available))
+    }
 
     // phase runaway compensation
     self.time_reference += f32(available)
@@ -171,7 +187,7 @@ run_dft_analysis :: proc "c" (self: ^PhaseTracker) {
         estimated_freq := band.freq_hz + band.freq_diff_hz
         band.estimated_freq_hz = estimated_freq
 
-        time_stretch_factor := 4.0 * reference_interval / f32(self.window_size)
+        time_stretch_factor := 10.0 * reference_interval / f32(self.window_size)
         // gain: f32 = 1.0 // (amp + 0.1)
 
         // TODO can I fade out the band when the freq difference is significant
@@ -181,5 +197,17 @@ run_dft_analysis :: proc "c" (self: ^PhaseTracker) {
         band.time_stretch = time_stretch_factor
         band.phase = phase
         band.amp = amp
+
+        phase_info.strobes[band_idx] = {
+            freq_hz = band.freq_hz,
+            norm_freq = band.norm_freq,
+            freq_diff_hz = band.freq_diff_hz,
+            estimated_freq_hz = band.estimated_freq_hz,
+            time_stretch = band.time_stretch,
+            phase = band.phase,
+            amp = band.amp,
+        }
     }
+
+    return phase_info
 }
