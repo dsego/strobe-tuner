@@ -118,7 +118,7 @@ PhaseInfo :: struct {
     phase_correction: f32,
     time_reference:   f32,
     band_count:       int,
-    strobes:            [MAX_BANDS]StrobeInfo,
+    strobes:          [MAX_BANDS]StrobeInfo,
 }
 
 StrobeInfo :: struct {
@@ -159,6 +159,8 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
     num_periods := self.time_reference / reference_interval
     self.phase_correction = math.ceil(num_periods) * reference_interval - self.time_reference
 
+    offset: f32 = 0.0
+
     for &band, band_idx in self.bands {
         normalized_freq: f32 = band.freq_hz / self.samplerate
 
@@ -193,19 +195,23 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
         // TODO can I fade out the band when the freq difference is significant
         // if band.freq_diff_hz > 15.0 || band.freq_diff_hz < -15.0 do gain = 1.0
 
+        // if band_idx == 0 do offset = 0.0
+        // if band_idx == 1 do offset = math.PI / 8.0
+        // if band_idx == 2 do offset = math.PI / 4.0
+
         // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
         band.time_stretch = time_stretch_factor
-        band.phase = phase
+        band.phase = phase + offset
         band.amp = amp
 
         phase_info.strobes[band_idx] = {
-            freq_hz = band.freq_hz,
-            norm_freq = band.norm_freq,
-            freq_diff_hz = band.freq_diff_hz,
+            freq_hz           = band.freq_hz,
+            norm_freq         = band.norm_freq,
+            freq_diff_hz      = band.freq_diff_hz,
             estimated_freq_hz = band.estimated_freq_hz,
-            time_stretch = band.time_stretch,
-            phase = band.phase,
-            amp = band.amp,
+            time_stretch      = band.time_stretch,
+            phase             = band.phase,
+            amp               = band.amp,
         }
     }
 

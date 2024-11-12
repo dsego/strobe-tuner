@@ -1,6 +1,7 @@
 package app
 
 import "core:fmt"
+import "core:math"
 import "core:path/filepath"
 import rl "vendor:raylib"
 

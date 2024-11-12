@@ -97,8 +97,8 @@ void main()
     // Current pixel angle
     float angle = atan(distance.y, distance.x);
 
-    // Time is translated from the linear to radial
-    float time = angle / abs(maxAngle - minAngle) / TAU;
+    // Time is translated from the linear to radial (and depends on the circumference)
+    float time = angle / abs(maxAngle - minAngle) / (0.006 * curvatureRadius);
 
     // float time = fragTexCoord.x;
 
