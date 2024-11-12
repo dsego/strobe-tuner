@@ -15,7 +15,6 @@ uniform float curvatureRadius;
 uniform vec3 colorA;
 uniform vec3 colorB;
 uniform float phaseCorrection;
-uniform int winSize;
 uniform float timeStretch;
 uniform float phase;
 uniform float amp;
@@ -29,10 +28,9 @@ float generateSignal(
     float amplitude,
     float time,
     float timeStretch,
-    float winSize,
     float phaseCorrection
 ) {
-    time = time * timeStretch * winSize;
+    time = time * timeStretch;
     float value = amplitude * sin(freq * TAU * (time - phaseCorrection) + phase);
 
     // convert from range [-1, 1] to [0, 1]
@@ -108,7 +106,6 @@ void main()
         amp,
         time,
         timeStretch,
-        winSize,
         phaseCorrection
     );
 

@@ -25,7 +25,6 @@ PhaseTrackerDisplay :: struct {
     phase_loc:            i32,
     amp_loc:              i32,
     norm_freq_loc:        i32,
-    win_size_loc:         i32,
     bounding_rect_loc:    i32,
     curvature_radius_loc: i32,
 }
@@ -52,7 +51,6 @@ init_phase_tracker_display :: proc() -> (self: PhaseTrackerDisplay) {
     self.phase_loc = rl.GetShaderLocation(self.shader, "phase")
     self.amp_loc = rl.GetShaderLocation(self.shader, "amp")
     self.norm_freq_loc = rl.GetShaderLocation(self.shader, "normFreq")
-    self.win_size_loc = rl.GetShaderLocation(self.shader, "winSize")
     self.bounding_rect_loc = rl.GetShaderLocation(self.shader, "boundingRect")
     self.curvature_radius_loc = rl.GetShaderLocation(self.shader, "curvatureRadius")
 
@@ -68,12 +66,7 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
 
     rl.DrawTextEx(font, "phase", {160, 30}, 14, 0, rl.GOLD)
 
-    rl.SetShaderValue(
-        self.shader,
-        self.win_size_loc,
-        &phase_info.window_size,
-        rl.ShaderUniformDataType.INT,
-    )
+
     rl.SetShaderValue(
         self.shader,
         self.phase_correction_loc,

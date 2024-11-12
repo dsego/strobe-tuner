@@ -159,7 +159,6 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
     num_periods := self.time_reference / reference_interval
     self.phase_correction = math.ceil(num_periods) * reference_interval - self.time_reference
 
-    offset: f32 = 0.0
 
     for &band, band_idx in self.bands {
         normalized_freq: f32 = band.freq_hz / self.samplerate
@@ -189,19 +188,15 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
         estimated_freq := band.freq_hz + band.freq_diff_hz
         band.estimated_freq_hz = estimated_freq
 
-        time_stretch_factor := 10.0 * reference_interval / f32(self.window_size)
+        time_stretch_factor := 10.0 * reference_interval
         // gain: f32 = 1.0 // (amp + 0.1)
 
         // TODO can I fade out the band when the freq difference is significant
         // if band.freq_diff_hz > 15.0 || band.freq_diff_hz < -15.0 do gain = 1.0
 
-        // if band_idx == 0 do offset = 0.0
-        // if band_idx == 1 do offset = math.PI / 8.0
-        // if band_idx == 2 do offset = math.PI / 4.0
-
         // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
         band.time_stretch = time_stretch_factor
-        band.phase = phase + offset
+        band.phase = phase
         band.amp = amp
 
         phase_info.strobes[band_idx] = {
