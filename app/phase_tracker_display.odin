@@ -75,9 +75,9 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
     period_count: f32 = 4.0 // how many strobe periods to fit in a circle
 
     // Curved tracks
-    if false {
-        curvature_radius: f32 = 1000.0
-        band_height: f32 = 66.0
+    if true {
+        curvature_radius = 1000.0
+        band_height = 66.0
         period_count = 24.0
     }
 
