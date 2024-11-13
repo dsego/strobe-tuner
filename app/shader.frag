@@ -19,7 +19,7 @@ uniform float timeStretch;
 uniform float phase;
 uniform float amp;
 uniform float normFreq;
-
+uniform float bandHeight;
 
 
 float generateSignal(
@@ -45,13 +45,18 @@ float drawDonut (
     float thickness,
     float curvatureRadius,
     float feathering,
-    float radialPosition
+    vec2 distance
 ) {
-    float outerRadius = curvatureRadius;
+    // vec2 translate = vec2(0.0, 0.5 * size.y - 10);
+    vec2 translate = vec2(0.0, 0.0);
+    distance = distance - translate;
+    float radialPosition = sqrt((distance.x * distance.x) + (distance.y * distance.y));
+
+    float outerRadius = 0; // why ?
     float innerRadius = curvatureRadius - thickness;
 
-    float innerCircle = smoothstep(innerRadius, innerRadius - feathering, abs(radialPosition));
     float outerCircle = smoothstep(curvatureRadius, curvatureRadius - feathering, abs(radialPosition));
+    float innerCircle = smoothstep(innerRadius, innerRadius - feathering, abs(radialPosition));
 
     float donut = outerCircle - innerCircle;
 
@@ -69,8 +74,8 @@ void main()
     vec2 position = fragTexCoord * size;
     float feathering = 2; // 2 px feathering for smoothstep
 
-    // Define the thickness of our donut shape (track)
-    float thickness = 57.0;
+    // Define the thickness of our donut shape (track), leave a gap between tracks
+    float thickness = 0.9 * bandHeight;
 
     // Calculate the center so the circle touches the top of the viewport
     // vertically and is centered horizontally
@@ -78,27 +83,21 @@ void main()
 
     // This is the pixel position in terms of distance from the circle center
     vec2 distance = center - position.xy;
-    float radialPosition = sqrt((distance.x * distance.x) + (distance.y * distance.y));
 
 
     // Color the pixel at position based on whether it sits in the donut shape
-    float donut = drawDonut(size, thickness, curvatureRadius, feathering, radialPosition);
+    float donut = drawDonut(size, thickness, curvatureRadius, feathering, distance);
 
 
     // Color in the generated strobe signal
-    // starting angle & final angle
-    vec2 minAngleDistance = center - vec2(0.0, 0);
-    vec2 maxAngleDistance = center - vec2(size.x, 0);
-    float minAngle = atan(minAngleDistance.y, minAngleDistance.x);
-    float maxAngle = atan(maxAngleDistance.y, maxAngleDistance.x);
+
+    // TODO: color glow effect based on distance from center of strobe!!!
 
     // Current pixel angle
     float angle = atan(distance.y, distance.x);
 
-    // Time is translated from the linear to radial (and depends on the circumference)
-    float time = angle / abs(maxAngle - minAngle) / (0.006 * curvatureRadius);
-
-    // float time = fragTexCoord.x;
+    // Time is translated from the linear to radial
+    float time = angle / TAU;
 
     float value = generateSignal(
         normFreq,

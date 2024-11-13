@@ -219,24 +219,24 @@ main :: proc() {
             rl.DrawTextEx(
                 font,
                 fmt.ctprintf("RMS %.4f", pitch_info.rms),
-                {20, 620},
+                {20, 420},
                 24,
                 0,
                 rl.PINK,
             )
-            rl.DrawRectangleV({20, 650}, {200 * pitch_info.rms, 4.0}, rl.PINK)
-            rl.DrawRectangleLinesEx({20, 650, 200, 5}, 1, rl.PINK)
+            rl.DrawRectangleV({20, 450}, {200 * pitch_info.rms, 4.0}, rl.PINK)
+            rl.DrawRectangleLinesEx({20, 450, 200, 5}, 1, rl.PINK)
 
             rl.DrawTextEx(
                 font,
                 fmt.ctprintf("Cla %.4f", pitch_info.clarity),
-                {20, 660},
+                {20, 460},
                 24,
                 0,
                 rl.ORANGE,
             )
-            rl.DrawRectangleV({20, 690}, {200 * pitch_info.clarity, 4.0}, rl.ORANGE)
-            rl.DrawRectangleLinesEx({20, 690, 200, 5}, 1, rl.ORANGE)
+            rl.DrawRectangleV({20, 490}, {200 * pitch_info.clarity, 4.0}, rl.ORANGE)
+            rl.DrawRectangleLinesEx({20, 490, 200, 5}, 1, rl.ORANGE)
 
             rl.DrawFPS(SCREEN_WIDTH - 100, 10)
         }
