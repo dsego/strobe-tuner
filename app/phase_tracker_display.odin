@@ -101,6 +101,8 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
         rl.ShaderUniformDataType.FLOAT,
     )
 
+    x: f32 = 1.0
+    y: f32 = 1.0
 
     // Draw circular bands from the center outwards, so the lowest frequency is the bottom one
     for &band, band_idx in phase_info.bands {
@@ -190,7 +192,10 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
             rl.ShaderUniformDataType.VEC4,
         )
 
-        time_stretch := band.time_stretch * period_count
+        time_stretch := band.time_stretch * period_count / x
+
+
+
         rl.SetShaderValue(
             self.shader,
             self.time_stretch_loc,
@@ -198,12 +203,23 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
             rl.ShaderUniformDataType.FLOAT,
         )
 
-        rl.SetShaderValue(self.shader, self.phase_loc, &band.phase, rl.ShaderUniformDataType.FLOAT)
-        rl.SetShaderValue(self.shader, self.amp_loc, &band.amp, rl.ShaderUniformDataType.FLOAT)
+        phase := phase_info.bands[0].phase * y
+        amp := phase_info.bands[0].amp
+        norm_freq := phase_info.bands[0].norm_freq * y
+
+        x *= 2.0
+        y *= 4.0
+
+
+        rl.SetShaderValue(self.shader, self.phase_loc, &phase, rl.ShaderUniformDataType.FLOAT)
+        // rl.SetShaderValue(self.shader, self.phase_loc, &band.phase, rl.ShaderUniformDataType.FLOAT)
+        rl.SetShaderValue(self.shader, self.amp_loc, &amp, rl.ShaderUniformDataType.FLOAT)
+        // rl.SetShaderValue(self.shader, self.amp_loc, &band.amp, rl.ShaderUniformDataType.FLOAT)
         rl.SetShaderValue(
             self.shader,
             self.norm_freq_loc,
-            &band.norm_freq,
+            &norm_freq,
+            // &band.norm_freq,
             rl.ShaderUniformDataType.FLOAT,
         )
 
