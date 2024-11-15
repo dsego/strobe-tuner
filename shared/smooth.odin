@@ -2,12 +2,43 @@ package shared
 
 
 import "core:math"
+import "core:fmt"
 import "core:testing"
 
 
+MAX_BLOCK_SIZE :: 512
+
+
+SmoothBlock :: struct {
+    block: [MAX_BLOCK_SIZE]f32,
+    size: int,
+}
+
+init_smooth_block :: proc(size: int) -> SmoothBlock {
+    assert(size <= MAX_BLOCK_SIZE)
+    self := SmoothBlock{}
+    self.size = size
+    return self
+}
+
+add_measurement :: proc (self: ^SmoothBlock, value: f32) {
+    for i in 0..<self.size - 1 {
+        self.block[i+1] = self.block[i]
+    }
+    self.block[0] = value
+}
+
+
+get_smoothed_value :: proc (self: ^SmoothBlock) -> f32 {
+    return smooth_impulsive_noise(self.block[:self.size])
+}
+
+
+
 // Impulsive-noise smoothing algorithm, Lyons book, page 770
-@(export)
-smooth_impulsive_noise :: proc "c" (block: []f32) -> f32 {
+// TODO  maybe it can be optimized to cache values between invocations?
+@(private="file")
+smooth_impulsive_noise :: proc (block: []f32) -> f32 {
     // obtain arithmetic mean
     sum: f32 = 0.0
     for value in block do sum += value

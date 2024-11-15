@@ -1,9 +1,27 @@
 
 
+is_strong_pitch
+
+
+create is_weak_pitch - eg  clarity < 0.5 || rms < 0.01
+
+
+flow:
+- is_strong_pitch activates "tracking" (active_tracking)
+- is_weak_pitch turns off frequency tracking, the strobe stays set on the detected note, but the frequency/cents value won't update
+- while "active" capture freq measurements and calculate smoothed freq value to show
+- if not active, pause capturing freq measurements and reset smoothing block
+
+
+
+--------------
+
 
 icon idea - strobe + tuning fork (ala xcode hammer icon)
 
 
+
+ - smooth_impulsive_noise, average, ewma, or euro filter?
 
 
 
@@ -24,14 +42,10 @@ MVP:
 
 
 
+TBD:
 
 - low pass filter to remove noise ??
-
-
-
 - figure out the min/max phase that I can track, show freq & cents offset, test with diff. freqs
-
-
 - control saturation with rms level, control hue with cents offset
 
 

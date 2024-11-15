@@ -50,7 +50,7 @@ float drawDonut (
     // vec2 translate = vec2(0.0, 0.5 * size.y - 10);
     vec2 translate = vec2(0.0, 0.0);
     distance = distance - translate;
-    float radialPosition = sqrt((distance.x * distance.x) + (distance.y * distance.y));
+    float radialPosition = length(distance); // sqrt((x * x) + (y * y))
 
     float outerRadius = 0; // why ?
     float innerRadius = curvatureRadius - thickness;

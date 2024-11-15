@@ -3,6 +3,7 @@ package app
 import "core:fmt"
 import "core:math"
 import "core:strings"
+import "core:time"
 
 import oef "../one_euro_filter"
 import "../shared"
@@ -45,17 +46,17 @@ main :: proc() {
 
 
     // set initial frequency
-    freq_changed := true
+    freq_changed_manually := true
     pitch_info := shared.PitchInfo{}
     cents_error_smooth := f32(0.0)
 
     detected_note := shared.Note{}
     detected_freq: f32 = 0.0
-    freq_mean: f32 = 0.0
-    freq_ewma: f32 = 0.0
     freq_measurements: [20]f32
 
-    time := 0.0
+    freq_estimation_active := false
+    freq_ewma: f32 = 0.0
+    // freq_smoother := shared.init_smooth_block(512)
 
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
@@ -91,16 +92,17 @@ main :: proc() {
     // oe_filter_ptr := oef.Create(60, 1, 1, 1)
     // defer oef.Destroy(oe_filter_ptr)
 
+
     for !rl.WindowShouldClose() {
 
         // Pick next or previous ukulele string
         if rl.IsKeyPressed(rl.KeyboardKey.RIGHT) {
             freqs_idx += 1
-            freq_changed = true
+            freq_changed_manually = true
         }
         if rl.IsKeyPressed(rl.KeyboardKey.LEFT) {
             freqs_idx -= 1
-            freq_changed = true
+            freq_changed_manually = true
         }
 
 
@@ -108,25 +110,23 @@ main :: proc() {
         pitch_info = shared.run_pitch_detection(&pitch_detector, pitch_info)
 
 
-        // TODO:
-        // Update freq measurement 5 times per second
-        // new_time := rl.GetTime()
         // Keep previous measurement if there is no detected note
-
         // TODO: detect note onset?
-
         // TODO: different clarity for locking onto pitch and tracking frequency?
-        // TODO: apply impulse noise smoothing algorithm to freq measurement
-        if shared.is_strong_pitch(pitch_info) &&
-           detected_note.cents != pitch_info.detected_note.cents {
-            detected_note = pitch_info.detected_note
-            detected_freq = pitch_info.detected_freq
-            target_freq = pitch_info.detected_note.frequency
-            shared.set_phase_tracker_freq(phase_tracker, target_freq)
+        if shared.is_strong_pitch(pitch_info) {
+            if detected_note.cents != pitch_info.detected_note.cents {
+                detected_note = pitch_info.detected_note
+                target_freq = pitch_info.detected_note.frequency
+                shared.set_phase_tracker_freq(phase_tracker, target_freq)
+            }
+            freq_estimation_active = true
         }
 
+        if shared.is_weak_pitch(pitch_info) {
+            freq_estimation_active = false
+        }
 
-        if freq_changed {
+        if freq_changed_manually {
             freqs_idx %= len(freqs)
             if freqs_idx < 0 do freqs_idx += len(freqs) // wrap around
             target_freq = freqs[freqs_idx]
@@ -136,85 +136,55 @@ main :: proc() {
             // target_freq = 1975.533
             // target_freq = 82.4068892282175
             shared.set_phase_tracker_freq(phase_tracker, target_freq)
-
-
-            freq_changed = false
+            freq_changed_manually = false
         }
 
         note := shared.find_note(f32(target_freq))
 
+        // TODO: detect if new note
+        cents_error: f32 = 0.0
+        if freq_estimation_active {
+            alpha: f32 = 0.3
+            if freq_ewma < 1 {
+                freq_ewma = pitch_info.detected_freq
+            } else {
+                freq_ewma = shared.ewma_filter(pitch_info.detected_freq, alpha, freq_ewma)
+                cents := shared.freq_to_cents(freq_ewma)
+                cents_error = cents - f32(detected_note.cents)
+            }
+
+        } else {
+            freq_ewma = 0.0
+        }
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
         {
-            rl.ClearBackground(rl.BLACK)
-
             shared.run_dft_analysis(phase_tracker)
 
+            rl.ClearBackground(rl.BLACK)
             draw_phase_tracker_display(&phase_tracker_display, phase_tracker)
-
-            draw_note(note, {20, 20}, 96)
-
-            // Show target frequency
-            rl.DrawTextEx(font, fmt.ctprintf("%.2fHz", target_freq), {20, 120}, 24, 0, rl.PURPLE)
+            // draw_note(note, {20, 20}, 96)
 
             // draw_autocorrelation(rl.Rectangle{130, 50, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
             // draw_nsdf(rl.Rectangle{130, 280, SCREEN_WIDTH-200, 180}, &pitch_detector.nsdf, pitch_info.nsdf_peak)
 
             // Detected note
-            draw_note(detected_note, {20, 300}, 64, rl.GOLD)
+            draw_note(detected_note, {20, 300}, 64, rl.GOLD, rl.GRAY, freq_estimation_active)
 
-            // convert to cents, because we need the log scale
-            if false {
-                cents := shared.freq_to_cents(detected_freq)
-                cents_error := cents - f32(detected_note.cents)
-                draw_note_meter(
-                    rl.Rectangle{500, 550, 200, 25},
-                    detected_freq,
-                    detected_note,
-                    cents_error,
-                    rl.BEIGE,
-                )
-                rl.DrawTextEx(
-                    font,
-                    fmt.ctprintf("%+.2fHz", pitch_info.detected_freq),
-                    {400, 550},
-                    22,
-                    0,
-                    rl.BEIGE,
-                )
-            }
 
-            // if false {
-            //     cents := freq_to_cents(freq_mean)
-            //     cents_error := cents - f32(detected_note.cents)
-            //     rl.DrawTextEx(font, fmt.ctprintf("%+.2fHz", freq_mean), {400, 580}, 22, 0, rl.PURPLE)
-            //     draw_note_meter(rl.Rectangle{500, 580, 200, 25}, freq_mean, detected_note, cents_error, rl.PURPLE)
-            // }
+            // fmt.println(smooth_freq, pitch_info.detected_freq)
 
-            if false {
-                alpha: f32 = 0.5
-                freq_ewma = shared.ewma_filter(pitch_info.detected_freq, alpha, freq_ewma)
-                cents := shared.freq_to_cents(freq_ewma)
-                cents_error := cents - f32(detected_note.cents)
 
-                rl.DrawTextEx(
-                    font,
-                    fmt.ctprintf("%+.2fHz", freq_ewma),
-                    {400, 610},
-                    22,
-                    0,
-                    rl.SKYBLUE,
-                )
-                draw_note_meter(
-                    rl.Rectangle{500, 610, 200, 25},
-                    freq_ewma,
-                    detected_note,
-                    cents_error,
-                    rl.SKYBLUE,
-                )
-            }
-
+            rl.DrawTextEx(font, fmt.ctprintf("%+.1fHz", freq_ewma), {400, 410}, 22, 0, rl.GOLD)
+            draw_note_meter(
+                rl.Rectangle{500, 410, 200, 25},
+                detected_note,
+                cents_error,
+                rl.GOLD,
+                rl.GRAY,
+                active = freq_estimation_active,
+            )
 
             rl.DrawTextEx(
                 font,

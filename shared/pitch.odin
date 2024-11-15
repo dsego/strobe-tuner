@@ -89,3 +89,7 @@ calculate_rms :: proc(samples: []f32) -> f32 {
 is_strong_pitch :: proc(pitch_info: PitchInfo) -> bool {
     return pitch_info.clarity > 0.95 && pitch_info.rms > 0.05
 }
+
+is_weak_pitch :: proc(pitch_info: PitchInfo) -> bool {
+    return pitch_info.clarity < 0.9 || pitch_info.rms < 0.001
+}

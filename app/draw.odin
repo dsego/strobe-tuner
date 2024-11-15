@@ -32,7 +32,17 @@ destroy_drawing_context :: proc() {
 }
 
 
-draw_note :: proc(note: shared.Note, pos: [2]f32, size: f32, color: rl.Color = rl.PURPLE) {
+draw_note :: proc(
+    note: shared.Note,
+    pos: [2]f32,
+    size: f32,
+    active_color: rl.Color,
+    disabled_color: rl.Color,
+    active: bool,
+) {
+
+    color := active_color if active else disabled_color
+
     // Note name
     rl.DrawTextEx(font, fmt.ctprintf("%v", note.name), pos, size, 0, color)
 
@@ -264,11 +274,15 @@ draw_freq_spectrum :: proc(rect: rl.Rectangle, spectrum: []f32, fft_size: int, s
 // TODO: draw past good note/position greyed out if new pitch is not found
 draw_note_meter :: proc(
     rect: rl.Rectangle,
-    freq: f32,
     note: shared.Note,
     cents_error: f32,
-    color: rl.Color,
+    active_color: rl.Color,
+    disabled_color: rl.Color,
+    active: bool,
 ) {
+
+    color := active_color if active else disabled_color
+
     // rl.DrawRectangleLinesEx(rect, 1.0, rl.ORANGE)
     px := rect.width / 100.0
 
