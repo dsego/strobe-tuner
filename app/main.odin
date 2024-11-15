@@ -113,8 +113,10 @@ main :: proc() {
         // Keep previous measurement if there is no detected note
         // TODO: detect note onset?
         // TODO: different clarity for locking onto pitch and tracking frequency?
+        new_note_detected := false
         if shared.is_strong_pitch(pitch_info) {
             if detected_note.cents != pitch_info.detected_note.cents {
+                new_note_detected = true
                 detected_note = pitch_info.detected_note
                 target_freq = pitch_info.detected_note.frequency
                 shared.set_phase_tracker_freq(phase_tracker, target_freq)
@@ -145,7 +147,7 @@ main :: proc() {
         cents_error: f32 = 0.0
         if freq_estimation_active {
             alpha: f32 = 0.3
-            if freq_ewma < 1 {
+            if freq_ewma < 1 || new_note_detected {
                 freq_ewma = pitch_info.detected_freq
             } else {
                 freq_ewma = shared.ewma_filter(pitch_info.detected_freq, alpha, freq_ewma)
@@ -176,15 +178,16 @@ main :: proc() {
             // fmt.println(smooth_freq, pitch_info.detected_freq)
 
 
-            rl.DrawTextEx(font, fmt.ctprintf("%+.1fHz", freq_ewma), {400, 410}, 22, 0, rl.GOLD)
-            draw_note_meter(
-                rl.Rectangle{500, 410, 200, 25},
-                detected_note,
-                cents_error,
-                rl.GOLD,
-                rl.GRAY,
-                active = freq_estimation_active,
-            )
+            rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", freq_ewma), {400, 410}, 22, 0, rl.GOLD)
+            rl.DrawTextEx(font, fmt.ctprintf("%+.1fc", cents_error), {400, 450}, 22, 0, rl.GREEN)
+            // draw_note_meter(
+            //     rl.Rectangle{500, 410, 200, 25},
+            //     detected_note,
+            //     cents_error,
+            //     rl.GOLD,
+            //     rl.GRAY,
+            //     active = freq_estimation_active,
+            // )
 
             rl.DrawTextEx(
                 font,

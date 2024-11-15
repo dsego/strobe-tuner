@@ -28,6 +28,7 @@ PhaseTrackerDisplay :: struct {
     bounding_rect_loc:    i32,
     curvature_radius_loc: i32,
     band_height_loc:      i32,
+    err_cents_loc:        i32,
 }
 
 
@@ -55,6 +56,7 @@ init_phase_tracker_display :: proc() -> (self: PhaseTrackerDisplay) {
     self.bounding_rect_loc = rl.GetShaderLocation(self.shader, "boundingRect")
     self.curvature_radius_loc = rl.GetShaderLocation(self.shader, "curvatureRadius")
     self.band_height_loc = rl.GetShaderLocation(self.shader, "bandHeight")
+    self.err_cents_loc = rl.GetShaderLocation(self.shader, "errCents")
 
     return
 }
@@ -85,8 +87,6 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
     // color_a := rl.ColorNormalize(rl.Color{248, 120, 85, 255})
     // color_b := rl.ColorNormalize(rl.Color{88, 27, 26, 255})
 
-    color_a := rl.ColorNormalize(rl.Color{226, 101, 70, 255})
-    color_b := rl.ColorNormalize(rl.Color{84, 32, 43, 255})
 
     rl.SetShaderValue(
         self.shader,
@@ -101,18 +101,6 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
         rl.ShaderUniformDataType.FLOAT,
     )
 
-    rl.SetShaderValue(
-        self.shader,
-        self.color_a_loc,
-        raw_data(color_a[:]),
-        rl.ShaderUniformDataType.VEC3,
-    )
-    rl.SetShaderValue(
-        self.shader,
-        self.color_b_loc,
-        raw_data(color_b[:]),
-        rl.ShaderUniformDataType.VEC3,
-    )
 
     // Draw circular bands from the center outwards, so the lowest frequency is the bottom one
     for &band, band_idx in phase_info.bands {
@@ -130,6 +118,54 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
 
         err_cents :=
             shared.freq_to_cents(band.estimated_freq_hz) - shared.freq_to_cents(band.freq_hz)
+
+
+        // If note is within 10 cents color the strobe green
+        // TODO: replace conditional with a smoothstep to blend between greenish and redish color - need to convert to HSV and blend hue??
+        // TODO: min/max threshold to avoid flicker - eg if green, needs to fall below 15 cents to turn red and above 10 to turn green
+        // if (abs(errCents) < 5) {
+        //     vec3 a = vec3(.78, .89, .29);
+        //     vec3 b = vec3(.17, .33, .13);
+        //     intuneColor = mix(a, b, value);
+        // }
+
+        color_a := rl.Color{226, 101, 70, 255}
+        color_b := rl.Color{84, 32, 43, 255}
+        // color_a := rl.ColorNormalize(rl.Color{226, 101, 70})
+        // color_b := rl.ColorNormalize(rl.Color{})
+        // color_hsv_a := rl.ColorToHSV(color_a)
+        // color_hsv_b := rl.ColorToHSV(color_b)
+
+        // // Show accented color if strobe is in tune, ie within 10 cents of the target frequency
+
+        // color_hsv_accent_a := rl.ColorToHSV(rl.Color{199, 228, 74, 255})
+        // color_hsv_accent_b := rl.ColorToHSV(rl.Color{43, 84, 33, 255})
+
+        // gradient: f32 = math.smoothstep(f32(25.0), f32(5.0), math.abs(err_cents))
+
+        // color_hsv_a.x = gradient * (color_hsv_accent_a.x - color_hsv_a.x)
+        // color_hsv_b.x = gradient * (color_hsv_accent_b.x - color_hsv_b.x)
+
+
+        // n_color_a := rl.ColorNormalize(rl.ColorFromHSV(color_hsv_a.x, color_hsv_a.y, color_hsv_a.z))
+        // n_color_b := rl.ColorNormalize(rl.ColorFromHSV(color_hsv_b.x, color_hsv_b.y, color_hsv_b.z))
+
+        n_color_a := rl.ColorNormalize(color_a)
+        n_color_b := rl.ColorNormalize(color_b)
+
+
+        rl.SetShaderValue(
+            self.shader,
+            self.color_a_loc,
+            raw_data(n_color_a[:]),
+            rl.ShaderUniformDataType.VEC3,
+        )
+        rl.SetShaderValue(
+            self.shader,
+            self.color_b_loc,
+            raw_data(n_color_b[:]),
+            rl.ShaderUniformDataType.VEC3,
+        )
 
 
         bounding_rect := [4]f32{rect.x, rect.y, rect.width, rect.height}
@@ -171,29 +207,34 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
             rl.ShaderUniformDataType.FLOAT,
         )
 
+        rl.SetShaderValue(
+            self.shader,
+            self.err_cents_loc,
+            &err_cents,
+            rl.ShaderUniformDataType.FLOAT,
+        )
+
         {
             rl.BeginShaderMode(self.shader)
             rl.DrawTextureV(self.texture, {rect.x, rect.y}, rl.WHITE)
             rl.EndShaderMode()
         }
 
-        rl.DrawTextEx(
-            font,
-            fmt.ctprintf("%+.1fHz", band.estimated_freq_hz),
-            {570, 100 + f32(band_height) * f32(order)},
-            18,
-            0,
-            rl.GOLD,
-        )
-        rl.DrawTextEx(
-            font,
-            fmt.ctprintf("%+.1fc", err_cents),
-            {570, 120 + f32(band_height) * f32(order)},
-            18,
-            0,
-            rl.GREEN,
-        )
-
-
+        // rl.DrawTextEx(
+        //     font,
+        //     fmt.ctprintf("%+.1fHz", band.estimated_freq_hz),
+        //     {570, 100 + f32(band_height) * f32(order)},
+        //     18,
+        //     0,
+        //     rl.GOLD,
+        // )
+        // rl.DrawTextEx(
+        //     font,
+        //     fmt.ctprintf("%+.1fc", err_cents),
+        //     {570, 120 + f32(band_height) * f32(order)},
+        //     18,
+        //     0,
+        //     rl.GREEN,
+        // )
     }
 }

@@ -20,6 +20,7 @@ uniform float phase;
 uniform float amp;
 uniform float normFreq;
 uniform float bandHeight;
+uniform float errCents;
 
 
 float generateSignal(
@@ -108,8 +109,10 @@ void main()
         phaseCorrection
     );
 
+
     // Blend colors
     vec3 rgb = mix(colorA, colorB, value);
+
 
     finalColor = vec4(rgb, donut);
 }

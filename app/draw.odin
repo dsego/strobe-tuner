@@ -292,7 +292,7 @@ draw_note_meter :: proc(
     needle_pos := rect.width / 2 + cents_error * px
 
     // horizontal line, ie "rail"
-    rl.DrawRectangleV({rect.x, rect.y + rect.height / 2}, {rect.width, 4.0}, rl.GRAY)
+    rl.DrawRectangleV({rect.x, rect.y + rect.height / 2 - 2.0}, {rect.width, 4.0}, rl.GRAY)
 
     // vertical notches
     rl.DrawRectangleV({rect.x + rect.width / 2.0 - 0.5, rect.y}, {1.0, rect.height}, rl.GRAY)
