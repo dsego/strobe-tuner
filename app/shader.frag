@@ -21,6 +21,7 @@ uniform float amp;
 uniform float normFreq;
 uniform float bandHeight;
 uniform float errCents;
+uniform float freqMultiplier;
 
 
 float generateSignal(
@@ -29,10 +30,11 @@ float generateSignal(
     float amplitude,
     float time,
     float timeStretch,
-    float phaseCorrection
+    float phaseCorrection,
+    float freqMultiplier
 ) {
     time = time * timeStretch;
-    float value = amplitude * sin(freq * TAU * (time - phaseCorrection) + phase);
+    float value = amplitude * sin(freqMultiplier * (freq * TAU * (time - phaseCorrection) + phase));
 
     // convert from range [-1, 1] to [0, 1]
     value = 0.5 * value + 0.5;
@@ -106,7 +108,8 @@ void main()
         amp,
         time,
         timeStretch,
-        phaseCorrection
+        phaseCorrection,
+        freqMultiplier
     );
 
 

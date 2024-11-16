@@ -1,19 +1,5 @@
 
 
-is_strong_pitch
-
-
-create is_weak_pitch - eg  clarity < 0.5 || rms < 0.01
-
-
-flow:
-- is_strong_pitch activates "tracking" (active_tracking)
-- is_weak_pitch turns off frequency tracking, the strobe stays set on the detected note, but the frequency/cents value won't update
-- while "active" capture freq measurements and calculate smoothed freq value to show
-- if not active, pause capturing freq measurements and reset smoothing block
-
-
-
 --------------
 
 
@@ -34,11 +20,18 @@ freq_measurements[0] = pitch_info.detected_freq
 
 
 MVP:
-- 2 strobe tracks
+- 2 modes
+    - standard - tracks same pitch at different sensitivities
+    - harmonic - tracks pitch & harmonics
+    - fade out strobe if the cents offset is too jarring
+- note auto detect on/off - if off can cycle through notes for the chosen instrument
 - Note display
 - flat/sharp indicator
-- settings ?
 - cents error display
+- settings
+    - pitch standard - 440hz
+    - manual mode tuning (eg chromatic, guitar eadgbe, ukulele, etc)
+    - cents offset per note
 
 
 

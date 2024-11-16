@@ -11,7 +11,6 @@ import rl "vendor:raylib"
 
 
 main :: proc() {
-
     bass_freqs: []f32 = {
         41.20344, // E1
         55.00000, // A1
@@ -65,7 +64,12 @@ main :: proc() {
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
     defer rl.CloseWindow()
 
-    phase_tracker := shared.init_phase_tracker(f32(target_freq), SAMPLERATE, STROBE_COUNT)
+    phase_tracker := shared.init_phase_tracker(
+        f32(target_freq),
+        SAMPLERATE,
+        STROBE_COUNT,
+        .VERNIER_MODE,
+    )
     defer shared.destroy_phase_tracker(phase_tracker)
 
     phase_tracker_display := init_phase_tracker_display()

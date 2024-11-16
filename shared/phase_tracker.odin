@@ -20,6 +20,12 @@ import "core:math"
 MAX_BANDS :: 8
 
 
+StrobeMode :: enum {
+    HARMONIC_MODE, // each track display a harmonic frequency
+    VERNIER_MODE, // displays the same frequency at different sensitivities
+}
+
+
 StrobeBand :: struct {
     freq_hz:           f32,
     norm_freq:         f32,
@@ -28,12 +34,21 @@ StrobeBand :: struct {
     angle:             f32,
     dft:               SingleFreqDFT,
     time_stretch:      f32,
+    freq_multiplier:   f32, // to get more or less stripes in the pattern
     phase:             f32,
     amp:               f32,
+
+    // Fade out track that is spinning too fast
+    attenuation:       f32,
+
+    // Schmitt trigger thresholds to avoid flickering
+    cents_err_low:     f32,
+    cents_err_high:    f32,
 }
 
 PhaseTracker :: struct {
     using node:       AudioCaptureNode,
+    base_freq_hz:     f32,
     sample_buffer:    []f32,
     window_size:      int,
     ringbuffer:       RingBuffer,
@@ -43,10 +58,16 @@ PhaseTracker :: struct {
     bands:            [dynamic]StrobeBand,
     band_count:       int,
     samplerate:       f32,
+    mode:             StrobeMode,
 }
 
 
-init_phase_tracker :: proc(base_freq_hz: f32, samplerate: f32, band_count: int) -> ^PhaseTracker {
+init_phase_tracker :: proc(
+    base_freq_hz: f32,
+    samplerate: f32,
+    band_count: int,
+    mode: StrobeMode,
+) -> ^PhaseTracker {
     self := new(PhaseTracker)
     self.window_size = 4096
     assert(band_count <= MAX_BANDS)
@@ -55,6 +76,8 @@ init_phase_tracker :: proc(base_freq_hz: f32, samplerate: f32, band_count: int) 
     self.ringbuffer = rb
     self.ringbuffer_data = rb_data
     self.sample_buffer = make([]f32, self.window_size)
+    self.mode = mode
+    self.base_freq_hz = base_freq_hz
 
     for i in 0 ..< band_count {
         band := StrobeBand{}
@@ -80,12 +103,22 @@ destroy_phase_tracker :: proc(self: ^PhaseTracker) {
 set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
     self.phase_correction = 0.0
     flush_ringbuffer(&self.ringbuffer)
-    multiplier := 1
+    multiplier: f32 = 1.0
+    self.base_freq_hz = base_freq_hz
 
     for &band, i in self.bands {
-        freq_hz := f32(multiplier) * base_freq_hz
-        band.freq_hz = freq_hz
-        band.norm_freq = freq_hz / self.samplerate
+        if self.mode == .HARMONIC_MODE {
+            band.freq_hz = f32(multiplier) * base_freq_hz
+            band.cents_err_low = 40.0
+            band.cents_err_high = 50.0
+        }
+        if self.mode == .VERNIER_MODE {
+            band.freq_hz = base_freq_hz
+            band.cents_err_low = 40.0 / multiplier
+            band.cents_err_high = 50.0 / multiplier
+        }
+
+        band.norm_freq = band.freq_hz / self.samplerate
         set_dft_freq(&band.dft, band.norm_freq)
         multiplier *= 2
     }
@@ -159,6 +192,9 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
     num_periods := self.time_reference / reference_interval
     self.phase_correction = math.ceil(num_periods) * reference_interval - self.time_reference
 
+
+    sensitivity: f32 = 1.0
+
     for &band, band_idx in self.bands {
         normalized_freq: f32 = band.freq_hz / self.samplerate
 
@@ -184,19 +220,22 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
 
         time_delta := f32(available) / f32(self.samplerate)
         band.freq_diff_hz = -(phase_diff / time_delta) / math.TAU
-        estimated_freq := band.freq_hz + band.freq_diff_hz
-        band.estimated_freq_hz = estimated_freq
-
-        time_stretch_factor := reference_interval
-        // gain: f32 = 1.0 // (amp + 0.1)
-
-        // TODO can I fade out the band when the freq difference is significant
-        // if band.freq_diff_hz > 15.0 || band.freq_diff_hz < -15.0 do gain = 1.0
 
         // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
-        band.time_stretch = time_stretch_factor
-        band.phase = phase + math.PI/2.0 // adding π/2 aligns phases to get the stripes lined up
+        band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
+        band.time_stretch = reference_interval
+        band.phase = phase + math.PI / 2.0 // adding π/2 aligns phases to get the stripes lined up
         band.amp = amp
+        band.freq_multiplier = 1.0
+
+        if self.mode == .VERNIER_MODE {
+            band.phase *= sensitivity
+            band.norm_freq = sensitivity * self.base_freq_hz / self.samplerate
+            band.time_stretch /= sensitivity
+            band.freq_multiplier *= sensitivity
+            sensitivity *= 2.0
+        }
+
 
         phase_info.strobes[band_idx] = {
             freq_hz           = band.freq_hz,
