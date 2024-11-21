@@ -15,6 +15,7 @@ package shared
 import "base:runtime"
 import "core:fmt"
 import "core:math"
+import "core:math/linalg"
 
 
 MAX_BANDS :: 8
@@ -31,15 +32,12 @@ StrobeBand :: struct {
     norm_freq:         f32,
     freq_diff_hz:      f32,
     estimated_freq_hz: f32,
-    angle:             f32,
     dft:               SingleFreqDFT,
     time_stretch:      f32,
     freq_multiplier:   f32, // to get more or less stripes in the pattern
     phase:             f32,
     amp:               f32,
-
-    // Fade out track that is spinning too fast
-    attenuation:       f32,
+    err_cents:         f32,
 
     // Schmitt trigger thresholds to avoid flickering
     cents_err_low:     f32,
@@ -176,7 +174,6 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
 
     if available <= 0 do return nil
 
-    reference_interval := self.samplerate / self.bands[0].freq_hz
 
     if int(available) >= self.window_size {
         read_ringbuffer(&self.ringbuffer, self.sample_buffer[:], u32(self.window_size))
@@ -186,14 +183,22 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
         read_ringbuffer(&self.ringbuffer, self.sample_buffer[offset:], u32(available))
     }
 
+    // TODO
+    // TODO
+    // TODO
+    // The problem with slowing down the spin is that I hit a situation where
+    //  the phase appears to quickly flicker in 1/2 periods and the strobe effect doesn't spin smoothly
+    // How to slow down the spin without increasing the number of stripes that appear?
+    slowdown_factor: f32 = 1.0
+    sensitivity: f32 = 1.0
+
+
     // phase runaway compensation
     self.time_reference += f32(available)
-
+    reference_interval := self.samplerate / self.bands[0].freq_hz
     num_periods := self.time_reference / reference_interval
-    self.phase_correction = math.ceil(num_periods) * reference_interval - self.time_reference
-
-
-    sensitivity: f32 = 1.0
+    // Note, trunc and ceil seem to have the same effect here
+    self.phase_correction = math.trunc(num_periods) * reference_interval - self.time_reference
 
     for &band, band_idx in self.bands {
         normalized_freq: f32 = band.freq_hz / self.samplerate
@@ -206,34 +211,53 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
         phase := math.atan2(sin, cos) // [-π, π]
         amp := magnitude(dft)
 
+        // Phase correction
+        phase = phase - self.phase_correction * math.TAU * normalized_freq
+
+        // Unwrap phase
+        for phase >= math.PI do phase -= math.TAU
+        for phase <= -math.PI do phase += math.TAU
+
         // Calculate estimated frequency
-        angle := phase - normalized_freq * math.TAU * self.phase_correction
-        phase_diff := angle - band.angle
-        band.angle = angle
-
-        // Unwrap phase diff
-        //  shifts the angles by adding multiples of ±2π until the jump is less than π
-        for phase_diff >= math.PI do phase_diff -= math.TAU
-
-        for phase_diff <= -math.PI do phase_diff += math.TAU
+        phase_diff := phase - band.phase
+        band.phase = phase
+        // band.phase =+ math.PI * 0.5// adding π/2 aligns phases to get the stripes lined up
 
 
         time_delta := f32(available) / f32(self.samplerate)
         band.freq_diff_hz = -(phase_diff / time_delta) / math.TAU
+        band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
+        band.err_cents = freq_to_cents(band.estimated_freq_hz) - freq_to_cents(band.freq_hz)
 
         // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
-        band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
         band.time_stretch = reference_interval
-        band.phase = phase + math.PI / 2.0 // adding π/2 aligns phases to get the stripes lined up
         band.amp = amp
         band.freq_multiplier = 1.0
 
+        edge1: f32 = 40.0
+        edge2: f32 = 20.0
+        if band_idx == 1 {
+            edge1 = 25.0
+            edge2 = 15.0
+        }
+
+        if band_idx == 2 {
+            edge1 = 5.0
+            edge2 = 1.0
+        }
+
+        // Fade out track that is spinning too fast
+        // attenuation :f32 = linalg.smootherstep(f32(edge1), edge2, math.abs(band.err_cents))
+        attenuation: f32 = 1.0
+
+        // band.amp *= attenuation
+
         if self.mode == .VERNIER_MODE {
-            band.phase *= sensitivity
-            band.norm_freq = sensitivity * self.base_freq_hz / self.samplerate
-            band.time_stretch /= sensitivity
-            band.freq_multiplier *= sensitivity
-            sensitivity *= 2.0
+            // band.phase *= sensitivity
+            // band.norm_freq = (self.base_freq_hz / self.samplerate) * sensitivity
+            // band.time_stretch /= sensitivity
+            // band.freq_multiplier *= sensitivity
+        //     sensitivity *= 2.0
         }
 
 

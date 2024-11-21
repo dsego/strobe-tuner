@@ -1,23 +1,23 @@
 package shared
 
+import "core:fmt"
 import "core:math"
 import "core:testing"
-import "core:fmt"
 import rl "vendor:raylib"
 
 
 // Parabolic interpolation to find the more accurate peak location
 // https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
-parabolic :: proc (alpha: f32, beta: f32, gamma: f32) -> (f32, f32) {
+parabolic :: proc(alpha: f32, beta: f32, gamma: f32) -> (f32, f32) {
     location := 0.5 * (alpha - gamma) / (alpha - 2.0 * beta + gamma)
     magnitude := beta - 0.25 * (alpha - gamma) * location
     return location, magnitude
 }
 
-arithmetic_mean :: proc (array: []f32) -> f32 {
+arithmetic_mean :: proc(array: []f32) -> f32 {
     mean: f32 = 0.0
 
-    for i in 0..<len(array) {
+    for i in 0 ..< len(array) {
         mean += max(array[i], math.F32_EPSILON) // epsilon so it never goes to zero
     }
 
@@ -26,10 +26,10 @@ arithmetic_mean :: proc (array: []f32) -> f32 {
 }
 
 
-geometric_mean :: proc (array: []f32) -> f32 {
+geometric_mean :: proc(array: []f32) -> f32 {
     geometric_mean: f32 = 0.0
 
-    for i in 0..<len(array) {
+    for i in 0 ..< len(array) {
         // need to avoid zeros, because ln(0) = -inf
         geometric_mean += math.ln(max(array[i], math.F32_EPSILON))
     }
@@ -40,33 +40,28 @@ geometric_mean :: proc (array: []f32) -> f32 {
 }
 
 // Complex number magnitude
-magnitude :: proc (cpx: complex64) -> f32 {
+magnitude :: proc(cpx: complex64) -> f32 {
     return math.sqrt(real(cpx) * real(cpx) + imag(cpx) * imag(cpx))
 }
 
-square :: proc (cpx: complex64) -> f32 {
+square :: proc(cpx: complex64) -> f32 {
     return real(cpx) * real(cpx) + imag(cpx) * imag(cpx)
 }
-
 
 
 // Exponentially Weighted Moving Average (https://github.com/jonnieZG/EWMA)
 // Parameters:
 //   alpha - smoothing factor in 0..1
 //   prev_output
-ewma_filter :: proc (
-    input: f32,
-    alpha: f32,
-    prev_output: f32
-) -> (output: f32) {
+ewma_filter :: proc(input: f32, alpha: f32, prev_output: f32) -> (output: f32) {
     output = (alpha * input + (1.0 - alpha) * prev_output)
     return
 }
 
 
-find_abs_max :: proc (slice: []f32) -> f32 {
+find_abs_max :: proc(slice: []f32) -> f32 {
     max: f32 = 0.0
-    for i in 0..<len(slice) {
+    for i in 0 ..< len(slice) {
         abs_val := abs(slice[i])
         if abs_val > max {
             max = abs_val
@@ -76,11 +71,11 @@ find_abs_max :: proc (slice: []f32) -> f32 {
 }
 
 
-lerp :: proc (a: f32, b: f32, t: f32) -> f32 {
-  return a + t * (b - a)
+lerp :: proc(a: f32, b: f32, t: f32) -> f32 {
+    return a + t * (b - a)
 }
 
-convert_to_rgba :: proc (value: f32) -> rl.Color {
+convert_to_rgba :: proc(value: f32) -> rl.Color {
     value := value
 
     color_a := rl.Color{226, 101, 70, 255}
@@ -106,30 +101,32 @@ convert_to_rgba :: proc (value: f32) -> rl.Color {
 
 
 // TODO: cache cosines to optimize?
-blackmann_window :: proc (k: f32, size: f32) -> f32 {
-    a0:f32 = 0.42
-    a1:f32 = 0.5
-    a2:f32 = 0.08
+blackmann_window :: proc(k: f32, size: f32) -> f32 {
+    a0: f32 = 0.42
+    a1: f32 = 0.5
+    a2: f32 = 0.08
 
-    l:f32 = math.TAU * k / (size - 1.0)
+    l: f32 = math.TAU * k / (size - 1.0)
     return a0 - a1 * math.cos(l) + a2 * math.cos(2.0 * l)
 }
 
 
 // https://www.recordingblogs.com/wiki/flat-top-window
-flattop_window :: proc (k: f32, size: f32) -> f32 {
-    return (0.21557895
-        - 0.41663158  * math.cos(2 * math.PI * k / (size - 1))
-        + 0.277263158 * math.cos(4 * math.PI * k / (size - 1))
-        - 0.083578947 * math.cos(6 * math.PI * k / (size - 1))
-        + 0.006947368 * math.cos(8 * math.PI * k / (size - 1)))
+flattop_window :: proc(k: f32, size: f32) -> f32 {
+    return (
+        0.21557895 -
+        0.41663158 * math.cos(2 * math.PI * k / (size - 1)) +
+        0.277263158 * math.cos(4 * math.PI * k / (size - 1)) -
+        0.083578947 * math.cos(6 * math.PI * k / (size - 1)) +
+        0.006947368 * math.cos(8 * math.PI * k / (size - 1)) \
+    )
 }
 
 
 // Symmetric Blackmann-Harris
 // https://en.wikipedia.org/wiki/Window_function
 // https://github.com/JvanKatwijk/filter-demo/blob/master/blackman-harris.cpp#L18-L24
-blackman_harris :: proc (i: f32, num: f32) -> f32 {
+blackman_harris :: proc(i: f32, num: f32) -> f32 {
     a0 :: 0.35875
     a1 :: 0.48829
     a2 :: 0.14128
@@ -144,7 +141,7 @@ blackman_harris :: proc (i: f32, num: f32) -> f32 {
 }
 
 
-snap_number :: proc (value: f32, eps: f32) -> f32 {
+snap_number :: proc(value: f32, eps: f32) -> f32 {
     rounded := math.round(value)
     if math.abs(rounded - value) <= eps {
         return rounded

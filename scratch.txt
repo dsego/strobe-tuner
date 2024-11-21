@@ -1,6 +1,26 @@
 
 
+
+
+441Hz and 882Hz should spin at the same rate, but one spins at 2Hz, the other at 1Hz (assuming one period displayed on the wheel)
+
+both are difference of 3.9 cents... can it spin at the same rate?
+
+
+it needs to be a flip flop divider? basically the 2x frequency does full circle,
+flips the slower freq to +2pi until it hits full circle again and resets to 0
+
+
 --------------
+
+
+TODO !!!!
+
+
+-  Adjust phase or phase correction to get the same overall sensitivity across the frequency range
+.... meaning, the spinning speed should depend on cents difference and not frequency...
+eg 440 -> 55 or something like that
+
 
 
 icon idea - strobe + tuning fork (ala xcode hammer icon)
@@ -21,9 +41,10 @@ freq_measurements[0] = pitch_info.detected_freq
 
 MVP:
 - 2 modes
-    - standard - tracks same pitch at different sensitivities
-    - harmonic - tracks pitch & harmonics
-    - fade out strobe if the cents offset is too jarring
+    - standard (vernier?) - tracks same pitch at different sensitivities
+    - harmonic - tracks pitch & overtones
+    - attenuate/fade out strobe when it moves too fast
+
 - note auto detect on/off - if off can cycle through notes for the chosen instrument
 - Note display
 - flat/sharp indicator

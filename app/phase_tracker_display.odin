@@ -29,7 +29,7 @@ PhaseTrackerDisplay :: struct {
     curvature_radius_loc: i32,
     band_height_loc:      i32,
     err_cents_loc:        i32,
-    freq_multiplier_loc: i32,
+    freq_multiplier_loc:  i32,
 }
 
 
@@ -71,15 +71,14 @@ destroy_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay) {
 // TODO: param to define what style of strobe to display (strobe_style) - curved track or full wheels
 draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shared.PhaseTracker) {
 
-    rl.DrawTextEx(font, "phase", {160, 30}, 14, 0, rl.GOLD)
-
     // Full circles
     curvature_radius: f32 = 100.0
     band_height: f32 = 26.0
-    period_count: f32 = 4.0 // how many strobe periods to fit in a circle
+    // period_count: f32 = 4.0 // how many strobe periods to fit in a circle
+    period_count: f32 = 1.0 // how many strobe periods to fit in a circle
 
     // Curved tracks
-    if true {
+    if false {
         curvature_radius = 1000.0
         band_height = 66.0
         period_count = 24.0
@@ -103,9 +102,6 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
         rl.ShaderUniformDataType.FLOAT,
     )
 
-    // x: f32 = 1.0
-    // y: f32 = 1.0
-
     // Draw circular bands from the center outwards, so the lowest frequency is the bottom one
     for &band, band_idx in phase_info.bands {
 
@@ -120,8 +116,6 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
             f32(self.texture_height),
         }
 
-        err_cents :=
-            shared.freq_to_cents(band.estimated_freq_hz) - shared.freq_to_cents(band.freq_hz)
 
 
         // If note is within 10 cents color the strobe green
@@ -223,7 +217,7 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
         rl.SetShaderValue(
             self.shader,
             self.err_cents_loc,
-            &err_cents,
+            &band.err_cents,
             rl.ShaderUniformDataType.FLOAT,
         )
 
@@ -232,6 +226,16 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
             rl.DrawTextureV(self.texture, {rect.x, rect.y}, rl.WHITE)
             rl.EndShaderMode()
         }
+
+
+        rl.DrawTextEx(
+           font,
+           fmt.ctprintf("%+.2f", band.phase),
+           {570, 100 + f32(band_height) * f32(order)},
+           18,
+           0,
+           rl.GOLD,
+       )
 
         // rl.DrawTextEx(
         //     font,

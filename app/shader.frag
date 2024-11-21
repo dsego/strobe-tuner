@@ -14,13 +14,18 @@ uniform vec4 boundingRect;
 uniform float curvatureRadius;
 uniform vec3 colorA;
 uniform vec3 colorB;
+
+// TODO: deprecate
 uniform float phaseCorrection;
+
 uniform float timeStretch;
 uniform float phase;
 uniform float amp;
 uniform float normFreq;
 uniform float bandHeight;
 uniform float errCents;
+
+// TODO: deprecate
 uniform float freqMultiplier;
 
 
@@ -34,7 +39,9 @@ float generateSignal(
     float freqMultiplier
 ) {
     time = time * timeStretch;
-    float value = amplitude * sin(freqMultiplier * (freq * TAU * (time - phaseCorrection) + phase));
+    // float value = amplitude * sin(freqMultiplier * (freq * TAU * (time - phaseCorrection) + phase));
+    float value = amplitude * sin(freq * TAU * time + phase) ;
+    // float value = amplitude * sin(freq * TAU * time -   freq * TAU * phaseCorrection + phase) ;
 
     // convert from range [-1, 1] to [0, 1]
     value = 0.5 * value + 0.5;
