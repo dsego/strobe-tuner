@@ -4,23 +4,32 @@
 
 441Hz and 882Hz should spin at the same rate, but one spins at 2Hz, the other at 1Hz (assuming one period displayed on the wheel)
 
-both are difference of 3.9 cents... can it spin at the same rate?
+both are difference of 3.9 cents... can it spin at the same rate? - YES
 
 
-it needs to be a flip flop divider? basically the 2x frequency does full circle,
-flips the slower freq to +2pi until it hits full circle again and resets to 0
+
+define the standard spin rate for cents difference, eg
+
+strobe 1:   tolerance 5 cents
+strobe 2:   tolerance 1 cent
+strobe 3:   tolerance 0.1 cents?
+
+
+
+25.7 -> 5x spin
+55  -> 4x spin
+110 -> 1x spin
+220 -> 1/2x spin
+440 -> 1/4x spin
+880    1/8x
+1760   1/16x
+3520   1/32x
+7040   1/64
+
+
 
 
 --------------
-
-
-TODO !!!!
-
-
--  Adjust phase or phase correction to get the same overall sensitivity across the frequency range
-.... meaning, the spinning speed should depend on cents difference and not frequency...
-eg 440 -> 55 or something like that
-
 
 
 icon idea - strobe + tuning fork (ala xcode hammer icon)

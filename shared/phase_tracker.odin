@@ -179,14 +179,16 @@ scale_down_phase :: proc(self: ^StrobeBand) {
 
     phase_diff := unwrapped_phase - self.prev_unwrapped_phase
 
-    // Need to handle two rotation directions!
+    // Handle the jump from 2π to 0 or 0 to 2π
+    // (need to handle both rotation directions)
     if phase_diff > math.PI do phase_diff -= math.TAU
     if phase_diff < -math.PI do phase_diff += math.TAU
 
-
-    // output is scaled down by factor
+    // Output is scaled down by factor
     self.scaled_phase += phase_diff / f32(self.downscale_factor)
 
+    // Technically not necessary to unwrap the phase,
+    // Question: is there a benefit to doing so?
     for self.scaled_phase < 0.0 do self.scaled_phase += math.TAU
     for self.scaled_phase > math.PI do self.scaled_phase -= math.TAU
 
