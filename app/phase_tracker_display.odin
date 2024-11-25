@@ -205,7 +205,7 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
             rl.ShaderUniformDataType.FLOAT,
         )
 
-        rl.SetShaderValue(self.shader, self.phase_loc, &band.phase, rl.ShaderUniformDataType.FLOAT)
+        rl.SetShaderValue(self.shader, self.phase_loc, &band.scaled_phase, rl.ShaderUniformDataType.FLOAT)
         rl.SetShaderValue(self.shader, self.amp_loc, &band.amp, rl.ShaderUniformDataType.FLOAT)
         rl.SetShaderValue(
             self.shader,
@@ -228,14 +228,14 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
         }
 
 
-        rl.DrawTextEx(
-           font,
-           fmt.ctprintf("%+.2f", band.phase),
-           {570, 100 + f32(band_height) * f32(order)},
-           18,
-           0,
-           rl.GOLD,
-       )
+       //  rl.DrawTextEx(
+       //     font,
+       //     fmt.ctprintf("%+.2f", band.phase),
+       //     {570, 100 + f32(band_height) * f32(order)},
+       //     18,
+       //     0,
+       //     rl.GOLD,
+       // )
 
         // rl.DrawTextEx(
         //     font,

@@ -28,20 +28,25 @@ StrobeMode :: enum {
 
 
 StrobeBand :: struct {
-    freq_hz:           f32,
-    norm_freq:         f32,
-    freq_diff_hz:      f32,
-    estimated_freq_hz: f32,
-    dft:               SingleFreqDFT,
-    time_stretch:      f32,
-    freq_multiplier:   f32, // to get more or less stripes in the pattern
-    phase:             f32,
-    amp:               f32,
-    err_cents:         f32,
+    freq_hz:              f32,
+    norm_freq:            f32,
+    freq_diff_hz:         f32,
+    estimated_freq_hz:    f32,
+    dft:                  SingleFreqDFT,
+    time_stretch:         f32,
+    freq_multiplier:      f32, // to get more or less stripes in the pattern
+    phase:                f32,
+    amp:                  f32,
+    err_cents:            f32,
 
-    // Schmitt trigger thresholds to avoid flickering
-    cents_err_low:     f32,
-    cents_err_high:    f32,
+    // Schmitt trigger thresholds to avoid flickering ?
+    cents_err_low:        f32,
+    cents_err_high:       f32,
+    prev_unwrapped_phase: f32,
+    unwrapped_phase:      f32,
+    scaled_phase:         f32,
+    downscale_factor:     int,
+    phase_iterator:       int,
 }
 
 PhaseTracker :: struct {
@@ -104,7 +109,10 @@ set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
     multiplier: f32 = 1.0
     self.base_freq_hz = base_freq_hz
 
+
     for &band, i in self.bands {
+        band.phase_iterator = 0
+        band.downscale_factor = 4
         if self.mode == .HARMONIC_MODE {
             band.freq_hz = f32(multiplier) * base_freq_hz
             band.cents_err_low = 40.0
@@ -121,7 +129,6 @@ set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
         multiplier *= 2
     }
 }
-
 
 phase_tracker_audio_callback :: proc(ctx: ^AudioCaptureNode, input: []f32) {
     self := container_of(ctx, PhaseTracker, "node")
@@ -162,6 +169,30 @@ StrobeInfo :: struct {
     amp:               f32,
 }
 
+sign: f32 = 1
+scale_down_phase :: proc(self: ^StrobeBand) {
+
+    // Unwrap phase to range [0, 2π]
+    unwrapped_phase := self.phase
+    for unwrapped_phase < 0.0 do unwrapped_phase += math.TAU
+    for unwrapped_phase > math.PI do unwrapped_phase -= math.TAU
+
+    phase_diff := unwrapped_phase - self.prev_unwrapped_phase
+
+    // Need to handle two rotation directions!
+    if phase_diff > math.PI do phase_diff -= math.TAU
+    if phase_diff < -math.PI do phase_diff += math.TAU
+
+
+    // output is scaled down by factor
+    self.scaled_phase += phase_diff / f32(self.downscale_factor)
+
+    for self.scaled_phase < 0.0 do self.scaled_phase += math.TAU
+    for self.scaled_phase > math.PI do self.scaled_phase -= math.TAU
+
+    self.prev_unwrapped_phase = unwrapped_phase
+}
+
 run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
 
     phase_info := PhaseInfo {
@@ -183,15 +214,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
         read_ringbuffer(&self.ringbuffer, self.sample_buffer[offset:], u32(available))
     }
 
-    // TODO
-    // TODO
-    // TODO
-    // The problem with slowing down the spin is that I hit a situation where
-    //  the phase appears to quickly flicker in 1/2 periods and the strobe effect doesn't spin smoothly
-    // How to slow down the spin without increasing the number of stripes that appear?
-    slowdown_factor: f32 = 1.0
     sensitivity: f32 = 1.0
-
 
     // phase runaway compensation
     self.time_reference += f32(available)
@@ -211,18 +234,24 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
         phase := math.atan2(sin, cos) // [-π, π]
         amp := magnitude(dft)
 
-        // Phase correction
+        // Phase correction, this can move the phase outside of the -π, π range
         phase = phase - self.phase_correction * math.TAU * normalized_freq
 
-        // Unwrap phase
-        for phase >= math.PI do phase -= math.TAU
-        for phase <= -math.PI do phase += math.TAU
+        // Unwrap back to -π to π range
+        for phase > math.PI do phase -= math.TAU
+        for phase < -math.PI do phase += math.TAU
 
         // Calculate estimated frequency
         phase_diff := phase - band.phase
-        band.phase = phase
-        // band.phase =+ math.PI * 0.5// adding π/2 aligns phases to get the stripes lined up
 
+        band.phase = phase
+
+        if band_idx == 0 {
+            scale_down_phase(&band)
+            // fmt.println(band.phase, band.scaled_phase, band.phase_iterator)
+        } else do band.scaled_phase = band.phase
+
+        // band.phase =+ math.PI * 0.5// adding π/2 aligns phases to get the stripes lined up
 
         time_delta := f32(available) / f32(self.samplerate)
         band.freq_diff_hz = -(phase_diff / time_delta) / math.TAU
@@ -257,7 +286,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
             // band.norm_freq = (self.base_freq_hz / self.samplerate) * sensitivity
             // band.time_stretch /= sensitivity
             // band.freq_multiplier *= sensitivity
-        //     sensitivity *= 2.0
+            //     sensitivity *= 2.0
         }
 
 
