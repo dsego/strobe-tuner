@@ -1,10 +1,10 @@
 /* ------------------------------------------------------------------------------------------------
 
 
-        Phase tracker
-        - Generates a reference signal and detects the phase difference between the reference
-            and target. The reference phase is calculated in the drawing method and synthesizes a strobe
-            based on the detected phase difference.
+    Phase tracker
+    - Generates a reference signal and detects the phase difference between the reference
+        and target. The reference phase is calculated in the drawing method and synthesizes a strobe
+        based on the detected phase difference.
 
 
  -------------------------------------------------------------------------------------------------*/
