@@ -21,6 +21,7 @@ PhaseTrackerDisplay :: struct {
     color_a_loc:          i32,
     color_b_loc:          i32,
     time_stretch_loc:     i32,
+    period_count_loc:     i32,
     phase_correction_loc: i32,
     phase_loc:            i32,
     amp_loc:              i32,
@@ -58,7 +59,7 @@ init_phase_tracker_display :: proc() -> (self: PhaseTrackerDisplay) {
     self.curvature_radius_loc = rl.GetShaderLocation(self.shader, "curvatureRadius")
     self.band_height_loc = rl.GetShaderLocation(self.shader, "bandHeight")
     self.err_cents_loc = rl.GetShaderLocation(self.shader, "errCents")
-    self.freq_multiplier_loc = rl.GetShaderLocation(self.shader, "freqMultiplier")
+    self.period_count_loc = rl.GetShaderLocation(self.shader, "periodCount")
 
     return
 }
@@ -75,10 +76,9 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
     curvature_radius: f32 = 100.0
     band_height: f32 = 26.0
     period_count: f32 = 4.0 // how many strobe periods to fit in a circle
-    // period_count: f32 = 1.0 // how many strobe periods to fit in a circle
 
     // Curved tracks
-    if false {
+    if true {
         curvature_radius = 1000.0
         band_height = 66.0
         period_count = 24.0
@@ -187,8 +187,15 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
             rl.ShaderUniformDataType.VEC4,
         )
 
-        time_stretch := band.time_stretch * period_count
+        time_stretch := band.time_stretch
 
+
+        rl.SetShaderValue(
+            self.shader,
+            self.period_count_loc,
+            &period_count,
+            rl.ShaderUniformDataType.FLOAT,
+        )
 
         rl.SetShaderValue(
             self.shader,
@@ -199,12 +206,10 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
 
         rl.SetShaderValue(
             self.shader,
-            self.freq_multiplier_loc,
-            &band.freq_multiplier,
+            self.phase_loc,
+            &band.scaled_phase,
             rl.ShaderUniformDataType.FLOAT,
         )
-
-        rl.SetShaderValue(self.shader, self.phase_loc, &band.scaled_phase, rl.ShaderUniformDataType.FLOAT)
         rl.SetShaderValue(self.shader, self.amp_loc, &band.amp, rl.ShaderUniformDataType.FLOAT)
         rl.SetShaderValue(
             self.shader,
@@ -227,14 +232,14 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
         }
 
         period_count *= 2.0
-       //  rl.DrawTextEx(
-       //     font,
-       //     fmt.ctprintf("%+.2f", band.phase),
-       //     {570, 100 + f32(band_height) * f32(order)},
-       //     18,
-       //     0,
-       //     rl.GOLD,
-       // )
+        //  rl.DrawTextEx(
+        //     font,
+        //     fmt.ctprintf("%+.2f", band.phase),
+        //     {570, 100 + f32(band_height) * f32(order)},
+        //     18,
+        //     0,
+        //     rl.GOLD,
+        // )
 
         // rl.DrawTextEx(
         //     font,

@@ -24,9 +24,7 @@ uniform float amp;
 uniform float normFreq;
 uniform float bandHeight;
 uniform float errCents;
-
-// TODO: deprecate
-uniform float freqMultiplier;
+uniform float periodCount;
 
 
 float generateSignal(
@@ -36,12 +34,10 @@ float generateSignal(
     float time,
     float timeStretch,
     float phaseCorrection,
-    float freqMultiplier
+    float periodCount
 ) {
     time = time * timeStretch;
-    // float value = amplitude * sin(freqMultiplier * (freq * TAU * (time - phaseCorrection) + phase));
-    float value = amplitude * sin(freq * TAU * time + phase) ;
-    // float value = amplitude * sin(freq * TAU * time -   freq * TAU * phaseCorrection + phase) ;
+    float value = amplitude * sin(periodCount * (freq * TAU * time + phase));
 
     // convert from range [-1, 1] to [0, 1]
     value = 0.5 * value + 0.5;
@@ -116,7 +112,7 @@ void main()
         time,
         timeStretch,
         phaseCorrection,
-        freqMultiplier
+        periodCount
     );
 
 

@@ -111,7 +111,7 @@ set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
     self.base_freq_hz = base_freq_hz
 
     // TODO: determined by base freq
-    sensitivity: f32 = 1.0
+    sensitivity: f32 = 0.05
 
     for &band, i in self.bands {
         if self.mode == .HARMONIC_MODE {
@@ -130,7 +130,7 @@ set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
         band.norm_freq = band.freq_hz / self.samplerate
         set_dft_freq(&band.dft, band.norm_freq)
         multiplier *= 2
-        sensitivity *= 4
+        sensitivity *= 1.5
     }
 }
 
