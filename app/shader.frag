@@ -46,7 +46,7 @@ float generateSignal(
     return value;
 }
 
-float drawDonut (
+float drawCurvedTrack (
     vec2 size,
     float thickness,
     float curvatureRadius,
@@ -92,7 +92,7 @@ void main()
 
 
     // Color the pixel at position based on whether it sits in the donut shape
-    float donut = drawDonut(size, thickness, curvatureRadius, feathering, distance);
+    float curvedTrack = drawCurvedTrack(size, thickness, curvatureRadius, feathering, distance);
 
 
     // Color in the generated strobe signal
@@ -120,5 +120,5 @@ void main()
     vec3 rgb = mix(colorA, colorB, value);
 
 
-    finalColor = vec4(rgb, donut);
+    finalColor = vec4(rgb, curvedTrack);
 }
