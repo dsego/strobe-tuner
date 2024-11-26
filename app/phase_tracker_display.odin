@@ -74,8 +74,8 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
     // Full circles
     curvature_radius: f32 = 100.0
     band_height: f32 = 26.0
-    // period_count: f32 = 4.0 // how many strobe periods to fit in a circle
-    period_count: f32 = 1.0 // how many strobe periods to fit in a circle
+    period_count: f32 = 4.0 // how many strobe periods to fit in a circle
+    // period_count: f32 = 1.0 // how many strobe periods to fit in a circle
 
     // Curved tracks
     if false {
@@ -115,7 +115,6 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
             f32(self.texture_width),
             f32(self.texture_height),
         }
-
 
 
         // If note is within 10 cents color the strobe green
@@ -227,7 +226,7 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
             rl.EndShaderMode()
         }
 
-
+        period_count *= 2.0
        //  rl.DrawTextEx(
        //     font,
        //     fmt.ctprintf("%+.2f", band.phase),

@@ -110,23 +110,27 @@ set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
     multiplier: f32 = 1.0
     self.base_freq_hz = base_freq_hz
 
+    // TODO: determined by base freq
+    sensitivity: f32 = 1.0
 
     for &band, i in self.bands {
-        band.sensitivity = 0.01
         if self.mode == .HARMONIC_MODE {
             band.freq_hz = f32(multiplier) * base_freq_hz
             band.cents_err_low = 40.0
             band.cents_err_high = 50.0
+            band.sensitivity = sensitivity
         }
         if self.mode == .VERNIER_MODE {
             band.freq_hz = base_freq_hz
             band.cents_err_low = 40.0 / multiplier
             band.cents_err_high = 50.0 / multiplier
+            band.sensitivity = sensitivity
         }
 
         band.norm_freq = band.freq_hz / self.samplerate
         set_dft_freq(&band.dft, band.norm_freq)
         multiplier *= 2
+        sensitivity *= 4
     }
 }
 
@@ -246,11 +250,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
         phase_diff := phase - band.phase
 
         band.phase = phase
-
-        // TODO: generate sensitivity for each strobe
-        if band_idx == 0 {
-            scale_phase(&band)
-        } else do band.scaled_phase = band.phase
+        scale_phase(&band)
 
         // band.phase =+ math.PI * 0.5// adding π/2 aligns phases to get the stripes lined up
 

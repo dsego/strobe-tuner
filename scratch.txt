@@ -1,5 +1,9 @@
 
 
+
+
+
+
 shader render to canvas ?
 new shared for the dot matrix effect, or stripes??
 
@@ -13,16 +17,16 @@ strobe 3:   tolerance 0.1 cents?
 
 
 
-25.7 -> 5x spin
-55  -> 4x spin
-110 -> 1x spin
-220 -> 1/2x spin
-440 -> 1/4x spin
-880    1/8x
-1760   1/16x
-3520   1/32x
-7040   1/64
 
+sensitivity = ref freq / target freq
+
+eg 110 / 440 = 0.25  slowdown by a factor of 4
+   110 / 659,2551 ~= 0.167
+   110 / 55 = 2    speed up x2
+
+
+figure out the reference frequency where sensitivity = 1.0
+check 3 strobes, set to freq 5 cents, 1 cent, 0.1 cent
 
 
 
