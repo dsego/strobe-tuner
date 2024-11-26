@@ -1,10 +1,7 @@
 
 
-
-
-441Hz and 882Hz should spin at the same rate, but one spins at 2Hz, the other at 1Hz (assuming one period displayed on the wheel)
-
-both are difference of 3.9 cents... can it spin at the same rate? - YES
+shader render to canvas ?
+new shared for the dot matrix effect, or stripes??
 
 
 
@@ -57,6 +54,13 @@ MVP:
 - note auto detect on/off - if off can cycle through notes for the chosen instrument
 - Note display
 - flat/sharp indicator
+
+- note line with notes that match the instrument highlighted, easy to spot the pitch area at a glance
+    eg for guitar tuning the low E string
+    --------------------------------
+      B2   C2  <|>  D2   [E2]   F2
+    --------------------------------
+
 - cents error display
 - settings
     - pitch standard - 440hz

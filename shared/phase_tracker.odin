@@ -45,8 +45,9 @@ StrobeBand :: struct {
     prev_unwrapped_phase: f32,
     unwrapped_phase:      f32,
     scaled_phase:         f32,
-    downscale_factor:     int,
-    phase_iterator:       int,
+
+    // a number < 1 will slow down the strobe and > 1 will increase the strobe spinning rate
+    sensitivity:          f32,
 }
 
 PhaseTracker :: struct {
@@ -111,8 +112,7 @@ set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
 
 
     for &band, i in self.bands {
-        band.phase_iterator = 0
-        band.downscale_factor = 4
+        band.sensitivity = 0.01
         if self.mode == .HARMONIC_MODE {
             band.freq_hz = f32(multiplier) * base_freq_hz
             band.cents_err_low = 40.0
@@ -169,8 +169,7 @@ StrobeInfo :: struct {
     amp:               f32,
 }
 
-sign: f32 = 1
-scale_down_phase :: proc(self: ^StrobeBand) {
+scale_phase :: proc(self: ^StrobeBand) {
 
     // Unwrap phase to range [0, 2π]
     unwrapped_phase := self.phase
@@ -185,7 +184,7 @@ scale_down_phase :: proc(self: ^StrobeBand) {
     if phase_diff < -math.PI do phase_diff += math.TAU
 
     // Output is scaled down by factor
-    self.scaled_phase += phase_diff / f32(self.downscale_factor)
+    self.scaled_phase += phase_diff * self.sensitivity
 
     // Technically not necessary to unwrap the phase,
     // Question: is there a benefit to doing so?
@@ -248,9 +247,9 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
 
         band.phase = phase
 
+        // TODO: generate sensitivity for each strobe
         if band_idx == 0 {
-            scale_down_phase(&band)
-            // fmt.println(band.phase, band.scaled_phase, band.phase_iterator)
+            scale_phase(&band)
         } else do band.scaled_phase = band.phase
 
         // band.phase =+ math.PI * 0.5// adding π/2 aligns phases to get the stripes lined up
@@ -284,11 +283,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
         // band.amp *= attenuation
 
         if self.mode == .VERNIER_MODE {
-            // band.phase *= sensitivity
-            // band.norm_freq = (self.base_freq_hz / self.samplerate) * sensitivity
-            // band.time_stretch /= sensitivity
-            // band.freq_multiplier *= sensitivity
-            //     sensitivity *= 2.0
+
         }
 
 
