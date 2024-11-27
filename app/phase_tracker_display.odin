@@ -133,7 +133,7 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
         // color_hsv_a := rl.ColorToHSV(color_a)
         // color_hsv_b := rl.ColorToHSV(color_b)
 
-        // // Show accented color if strobe is in tune, ie within 10 cents of the target frequency
+        // Show accented color if strobe is in tune, ie within 10 cents of the target frequency
 
         // color_hsv_accent_a := rl.ColorToHSV(rl.Color{199, 228, 74, 255})
         // color_hsv_accent_b := rl.ColorToHSV(rl.Color{43, 84, 33, 255})
@@ -231,7 +231,9 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
             rl.EndShaderMode()
         }
 
-        period_count *= 2.0
+        if phase_info.mode == .VERNIER_MODE {
+            period_count *= 2.0
+        }
         //  rl.DrawTextEx(
         //     font,
         //     fmt.ctprintf("%+.2f", band.phase),
@@ -249,13 +251,13 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
         //     0,
         //     rl.GOLD,
         // )
-        // rl.DrawTextEx(
-        //     font,
-        //     fmt.ctprintf("%+.1fc", err_cents),
-        //     {570, 120 + f32(band_height) * f32(order)},
-        //     18,
-        //     0,
-        //     rl.GREEN,
-        // )
+        rl.DrawTextEx(
+            font,
+            fmt.ctprintf("%+.1fc", band.err_cents),
+            {570, 120 + f32(band_height) * f32(order)},
+            18,
+            0,
+            rl.GREEN,
+        )
     }
 }

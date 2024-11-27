@@ -37,9 +37,8 @@ StrobeBand :: struct {
     freq_multiplier:      f32, // to get more or less stripes in the pattern
     phase:                f32,
     amp:                  f32,
+    phase_diff: f32,
     err_cents:            f32,
-
-    // Schmitt trigger thresholds to avoid flickering ?
     cents_err_low:        f32,
     cents_err_high:       f32,
     prev_unwrapped_phase: f32,
@@ -188,6 +187,8 @@ scale_phase :: proc(self: ^StrobeBand) {
     if phase_diff > math.PI do phase_diff -= math.TAU
     if phase_diff < -math.PI do phase_diff += math.TAU
 
+    self.phase_diff = phase_diff
+
     // Output is scaled down by factor
     self.scaled_phase += phase_diff * self.sensitivity
 
@@ -243,20 +244,20 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
         // Phase correction, this can move the phase outside of the -π, π range
         phase = phase - self.phase_correction * math.TAU * normalized_freq
 
+        // Adding π/2 aligns phases to get the stripes lined up ???
+        // FIXME: This used to work before the phase scaling was added
+        // phase += math.PI * 0.5
+
         // Unwrap back to -π to π range
         for phase > math.PI do phase -= math.TAU
         for phase < -math.PI do phase += math.TAU
 
         // Calculate estimated frequency
-        phase_diff := phase - band.phase
-
         band.phase = phase
         scale_phase(&band)
 
-        // band.phase =+ math.PI * 0.5// adding π/2 aligns phases to get the stripes lined up
-
         time_delta := f32(available) / f32(self.samplerate)
-        band.freq_diff_hz = -(phase_diff / time_delta) / math.TAU
+        band.freq_diff_hz = -(band.phase_diff / time_delta) / math.TAU
         band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
         band.err_cents = freq_to_cents(band.estimated_freq_hz) - freq_to_cents(band.freq_hz)
 
@@ -265,28 +266,16 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
         band.amp = amp
         band.freq_multiplier = 1.0
 
-        edge1: f32 = 40.0
-        edge2: f32 = 20.0
-        if band_idx == 1 {
-            edge1 = 25.0
-            edge2 = 15.0
-        }
-
-        if band_idx == 2 {
-            edge1 = 5.0
-            edge2 = 1.0
-        }
 
         // Fade out track that is spinning too fast
-        // attenuation :f32 = linalg.smootherstep(f32(edge1), edge2, math.abs(band.err_cents))
-        attenuation: f32 = 1.0
-
-        // band.amp *= attenuation
-
-        if self.mode == .VERNIER_MODE {
-
-        }
-
+        attenuation: f32 = linalg.smootherstep(
+            band.cents_err_high,
+            band.cents_err_low,
+            math.abs(band.err_cents),
+        )
+        // fmt.println(attenuation, band.cents_err_high, band.cents_err_low, band.err_cents)
+        // attenuation: f32 = 1.0
+        band.amp *= attenuation
 
         phase_info.strobes[band_idx] = {
             freq_hz           = band.freq_hz,

@@ -69,6 +69,7 @@ main :: proc() {
         SAMPLERATE,
         STROBE_COUNT,
         .VERNIER_MODE,
+        // .HARMONIC_MODE,
     )
     defer shared.destroy_phase_tracker(phase_tracker)
 
