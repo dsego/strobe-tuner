@@ -114,17 +114,16 @@ set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
     sensitivity: f32 = 0.01 * pitch_standard / base_freq_hz
 
     for &band, i in self.bands {
+        band.cents_err_low = 30.0
+        band.cents_err_high = 50.0
+        band.sensitivity = sensitivity
         if self.mode == .HARMONIC_MODE {
             band.freq_hz = f32(multiplier) * base_freq_hz
-            band.cents_err_low = 40.0
-            band.cents_err_high = 50.0
-            band.sensitivity = sensitivity
         }
         if self.mode == .VERNIER_MODE {
             band.freq_hz = base_freq_hz
-            band.cents_err_low = 40.0 / multiplier
-            band.cents_err_high = 50.0 / multiplier
-            band.sensitivity = sensitivity
+            band.cents_err_low /= multiplier
+            band.cents_err_high /= multiplier
         }
 
         band.norm_freq = band.freq_hz / self.samplerate

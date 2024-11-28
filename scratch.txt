@@ -9,27 +9,6 @@ new shared for the dot matrix effect, or stripes??
 
 
 
-define the standard spin rate for cents difference, eg
-
-strobe 1:   tolerance 5 cents
-strobe 2:   tolerance 1 cent
-strobe 3:   tolerance 0.1 cents?
-
-
-
-
-sensitivity = ref freq / target freq
-
-eg 110 / 440 = 0.25  slowdown by a factor of 4
-   110 / 659,2551 ~= 0.167
-   110 / 55 = 2    speed up x2
-
-
-figure out the reference frequency where sensitivity = 1.0
-check 3 strobes, set to freq 5 cents, 1 cent, 0.1 cent
-
-
-
 --------------
 
 
