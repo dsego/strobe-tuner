@@ -157,12 +157,11 @@ main :: proc() {
         } else {
             freq_ewma = 0.0
         }
+        shared.run_dft_analysis(phase_tracker)
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
         {
-            shared.run_dft_analysis(phase_tracker)
-
             rl.ClearBackground(rl.BLACK)
             draw_phase_tracker_display(&phase_tracker_display, phase_tracker)
             // draw_note(note, {20, 20}, 96)

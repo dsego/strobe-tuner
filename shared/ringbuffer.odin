@@ -10,10 +10,7 @@ import pa_rb "../pa_ringbuffer"
 RingBuffer :: pa_rb.RingBuffer
 
 
-@(export)
-init_ringbuffer :: proc "c" (size: int) -> (RingBuffer, []u8) {
-    context = runtime.default_context()
-
+init_ringbuffer :: proc (size: int) -> (RingBuffer, []u8) {
     rb := RingBuffer{}
     rb_data := make([]u8, size * size_of(f32))
     pa_rb.InitializeRingBuffer(&rb, i32(size_of(f32)), i32(size), raw_data(rb_data))
@@ -21,38 +18,30 @@ init_ringbuffer :: proc "c" (size: int) -> (RingBuffer, []u8) {
 }
 
 
-@(export)
-advance_ringbuffer_read :: proc "c" (rb_ptr: ^RingBuffer, frames_to_skip: i32) -> i32 {
+advance_ringbuffer_read :: proc (rb_ptr: ^RingBuffer, frames_to_skip: i32) -> i32 {
     return pa_rb.AdvanceRingBufferReadIndex(rb_ptr, frames_to_skip)
 }
 
 
-@(export)
-advance_ringbuffer_write :: proc "c" (rb_ptr: ^RingBuffer, frames_to_skip: i32) -> i32 {
+advance_ringbuffer_write :: proc (rb_ptr: ^RingBuffer, frames_to_skip: i32) -> i32 {
     return pa_rb.AdvanceRingBufferWriteIndex(rb_ptr, frames_to_skip)
 }
 
-@(export)
-frames_available_in_ringbuffer :: proc "c" (rb_ptr: ^RingBuffer) -> i32 {
+frames_available_in_ringbuffer :: proc (rb_ptr: ^RingBuffer) -> i32 {
     return pa_rb.GetRingBufferReadAvailable(rb_ptr)
 }
 
 
-@(export)
-flush_ringbuffer :: proc "c" (rb_ptr: ^RingBuffer) {
+flush_ringbuffer :: proc (rb_ptr: ^RingBuffer) {
     pa_rb.FlushRingBuffer(rb_ptr)
 }
 
-@(export)
-write_to_ringbuffer :: proc "c" (rb_ptr: ^RingBuffer, input: []f32) {
+write_to_ringbuffer :: proc (rb_ptr: ^RingBuffer, input: []f32) {
     pa_rb.WriteRingBuffer(rb_ptr, raw_data(input), i32(len(input)))
 }
 
 
-@(export)
-read_ringbuffer :: proc "c" (rb_ptr: ^RingBuffer, samples: []f32, frame_count: u32) -> u32 {
-    context = runtime.default_context()
-
+read_ringbuffer :: proc (rb_ptr: ^RingBuffer, samples: []f32, frame_count: u32) -> u32 {
     data_ptr: rawptr
     total_frames_read: u32 = 0
 
@@ -65,8 +54,7 @@ read_ringbuffer :: proc "c" (rb_ptr: ^RingBuffer, samples: []f32, frame_count: u
     return u32(num_read)
 }
 
-@(export)
-get_ringbuffer_write_regions :: proc "c" (
+get_ringbuffer_write_regions :: proc (
     rb_ptr: ^RingBuffer,
     frame_count: int,
 ) -> (
@@ -74,7 +62,6 @@ get_ringbuffer_write_regions :: proc "c" (
     []f32,
     int,
 ) {
-    // context = runtime.default_context()
 
     // ringbuffer write regions
     region1: rawptr
@@ -100,18 +87,3 @@ get_ringbuffer_write_regions :: proc "c" (
 
     return out1, out2, int(num_written)
 }
-
-
-// read_interleaved_ringbuffer :: proc(
-//     rb_ptr: ^RingBuffer,
-//     samples: []InterleavedSamples,
-//     element_count: u32,
-// ) -> u32 {
-//     data_ptr : rawptr
-//     total_frames_read : u32 = 0
-
-//     assert(len(samples) >= int(element_count))
-
-//     num_read := pa_rb.ReadRingBuffer(rb_ptr, raw_data(samples), i32(element_count))
-//     return u32(num_read)
-// }

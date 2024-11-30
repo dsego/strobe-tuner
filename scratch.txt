@@ -1,18 +1,5 @@
 
 
-TODO: apply smoothing to detected phase ?
-
-
-
-- ringbuffer in AudioCaptureNode
-
-- one buffer for capturing audio FFT ???
-    -> run NSDF autocorrelation
-    -> apply filter etc
-    -> inverse FFT
-    -> run DFT analysis to produce the strobe
-
-
 
 shader render to canvas ?
 new shared for the dot matrix effect, or stripes??

@@ -70,7 +70,7 @@ init_phase_tracker :: proc(
     mode: StrobeMode,
 ) -> ^PhaseTracker {
     self := new(PhaseTracker)
-    self.window_size = 4096
+    self.window_size = 8192
     assert(band_count <= MAX_BANDS)
 
     init_audio_capture_node(self, "phase-tracker")
@@ -101,6 +101,7 @@ destroy_phase_tracker :: proc(self: ^PhaseTracker) {
 
 set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
     flush_audio_capture_ringbuffer(self)
+
     self.phase_correction = 0.0
     multiplier: f32 = 1.0
     self.base_freq_hz = base_freq_hz
@@ -110,6 +111,7 @@ set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
     sensitivity: f32 = 0.01 * pitch_standard / base_freq_hz
 
     for &band, i in self.bands {
+        band.phase = 0.0
         // band.cents_err_low = 30.0
         // band.cents_err_high = 50.0
         band.sensitivity = sensitivity
@@ -156,6 +158,8 @@ scale_phase :: proc(self: ^StrobeBand) {
 
 run_dft_analysis :: proc(self: ^PhaseTracker) {
     available := audio_capture_read(self, self.sample_buffer)
+
+    if available <= 0 do return
 
     sensitivity: f32 = 1.0
 
