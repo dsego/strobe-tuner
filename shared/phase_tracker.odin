@@ -37,7 +37,7 @@ StrobeBand :: struct {
     freq_multiplier:      f32, // to get more or less stripes in the pattern
     phase:                f32,
     amp:                  f32,
-    phase_diff: f32,
+    phase_diff:           f32,
     err_cents:            f32,
     cents_err_low:        f32,
     cents_err_high:       f32,
@@ -54,8 +54,6 @@ PhaseTracker :: struct {
     base_freq_hz:     f32,
     sample_buffer:    []f32,
     window_size:      int,
-    ringbuffer:       RingBuffer,
-    ringbuffer_data:  []u8,
     phase_correction: f32,
     time_reference:   f32,
     bands:            [dynamic]StrobeBand,
@@ -75,9 +73,8 @@ init_phase_tracker :: proc(
     self.window_size = 4096
     assert(band_count <= MAX_BANDS)
 
-    rb, rb_data := init_ringbuffer(DEFAULT_RB_SIZE)
-    self.ringbuffer = rb
-    self.ringbuffer_data = rb_data
+    init_audio_capture_node(self, "phase-tracker")
+
     self.sample_buffer = make([]f32, self.window_size)
     self.mode = mode
     self.base_freq_hz = base_freq_hz
@@ -91,12 +88,11 @@ init_phase_tracker :: proc(
     set_phase_tracker_freq(self, base_freq_hz)
 
     self.samplerate = samplerate
-    self.stream_callback = phase_tracker_audio_callback
     return self
 }
 
 destroy_phase_tracker :: proc(self: ^PhaseTracker) {
-    delete(self.ringbuffer_data)
+    destroy_audio_capture_node(self)
     delete(self.sample_buffer)
     for &band in self.bands {
         destory_dft(&band.dft)
@@ -104,8 +100,8 @@ destroy_phase_tracker :: proc(self: ^PhaseTracker) {
 }
 
 set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
+    flush_audio_capture_ringbuffer(self)
     self.phase_correction = 0.0
-    flush_ringbuffer(&self.ringbuffer)
     multiplier: f32 = 1.0
     self.base_freq_hz = base_freq_hz
 
@@ -114,66 +110,25 @@ set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
     sensitivity: f32 = 0.01 * pitch_standard / base_freq_hz
 
     for &band, i in self.bands {
-        band.cents_err_low = 30.0
-        band.cents_err_high = 50.0
+        // band.cents_err_low = 30.0
+        // band.cents_err_high = 50.0
         band.sensitivity = sensitivity
         if self.mode == .HARMONIC_MODE {
             band.freq_hz = f32(multiplier) * base_freq_hz
+            multiplier *= 2
         }
         if self.mode == .VERNIER_MODE {
             band.freq_hz = base_freq_hz
-            band.cents_err_low /= multiplier
-            band.cents_err_high /= multiplier
+            // band.cents_err_low /= multiplier
+            // band.cents_err_high /= multiplier
+            sensitivity *= 2.0
         }
-
         band.norm_freq = band.freq_hz / self.samplerate
         set_dft_freq(&band.dft, band.norm_freq)
-        multiplier *= 2
-        sensitivity *= 2.0
     }
 }
 
-phase_tracker_audio_callback :: proc(ctx: ^AudioCaptureNode, input: []f32) {
-    self := container_of(ctx, PhaseTracker, "node")
-
-    // fmt.println("audio callback", len(input))
-
-    out1, out2, num_written := get_ringbuffer_write_regions(&self.ringbuffer, len(input))
-
-    if len(out1) > 0 do write_to_rb_region(out1, input[:len(out1)])
-    if len(out2) > 0 do write_to_rb_region(out2, input[len(out1):])
-
-    advance_ringbuffer_write(&self.ringbuffer, i32(num_written))
-}
-
-// TODO: filtering ??
-@(private = "file")
-write_to_rb_region :: proc(output: []f32, input: []f32) {
-    copy(output, input)
-}
-
-
-// Return this structure from C code,
-//  needs to be compatible and kept in sync with struct in StrobeTuner-Bridging-Header.h
-PhaseInfo :: struct {
-    phase_correction: f32,
-    time_reference:   f32,
-    band_count:       int,
-    strobes:          [MAX_BANDS]StrobeInfo,
-}
-
-StrobeInfo :: struct {
-    freq_hz:           f32,
-    norm_freq:         f32,
-    freq_diff_hz:      f32,
-    estimated_freq_hz: f32,
-    time_stretch:      f32,
-    phase:             f32,
-    amp:               f32,
-}
-
 scale_phase :: proc(self: ^StrobeBand) {
-
     // Unwrap phase to range [0, 2π]
     unwrapped_phase := self.phase
     for unwrapped_phase < 0.0 do unwrapped_phase += math.TAU
@@ -199,26 +154,8 @@ scale_phase :: proc(self: ^StrobeBand) {
     self.prev_unwrapped_phase = unwrapped_phase
 }
 
-run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
-
-    phase_info := PhaseInfo {
-        phase_correction = self.phase_correction,
-        time_reference   = self.time_reference,
-        band_count       = self.band_count,
-    }
-
-    available := frames_available_in_ringbuffer(&self.ringbuffer)
-
-    if available <= 0 do return nil
-
-
-    if int(available) >= self.window_size {
-        read_ringbuffer(&self.ringbuffer, self.sample_buffer[:], u32(self.window_size))
-    } else {
-        copy(self.sample_buffer, self.sample_buffer[available:self.window_size])
-        offset := self.window_size - int(available)
-        read_ringbuffer(&self.ringbuffer, self.sample_buffer[offset:], u32(available))
-    }
+run_dft_analysis :: proc(self: ^PhaseTracker) {
+    available := audio_capture_read(self, self.sample_buffer)
 
     sensitivity: f32 = 1.0
 
@@ -226,6 +163,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
     self.time_reference += f32(available)
     reference_interval := self.samplerate / self.bands[0].freq_hz
     num_periods := self.time_reference / reference_interval
+
     // Note, trunc and ceil seem to have the same effect here
     self.phase_correction = math.trunc(num_periods) * reference_interval - self.time_reference
 
@@ -275,17 +213,5 @@ run_dft_analysis :: proc(self: ^PhaseTracker) -> Maybe(PhaseInfo) {
         // fmt.println(attenuation, band.cents_err_high, band.cents_err_low, band.err_cents)
         // attenuation: f32 = 1.0
         band.amp *= attenuation
-
-        phase_info.strobes[band_idx] = {
-            freq_hz           = band.freq_hz,
-            norm_freq         = band.norm_freq,
-            freq_diff_hz      = band.freq_diff_hz,
-            estimated_freq_hz = band.estimated_freq_hz,
-            time_stretch      = band.time_stretch,
-            phase             = band.phase,
-            amp               = band.amp,
-        }
     }
-
-    return phase_info
 }

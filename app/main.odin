@@ -97,7 +97,6 @@ main :: proc() {
     // oe_filter_ptr := oef.Create(60, 1, 1, 1)
     // defer oef.Destroy(oe_filter_ptr)
 
-
     for !rl.WindowShouldClose() {
 
         // Pick next or previous ukulele string
@@ -109,7 +108,6 @@ main :: proc() {
             freqs_idx -= 1
             freq_changed_manually = true
         }
-
 
         // TODO: turn off pitch detector if rms is weak?
         pitch_info = shared.run_pitch_detection(&pitch_detector, pitch_info)
@@ -138,10 +136,6 @@ main :: proc() {
             if freqs_idx < 0 do freqs_idx += len(freqs) // wrap around
             target_freq = freqs[freqs_idx]
 
-            // TODO: remove
-            // target_freq = 100
-            // target_freq = 1975.533
-            // target_freq = 82.4068892282175
             shared.set_phase_tracker_freq(phase_tracker, target_freq)
             freq_changed_manually = false
         }
@@ -178,10 +172,6 @@ main :: proc() {
 
             // Detected note
             draw_note(detected_note, {20, 300}, 64, rl.GOLD, rl.GRAY, freq_estimation_active)
-
-
-            // fmt.println(smooth_freq, pitch_info.detected_freq)
-
 
             rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", freq_ewma), {400, 410}, 22, 0, rl.GOLD)
             rl.DrawTextEx(font, fmt.ctprintf("%+.1fc", cents_error), {400, 450}, 22, 0, rl.GREEN)
