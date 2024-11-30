@@ -1,5 +1,9 @@
 
 
+TODO: apply smoothing to detected phase ?
+
+
+
 - ringbuffer in AudioCaptureNode
 
 - one buffer for capturing audio FFT ???

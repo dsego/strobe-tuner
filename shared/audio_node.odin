@@ -35,11 +35,14 @@ audio_capture_callback :: proc(self: ^AudioCaptureNode, input: []f32) {
 // buffer with new samples. Otherwise it will shift the existing samples.
 audio_capture_read :: proc(self: ^AudioCaptureNode, audio_buffer: []f32) -> i32 {
     available := frames_available_in_ringbuffer(&self.ringbuffer)
-    size := len(audio_buffer)
 
     if available <= 0 do return 0
 
+    size := len(audio_buffer)
+
     if int(available) >= size {
+        skip := available - i32(size)
+        advance_ringbuffer_read(&self.ringbuffer, skip)
         read_ringbuffer(&self.ringbuffer, audio_buffer[:], u32(size))
     } else {
         // move old samples back to make room for new samples
