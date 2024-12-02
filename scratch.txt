@@ -1,5 +1,7 @@
 
 
+downsample to 16 k ???
+
 
 shader render to canvas ?
 new shared for the dot matrix effect, or stripes??

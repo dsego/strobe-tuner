@@ -64,7 +64,7 @@ draw_note :: proc(
 
 
 draw_autocorrelation :: proc(rect: rl.Rectangle, nsdf: ^shared.NSDFConfig) {
-    points: [FFT_SIZE]rl.Vector2 = {}
+    points: [4096]rl.Vector2 = {}
 
     start := 0 // enables me to move the start to zoom into a portion of the graph
     end := len(nsdf.autocorr)
@@ -117,7 +117,7 @@ draw_autocorrelation :: proc(rect: rl.Rectangle, nsdf: ^shared.NSDFConfig) {
 }
 
 draw_nsdf :: proc(rect: rl.Rectangle, nsdf: ^shared.NSDFConfig, peak: shared.Vec2) {
-    points: [FFT_SIZE / 2]rl.Vector2 = {}
+    points: [4096 / 2]rl.Vector2 = {}
 
     start := 0 // enables me to move the start to zoom into a portion of the graph
     end := len(nsdf.nsdf)
@@ -169,7 +169,7 @@ draw_nsdf :: proc(rect: rl.Rectangle, nsdf: ^shared.NSDFConfig, peak: shared.Vec
 }
 
 draw_cepstrum :: proc(rect: rl.Rectangle, buffer: []f32, lag: f32, val: f32) {
-    points: [FFT_SIZE]rl.Vector2 = {}
+    points: [4096]rl.Vector2 = {}
     l := len(buffer) / 2
 
     // stretch samples to fit the box width

@@ -1,21 +1,12 @@
 package app
 
-
-// DEBUG_NSDF :: true
-
 STROBE_COUNT :: 3
 
 // NOTE: Needs to be a power of 2 for portaudio ring buffers
 DEFAULT_RB_SIZE :: 65536
 
-// FFT size for pitch detection
-FFT_SIZE :: 4096
-
-SAMPLERATE :: 44100
-
 SCREEN_WIDTH :: 800
 SCREEN_HEIGHT :: 600
-
 
 MAX_SPECTRUM_DISPLAY_LEN :: 8192
 

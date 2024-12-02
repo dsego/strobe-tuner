@@ -22,9 +22,9 @@ PitchInfo :: struct {
 }
 
 
-init_pitch_detector :: proc(samplerate: int) -> (self: PicthDetector) {
-    self.samples = make([]f32, FFT_SIZE / 2)
-    self.nsdf = nsdf_init(FFT_SIZE, samplerate)
+init_pitch_detector :: proc(samplerate: int, fft_size: int) -> (self: PicthDetector) {
+    self.samples = make([]f32, fft_size / 2)
+    self.nsdf = nsdf_init(fft_size, samplerate)
     init_audio_capture_node(&self, "pitch")
     return
 }

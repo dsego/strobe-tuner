@@ -66,10 +66,10 @@ main :: proc() {
 
     phase_tracker := shared.init_phase_tracker(
         f32(target_freq),
-        SAMPLERATE,
-        STROBE_COUNT,
-        .VERNIER_MODE,
-        // .HARMONIC_MODE,
+        f32(config.samplerate),
+        config.strobe_count,
+        config.strobe_window_size,
+        config.strobe_mode,
     )
     defer shared.destroy_phase_tracker(phase_tracker)
 
@@ -77,11 +77,11 @@ main :: proc() {
     defer destroy_phase_tracker_display(&phase_tracker_display)
 
 
-    pitch_detector := shared.init_pitch_detector(SAMPLERATE)
+    pitch_detector := shared.init_pitch_detector(config.samplerate, config.pitch_detect_fft_size)
     defer shared.destroy_pitch_detector(&pitch_detector)
 
 
-    ok, audio_capture := init_audio_capture(SAMPLERATE)
+    ok, audio_capture := init_audio_capture(u32(config.samplerate))
     if !ok do return
     defer destroy_audio_capture(audio_capture)
 

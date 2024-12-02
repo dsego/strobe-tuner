@@ -67,10 +67,11 @@ init_phase_tracker :: proc(
     base_freq_hz: f32,
     samplerate: f32,
     band_count: int,
+    window_size: int,
     mode: StrobeMode,
 ) -> ^PhaseTracker {
     self := new(PhaseTracker)
-    self.window_size = 8192 // vs 16_384 ??
+    self.window_size = window_size
     assert(band_count <= MAX_BANDS)
 
     init_audio_capture_node(self, "phase-tracker")
