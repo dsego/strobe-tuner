@@ -23,7 +23,7 @@ init_drawing_context :: proc() {
 
     path := filepath.join({root_dir, "../assets/NotoSansMono-Medium.ttf"})
     font_path := strings.clone_to_cstring(path)
-    font = rl.LoadFontEx(font_path, 128, codepoints, count)
+    font = rl.LoadFontEx(font_path, 192, codepoints, count)
 }
 
 
@@ -39,15 +39,18 @@ draw_note :: proc(
     active_color: rl.Color,
     disabled_color: rl.Color,
     active: bool,
+    hide_accidental: bool = false,
 ) {
 
     color := active_color if active else disabled_color
+
+    if note.frequency == 0 do return
 
     // Note name
     rl.DrawTextEx(font, fmt.ctprintf("%v", note.name), pos, size, 0, color)
 
     // Sharp sign
-    if note.is_accidental {
+    if note.is_accidental && !hide_accidental {
         rl.DrawTextEx(font, SHARP, {pos.x + size / 2.0, pos.y}, size / 2.0, 0, color)
     }
 

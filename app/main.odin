@@ -38,11 +38,6 @@ main :: proc() {
     freqs_idx := 0
     target_freq := freqs[freqs_idx]
 
-    // TODO: remove
-    // target_freq = 100
-    // target_freq = 1975.533
-    // target_freq = 82.4068892282175
-
 
     // set initial frequency
     freq_changed_manually := true
@@ -114,8 +109,6 @@ main :: proc() {
 
 
         // Keep previous measurement if there is no detected note
-        // TODO: detect note onset?
-        // TODO: different clarity for locking onto pitch and tracking frequency?
         new_note_detected := false
         if shared.is_strong_pitch(pitch_info) {
             if detected_note.cents != pitch_info.detected_note.cents {
@@ -142,7 +135,6 @@ main :: proc() {
 
         note := shared.find_note(f32(target_freq))
 
-        // TODO: detect if new note
         cents_error: f32 = 0.0
         if freq_estimation_active {
             alpha: f32 = 0.3
@@ -164,48 +156,18 @@ main :: proc() {
         {
             rl.ClearBackground(rl.BLACK)
             draw_phase_tracker_display(&phase_tracker_display, phase_tracker)
-            // draw_note(note, {20, 20}, 96)
 
-            // draw_autocorrelation(rl.Rectangle{130, 50, SCREEN_WIDTH-180, 200}, &pitch_detector.autocorr)
-            // draw_nsdf(rl.Rectangle{130, 280, SCREEN_WIDTH-200, 180}, &pitch_detector.nsdf, pitch_info.nsdf_peak)
+            prev_note := shared.prev_note_in_scale(detected_note)
+            prev_note_2 := shared.prev_note_in_scale(prev_note)
+            next_note := shared.next_note_in_scale(detected_note)
+            next_note_2 := shared.next_note_in_scale(next_note)
 
             // Detected note
-            draw_note(detected_note, {20, 300}, 64, rl.GOLD, rl.GRAY, freq_estimation_active)
-
-            rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", freq_ewma), {400, 410}, 22, 0, rl.GOLD)
-            rl.DrawTextEx(font, fmt.ctprintf("%+.1fc", cents_error), {400, 450}, 22, 0, rl.GREEN)
-            // draw_note_meter(
-            //     rl.Rectangle{500, 410, 200, 25},
-            //     detected_note,
-            //     cents_error,
-            //     rl.GOLD,
-            //     rl.GRAY,
-            //     active = freq_estimation_active,
-            // )
-
-            rl.DrawTextEx(
-                font,
-                fmt.ctprintf("RMS %.4f", pitch_info.rms),
-                {20, 420},
-                24,
-                0,
-                rl.PINK,
-            )
-            rl.DrawRectangleV({20, 450}, {200 * pitch_info.rms, 4.0}, rl.PINK)
-            rl.DrawRectangleLinesEx({20, 450, 200, 5}, 1, rl.PINK)
-
-            rl.DrawTextEx(
-                font,
-                fmt.ctprintf("Cla %.4f", pitch_info.clarity),
-                {20, 460},
-                24,
-                0,
-                rl.ORANGE,
-            )
-            rl.DrawRectangleV({20, 490}, {200 * pitch_info.clarity, 4.0}, rl.ORANGE)
-            rl.DrawRectangleLinesEx({20, 490, 200, 5}, 1, rl.ORANGE)
-
-            rl.DrawFPS(SCREEN_WIDTH - 100, 10)
+            draw_note(prev_note_2, {160, 400}, 48, rl.GRAY, rl.GRAY, freq_estimation_active, false)
+            draw_note(prev_note, {220, 400}, 48, rl.GRAY, rl.GRAY, freq_estimation_active, false)
+            draw_note(detected_note, {280, 380}, 96, rl.WHITE, rl.WHITE, freq_estimation_active)
+            draw_note(next_note, {360, 400}, 48, rl.GRAY, rl.GRAY, freq_estimation_active, false)
+            draw_note(next_note_2, {420, 400}, 48, rl.GRAY, rl.GRAY, freq_estimation_active, false)
         }
     }
 }

@@ -1,10 +1,17 @@
+TODO:
 
 
-downsample to 16 k ???
+- Label to show active mode: vernier/harmonic
+- Draw note line with notes that match the instrument highlighted
+- Show cents error display
+- Show flat/sharp indicator
 
 
-shader render to canvas ?
-new shared for the dot matrix effect, or stripes??
+
+
+
+- note overview which shows the current note in the center and surrounding notes,
+sharp symbol is added to the note name as super script
 
 
 
@@ -28,11 +35,8 @@ freq_measurements[0] = pitch_info.detected_freq
 
 
 MVP:
-- 2 modes
-    - standard (vernier?) - tracks same pitch at different sensitivities
-    - harmonic - tracks pitch & overtones
-    - attenuate/fade out strobe when it moves too fast
-
+- harmonic - tracks pitch & overtones
+- attenuate/fade out strobe when it moves too fast
 - note auto detect on/off - if off can cycle through notes for the chosen instrument
 - Note display
 - flat/sharp indicator
@@ -54,8 +58,11 @@ MVP:
 TBD:
 
 - low pass filter to remove noise ??
+- downsample to 16 k ???
 - figure out the min/max phase that I can track, show freq & cents offset, test with diff. freqs
 - control saturation with rms level, control hue with cents offset
+- shader render to canvas ?
+- new shared for the dot matrix effect, or stripes??
 
 
 ==============================
