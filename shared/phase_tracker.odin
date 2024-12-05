@@ -54,8 +54,8 @@ PhaseTracker :: struct {
     base_freq_hz:     f32,
     sample_buffer:    []f32,
     window_size:      int,
-    phase_correction: f32,
-    time_reference:   f32,
+    phase_correction: f64,
+    time_reference:   f64,
     bands:            [dynamic]StrobeBand,
     band_count:       int,
     samplerate:       f32,
@@ -165,12 +165,16 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
     sensitivity: f32 = 1.0
 
     // phase runaway compensation
-    self.time_reference += f32(available)
-    reference_interval := self.samplerate / self.bands[0].freq_hz
+    self.time_reference += f64(available)
+    reference_interval := f64(self.samplerate / self.bands[0].freq_hz)
     num_periods := self.time_reference / reference_interval
 
+    // wrap back closer to zero, only interested in relative time reference
+    full_periods := math.trunc(num_periods) * f64(reference_interval)
+    self.time_reference -= full_periods
+
     // Note, trunc and ceil seem to have the same effect here
-    self.phase_correction = math.trunc(num_periods) * reference_interval - self.time_reference
+    self.phase_correction = full_periods - self.time_reference
 
     for &band, band_idx in self.bands {
         normalized_freq: f32 = band.freq_hz / self.samplerate
@@ -184,7 +188,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         amp := magnitude(dft)
 
         // Phase correction, this can move the phase outside of the -π, π range
-        phase = phase - self.phase_correction * math.TAU * normalized_freq
+        phase = phase - f32(self.phase_correction) * math.TAU * normalized_freq
 
         // Adding π/2 aligns phases to get the stripes lined up ???
         // FIXME: This used to work before the phase scaling was added
@@ -204,7 +208,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         band.err_cents = freq_to_cents(band.estimated_freq_hz) - freq_to_cents(band.freq_hz)
 
         // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
-        band.time_stretch = reference_interval
+        band.time_stretch = f32(reference_interval)
         band.amp = amp
         band.freq_multiplier = 1.0
 
