@@ -6,7 +6,7 @@ import "core:strings"
 import "core:time"
 
 import oef "../one_euro_filter"
-import "../shared"
+import "../core"
 import rl "vendor:raylib"
 
 
@@ -41,16 +41,16 @@ main :: proc() {
 
     // set initial frequency
     freq_changed_manually := true
-    pitch_info := shared.PitchInfo{}
+    pitch_info := core.PitchInfo{}
     cents_error_smooth := f32(0.0)
 
-    detected_note := shared.Note{}
+    detected_note := core.Note{}
     detected_freq: f32 = 0.0
     freq_measurements: [20]f32
 
     freq_estimation_active := false
     freq_ewma: f32 = 0.0
-    // freq_smoother := shared.init_smooth_block(512)
+    // freq_smoother := core.init_smooth_block(512)
 
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
@@ -59,21 +59,21 @@ main :: proc() {
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
     defer rl.CloseWindow()
 
-    phase_tracker := shared.init_phase_tracker(
+    phase_tracker := core.init_phase_tracker(
         f32(target_freq),
         f32(config.samplerate),
         config.strobe_count,
         config.strobe_window_size,
         config.strobe_mode,
     )
-    defer shared.destroy_phase_tracker(phase_tracker)
+    defer core.destroy_phase_tracker(phase_tracker)
 
     phase_tracker_display := init_phase_tracker_display()
     defer destroy_phase_tracker_display(&phase_tracker_display)
 
 
-    pitch_detector := shared.init_pitch_detector(config.samplerate, config.pitch_detect_fft_size)
-    defer shared.destroy_pitch_detector(&pitch_detector)
+    pitch_detector := core.init_pitch_detector(config.samplerate, config.pitch_detect_fft_size)
+    defer core.destroy_pitch_detector(&pitch_detector)
 
 
     ok, audio_capture := init_audio_capture(u32(config.samplerate))
@@ -105,22 +105,22 @@ main :: proc() {
         }
 
         // TODO: turn off pitch detector if rms is weak?
-        pitch_info = shared.run_pitch_detection(&pitch_detector, pitch_info)
+        pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
 
 
         // Keep previous measurement if there is no detected note
         new_note_detected := false
-        if shared.is_strong_pitch(pitch_info) {
+        if core.is_strong_pitch(pitch_info) {
             if detected_note.cents != pitch_info.detected_note.cents {
                 new_note_detected = true
                 detected_note = pitch_info.detected_note
                 target_freq = pitch_info.detected_note.frequency
-                shared.set_phase_tracker_freq(phase_tracker, target_freq)
+                core.set_phase_tracker_freq(phase_tracker, target_freq)
             }
             freq_estimation_active = true
         }
 
-        if shared.is_weak_pitch(pitch_info) {
+        if core.is_weak_pitch(pitch_info) {
             freq_estimation_active = false
         }
 
@@ -129,11 +129,11 @@ main :: proc() {
             if freqs_idx < 0 do freqs_idx += len(freqs) // wrap around
             target_freq = freqs[freqs_idx]
 
-            shared.set_phase_tracker_freq(phase_tracker, target_freq)
+            core.set_phase_tracker_freq(phase_tracker, target_freq)
             freq_changed_manually = false
         }
 
-        note := shared.find_note(f32(target_freq))
+        note := core.find_note(f32(target_freq))
 
         cents_error: f32 = 0.0
         if freq_estimation_active {
@@ -141,33 +141,37 @@ main :: proc() {
             if freq_ewma < 1 || new_note_detected {
                 freq_ewma = pitch_info.detected_freq
             } else {
-                freq_ewma = shared.ewma_filter(pitch_info.detected_freq, alpha, freq_ewma)
-                cents := shared.freq_to_cents(freq_ewma)
+                freq_ewma = core.ewma_filter(pitch_info.detected_freq, alpha, freq_ewma)
+                cents := core.freq_to_cents(freq_ewma)
                 cents_error = cents - f32(detected_note.cents)
             }
 
         } else {
             freq_ewma = 0.0
         }
-        shared.run_dft_analysis(phase_tracker)
+        core.run_dft_analysis(phase_tracker)
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
         {
             rl.ClearBackground(rl.BLACK)
+
+            // rl.DrawFPS(10, 10)
             draw_phase_tracker_display(&phase_tracker_display, phase_tracker)
 
-            prev_note := shared.prev_note_in_scale(detected_note)
-            prev_note_2 := shared.prev_note_in_scale(prev_note)
-            next_note := shared.next_note_in_scale(detected_note)
-            next_note_2 := shared.next_note_in_scale(next_note)
+            prev_note := core.prev_note_in_scale(detected_note)
+            prev_note_2 := core.prev_note_in_scale(prev_note)
+            next_note := core.next_note_in_scale(detected_note)
+            next_note_2 := core.next_note_in_scale(next_note)
+
+            draw_note(detected_note, {280, 340}, 96, rl.WHITE if freq_estimation_active else rl.GRAY)
 
             // Detected note
-            draw_note(prev_note_2, {160, 400}, 48, rl.GRAY, false)
-            draw_note(prev_note, {220, 400}, 48, rl.GRAY, false)
-            draw_note(detected_note, {280, 380}, 96, rl.WHITE if freq_estimation_active else rl.GRAY)
-            draw_note(next_note, {360, 400}, 48, rl.GRAY, false)
-            draw_note(next_note_2, {420, 400}, 48, rl.GRAY, false)
+            draw_note(prev_note_2, {160, 460}, 48, rl.GRAY, false)
+            draw_note(prev_note, {220, 460}, 48, rl.GRAY, false)
+            draw_note(detected_note, {280, 460}, 48, rl.GRAY, false)
+            draw_note(next_note, {340, 460}, 48, rl.GRAY, false)
+            draw_note(next_note_2, {400, 460}, 48, rl.GRAY, false)
         }
     }
 }

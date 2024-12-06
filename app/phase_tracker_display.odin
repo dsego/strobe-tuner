@@ -5,7 +5,7 @@ import "core:math"
 import "core:path/filepath"
 import rl "vendor:raylib"
 
-import "../shared"
+import "../core"
 
 
 PhaseTrackerDisplay :: struct {
@@ -70,7 +70,7 @@ destroy_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay) {
 
 
 // TODO: param to define what style of strobe to display (strobe_style) - curved track or full wheels
-draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shared.PhaseTracker) {
+draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^core.PhaseTracker) {
 
     // Full circles
     curvature_radius: f32 = 100.0

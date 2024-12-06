@@ -1,13 +1,13 @@
 package app
 
-import "../shared"
+import "../core"
 
 Config :: struct {
     strobe_count:          int,
     pitch_detect_fft_size: int,
     samplerate:            int,
     strobe_window_size:    int,
-    strobe_mode:           shared.StrobeMode,
+    strobe_mode:           core.StrobeMode,
 }
 
 config := Config {

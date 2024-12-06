@@ -5,7 +5,7 @@ import "core:path/filepath"
 import "core:strings"
 import rl "vendor:raylib"
 
-import "../shared"
+import "../core"
 
 // Root directory relative to this file
 root_dir := filepath.dir(#file)
@@ -33,7 +33,7 @@ destroy_drawing_context :: proc() {
 
 
 draw_note :: proc(
-    note: shared.Note,
+    note: core.Note,
     pos: [2]f32,
     size: f32,
     color: rl.Color,
@@ -61,7 +61,7 @@ draw_note :: proc(
 }
 
 
-draw_autocorrelation :: proc(rect: rl.Rectangle, nsdf: ^shared.NSDFConfig) {
+draw_autocorrelation :: proc(rect: rl.Rectangle, nsdf: ^core.NSDFConfig) {
     points: [4096]rl.Vector2 = {}
 
     start := 0 // enables me to move the start to zoom into a portion of the graph
@@ -114,7 +114,7 @@ draw_autocorrelation :: proc(rect: rl.Rectangle, nsdf: ^shared.NSDFConfig) {
     rl.DrawTextEx(font, fmt.ctprintf("%.2f", nsdf.autocorr[0]), {rect.x, rect.y}, 16, 0, rl.BLUE)
 }
 
-draw_nsdf :: proc(rect: rl.Rectangle, nsdf: ^shared.NSDFConfig, peak: shared.Vec2) {
+draw_nsdf :: proc(rect: rl.Rectangle, nsdf: ^core.NSDFConfig, peak: core.Vec2) {
     points: [4096 / 2]rl.Vector2 = {}
 
     start := 0 // enables me to move the start to zoom into a portion of the graph
@@ -272,7 +272,7 @@ draw_freq_spectrum :: proc(rect: rl.Rectangle, spectrum: []f32, fft_size: int, s
 // TODO: draw past good note/position greyed out if new pitch is not found
 draw_note_meter :: proc(
     rect: rl.Rectangle,
-    note: shared.Note,
+    note: core.Note,
     cents_error: f32,
     active_color: rl.Color,
     disabled_color: rl.Color,
