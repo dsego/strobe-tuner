@@ -36,14 +36,9 @@ draw_note :: proc(
     note: shared.Note,
     pos: [2]f32,
     size: f32,
-    active_color: rl.Color,
-    disabled_color: rl.Color,
-    active: bool,
+    color: rl.Color,
     hide_accidental: bool = false,
 ) {
-
-    color := active_color if active else disabled_color
-
     if note.frequency == 0 do return
 
     // Note name

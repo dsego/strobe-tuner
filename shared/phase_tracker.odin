@@ -32,7 +32,7 @@ StrobeBand :: struct {
     norm_freq:            f32,
     freq_diff_hz:         f32,
     estimated_freq_hz:    f32,
-    dft:                  SingleFreqDFT,
+    dft:                  SingleFreqDFT, // harmonic mode
     time_stretch:         f32,
     freq_multiplier:      f32, // to get more or less stripes in the pattern
     phase:                f32,
@@ -60,6 +60,7 @@ PhaseTracker :: struct {
     band_count:       int,
     samplerate:       f32,
     mode:             StrobeMode,
+    dft:              SingleFreqDFT, // vernier mode
 }
 
 
@@ -79,6 +80,7 @@ init_phase_tracker :: proc(
     self.sample_buffer = make([]f32, self.window_size)
     self.mode = mode
     self.base_freq_hz = base_freq_hz
+    self.dft = init_dft(self.window_size)
 
     for i in 0 ..< band_count {
         band := StrobeBand{}
@@ -95,6 +97,7 @@ init_phase_tracker :: proc(
 destroy_phase_tracker :: proc(self: ^PhaseTracker) {
     destroy_audio_capture_node(self)
     delete(self.sample_buffer)
+    destory_dft(&self.dft)
     for &band in self.bands {
         destory_dft(&band.dft)
     }
@@ -106,6 +109,10 @@ set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
     self.phase_correction = 0.0
     multiplier: f32 = 1.0
     self.base_freq_hz = base_freq_hz
+
+    if self.mode == .VERNIER_MODE {
+        set_dft_freq(&self.dft, base_freq_hz / self.samplerate)
+    }
 
     // TODO: move to config
     pitch_standard: f32 = 440.0
@@ -127,7 +134,10 @@ set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
             sensitivity *= 2.0
         }
         band.norm_freq = band.freq_hz / self.samplerate
-        set_dft_freq(&band.dft, band.norm_freq)
+
+        if self.mode == .HARMONIC_MODE {
+            set_dft_freq(&band.dft, band.norm_freq)
+        }
     }
 }
 
@@ -176,16 +186,24 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
     // Note, trunc and ceil seem to have the same effect here
     self.phase_correction = full_periods - self.time_reference
 
-    for &band, band_idx in self.bands {
-        normalized_freq: f32 = band.freq_hz / self.samplerate
+    // We can run only one phase calculation since all bands are tracking the same frequency
+    dft: complex64 = complex(0, 0)
+    if self.mode == .VERNIER_MODE {
+        dft = run_single_dft(&self.dft, self.sample_buffer[:self.window_size])
+    }
 
-        // Calculate DFT for this band
-        dft := run_single_dft(&band.dft, self.sample_buffer[:self.window_size])
+    for &band, band_idx in self.bands {
+
+        // Calculate DFT for this band in harmonic mode
+        if self.mode == .HARMONIC_MODE {
+            dft = run_single_dft(&band.dft, self.sample_buffer[:self.window_size])
+        }
 
         cos := real(dft)
         sin := imag(dft)
         phase := math.atan2(sin, cos) // [-π, π]
         amp := magnitude(dft)
+        normalized_freq: f32 = band.freq_hz / self.samplerate
 
         // Phase correction, this can move the phase outside of the -π, π range
         phase = phase - f32(self.phase_correction) * math.TAU * normalized_freq

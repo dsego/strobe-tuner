@@ -2,16 +2,16 @@ TODO:
 
 
 - Label to show active mode: vernier/harmonic
-- Draw note line with notes that match the instrument highlighted
+- Draw note line with notes that match the instrument highlighted ?
 - Show cents error display
 - Show flat/sharp indicator
 
 
 
 
-
 - note overview which shows the current note in the center and surrounding notes,
 sharp symbol is added to the note name as super script
+ -> smooth slide animation  - only animate one note movement, regardless of actual note shift
 
 
 

@@ -234,30 +234,15 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^shar
         if phase_info.mode == .VERNIER_MODE {
             period_count *= 2.0
         }
-        //  rl.DrawTextEx(
-        //     font,
-        //     fmt.ctprintf("%+.2f", band.phase),
-        //     {570, 100 + f32(band_height) * f32(order)},
-        //     18,
-        //     0,
-        //     rl.GOLD,
-        // )
+
 
         // rl.DrawTextEx(
         //     font,
-        //     fmt.ctprintf("%+.1fHz", band.estimated_freq_hz),
-        //     {570, 100 + f32(band_height) * f32(order)},
+        //     fmt.ctprintf("%+.1fc", band.err_cents),
+        //     {570, 120 + f32(band_height) * f32(order)},
         //     18,
         //     0,
-        //     rl.GOLD,
+        //     rl.GREEN,
         // )
-        rl.DrawTextEx(
-            font,
-            fmt.ctprintf("%+.1fc", band.err_cents),
-            {570, 120 + f32(band_height) * f32(order)},
-            18,
-            0,
-            rl.GREEN,
-        )
     }
 }

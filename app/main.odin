@@ -163,11 +163,11 @@ main :: proc() {
             next_note_2 := shared.next_note_in_scale(next_note)
 
             // Detected note
-            draw_note(prev_note_2, {160, 400}, 48, rl.GRAY, rl.GRAY, freq_estimation_active, false)
-            draw_note(prev_note, {220, 400}, 48, rl.GRAY, rl.GRAY, freq_estimation_active, false)
-            draw_note(detected_note, {280, 380}, 96, rl.WHITE, rl.WHITE, freq_estimation_active)
-            draw_note(next_note, {360, 400}, 48, rl.GRAY, rl.GRAY, freq_estimation_active, false)
-            draw_note(next_note_2, {420, 400}, 48, rl.GRAY, rl.GRAY, freq_estimation_active, false)
+            draw_note(prev_note_2, {160, 400}, 48, rl.GRAY, false)
+            draw_note(prev_note, {220, 400}, 48, rl.GRAY, false)
+            draw_note(detected_note, {280, 380}, 96, rl.WHITE if freq_estimation_active else rl.GRAY)
+            draw_note(next_note, {360, 400}, 48, rl.GRAY, false)
+            draw_note(next_note_2, {420, 400}, 48, rl.GRAY, false)
         }
     }
 }
