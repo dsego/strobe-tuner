@@ -234,15 +234,5 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^core
         if phase_info.mode == .VERNIER_MODE {
             period_count *= 2.0
         }
-
-
-        // rl.DrawTextEx(
-        //     font,
-        //     fmt.ctprintf("%+.1fc", band.err_cents),
-        //     {570, 120 + f32(band_height) * f32(order)},
-        //     18,
-        //     0,
-        //     rl.GREEN,
-        // )
     }
 }

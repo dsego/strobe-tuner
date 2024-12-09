@@ -1,4 +1,4 @@
-package shared
+package core
 
 
 import "core:c/libc"

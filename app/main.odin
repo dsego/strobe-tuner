@@ -5,62 +5,28 @@ import "core:math"
 import "core:strings"
 import "core:time"
 
-import oef "../one_euro_filter"
 import "../core"
 import rl "vendor:raylib"
 
 
 main :: proc() {
-    bass_freqs: []f32 = {
-        41.20344, // E1
-        55.00000, // A1
-        73.41619, // D2
-        97.99886, // G2
-    }
+    target_freq_hz: f32 = 110.0
 
-    guitar_freqs: []f32 = {
-        82.40689, // E2
-        110.0000, // A2
-        146.8324, // D3
-        195.9977, // G3
-        246.9417, // B3
-        329.6276, // E4
-    }
-
-    ukulele_freqs: []f32 = {
-        391.9954, // G4
-        261.6256, // C4
-        329.6276, // E4
-        440.0000, // A4
-    }
-
-    freqs: []f32 = guitar_freqs
-    freqs_idx := 0
-    target_freq := freqs[freqs_idx]
-
-
-    // set initial frequency
     freq_changed_manually := true
-    pitch_info := core.PitchInfo{}
-    cents_error_smooth := f32(0.0)
-
-    detected_note := core.Note{}
-    detected_freq: f32 = 0.0
-    freq_measurements: [20]f32
-
     freq_estimation_active := false
-    freq_ewma: f32 = 0.0
-    // freq_smoother := core.init_smooth_block(512)
+
+    pitch_info := core.PitchInfo{}
+    detected_note := core.Note{}
+    selected_note := core.Note{}
 
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
-    // rl.SetTargetFPS(120)
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
     defer rl.CloseWindow()
 
     phase_tracker := core.init_phase_tracker(
-        f32(target_freq),
+        target_freq_hz,
         f32(config.samplerate),
         config.strobe_count,
         config.strobe_window_size,
@@ -88,90 +54,84 @@ main :: proc() {
     register_audio_node(audio_capture, phase_tracker)
     start_audio_capture(audio_capture)
 
+    core.set_phase_tracker_freq(phase_tracker, target_freq_hz)
 
-    // oe_filter_ptr := oef.Create(60, 1, 1, 1)
-    // defer oef.Destroy(oe_filter_ptr)
+    freq_ewma := core.init_ewma(alpha = 0.005)
+    cents_ewma := core.init_ewma(alpha = 0.005)
 
     for !rl.WindowShouldClose() {
-
-        // Pick next or previous ukulele string
-        if rl.IsKeyPressed(rl.KeyboardKey.RIGHT) {
-            freqs_idx += 1
-            freq_changed_manually = true
-        }
-        if rl.IsKeyPressed(rl.KeyboardKey.LEFT) {
-            freqs_idx -= 1
-            freq_changed_manually = true
-        }
-
-        // TODO: turn off pitch detector if rms is weak?
         pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
 
-
         // Keep previous measurement if there is no detected note
-        new_note_detected := false
         if core.is_strong_pitch(pitch_info) {
             if detected_note.cents != pitch_info.detected_note.cents {
-                new_note_detected = true
                 detected_note = pitch_info.detected_note
-                target_freq = pitch_info.detected_note.frequency
-                core.set_phase_tracker_freq(phase_tracker, target_freq)
+                target_freq_hz = pitch_info.detected_note.frequency
+                core.set_phase_tracker_freq(phase_tracker, target_freq_hz)
             }
             freq_estimation_active = true
+            core.reset_ewma(&cents_ewma)
+            core.reset_ewma(&freq_ewma)
         }
 
         if core.is_weak_pitch(pitch_info) {
             freq_estimation_active = false
         }
 
-        if freq_changed_manually {
-            freqs_idx %= len(freqs)
-            if freqs_idx < 0 do freqs_idx += len(freqs) // wrap around
-            target_freq = freqs[freqs_idx]
-
-            core.set_phase_tracker_freq(phase_tracker, target_freq)
-            freq_changed_manually = false
-        }
-
-        note := core.find_note(f32(target_freq))
-
-        cents_error: f32 = 0.0
-        if freq_estimation_active {
-            alpha: f32 = 0.3
-            if freq_ewma < 1 || new_note_detected {
-                freq_ewma = pitch_info.detected_freq
-            } else {
-                freq_ewma = core.ewma_filter(pitch_info.detected_freq, alpha, freq_ewma)
-                cents := core.freq_to_cents(freq_ewma)
-                cents_error = cents - f32(detected_note.cents)
-            }
-
-        } else {
-            freq_ewma = 0.0
-        }
+        // prev_note := core.prev_note_in_scale(detected_note)
+        // prev_note_2 := core.prev_note_in_scale(prev_note)
+        // next_note := core.next_note_in_scale(detected_note)
+        // next_note_2 := core.next_note_in_scale(next_note)
         core.run_dft_analysis(phase_tracker)
+
+        measured_freq := phase_tracker.bands[0].estimated_freq_hz
+        measured_cents := phase_tracker.bands[0].err_cents
+
+        freq_smooth := core.ewma_filter(&freq_ewma, measured_freq)
+        cents_err_smooth := core.ewma_filter(&cents_ewma, measured_cents)
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
         {
             rl.ClearBackground(rl.BLACK)
 
-            // rl.DrawFPS(10, 10)
             draw_phase_tracker_display(&phase_tracker_display, phase_tracker)
+            draw_note(
+                detected_note,
+                {280, 340},
+                96,
+                rl.WHITE if freq_estimation_active else rl.GRAY,
+            )
 
-            prev_note := core.prev_note_in_scale(detected_note)
-            prev_note_2 := core.prev_note_in_scale(prev_note)
-            next_note := core.next_note_in_scale(detected_note)
-            next_note_2 := core.next_note_in_scale(next_note)
+            rl.DrawTextEx(
+                font,
+                fmt.ctprintf("%+.1fc", cents_err_smooth),
+                {400, 340},
+                24,
+                0,
+                rl.WHITE,
+            )
 
-            draw_note(detected_note, {280, 340}, 96, rl.WHITE if freq_estimation_active else rl.GRAY)
+            rl.DrawTextEx(
+                font,
+                fmt.ctprintf("%+.1fc", measured_cents),
+                {500, 340},
+                24,
+                0,
+                rl.LIGHTGRAY,
+            )
+
+            rl.DrawTextEx(font, fmt.ctprintf("%+.1fHz", freq_smooth), {400, 400}, 24, 0, rl.WHITE)
+            rl.DrawTextEx(font, fmt.ctprintf("%+.1fHz", measured_freq), {500, 400}, 24, 0, rl.LIGHTGRAY)
 
             // Detected note
+            /*
             draw_note(prev_note_2, {160, 460}, 48, rl.GRAY, false)
             draw_note(prev_note, {220, 460}, 48, rl.GRAY, false)
             draw_note(detected_note, {280, 460}, 48, rl.GRAY, false)
             draw_note(next_note, {340, 460}, 48, rl.GRAY, false)
             draw_note(next_note_2, {400, 460}, 48, rl.GRAY, false)
+            */
         }
     }
 }

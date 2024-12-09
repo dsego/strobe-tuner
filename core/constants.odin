@@ -1,4 +1,4 @@
-package shared
+package core
 
 // FFT size for pitch detection
 FFT_SIZE :: 4096

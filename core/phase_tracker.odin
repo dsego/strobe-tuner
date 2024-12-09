@@ -10,7 +10,7 @@
  -------------------------------------------------------------------------------------------------*/
 
 
-package shared
+package core
 
 import "base:runtime"
 import "core:fmt"

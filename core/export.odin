@@ -1,7 +1,7 @@
 
 // C exports for shared library
 
-package shared
+package core
 
 import "base:runtime"
 
