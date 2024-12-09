@@ -19,6 +19,8 @@ main :: proc() {
     detected_note := core.Note{}
     selected_note := core.Note{}
 
+    timestamp := time.now()
+
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
@@ -56,10 +58,23 @@ main :: proc() {
 
     core.set_phase_tracker_freq(phase_tracker, target_freq_hz)
 
-    freq_ewma := core.init_ewma(alpha = 0.005)
-    cents_ewma := core.init_ewma(alpha = 0.005)
+    freq_ewma := core.init_ewma(alpha = 0.05)
+    cents_ewma := core.init_ewma(alpha = 0.05)
+
+    measured_freq: f32 = 0.0
+    measured_cents: f32 = 0.0
+    freq_smooth: f32 = 0.0
+    cents_err_smooth: f32 = 0.0
 
     for !rl.WindowShouldClose() {
+        seconds_elapsed := time.duration_seconds(time.since(timestamp))
+
+        refresh_measurements := false
+        if seconds_elapsed > 0.1 {
+            refresh_measurements = true
+            timestamp = time.now()
+        }
+
         pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
 
         // Keep previous measurement if there is no detected note
@@ -84,11 +99,12 @@ main :: proc() {
         // next_note_2 := core.next_note_in_scale(next_note)
         core.run_dft_analysis(phase_tracker)
 
-        measured_freq := phase_tracker.bands[0].estimated_freq_hz
-        measured_cents := phase_tracker.bands[0].err_cents
-
-        freq_smooth := core.ewma_filter(&freq_ewma, measured_freq)
-        cents_err_smooth := core.ewma_filter(&cents_ewma, measured_cents)
+        if refresh_measurements {
+            measured_freq = phase_tracker.bands[0].estimated_freq_hz
+            measured_cents = phase_tracker.bands[0].err_cents
+            freq_smooth = core.ewma_filter(&freq_ewma, measured_freq)
+            cents_err_smooth = core.ewma_filter(&cents_ewma, measured_cents)
+        }
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -122,7 +138,14 @@ main :: proc() {
             )
 
             rl.DrawTextEx(font, fmt.ctprintf("%+.1fHz", freq_smooth), {400, 400}, 24, 0, rl.WHITE)
-            rl.DrawTextEx(font, fmt.ctprintf("%+.1fHz", measured_freq), {500, 400}, 24, 0, rl.LIGHTGRAY)
+            rl.DrawTextEx(
+                font,
+                fmt.ctprintf("%+.1fHz", measured_freq),
+                {500, 400},
+                24,
+                0,
+                rl.LIGHTGRAY,
+            )
 
             // Detected note
             /*
