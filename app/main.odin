@@ -99,7 +99,7 @@ main :: proc() {
         // next_note_2 := core.next_note_in_scale(next_note)
         core.run_dft_analysis(phase_tracker)
 
-        if refresh_measurements {
+        if refresh_measurements && freq_estimation_active {
             measured_freq = phase_tracker.bands[0].estimated_freq_hz
             measured_cents = phase_tracker.bands[0].err_cents
             freq_smooth = core.ewma_filter(&freq_ewma, measured_freq)

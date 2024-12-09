@@ -203,6 +203,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         sin := imag(dft)
         phase := math.atan2(sin, cos) // [-π, π]
         amp := magnitude(dft)
+
         normalized_freq: f32 = band.freq_hz / self.samplerate
 
         // Phase correction, this can move the phase outside of the -π, π range
@@ -232,13 +233,13 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
 
 
         // Fade out track that is spinning too fast
-        attenuation: f32 = linalg.smootherstep(
-            band.cents_err_high,
-            band.cents_err_low,
-            math.abs(band.err_cents),
-        )
+        // attenuation: f32 = linalg.smootherstep(
+        //     band.cents_err_high,
+        //     band.cents_err_low,
+        //     math.abs(band.err_cents),
+        // )
         // fmt.println(attenuation, band.cents_err_high, band.cents_err_low, band.err_cents)
         // attenuation: f32 = 1.0
-        band.amp *= attenuation
+        // band.amp *= attenuation
     }
 }
