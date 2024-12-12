@@ -17,9 +17,6 @@ import "core:mem"
 
 import "../pffft"
 
-
-Vec2 :: [2]f32
-
 NSDFConfig :: struct {
     pffft_setup:     rawptr,
     fft_size:        int,

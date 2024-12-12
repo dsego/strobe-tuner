@@ -58,22 +58,20 @@ main :: proc() {
 
     core.set_phase_tracker_freq(phase_tracker, target_freq_hz)
 
-    freq_ewma := core.init_ewma(alpha = 0.05)
-    cents_ewma := core.init_ewma(alpha = 0.05)
 
     measured_freq: f32 = 0.0
     measured_cents: f32 = 0.0
-    freq_smooth: f32 = 0.0
-    cents_err_smooth: f32 = 0.0
+
+    phase_points: [1024]rl.Vector2 = {}
 
     for !rl.WindowShouldClose() {
-        seconds_elapsed := time.duration_seconds(time.since(timestamp))
+        // seconds_elapsed := time.duration_seconds(time.since(timestamp))
 
-        refresh_measurements := false
-        if seconds_elapsed > 0.1 {
-            refresh_measurements = true
-            timestamp = time.now()
-        }
+        // refresh_measurements := false
+        // if seconds_elapsed > 0.1 {
+        //     refresh_measurements = true
+        //     timestamp = time.now()
+        // }
 
         pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
 
@@ -85,8 +83,8 @@ main :: proc() {
                 core.set_phase_tracker_freq(phase_tracker, target_freq_hz)
             }
             freq_estimation_active = true
-            core.reset_ewma(&cents_ewma)
-            core.reset_ewma(&freq_ewma)
+            // core.reset_ewma(&cents_ewma)
+            // core.reset_ewma(&freq_ewma)
         }
 
         if core.is_weak_pitch(pitch_info) {
@@ -99,12 +97,38 @@ main :: proc() {
         // next_note_2 := core.next_note_in_scale(next_note)
         core.run_dft_analysis(phase_tracker)
 
-        if refresh_measurements && freq_estimation_active {
-            measured_freq = phase_tracker.bands[0].estimated_freq_hz
-            measured_cents = phase_tracker.bands[0].err_cents
-            freq_smooth = core.ewma_filter(&freq_ewma, measured_freq)
-            cents_err_smooth = core.ewma_filter(&cents_ewma, measured_cents)
-        }
+
+
+
+
+
+        // TODO
+
+        // keep track of previous N phases ---->  only calculate phase diff every X refresh_measurements
+
+
+        //  ring buffer on display tracker to store all phases from band zero
+        //      phase_buffer
+        //  I can then optionally display this buffer as a tracking line
+
+        // ---- can even draw all the phase measurements as a graph
+        // -- instead of just the note names draw a "ruler" with dashes and notes, and a line
+
+        // eg phase in time x - phase in time y = phase diff -> cents offset
+
+        // this should happen in the phase tracker bands, eg refresh this 10 times a second, meaning cca every 4k samples
+
+        // measured_phase = phase_tracker.bands[0].phase
+
+
+
+
+        // if refresh_measurements && freq_estimation_active {
+        //     measured_freq = phase_tracker.bands[0].estimated_freq_hz
+        //     measured_cents = phase_tracker.bands[0].err_cents
+        //     freq_smooth = core.ewma_filter(&freq_ewma, measured_freq)
+        //     cents_err_smooth = core.ewma_filter(&cents_ewma, measured_cents)
+        // }
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -119,14 +143,14 @@ main :: proc() {
                 rl.WHITE if freq_estimation_active else rl.GRAY,
             )
 
-            rl.DrawTextEx(
-                font,
-                fmt.ctprintf("%+.1fc", cents_err_smooth),
-                {400, 340},
-                24,
-                0,
-                rl.WHITE,
-            )
+            // rl.DrawTextEx(
+            //     font,
+            //     fmt.ctprintf("%+.1fc", cents_err_smooth),
+            //     {400, 340},
+            //     24,
+            //     0,
+            //     rl.WHITE,
+            // )
 
             rl.DrawTextEx(
                 font,
@@ -137,7 +161,7 @@ main :: proc() {
                 rl.LIGHTGRAY,
             )
 
-            rl.DrawTextEx(font, fmt.ctprintf("%+.1fHz", freq_smooth), {400, 400}, 24, 0, rl.WHITE)
+            // rl.DrawTextEx(font, fmt.ctprintf("%+.1fHz", freq_smooth), {400, 400}, 24, 0, rl.WHITE)
             rl.DrawTextEx(
                 font,
                 fmt.ctprintf("%+.1fHz", measured_freq),
@@ -146,6 +170,35 @@ main :: proc() {
                 0,
                 rl.LIGHTGRAY,
             )
+
+            x :f32 = 10
+            i := phase_tracker.data_write_head
+
+            // the idea is that phase gives bogus readings for random noise
+            // --- need to somehow fade out the display if it's noise, eg low amplitude
+
+            for i >= 0 {
+                y := 500 + phase_tracker.data_buffer[i].err_cents
+                x += 0.5
+                rl.DrawPixelV({x, y}, rl.ColorAlpha(rl.GREEN, phase_tracker.data_buffer[i].amp * 10))
+                i -= 1
+            }
+
+            i = len(phase_tracker.data_buffer) - 1
+
+            for i > phase_tracker.data_write_head {
+                y := 500 + phase_tracker.data_buffer[i].err_cents
+                x += 0.5
+                // phase_points[i] = {x, y}
+                rl.DrawPixelV({x, y}, rl.ColorAlpha(rl.GREEN, phase_tracker.data_buffer[i].amp * 10))
+                i -= 1
+            }
+
+
+            // phase_points: [MAX_SPECTRUM_DISPLAY_LEN]rl.Vector2 = {}
+            rl.DrawLineV({10.0, 500.0}, {522.0, 500.0}, rl.GRAY)
+
+            // rl.DrawLineStrip(raw_data(phase_points[:]), i32(len(phase_points)), rl.LIME)
 
             // Detected note
             /*

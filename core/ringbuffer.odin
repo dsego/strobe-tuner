@@ -41,16 +41,16 @@ write_to_ringbuffer :: proc (rb_ptr: ^RingBuffer, input: []f32) {
 }
 
 
-read_ringbuffer :: proc (rb_ptr: ^RingBuffer, samples: []f32, frame_count: u32) -> u32 {
+read_ringbuffer :: proc (rb_ptr: ^RingBuffer, buffer: []f32, frame_count: u32) -> u32 {
     data_ptr: rawptr
     total_frames_read: u32 = 0
 
     assert(
-        len(samples) >= int(frame_count),
-        fmt.aprintf("frame_count %v larger than samples size %v", frame_count, len(samples)),
+        len(buffer) >= int(frame_count),
+        fmt.aprintf("frame_count %v larger than buffer size %v", frame_count, len(buffer)),
     )
 
-    num_read := pa_rb.ReadRingBuffer(rb_ptr, raw_data(samples), i32(frame_count))
+    num_read := pa_rb.ReadRingBuffer(rb_ptr, raw_data(buffer), i32(frame_count))
     return u32(num_read)
 }
 
