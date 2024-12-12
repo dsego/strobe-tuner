@@ -28,10 +28,8 @@ StrobeMode :: enum {
 
 
 DataPoint :: struct {
-    time_delta: f32,
-    amp:        f32,
-    phase:      f32,
-    err_cents:  f32,
+    amp:       f32,
+    err_cents: f32,
 }
 
 
@@ -67,7 +65,7 @@ PhaseTracker :: struct {
     samplerate:       f32,
     mode:             StrobeMode,
     dft:              SingleFreqDFT, // vernier mode
-    data_buffer:      []DataPoint,
+    data_points:      []DataPoint,
     data_write_head:  int,
 }
 
@@ -86,7 +84,7 @@ init_phase_tracker :: proc(
     init_audio_capture_node(self, "phase-tracker")
 
     self.sample_buffer = make([]f32, self.window_size)
-    self.data_buffer = make([]DataPoint, 1024)
+    self.data_points = make([]DataPoint, 1024)
     self.mode = mode
     self.base_freq_hz = base_freq_hz
     self.dft = init_dft(self.window_size)
@@ -105,7 +103,7 @@ init_phase_tracker :: proc(
 
 destroy_phase_tracker :: proc(self: ^PhaseTracker) {
     destroy_audio_capture_node(self)
-    delete(self.data_buffer)
+    delete(self.data_points)
     delete(self.sample_buffer)
     destory_dft(&self.dft)
     for &band in self.bands {
@@ -178,7 +176,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
 
     if available <= 0 do return
 
-    time_delta := f32(available) / f32(self.samplerate)
+    time_delta := f64(available) / f64(self.samplerate)
     sensitivity: f32 = 1.0
 
     // phase runaway compensation
@@ -228,7 +226,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         band.phase = phase
         scale_phase(&band)
 
-        band.freq_diff_hz = -(band.phase_diff / time_delta) / math.TAU
+        band.freq_diff_hz = -(band.phase_diff / f32(time_delta)) / math.TAU
         band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
         band.err_cents = freq_to_cents(band.estimated_freq_hz) - freq_to_cents(band.freq_hz)
 
@@ -238,11 +236,6 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         band.freq_multiplier = 1.0
     }
 
-    self.data_buffer[self.data_write_head] = DataPoint {
-        time_delta,
-        self.bands[0].amp,
-        self.bands[0].phase,
-        self.bands[0].err_cents,
-    }
-    self.data_write_head = (self.data_write_head + 1) % len(self.data_buffer)
+    self.data_points[self.data_write_head] = DataPoint{self.bands[0].amp, self.bands[0].err_cents}
+    self.data_write_head = (self.data_write_head + 1) % len(self.data_points)
 }

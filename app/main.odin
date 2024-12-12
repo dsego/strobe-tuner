@@ -98,10 +98,6 @@ main :: proc() {
         core.run_dft_analysis(phase_tracker)
 
 
-
-
-
-
         // TODO
 
         // keep track of previous N phases ---->  only calculate phase diff every X refresh_measurements
@@ -119,8 +115,6 @@ main :: proc() {
         // this should happen in the phase tracker bands, eg refresh this 10 times a second, meaning cca every 4k samples
 
         // measured_phase = phase_tracker.bands[0].phase
-
-
 
 
         // if refresh_measurements && freq_estimation_active {
@@ -152,10 +146,54 @@ main :: proc() {
             //     rl.WHITE,
             // )
 
+            data_points := phase_tracker.data_points
+
+
+            x: f32 = 10
+            i := phase_tracker.data_write_head
+
+            // the idea is that phase gives bogus readings for random noise
+            // --- need to somehow fade out the display if it's noise, eg low amplitude
+
+            for i >= 0 {
+                y := 500 - phase_tracker.data_points[i].err_cents * 5
+                x += 0.5
+                rl.DrawPixelV(
+                    {x, y},
+                    rl.ColorAlpha(rl.GREEN, phase_tracker.data_points[i].amp * 10),
+                )
+                i -= 1
+            }
+
+            i = len(phase_tracker.data_points) - 1
+
+            for i > phase_tracker.data_write_head {
+                y := 500 - phase_tracker.data_points[i].err_cents * 5
+                x += 0.5
+                // phase_points[i] = {x, y}
+                rl.DrawPixelV(
+                    {x, y},
+                    rl.ColorAlpha(rl.GREEN, phase_tracker.data_points[i].amp * 10),
+                )
+                i -= 1
+            }
+
+            // measured_cents = phase_tracker.bands[0].
+
+            // band.freq_diff_hz = -(band.phase_diff / time_delta) / math.TAU
+            // band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
+            // band.err_cents = freq_to_cents(band.estimated_freq_hz) - freq_to_cents(band.freq_hz)
+
+            base_band := phase_tracker.bands[0]
+
+            // phase_points: [MAX_SPECTRUM_DISPLAY_LEN]rl.Vector2 = {}
+            rl.DrawLineV({10.0, 500.0}, {522.0, 500.0}, rl.GRAY)
+
+
             rl.DrawTextEx(
                 font,
-                fmt.ctprintf("%+.1fc", measured_cents),
-                {500, 340},
+                fmt.ctprintf("%+.2fc", base_band.err_cents),
+                {400, 340},
                 24,
                 0,
                 rl.LIGHTGRAY,
@@ -164,39 +202,13 @@ main :: proc() {
             // rl.DrawTextEx(font, fmt.ctprintf("%+.1fHz", freq_smooth), {400, 400}, 24, 0, rl.WHITE)
             rl.DrawTextEx(
                 font,
-                fmt.ctprintf("%+.1fHz", measured_freq),
-                {500, 400},
+                fmt.ctprintf("%+.2fHz", base_band.estimated_freq_hz),
+                {400, 400},
                 24,
                 0,
                 rl.LIGHTGRAY,
             )
-
-            x :f32 = 10
-            i := phase_tracker.data_write_head
-
-            // the idea is that phase gives bogus readings for random noise
-            // --- need to somehow fade out the display if it's noise, eg low amplitude
-
-            for i >= 0 {
-                y := 500 + phase_tracker.data_buffer[i].err_cents
-                x += 0.5
-                rl.DrawPixelV({x, y}, rl.ColorAlpha(rl.GREEN, phase_tracker.data_buffer[i].amp * 10))
-                i -= 1
-            }
-
-            i = len(phase_tracker.data_buffer) - 1
-
-            for i > phase_tracker.data_write_head {
-                y := 500 + phase_tracker.data_buffer[i].err_cents
-                x += 0.5
-                // phase_points[i] = {x, y}
-                rl.DrawPixelV({x, y}, rl.ColorAlpha(rl.GREEN, phase_tracker.data_buffer[i].amp * 10))
-                i -= 1
-            }
-
-
-            // phase_points: [MAX_SPECTRUM_DISPLAY_LEN]rl.Vector2 = {}
-            rl.DrawLineV({10.0, 500.0}, {522.0, 500.0}, rl.GRAY)
+            //////////////////////////////////////////
 
             // rl.DrawLineStrip(raw_data(phase_points[:]), i32(len(phase_points)), rl.LIME)
 
