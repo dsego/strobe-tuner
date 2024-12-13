@@ -156,11 +156,16 @@ main :: proc() {
             // --- need to somehow fade out the display if it's noise, eg low amplitude
 
             for i >= 0 {
-                y := 500 - phase_tracker.data_points[i].err_cents * 5
+                y := 500 - phase_tracker.data_points[i].err_cents * 15
+                y_avg := 500 - phase_tracker.data_points[i].err_cents_avg * 15
                 x += 0.5
                 rl.DrawPixelV(
                     {x, y},
-                    rl.ColorAlpha(rl.GREEN, phase_tracker.data_points[i].amp * 10),
+                    rl.ColorAlpha(rl.GREEN, phase_tracker.data_points[i].amp),
+                )
+                rl.DrawPixelV(
+                    {x, y_avg},
+                    rl.ColorAlpha(rl.ORANGE, phase_tracker.data_points[i].amp),
                 )
                 i -= 1
             }
@@ -168,12 +173,17 @@ main :: proc() {
             i = len(phase_tracker.data_points) - 1
 
             for i > phase_tracker.data_write_head {
-                y := 500 - phase_tracker.data_points[i].err_cents * 5
+                y := 500 - phase_tracker.data_points[i].err_cents * 15
+                y_avg := 500 - phase_tracker.data_points[i].err_cents_avg * 15
                 x += 0.5
                 // phase_points[i] = {x, y}
                 rl.DrawPixelV(
                     {x, y},
-                    rl.ColorAlpha(rl.GREEN, phase_tracker.data_points[i].amp * 10),
+                    rl.ColorAlpha(rl.GREEN, phase_tracker.data_points[i].amp),
+                )
+                rl.DrawPixelV(
+                    {x, y_avg},
+                    rl.ColorAlpha(rl.ORANGE, phase_tracker.data_points[i].amp),
                 )
                 i -= 1
             }
@@ -196,7 +206,16 @@ main :: proc() {
                 {400, 340},
                 24,
                 0,
-                rl.LIGHTGRAY,
+                rl.GREEN,
+            )
+
+            rl.DrawTextEx(
+                font,
+                fmt.ctprintf("%+.2fc", base_band.err_cents_avg),
+                {500, 340},
+                24,
+                0,
+                rl.ORANGE,
             )
 
             // rl.DrawTextEx(font, fmt.ctprintf("%+.1fHz", freq_smooth), {400, 400}, 24, 0, rl.WHITE)

@@ -28,8 +28,9 @@ StrobeMode :: enum {
 
 
 DataPoint :: struct {
-    amp:       f32,
-    err_cents: f32,
+    amp:           f32,
+    err_cents:     f32,
+    err_cents_avg: f32,
 }
 
 
@@ -45,6 +46,7 @@ StrobeBand :: struct {
     amp:                  f32,
     phase_diff:           f32,
     err_cents:            f32,
+    err_cents_avg:        f32,
     prev_unwrapped_phase: f32,
     unwrapped_phase:      f32,
     scaled_phase:         f32,
@@ -230,12 +232,18 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
         band.err_cents = freq_to_cents(band.estimated_freq_hz) - freq_to_cents(band.freq_hz)
 
+        band.err_cents_avg += 0.1 * (band.err_cents - band.err_cents_avg)
+
         // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
         band.time_stretch = f32(reference_interval)
         band.amp = amp
         band.freq_multiplier = 1.0
     }
 
-    self.data_points[self.data_write_head] = DataPoint{self.bands[0].amp, self.bands[0].err_cents}
+    self.data_points[self.data_write_head] = DataPoint {
+        self.bands[0].amp,
+        self.bands[0].err_cents,
+        self.bands[0].err_cents_avg,
+    }
     self.data_write_head = (self.data_write_head + 1) % len(self.data_points)
 }
