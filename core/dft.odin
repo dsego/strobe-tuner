@@ -16,7 +16,7 @@ init_dft :: proc (size: int) -> SingleFreqDFT {
     self.window = make([]f32, size)
     self.twiddle_lookup = make([]complex64, size)
 
-    // Generate the Blackmann window
+    // Generate the windowing function
     for i in 0 ..< size {
         self.window[i] = blackmann_window(f32(i), f32(size))
     }
@@ -25,10 +25,9 @@ init_dft :: proc (size: int) -> SingleFreqDFT {
 }
 
 set_dft_freq :: proc (self: ^SingleFreqDFT, norm_freq: f32) {
-    phase_delta: f32 = math.TAU // f32(self.size) // τ = 2π
     for i in 0 ..< self.size {
         time := f32(i)
-        phase := phase_delta * time * norm_freq
+        phase := math.TAU * time * norm_freq
         self.twiddle_lookup[i] =
             complex(self.window[i], 0) * complex(math.cos(phase), math.sin(phase))
     }

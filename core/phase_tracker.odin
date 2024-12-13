@@ -1,11 +1,9 @@
 /* ------------------------------------------------------------------------------------------------
 
-
     Phase tracker
     - Generates a reference signal and detects the phase difference between the reference
         and target. The reference phase is calculated in the drawing method and synthesizes a strobe
         based on the detected phase difference.
-
 
  -------------------------------------------------------------------------------------------------*/
 
@@ -47,9 +45,11 @@ StrobeBand :: struct {
     phase_diff:           f32,
     err_cents:            f32,
     err_cents_avg:        f32,
+    moving_avg: MovingAvg,
     prev_unwrapped_phase: f32,
     unwrapped_phase:      f32,
     scaled_phase:         f32,
+    detected:             bool,
 
     // a number < 1 will slow down the strobe and > 1 will increase the strobe spinning rate
     sensitivity:          f32,
@@ -85,15 +85,20 @@ init_phase_tracker :: proc(
 
     init_audio_capture_node(self, "phase-tracker")
 
-    self.sample_buffer = make([]f32, self.window_size)
+    // zero pad to get more DFT precision & smoother response (?)
+    fft_size := self.window_size * 2
+
+    self.sample_buffer = make([]f32, fft_size)
     self.data_points = make([]DataPoint, 1024)
     self.mode = mode
     self.base_freq_hz = base_freq_hz
-    self.dft = init_dft(self.window_size)
+
+    self.dft = init_dft(fft_size)
 
     for i in 0 ..< band_count {
         band := StrobeBand{}
-        band.dft = init_dft(self.window_size)
+        band.dft = init_dft(fft_size)
+        band.moving_avg = init_moving_avg(32)
         append(&self.bands, band)
     }
 
@@ -110,6 +115,7 @@ destroy_phase_tracker :: proc(self: ^PhaseTracker) {
     destory_dft(&self.dft)
     for &band in self.bands {
         destory_dft(&band.dft)
+        destroy_moving_avg(&band.moving_avg)
     }
 }
 
@@ -196,19 +202,28 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
     // We can run only one phase calculation since all bands are tracking the same frequency
     dft: complex64 = complex(0, 0)
     if self.mode == .VERNIER_MODE {
-        dft = run_single_dft(&self.dft, self.sample_buffer[:self.window_size])
+        dft = run_single_dft(&self.dft, self.sample_buffer)
     }
 
     for &band, band_idx in self.bands {
 
         // Calculate DFT for this band in harmonic mode
         if self.mode == .HARMONIC_MODE {
-            dft = run_single_dft(&band.dft, self.sample_buffer[:self.window_size])
+            dft = run_single_dft(&band.dft, self.sample_buffer)
         }
 
         cos := real(dft)
         sin := imag(dft)
+
+        // if both cos & sin are zero or close to zero, that means there is nothing detected
+        band.detected = math.abs(cos) > DETECTION_THRESHOLD && math.abs(sin) > DETECTION_THRESHOLD
+
+        if !band.detected {
+            continue
+        }
+
         phase := math.atan2(sin, cos) // [-π, π]
+
         amp := magnitude(dft)
 
         normalized_freq: f32 = band.freq_hz / self.samplerate
@@ -232,7 +247,11 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
         band.err_cents = freq_to_cents(band.estimated_freq_hz) - freq_to_cents(band.freq_hz)
 
-        band.err_cents_avg += 0.1 * (band.err_cents - band.err_cents_avg)
+        // Exponentially Weighted Moving Average
+        // band.err_cents_avg += 0.1 * (band.err_cents - band.err_cents_avg)
+
+        band.err_cents_avg = run_moving_avg(&band.moving_avg, band.err_cents)
+
 
         // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
         band.time_stretch = f32(reference_interval)

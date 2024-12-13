@@ -197,7 +197,7 @@ main :: proc() {
             base_band := phase_tracker.bands[0]
 
             // phase_points: [MAX_SPECTRUM_DISPLAY_LEN]rl.Vector2 = {}
-            rl.DrawLineV({10.0, 500.0}, {522.0, 500.0}, rl.GRAY)
+            rl.DrawLineV({10.0, 500.0}, {522.0, 500.0}, rl.LIGHTGRAY)
 
 
             rl.DrawTextEx(

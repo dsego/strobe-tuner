@@ -22,7 +22,7 @@ AudioCapture :: struct {
 
 // TODO can't listen to default input device refresh without hotplug
 // https://github.com/PortAudio/portaudio/wiki/HotPlug
-init_audio_capture :: proc(samplerate: u32 = 44100) -> (bool, ^AudioCapture) {
+init_audio_capture :: proc(samplerate: u32) -> (bool, ^AudioCapture) {
     err: pa.Error
 
     self := new(AudioCapture)
