@@ -2,8 +2,8 @@ package core
 
 
 import "core:c/libc"
-import "core:math"
 import "core:fmt"
+import "core:math"
 import "core:testing"
 import "core:unicode/utf8"
 
@@ -12,7 +12,7 @@ import "core:unicode/utf8"
 
 Note :: struct {
     name:           rune, // note name does not include the accidental
-    semitone_index: int,  // C = 0, C# = 1, ... B = 11
+    semitone_index: int, // C = 0, C# = 1, ... B = 11
     is_accidental:  bool,
     octave:         int,
     cents:          int,
@@ -25,6 +25,7 @@ Note :: struct {
 // TODO: new note from string, eg new_note("A#2")
 
 
+// Cents difference from the pitch standard A440
 freq_to_cents :: proc(freq: f32, pitch_standard: f32 = 440.0) -> f32 {
     return 1200.0 * math.log2(freq / pitch_standard)
 }
@@ -114,6 +115,7 @@ test_freq_to_octave :: proc(t: ^testing.T) {
 }
 
 
+// Cents difference from the pitch standard A440
 cents_to_note :: proc(cents: f32, pitch_standard: f32 = 440.0) -> (note: Note) {
     note_names: []rune = {'C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B'}
 
@@ -174,28 +176,32 @@ test_find_note_g4 :: proc(t: ^testing.T) {
     testing.expect_value(t, note.name, 'G')
 }
 
-next_note_in_scale :: proc (note: Note) -> Note {
+next_note_in_scale :: proc(note: Note) -> Note {
     cents := note.cents
     switch note.name {
-        case 'B', 'E':
-            cents += 100
-        case:
-            cents += 100 if note.is_accidental else 200
+    case 'B', 'E':
+        cents += 100
+    case:
+        cents += 100 if note.is_accidental else 200
     }
     return cents_to_note(f32(cents), note.pitch_standard)
 }
 
-prev_note_in_scale :: proc (note: Note) -> Note {
+prev_note_in_scale :: proc(note: Note) -> Note {
     cents := note.cents
     switch note.name {
-        case 'C', 'F':
-            cents -= 200 if note.is_accidental else 100
-        case:
-            cents -= 300 if note.is_accidental else 200
+    case 'C', 'F':
+        cents -= 200 if note.is_accidental else 100
+    case:
+        cents -= 300 if note.is_accidental else 200
     }
     return cents_to_note(f32(cents), note.pitch_standard)
 }
-
 
 
 // TODO: test next_in_scale
+
+
+cents_deviation :: proc(freq_1_hz: f32, freq_2_hz: f32) -> f32 {
+    return freq_to_cents(freq_1_hz, freq_2_hz)
+}

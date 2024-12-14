@@ -3,7 +3,7 @@ package core
 import "core:fmt"
 import "core:testing"
 
-// Nice performant implementation using a circular buffer
+// Nice efficient implementation using a circular buffer
 // courtesy of Gergely Bencsik (https://youtu.be/7STwpe9Ojic)
 MovingAvg :: struct {
     buffer:  []f32,

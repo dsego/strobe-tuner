@@ -27,6 +27,8 @@ StrobeMode :: enum {
 
 DataPoint :: struct {
     amp:           f32,
+    phase:         f32,
+    freq_diff_hz:  f32,
     err_cents:     f32,
     err_cents_avg: f32,
 }
@@ -45,7 +47,7 @@ StrobeBand :: struct {
     phase_diff:           f32,
     err_cents:            f32,
     err_cents_avg:        f32,
-    moving_avg: MovingAvg,
+    moving_avg:           MovingAvg,
     prev_unwrapped_phase: f32,
     unwrapped_phase:      f32,
     scaled_phase:         f32,
@@ -68,7 +70,7 @@ PhaseTracker :: struct {
     mode:             StrobeMode,
     dft:              SingleFreqDFT, // vernier mode
     data_points:      []DataPoint,
-    data_write_head:  int,
+    data_points_head: int,
 }
 
 
@@ -184,7 +186,8 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
 
     if available <= 0 do return
 
-    time_delta := f64(available) / f64(self.samplerate)
+    time_delta := math.TAU * f64(available) / f64(self.samplerate)
+
     sensitivity: f32 = 1.0
 
     // phase runaway compensation
@@ -195,8 +198,6 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
     // wrap back closer to zero, only interested in relative time reference
     full_periods := math.trunc(num_periods) * f64(reference_interval)
     self.time_reference -= full_periods
-
-    // Note, trunc and ceil seem to have the same effect here
     self.phase_correction = full_periods - self.time_reference
 
     // We can run only one phase calculation since all bands are tracking the same frequency
@@ -226,26 +227,27 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
 
         amp := magnitude(dft)
 
-        normalized_freq: f32 = band.freq_hz / self.samplerate
+        angle_freq: f32 = math.TAU * band.freq_hz / self.samplerate
 
         // Phase correction, this can move the phase outside of the -π, π range
-        phase = phase - f32(self.phase_correction) * math.TAU * normalized_freq
+        phase = phase - f32(self.phase_correction) * angle_freq
 
         // Adding π/2 aligns phases to get the stripes lined up ???
         // FIXME: This used to work before the phase scaling was added
         // phase += math.PI * 0.5
 
-        // Unwrap back to -π to π range
-        for phase > math.PI do phase -= math.TAU
-        for phase < -math.PI do phase += math.TAU
+        // Unwrap back to -π to π range (?)
+        // for phase > math.PI do phase -= math.TAU
+        // for phase < -math.PI do phase += math.TAU
 
         // Calculate estimated frequency
         band.phase = phase
         scale_phase(&band)
 
-        band.freq_diff_hz = -(band.phase_diff / f32(time_delta)) / math.TAU
+        band.freq_diff_hz = -band.phase_diff / f32(time_delta)
         band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
-        band.err_cents = freq_to_cents(band.estimated_freq_hz) - freq_to_cents(band.freq_hz)
+        band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
+
 
         // Exponentially Weighted Moving Average
         // band.err_cents_avg += 0.1 * (band.err_cents - band.err_cents_avg)
@@ -259,10 +261,12 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         band.freq_multiplier = 1.0
     }
 
-    self.data_points[self.data_write_head] = DataPoint {
+    self.data_points[self.data_points_head] = DataPoint {
         self.bands[0].amp,
+        self.bands[0].phase,
+        self.bands[0].freq_diff_hz,
         self.bands[0].err_cents,
         self.bands[0].err_cents_avg,
     }
-    self.data_write_head = (self.data_write_head + 1) % len(self.data_points)
+    self.data_points_head = (self.data_points_head + 1) % len(self.data_points)
 }
