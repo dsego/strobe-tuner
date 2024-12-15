@@ -33,6 +33,7 @@ main :: proc() {
         config.strobe_count,
         config.strobe_window_size,
         config.strobe_mode,
+        config.pitch_standard,
     )
     defer core.destroy_phase_tracker(phase_tracker)
 
@@ -56,7 +57,7 @@ main :: proc() {
     register_audio_node(audio_capture, phase_tracker)
     start_audio_capture(audio_capture)
 
-    core.set_phase_tracker_freq(phase_tracker, target_freq_hz)
+    core.set_phase_tracker_freq(phase_tracker, target_freq_hz, config.pitch_standard)
 
 
     measured_freq: f32 = 0.0
@@ -80,7 +81,7 @@ main :: proc() {
             if detected_note.cents != pitch_info.detected_note.cents {
                 detected_note = pitch_info.detected_note
                 target_freq_hz = pitch_info.detected_note.frequency
-                core.set_phase_tracker_freq(phase_tracker, target_freq_hz)
+                core.set_phase_tracker_freq(phase_tracker, target_freq_hz, config.pitch_standard)
             }
             freq_estimation_active = true
             // core.reset_ewma(&cents_ewma)
@@ -150,7 +151,7 @@ main :: proc() {
 
 
             x: f32 = 10
-            i := phase_tracker.data_write_head
+            i := phase_tracker.data_points_head
 
             // the idea is that phase gives bogus readings for random noise
             // --- need to somehow fade out the display if it's noise, eg low amplitude
@@ -158,30 +159,30 @@ main :: proc() {
             for i >= 0 {
                 y := 500 - phase_tracker.data_points[i].err_cents * 10
                 y_avg := 500 - phase_tracker.data_points[i].err_cents_avg * 10
-                y_phase := 500 - phase_tracker.data_points[i].phase * 10
+                y_phase := 500 - phase_tracker.data_points[i].phase * 500
                 y_freq := 500 - phase_tracker.data_points[i].freq_diff_hz * 100
                 x += 0.5
                 alpha := phase_tracker.data_points[i].amp
                 rl.DrawPixelV({x, y}, rl.ColorAlpha(rl.GREEN, alpha))
-                rl.DrawPixelV({x, y_freq}, rl.ColorAlpha(rl.ORANGE, alpha))
+                // rl.DrawPixelV({x, y_freq}, rl.ColorAlpha(rl.ORANGE, alpha))
                 // rl.DrawPixelV({x, y_avg}, rl.ColorAlpha(rl.ORANGE, alpha))
-                // rl.DrawPixelV({x, y_phase}, rl.ColorAlpha(rl.PINK, alpha))
+                rl.DrawPixelV({x, y_phase}, rl.ColorAlpha(rl.PINK, alpha))
                 i -= 1
             }
 
             i = len(phase_tracker.data_points) - 1
 
-            for i > phase_tracker.data_write_head {
+            for i > phase_tracker.data_points_head {
                 y := 500 - phase_tracker.data_points[i].err_cents * 10
                 y_avg := 500 - phase_tracker.data_points[i].err_cents_avg * 10
-                y_phase := 500 - phase_tracker.data_points[i].phase * 10
+                y_phase := 500 - phase_tracker.data_points[i].phase * 500
                 y_freq := 500 - phase_tracker.data_points[i].freq_diff_hz * 100
                 x += 0.5
                 alpha := phase_tracker.data_points[i].amp
                 rl.DrawPixelV({x, y}, rl.ColorAlpha(rl.GREEN, alpha))
-                rl.DrawPixelV({x, y_freq}, rl.ColorAlpha(rl.ORANGE, alpha))
+                // rl.DrawPixelV({x, y_freq}, rl.ColorAlpha(rl.ORANGE, alpha))
                 // rl.DrawPixelV({x, y_avg}, rl.ColorAlpha(rl.ORANGE, alpha))
-                // rl.DrawPixelV({x, y_phase}, rl.ColorAlpha(rl.PINK, alpha))
+                rl.DrawPixelV({x, y_phase}, rl.ColorAlpha(rl.PINK, alpha))
                 i -= 1
             }
 

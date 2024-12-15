@@ -47,7 +47,6 @@ StrobeBand :: struct {
     phase_diff:           f32,
     err_cents:            f32,
     err_cents_avg:        f32,
-    moving_avg:           MovingAvg,
     prev_unwrapped_phase: f32,
     unwrapped_phase:      f32,
     scaled_phase:         f32,
@@ -71,6 +70,7 @@ PhaseTracker :: struct {
     dft:              SingleFreqDFT, // vernier mode
     data_points:      []DataPoint,
     data_points_head: int,
+    moving_avg:           MovingAvg,
 }
 
 
@@ -80,6 +80,7 @@ init_phase_tracker :: proc(
     band_count: int,
     window_size: int,
     mode: StrobeMode,
+    pitch_standard: f32,
 ) -> ^PhaseTracker {
     self := new(PhaseTracker)
     self.window_size = window_size
@@ -88,7 +89,7 @@ init_phase_tracker :: proc(
     init_audio_capture_node(self, "phase-tracker")
 
     // zero pad to get more DFT precision & smoother response (?)
-    fft_size := self.window_size * 2
+    fft_size := self.window_size * 2.0
 
     self.sample_buffer = make([]f32, fft_size)
     self.data_points = make([]DataPoint, 1024)
@@ -96,15 +97,15 @@ init_phase_tracker :: proc(
     self.base_freq_hz = base_freq_hz
 
     self.dft = init_dft(fft_size)
+    self.moving_avg = init_moving_avg(8)
 
     for i in 0 ..< band_count {
         band := StrobeBand{}
         band.dft = init_dft(fft_size)
-        band.moving_avg = init_moving_avg(32)
         append(&self.bands, band)
     }
 
-    set_phase_tracker_freq(self, base_freq_hz)
+    set_phase_tracker_freq(self, base_freq_hz, pitch_standard)
 
     self.samplerate = samplerate
     return self
@@ -115,13 +116,13 @@ destroy_phase_tracker :: proc(self: ^PhaseTracker) {
     delete(self.data_points)
     delete(self.sample_buffer)
     destory_dft(&self.dft)
+    destroy_moving_avg(&self.moving_avg)
     for &band in self.bands {
         destory_dft(&band.dft)
-        destroy_moving_avg(&band.moving_avg)
     }
 }
 
-set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
+set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32, pitch_standard: f32) {
     flush_audio_capture_ringbuffer(self)
 
     self.phase_correction = 0.0
@@ -155,30 +156,31 @@ set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32) {
     }
 }
 
-scale_phase :: proc(self: ^StrobeBand) {
+scale_phase :: proc(band: ^StrobeBand) {
     // Unwrap phase to range [0, 2π]
-    unwrapped_phase := self.phase
+    unwrapped_phase := band.phase
     for unwrapped_phase < 0.0 do unwrapped_phase += math.TAU
     for unwrapped_phase > math.PI do unwrapped_phase -= math.TAU
 
-    phase_diff := unwrapped_phase - self.prev_unwrapped_phase
+    phase_diff := unwrapped_phase - band.prev_unwrapped_phase
 
     // Handle the jump from 2π to 0 or 0 to 2π
     // (need to handle both rotation directions)
     if phase_diff > math.PI do phase_diff -= math.TAU
     if phase_diff < -math.PI do phase_diff += math.TAU
 
-    self.phase_diff = phase_diff
+    band.phase_diff = phase_diff
 
     // Output is scaled down by factor
-    self.scaled_phase += phase_diff * self.sensitivity
+    band.scaled_phase += phase_diff * band.sensitivity
+
 
     // Technically not necessary to unwrap the phase,
     // Question: is there a benefit to doing so?
-    for self.scaled_phase < 0.0 do self.scaled_phase += math.TAU
-    for self.scaled_phase > math.PI do self.scaled_phase -= math.TAU
+    for band.scaled_phase < 0.0 do band.scaled_phase += math.TAU
+    for band.scaled_phase > math.PI do band.scaled_phase -= math.TAU
 
-    self.prev_unwrapped_phase = unwrapped_phase
+    band.prev_unwrapped_phase = unwrapped_phase
 }
 
 run_dft_analysis :: proc(self: ^PhaseTracker) {
@@ -224,7 +226,6 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         }
 
         phase := math.atan2(sin, cos) // [-π, π]
-
         amp := magnitude(dft)
 
         angle_freq: f32 = math.TAU * band.freq_hz / self.samplerate
@@ -232,16 +233,15 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         // Phase correction, this can move the phase outside of the -π, π range
         phase = phase - f32(self.phase_correction) * angle_freq
 
+        band.phase = phase
+
+        // fmt.println(phase)
+
         // Adding π/2 aligns phases to get the stripes lined up ???
         // FIXME: This used to work before the phase scaling was added
         // phase += math.PI * 0.5
 
-        // Unwrap back to -π to π range (?)
-        // for phase > math.PI do phase -= math.TAU
-        // for phase < -math.PI do phase += math.TAU
-
         // Calculate estimated frequency
-        band.phase = phase
         scale_phase(&band)
 
         band.freq_diff_hz = -band.phase_diff / f32(time_delta)
@@ -251,8 +251,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
 
         // Exponentially Weighted Moving Average
         // band.err_cents_avg += 0.1 * (band.err_cents - band.err_cents_avg)
-
-        band.err_cents_avg = run_moving_avg(&band.moving_avg, band.err_cents)
+        band.err_cents_avg = 0 //run_moving_avg(&band.moving_avg, band.err_cents)
 
 
         // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
@@ -263,7 +262,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
 
     self.data_points[self.data_points_head] = DataPoint {
         self.bands[0].amp,
-        self.bands[0].phase,
+        self.bands[0].scaled_phase,
         self.bands[0].freq_diff_hz,
         self.bands[0].err_cents,
         self.bands[0].err_cents_avg,

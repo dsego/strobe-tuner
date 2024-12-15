@@ -3,6 +3,7 @@ package app
 import "../core"
 
 Config :: struct {
+    pitch_standard:        f32,
     strobe_count:          int,
     pitch_detect_fft_size: int,
     samplerate:            int,
@@ -11,6 +12,7 @@ Config :: struct {
 }
 
 config := Config {
+    pitch_standard        = 440.0,
     strobe_count          = 3,
     pitch_detect_fft_size = 4096,
     samplerate            = 48_000,
