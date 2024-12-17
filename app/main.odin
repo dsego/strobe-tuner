@@ -158,7 +158,6 @@ main :: proc() {
 
             for i >= 0 {
                 y := 500 - phase_tracker.data_points[i].err_cents * 10
-                y_avg := 500 - phase_tracker.data_points[i].err_cents_avg * 10
                 y_phase := 500 - phase_tracker.data_points[i].phase * 500
                 y_freq := 500 - phase_tracker.data_points[i].freq_diff_hz * 100
                 x += 0.5
@@ -174,7 +173,6 @@ main :: proc() {
 
             for i > phase_tracker.data_points_head {
                 y := 500 - phase_tracker.data_points[i].err_cents * 10
-                y_avg := 500 - phase_tracker.data_points[i].err_cents_avg * 10
                 y_phase := 500 - phase_tracker.data_points[i].phase * 500
                 y_freq := 500 - phase_tracker.data_points[i].freq_diff_hz * 100
                 x += 0.5
@@ -207,15 +205,6 @@ main :: proc() {
                 rl.GREEN,
             )
 
-            rl.DrawTextEx(
-                font,
-                fmt.ctprintf("%+.1fc", base_band.err_cents_avg),
-                {500, 340},
-                24,
-                0,
-                rl.ORANGE,
-            )
-
             // rl.DrawTextEx(font, fmt.ctprintf("%+.1fHz", freq_smooth), {400, 400}, 24, 0, rl.WHITE)
             rl.DrawTextEx(
                 font,
@@ -223,7 +212,7 @@ main :: proc() {
                 {400, 400},
                 24,
                 0,
-                rl.LIGHTGRAY,
+                rl.PURPLE,
             )
             //////////////////////////////////////////
 

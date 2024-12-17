@@ -30,7 +30,7 @@ DataPoint :: struct {
     phase:         f32,
     freq_diff_hz:  f32,
     err_cents:     f32,
-    err_cents_avg: f32,
+    // err_cents_avg: f32,
 }
 
 
@@ -70,7 +70,7 @@ PhaseTracker :: struct {
     dft:              SingleFreqDFT, // vernier mode
     data_points:      []DataPoint,
     data_points_head: int,
-    moving_avg:           MovingAvg,
+    // moving_avg:           MovingAvg,
 }
 
 
@@ -97,7 +97,7 @@ init_phase_tracker :: proc(
     self.base_freq_hz = base_freq_hz
 
     self.dft = init_dft(fft_size)
-    self.moving_avg = init_moving_avg(8)
+    // self.moving_avg = init_moving_avg(64)
 
     for i in 0 ..< band_count {
         band := StrobeBand{}
@@ -116,7 +116,7 @@ destroy_phase_tracker :: proc(self: ^PhaseTracker) {
     delete(self.data_points)
     delete(self.sample_buffer)
     destory_dft(&self.dft)
-    destroy_moving_avg(&self.moving_avg)
+    // destroy_moving_avg(&self.moving_avg)
     for &band in self.bands {
         destory_dft(&band.dft)
     }
@@ -251,7 +251,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
 
         // Exponentially Weighted Moving Average
         // band.err_cents_avg += 0.1 * (band.err_cents - band.err_cents_avg)
-        band.err_cents_avg = 0 //run_moving_avg(&band.moving_avg, band.err_cents)
+        // band.err_cents_avg = 0 //run_moving_avg(&band.moving_avg, band.err_cents)
 
 
         // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
@@ -265,7 +265,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         self.bands[0].scaled_phase,
         self.bands[0].freq_diff_hz,
         self.bands[0].err_cents,
-        self.bands[0].err_cents_avg,
+        // self.bands[0].err_cents_avg,
     }
     self.data_points_head = (self.data_points_head + 1) % len(self.data_points)
 }

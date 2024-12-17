@@ -21,6 +21,7 @@ destroy_moving_avg :: proc(self: ^MovingAvg) {
     delete(self.buffer)
 }
 
+// Convolve
 run_moving_avg :: proc(self: ^MovingAvg, input: f32) -> f32 {
     size := len(self.buffer)
 
