@@ -110,8 +110,8 @@ draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^core
         order := len(phase_info.bands) - 1 - band_idx
 
         rect := rl.Rectangle {
-            160,
-            50.0 + band_height * f32(order),
+            120,
+            band_height * f32(order),
             f32(self.texture_width),
             f32(self.texture_height),
         }

@@ -131,12 +131,6 @@ main :: proc() {
             rl.ClearBackground(rl.BLACK)
 
             draw_phase_tracker_display(&phase_tracker_display, phase_tracker)
-            draw_note(
-                detected_note,
-                {280, 340},
-                96,
-                rl.WHITE if freq_estimation_active else rl.GRAY,
-            )
 
             // rl.DrawTextEx(
             //     font,
@@ -150,37 +144,44 @@ main :: proc() {
             data_points := phase_tracker.data_points
 
 
-            x: f32 = 10
+            x: f32 = 86
+
             i := phase_tracker.data_points_head
 
             // the idea is that phase gives bogus readings for random noise
             // --- need to somehow fade out the display if it's noise, eg low amplitude
 
             for i >= 0 {
-                y := 500 - phase_tracker.data_points[i].err_cents * 10
-                y_phase := 500 - phase_tracker.data_points[i].phase * 500
-                y_freq := 500 - phase_tracker.data_points[i].freq_diff_hz * 100
+                y := 400 - phase_tracker.data_points[i].err_cents * 10
+                y_phase := 400 - phase_tracker.data_points[i].phase * 500
+                y_freq := 400 - phase_tracker.data_points[i].freq_diff_hz * 100
                 x += 0.5
                 alpha := phase_tracker.data_points[i].amp
-                rl.DrawPixelV({x, y}, rl.ColorAlpha(rl.GREEN, alpha))
+                // Hack to not clip pixels
+                if y > 300 {
+                    rl.DrawPixelV({x, y}, rl.ColorAlpha(rl.GREEN, alpha))
+                }
                 // rl.DrawPixelV({x, y_freq}, rl.ColorAlpha(rl.ORANGE, alpha))
                 // rl.DrawPixelV({x, y_avg}, rl.ColorAlpha(rl.ORANGE, alpha))
-                rl.DrawPixelV({x, y_phase}, rl.ColorAlpha(rl.PINK, alpha))
+                // rl.DrawPixelV({x, y_phase}, rl.ColorAlpha(rl.PINK, alpha))
                 i -= 1
             }
 
             i = len(phase_tracker.data_points) - 1
 
             for i > phase_tracker.data_points_head {
-                y := 500 - phase_tracker.data_points[i].err_cents * 10
-                y_phase := 500 - phase_tracker.data_points[i].phase * 500
-                y_freq := 500 - phase_tracker.data_points[i].freq_diff_hz * 100
+                y := 400 - phase_tracker.data_points[i].err_cents * 10
+                y_phase := 400 - phase_tracker.data_points[i].phase * 500
+                y_freq := 400 - phase_tracker.data_points[i].freq_diff_hz * 100
                 x += 0.5
                 alpha := phase_tracker.data_points[i].amp
-                rl.DrawPixelV({x, y}, rl.ColorAlpha(rl.GREEN, alpha))
+                // Hack to not clip pixels
+                if y > 300 {
+                    rl.DrawPixelV({x, y}, rl.ColorAlpha(rl.GREEN, alpha))
+                }
                 // rl.DrawPixelV({x, y_freq}, rl.ColorAlpha(rl.ORANGE, alpha))
                 // rl.DrawPixelV({x, y_avg}, rl.ColorAlpha(rl.ORANGE, alpha))
-                rl.DrawPixelV({x, y_phase}, rl.ColorAlpha(rl.PINK, alpha))
+                // rl.DrawPixelV({x, y_phase}, rl.ColorAlpha(rl.PINK, alpha))
                 i -= 1
             }
 
@@ -193,13 +194,19 @@ main :: proc() {
             base_band := phase_tracker.bands[0]
 
             // phase_points: [MAX_SPECTRUM_DISPLAY_LEN]rl.Vector2 = {}
-            rl.DrawLineV({10.0, 500.0}, {522.0, 500.0}, rl.LIGHTGRAY)
+            rl.DrawLineV({86.0, 400.0}, {598.0, 400.0}, rl.LIGHTGRAY)
 
+            draw_note(
+                detected_note,
+                {160, 280},
+                96,
+                rl.WHITE if freq_estimation_active else rl.GRAY,
+            )
 
             rl.DrawTextEx(
                 font,
                 fmt.ctprintf("%+.1fc", base_band.err_cents),
-                {400, 340},
+                {300, 300},
                 24,
                 0,
                 rl.GREEN,
@@ -209,7 +216,7 @@ main :: proc() {
             rl.DrawTextEx(
                 font,
                 fmt.ctprintf("%+.1fHz", base_band.estimated_freq_hz),
-                {400, 400},
+                {400, 300},
                 24,
                 0,
                 rl.PURPLE,

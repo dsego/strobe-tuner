@@ -5,8 +5,8 @@ STROBE_COUNT :: 3
 // NOTE: Needs to be a power of 2 for portaudio ring buffers
 DEFAULT_RB_SIZE :: 65536
 
-SCREEN_WIDTH :: 800
-SCREEN_HEIGHT :: 600
+SCREEN_WIDTH :: 640
+SCREEN_HEIGHT :: 480
 
 MAX_SPECTRUM_DISPLAY_LEN :: 8192
 
