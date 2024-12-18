@@ -8,7 +8,7 @@ import "core:mem"
 import "core:slice"
 
 
-import pa "../odin-portaudio"
+import pa "../vendor/odin-portaudio"
 
 import "../core"
 

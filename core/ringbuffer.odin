@@ -4,7 +4,7 @@ import "base:runtime"
 import "core:fmt"
 import "core:slice"
 
-import pa_rb "../pa_ringbuffer"
+import pa_rb "../vendor/odin-pa_ringbuffer"
 
 
 RingBuffer :: pa_rb.RingBuffer
