@@ -53,7 +53,13 @@ run_raylib_app :: proc() {
     register_audio_node(audio_capture, phase_tracker)
     start_audio_capture(audio_capture)
 
-    core.set_phase_tracker_freq(phase_tracker, target_freq_hz, config.pitch_standard)
+    core.set_phase_tracker_freq(
+        phase_tracker,
+        target_freq_hz,
+        config.pitch_standard,
+        config.base_sensitivity,
+        config.sensitivity_multiplier
+    )
 
     for !rl.WindowShouldClose() {
         pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
@@ -63,7 +69,13 @@ run_raylib_app :: proc() {
             if detected_note.cents != pitch_info.detected_note.cents {
                 detected_note = pitch_info.detected_note
                 target_freq_hz = pitch_info.detected_note.frequency
-                core.set_phase_tracker_freq(phase_tracker, target_freq_hz, config.pitch_standard)
+                core.set_phase_tracker_freq(
+                    phase_tracker,
+                    target_freq_hz,
+                    config.pitch_standard,
+                    config.base_sensitivity,
+                    config.sensitivity_multiplier
+                )
             }
             freq_estimation_active = true
         }

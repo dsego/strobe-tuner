@@ -26,10 +26,10 @@ StrobeMode :: enum {
 
 
 DataPoint :: struct {
-    amp:           f32,
-    phase:         f32,
-    freq_diff_hz:  f32,
-    err_cents:     f32,
+    amp:          f32,
+    phase:        f32,
+    freq_diff_hz: f32,
+    err_cents:    f32,
     // err_cents_avg: f32,
 }
 
@@ -105,8 +105,6 @@ init_phase_tracker :: proc(
         append(&self.bands, band)
     }
 
-    set_phase_tracker_freq(self, base_freq_hz, pitch_standard)
-
     self.samplerate = samplerate
     return self
 }
@@ -122,7 +120,13 @@ destroy_phase_tracker :: proc(self: ^PhaseTracker) {
     }
 }
 
-set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32, pitch_standard: f32) {
+set_phase_tracker_freq :: proc(
+    self: ^PhaseTracker,
+    base_freq_hz: f32,
+    pitch_standard: f32,
+    base_sensitivity: f32,
+    sensitivity_multiplier: f32,
+) {
     flush_audio_capture_ringbuffer(self)
 
     self.phase_correction = 0.0
@@ -133,9 +137,7 @@ set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32, pitch_sta
         set_dft_freq(&self.dft, base_freq_hz / self.samplerate)
     }
 
-    // TODO: move to config
-    pitch_standard: f32 = 440.0
-    sensitivity: f32 = 0.01 * pitch_standard / base_freq_hz
+    sensitivity: f32 = base_sensitivity * pitch_standard / base_freq_hz
 
     for &band, i in self.bands {
         band.phase = 0.0
@@ -146,7 +148,7 @@ set_phase_tracker_freq :: proc(self: ^PhaseTracker, base_freq_hz: f32, pitch_sta
         }
         if self.mode == .VERNIER_MODE {
             band.freq_hz = base_freq_hz
-            sensitivity *= 2.0
+            sensitivity *= sensitivity_multiplier
         }
         band.norm_freq = band.freq_hz / self.samplerate
 
