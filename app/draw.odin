@@ -246,8 +246,7 @@ draw_freq_plot :: proc(using rect: rl.Rectangle, len_hz: f32, div_hz: f32) {
 draw_freq_spectrum :: proc(rect: rl.Rectangle, spectrum: []f32, fft_size: int, samplerate: int) {
     l := len(spectrum)
 
-    // TODO: allocate on the heap ?
-    spectrum_points: [MAX_SPECTRUM_DISPLAY_LEN]rl.Vector2 = {}
+    spectrum_points: [8192]rl.Vector2 = {}
 
     // stretch samples to fit the box width
     px_per_sample := f32(rect.width) / f32(l - 1)

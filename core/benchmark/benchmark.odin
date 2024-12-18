@@ -2,6 +2,7 @@ package benchmark
 
 import "core:time"
 import "core:fmt"
+import "core:math/rand"
 
 import ".."
 import "../../pffft"
@@ -25,7 +26,7 @@ main :: proc() {
     {
         out : [SIZE*2]f32
         samples: [SIZE]f32
-        for i in 0..<SIZE do samples[i] = f32(1)
+        for i in 0..<SIZE do samples[i] = rand.float32_range(-1.0, 1.0)
 
         stopwatch := time.Stopwatch{}
 
