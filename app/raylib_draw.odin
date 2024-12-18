@@ -303,3 +303,33 @@ draw_note_meter :: proc(
         color,
     )
 }
+
+
+draw_cent_deviation :: proc (phase_tracker: ^core.PhaseTracker) {
+    data_points := phase_tracker.data_points
+    x: f32 = 86
+    i := phase_tracker.data_points_head
+
+    draw_point :: proc (x: f32, value: f32, alpha: f32) {
+        y := 400 - value * 10
+        if y > 300 {
+            rl.DrawPixelV({x, y}, rl.ColorAlpha(rl.GREEN, alpha))
+        }
+    }
+
+    for i >= 0 {
+        draw_point(x, data_points[i].err_cents, data_points[i].amp)
+        x += 0.5
+        i -= 1
+    }
+
+    i = len(data_points) - 1
+
+    for i > phase_tracker.data_points_head {
+        draw_point(x, data_points[i].err_cents, data_points[i].amp)
+        x += 0.5
+        i -= 1
+    }
+
+    rl.DrawLineV({86.0, 400.0}, {598.0, 400.0}, rl.LIGHTGRAY)
+}

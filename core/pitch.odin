@@ -6,7 +6,7 @@ import "core:fmt"
 import "core:math"
 
 
-PicthDetector :: struct {
+PitchDetector :: struct {
     using node: AudioCaptureNode,
     nsdf:       NSDFConfig,
     samples:    []f32,
@@ -22,14 +22,14 @@ PitchInfo :: struct {
 }
 
 
-init_pitch_detector :: proc(samplerate: int, fft_size: int) -> (self: PicthDetector) {
+init_pitch_detector :: proc(samplerate: int, fft_size: int) -> (self: PitchDetector) {
     self.samples = make([]f32, fft_size / 2)
     self.nsdf = nsdf_init(fft_size, samplerate)
     init_audio_capture_node(&self, "pitch")
     return
 }
 
-destroy_pitch_detector :: proc(self: ^PicthDetector) {
+destroy_pitch_detector :: proc(self: ^PitchDetector) {
     destroy_audio_capture_node(self)
     nsdf_destroy(&self.nsdf)
     delete(self.samples)
@@ -37,7 +37,7 @@ destroy_pitch_detector :: proc(self: ^PicthDetector) {
 
 
 // TODO: keep track of previous pitches
-run_pitch_detection :: proc(self: ^PicthDetector, prev_info: PitchInfo) -> PitchInfo {
+run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> PitchInfo {
     info := PitchInfo{}
     available := audio_capture_read(self, self.samples)
 

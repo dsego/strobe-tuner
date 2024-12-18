@@ -9,6 +9,7 @@ Config :: struct {
     samplerate:            int,
     strobe_window_size:    int,
     strobe_mode:           core.StrobeMode,
+    note_detection_mode:   NoteDetectionMode,
 }
 
 config := Config {
@@ -18,4 +19,7 @@ config := Config {
     samplerate            = 48_000,
     strobe_window_size    = 9600,
     strobe_mode           = .VERNIER_MODE, // .HARMONIC_MODE
+    note_detection_mode   = .AUTO,
 }
+
+

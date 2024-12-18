@@ -8,7 +8,7 @@ import rl "vendor:raylib"
 import "../core"
 
 
-PhaseTrackerDisplay :: struct {
+SpinningWheelDisplay :: struct {
     // GL Shader
     shader:               rl.Shader,
 
@@ -34,7 +34,7 @@ PhaseTrackerDisplay :: struct {
 }
 
 
-init_phase_tracker_display :: proc() -> (self: PhaseTrackerDisplay) {
+init_spinning_wheel_display :: proc() -> (self: SpinningWheelDisplay) {
     self.texture_width = 400
     self.texture_height = 410
 
@@ -64,13 +64,13 @@ init_phase_tracker_display :: proc() -> (self: PhaseTrackerDisplay) {
     return
 }
 
-destroy_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay) {
+destroy_spinning_wheel_display :: proc(self: ^SpinningWheelDisplay) {
     rl.UnloadShader(self.shader)
 }
 
 
 // TODO: param to define what style of strobe to display (strobe_style) - curved track or full wheels
-draw_phase_tracker_display :: proc(self: ^PhaseTrackerDisplay, phase_info: ^core.PhaseTracker) {
+draw_spinning_wheel_display :: proc(self: ^SpinningWheelDisplay, phase_info: ^core.PhaseTracker) {
 
     // Full circles
     curvature_radius: f32 = 100.0
