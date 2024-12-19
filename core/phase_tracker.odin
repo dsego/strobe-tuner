@@ -54,6 +54,10 @@ StrobeBand :: struct {
 
     // a number < 1 will slow down the strobe and > 1 will increase the strobe spinning rate
     sensitivity:          f32,
+
+    // fade out if the spinning is too rapid
+    attenuation:          f32,
+    attenuation_range: [2]f32,
 }
 
 PhaseTracker :: struct {
@@ -250,7 +254,6 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
         band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
 
-
         // Exponentially Weighted Moving Average
         // band.err_cents_avg += 0.1 * (band.err_cents - band.err_cents_avg)
         // band.err_cents_avg = 0 //run_moving_avg(&band.moving_avg, band.err_cents)
@@ -258,7 +261,9 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
 
         // Generate a (synthetic strobe) sinusoid based on detected phase & amplitude
         band.time_stretch = f32(reference_interval)
-        band.amp = amp
+
+        band.attenuation = linalg.smoothstep(f32(0.12), f32(0.1), band.freq_diff_hz * band.sensitivity)
+        band.amp = amp * band.attenuation
         band.freq_multiplier = 1.0
     }
 
