@@ -96,26 +96,12 @@ run_raylib_app :: proc() {
             draw_spinning_wheel_display(&spinning_wheel_display, phase_tracker)
             draw_cent_deviation(phase_tracker)
 
-
             draw_note(
                 detected_note,
                 {160, 280},
                 96,
                 rl.WHITE if freq_estimation_active else rl.GRAY,
             )
-
-            for band, i in phase_tracker.bands {
-                order := len(phase_tracker.bands) - 1 - i
-                rl.DrawTextEx(
-                    font,
-                    fmt.ctprintf("%+.4f  %+.4f", base_band.attenuation, base_band.freq_diff_hz * band.sensitivity),
-                    {500, 300 + f32(order) * 50},
-                    16,
-                    0,
-                    rl.SKYBLUE,
-                )
-            }
-
             rl.DrawTextEx(
                 font,
                 fmt.ctprintf("%+.1fc", base_band.err_cents),
