@@ -165,3 +165,7 @@ https://github.com/PortAudio/portaudio/wiki/HotPlug
 
 A Better Approach to Spectral Analysis
 https://youtu.be/0-q9gwYZZ1o
+
+
+An In-Depth look at Lerp, Smoothstep, and Shaping Functions
+https://www.youtube.com/watch?v=YJB1QnEmlTs

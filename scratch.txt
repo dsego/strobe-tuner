@@ -1,6 +1,19 @@
 TODO:
 
 
+
+phase
+
+slerp
+
+
+spherical interpolateion
+
+
+
+
+
+
 - Label to show active mode: vernier/harmonic
 - Draw note line with notes that match the instrument highlighted ?
 - Show cents error display
@@ -22,21 +35,10 @@ icon idea - strobe + tuning fork (ala xcode hammer icon)
 
 
 
- - smooth_impulsive_noise, average, ewma, or euro filter?
-
-
-
-
-
-for i in 0..<len(freq_measurements) - 1 {
-    freq_measurements[i+1] = freq_measurements[i]
-}
-freq_measurements[0] = pitch_info.detected_freq
-
 
 MVP:
-- harmonic - tracks pitch & overtones
-- attenuate/fade out strobe when it moves too fast
+- harmonic - tracks pitch & overtones ✅
+- attenuate/fade out strobe when it moves too fast ✅
 - note auto detect on/off - if off can cycle through notes for the chosen instrument
 - Note display
 - flat/sharp indicator
@@ -58,16 +60,8 @@ MVP:
 TBD:
 
 - low pass filter to remove noise ??
-- downsample to 16 k ???
-- figure out the min/max phase that I can track, show freq & cents offset, test with diff. freqs
-- control saturation with rms level, control hue with cents offset
+- control saturation with rms level, control hue with cents offset ??
 - shader render to canvas ?
 - new shared for the dot matrix effect, or stripes??
-
-
-==============================
-
-
-foreign import portaudio "system:/opt/homebrew/Cellar/portaudio/19.7.0/lib/libportaudio.dylib"
 
 
