@@ -15,9 +15,6 @@ uniform float curvatureRadius;
 uniform vec3 colorA;
 uniform vec3 colorB;
 
-// TODO: deprecate
-uniform float phaseCorrection;
-
 uniform float timeStretch;
 uniform float phase;
 uniform float amp;
@@ -33,7 +30,6 @@ float generateSignal(
     float amplitude,
     float time,
     float timeStretch,
-    float phaseCorrection,
     float periodCount
 ) {
     time = time * timeStretch;
@@ -111,7 +107,6 @@ void main()
         amp,
         time,
         timeStretch,
-        phaseCorrection,
         periodCount
     );
 

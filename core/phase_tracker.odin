@@ -244,9 +244,10 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         phase = phase - f32(self.phase_correction) * angle_freq
 
 
-        cos_avg := run_moving_avg(&band.cos_avg, math.cos(phase))
-        sin_avg := run_moving_avg(&band.sin_avg, math.sin(phase))
-        phase = math.atan2(sin_avg, cos_avg)
+        // TODO: avg with vector of magnitude
+        // cos_avg := run_moving_avg(&band.cos_avg, math.cos(   phase))
+        // sin_avg := run_moving_avg(&band.sin_avg, math.sin(phase))
+        // phase = math.atan2(sin_avg, cos_avg)
 
 
         band.phase = phase

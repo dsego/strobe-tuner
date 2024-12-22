@@ -22,7 +22,6 @@ SpinningWheelDisplay :: struct {
     color_b_loc:          i32,
     time_stretch_loc:     i32,
     period_count_loc:     i32,
-    phase_correction_loc: i32,
     phase_loc:            i32,
     amp_loc:              i32,
     norm_freq_loc:        i32,
@@ -51,7 +50,6 @@ init_spinning_wheel_display :: proc() -> (self: SpinningWheelDisplay) {
     self.color_a_loc = rl.GetShaderLocation(self.shader, "colorA")
     self.color_b_loc = rl.GetShaderLocation(self.shader, "colorB")
     self.time_stretch_loc = rl.GetShaderLocation(self.shader, "timeStretch")
-    self.phase_correction_loc = rl.GetShaderLocation(self.shader, "phaseCorrection")
     self.phase_loc = rl.GetShaderLocation(self.shader, "phase")
     self.amp_loc = rl.GetShaderLocation(self.shader, "amp")
     self.norm_freq_loc = rl.GetShaderLocation(self.shader, "normFreq")
@@ -88,13 +86,6 @@ draw_spinning_wheel_display :: proc(self: ^SpinningWheelDisplay, phase_info: ^co
     // color_a := rl.ColorNormalize(rl.Color{248, 120, 85, 255})
     // color_b := rl.ColorNormalize(rl.Color{88, 27, 26, 255})
 
-
-    rl.SetShaderValue(
-        self.shader,
-        self.phase_correction_loc,
-        &phase_info.phase_correction,
-        rl.ShaderUniformDataType.FLOAT,
-    )
     rl.SetShaderValue(
         self.shader,
         self.band_height_loc,
