@@ -272,14 +272,18 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         band.time_stretch = f32(reference_interval)
 
         band.attenuation = linalg.smoothstep(
-            f32(0.15),
-            f32(0.1),
-            band.freq_diff_hz * band.sensitivity,
+            f32(0.14),
+            f32(0.01),
+            math.abs(band.freq_diff_hz * band.sensitivity),
         )
-        band.amp = amp * band.attenuation
+
+        band.amp = amp
 
         // limit max amp to avoid jagged edges in the strobe display
         band.amp = clamp(band.amp, 0.0, 50.0)
+
+        // apply attenuation after clamping to get the desired effect
+        band.amp *= band.attenuation
 
 
         band.freq_multiplier = 1.0
