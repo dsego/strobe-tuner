@@ -277,6 +277,11 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
             band.freq_diff_hz * band.sensitivity,
         )
         band.amp = amp * band.attenuation
+
+        // limit max amp to avoid jagged edges in the strobe display
+        band.amp = clamp(band.amp, 0.0, 50.0)
+
+
         band.freq_multiplier = 1.0
     }
 
