@@ -4,9 +4,13 @@ import "core:fmt"
 import "core:math"
 import "core:strings"
 import "core:time"
+import "core:path/filepath"
 
 import "../core"
 import rl "vendor:raylib"
+
+root_dir := filepath.dir(#file)
+raylib_style_path := filepath.join({root_dir, "../assets/style_dark.txt.rgs"})
 
 
 run_raylib_app :: proc() {
@@ -16,11 +20,14 @@ run_raylib_app :: proc() {
     pitch_info := core.PitchInfo{}
     detected_note := core.Note{}
 
-
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
+    rl.GuiSetStyle(.DEFAULT, i32(rl.GuiDefaultProperty.TEXT_SIZE), 16)
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
     defer rl.CloseWindow()
+
+    init_font(192)
+    defer destroy_font()
 
 
     phase_tracker := core.init_phase_tracker(
@@ -45,10 +52,6 @@ run_raylib_app :: proc() {
     if !ok do return
     defer destroy_audio_capture(audio_capture)
 
-
-    init_drawing_context()
-    defer destroy_drawing_context()
-
     register_audio_node(audio_capture, &pitch_detector)
     register_audio_node(audio_capture, phase_tracker)
     start_audio_capture(audio_capture)
@@ -58,8 +61,10 @@ run_raylib_app :: proc() {
         target_freq_hz,
         config.pitch_standard,
         config.base_sensitivity,
-        config.sensitivity_multiplier
+        config.sensitivity_multiplier,
     )
+
+    text_buffer: [1024]u8
 
     for !rl.WindowShouldClose() {
         pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
@@ -74,7 +79,7 @@ run_raylib_app :: proc() {
                     target_freq_hz,
                     config.pitch_standard,
                     config.base_sensitivity,
-                    config.sensitivity_multiplier
+                    config.sensitivity_multiplier,
                 )
             }
             freq_estimation_active = true

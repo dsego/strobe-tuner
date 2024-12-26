@@ -12,13 +12,10 @@ spherical interpolateion
 
 
 
-
-
 - Label to show active mode: vernier/harmonic
 - Draw note line with notes that match the instrument highlighted ?
 - Show cents error display
 - Show flat/sharp indicator
-
 
 
 
@@ -40,7 +37,7 @@ MVP:
 - harmonic - tracks pitch & overtones ✅
 - attenuate/fade out strobe when it moves too fast ✅
 - note auto detect on/off - if off can cycle through notes for the chosen instrument
-- Note display
+- Note display ✅
 - flat/sharp indicator
 
 - note line with notes that match the instrument highlighted, easy to spot the pitch area at a glance
@@ -58,7 +55,6 @@ MVP:
 
 
 TBD:
-
 - low pass filter to remove noise ??
 - control saturation with rms level, control hue with cents offset ??
 - shader render to canvas ?
