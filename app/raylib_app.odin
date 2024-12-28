@@ -40,8 +40,8 @@ run_raylib_app :: proc() {
     )
     defer core.destroy_phase_tracker(phase_tracker)
 
-    spinning_wheel_display := init_spinning_wheel_display()
-    defer destroy_spinning_wheel_display(&spinning_wheel_display)
+    strobe_display := init_strobe_display()
+    defer destroy_strobe_display(&strobe_display)
 
 
     pitch_detector := core.init_pitch_detector(config.samplerate, config.pitch_detect_fft_size)
@@ -62,6 +62,7 @@ run_raylib_app :: proc() {
         config.pitch_standard,
         config.base_sensitivity,
         config.sensitivity_multiplier,
+        config.strobe_mode,
     )
 
     text_buffer: [1024]u8
@@ -80,6 +81,7 @@ run_raylib_app :: proc() {
                     config.pitch_standard,
                     config.base_sensitivity,
                     config.sensitivity_multiplier,
+                    config.strobe_mode,
                 )
             }
             freq_estimation_active = true
@@ -98,7 +100,7 @@ run_raylib_app :: proc() {
         {
             rl.ClearBackground(rl.BLACK)
 
-            draw_spinning_wheel_display(&spinning_wheel_display, phase_tracker)
+            draw_strobe_display(&strobe_display, phase_tracker)
             draw_cent_deviation(phase_tracker)
 
             draw_note(

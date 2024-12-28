@@ -30,6 +30,9 @@ Config :: struct {
 
     // auto detection vs manual selection of note to track
     note_detection_mode:    NoteDetectionMode,
+
+    // How to render the strobe effect
+    strobe_display_type:    StrobeDisplayType,
 }
 
 config := Config {

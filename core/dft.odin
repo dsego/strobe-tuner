@@ -47,5 +47,6 @@ run_single_dft :: proc (self: ^SingleFreqDFT, samples: []f32) -> complex64 {
         dft += complex(samples[i], 0) * self.twiddle_lookup[i]
     }
 
+    // TODO: normalize?
     return dft
 }

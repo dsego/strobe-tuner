@@ -8,7 +8,7 @@ import rl "vendor:raylib"
 import "../core"
 
 
-SpinningWheelDisplay :: struct {
+StrobeDisplay :: struct {
     // GL Shader
     shader:               rl.Shader,
 
@@ -30,10 +30,11 @@ SpinningWheelDisplay :: struct {
     band_height_loc:      i32,
     err_cents_loc:        i32,
     freq_multiplier_loc:  i32,
+    display_type:         StrobeDisplayType,
 }
 
 
-init_spinning_wheel_display :: proc() -> (self: SpinningWheelDisplay) {
+init_strobe_display :: proc() -> (self: StrobeDisplay) {
     self.texture_width = 400
     self.texture_height = 410
 
@@ -58,29 +59,38 @@ init_spinning_wheel_display :: proc() -> (self: SpinningWheelDisplay) {
     self.band_height_loc = rl.GetShaderLocation(self.shader, "bandHeight")
     self.err_cents_loc = rl.GetShaderLocation(self.shader, "errCents")
     self.period_count_loc = rl.GetShaderLocation(self.shader, "periodCount")
+    self.display_type = StrobeDisplayType.CURVED_TRACKS
 
     return
 }
 
-destroy_spinning_wheel_display :: proc(self: ^SpinningWheelDisplay) {
+destroy_strobe_display :: proc(self: ^StrobeDisplay) {
     rl.UnloadShader(self.shader)
+}
+
+set_display_type :: proc(self: ^StrobeDisplay, display_type: StrobeDisplayType) {
+    self.display_type = display_type
 }
 
 
 // TODO: param to define what style of strobe to display (strobe_style) - curved track or full wheels
-draw_spinning_wheel_display :: proc(self: ^SpinningWheelDisplay, phase_info: ^core.PhaseTracker) {
+draw_strobe_display :: proc(self: ^StrobeDisplay, phase_info: ^core.PhaseTracker) {
+    curvature_radius: f32
+    band_height: f32
+    period_count: f32
 
-    // Full circles
-    curvature_radius: f32 = 100.0
-    band_height: f32 = 26.0
-    period_count: f32 = 4.0 // how many strobe periods to fit in a circle
-
-    // Curved tracks
-    if true {
+    switch self.display_type {
+    case StrobeDisplayType.SPINNING_WHEEL:
+        // Full circles
+        curvature_radius = 100.0
+        band_height = 26.0
+        period_count = 4.0 // how many strobe periods to fit in a circle
+    case StrobeDisplayType.CURVED_TRACKS:
         curvature_radius = 1000.0
         band_height = 66.0
         period_count = 24.0
     }
+
 
     // RED SCHEME
     // color_a := rl.ColorNormalize(rl.Color{248, 120, 85, 255})

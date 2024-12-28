@@ -134,12 +134,14 @@ set_phase_tracker_freq :: proc(
     pitch_standard: f32,
     base_sensitivity: f32,
     sensitivity_multiplier: f32,
+    mode: StrobeMode,
 ) {
     flush_audio_capture_ringbuffer(self)
 
     self.phase_correction = 0.0
     multiplier: f32 = 1.0
     self.base_freq_hz = base_freq_hz
+    self.mode = mode
 
     if self.mode == .VERNIER_MODE {
         set_dft_freq(&self.dft, base_freq_hz / self.samplerate)
@@ -298,3 +300,4 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
     }
     self.data_points_head = (self.data_points_head + 1) % len(self.data_points)
 }
+

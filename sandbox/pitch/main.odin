@@ -103,8 +103,7 @@ main :: proc() {
         helpers.draw_time_plot(rect2, len(pitch_config.autocorrelation), 9.0, SAMPLERATE, ctx.font)
         helpers.draw_samples(rect2, pitch_config.autocorrelation, rl.GOLD, gain)
 
-        formatted_freq := strings.clone_to_cstring(fmt.aprintf("%.1f Hz", freq))
-        rl.DrawTextEx(font, formatted_freq, {20, 550}, 32, 0, rl.GRAY)
+        rl.DrawTextEx(font, fmt.cprintf("%.1f Hz", freq), {20, 550}, 32, 0, rl.GRAY)
 
         // Mark lag position with a cross
         cx := rect2.x + lag * f32(rect.width) / f32(len(samples) - 1)
