@@ -38,14 +38,19 @@ init_strobe_display :: proc() -> (self: StrobeDisplay) {
     self.texture_width = 400
     self.texture_height = 410
 
-    imgRed := rl.GenImageColor(self.texture_width, self.texture_height, rl.Color{255, 0, 0, 255})
-    self.texture = rl.LoadTextureFromImage(imgRed)
-    rl.UnloadImage(imgRed)
+    // We need this to draw the fragment shader
+    textureImage := rl.GenImageColor(self.texture_width, self.texture_height, rl.Color{255, 0, 0, 255})
+    self.texture = rl.LoadTextureFromImage(textureImage)
+    rl.UnloadImage(textureImage)
 
 
     // File path relative to our current odin file
-    frag_shader_path := filepath.join({filepath.dir(#file), "./shader.frag"})
-    self.shader = rl.LoadShader(nil, fmt.ctprintf("%v", frag_shader_path))
+    dir := filepath.dir(#file)
+    frag_shader_path := filepath.join({dir, "./shader.frag"})
+    self.shader = rl.LoadShader(nil, cstring(raw_data(frag_shader_path)))
+    delete(dir)
+    delete(frag_shader_path)
+
 
     // Get uniform locations
     self.color_a_loc = rl.GetShaderLocation(self.shader, "colorA")
@@ -66,6 +71,7 @@ init_strobe_display :: proc() -> (self: StrobeDisplay) {
 
 destroy_strobe_display :: proc(self: ^StrobeDisplay) {
     rl.UnloadShader(self.shader)
+    rl.UnloadTexture(self.texture)
 }
 
 set_display_type :: proc(self: ^StrobeDisplay, display_type: StrobeDisplayType) {
@@ -73,19 +79,18 @@ set_display_type :: proc(self: ^StrobeDisplay, display_type: StrobeDisplayType) 
 }
 
 
-// TODO: param to define what style of strobe to display (strobe_style) - curved track or full wheels
 draw_strobe_display :: proc(self: ^StrobeDisplay, phase_info: ^core.PhaseTracker) {
     curvature_radius: f32
     band_height: f32
     period_count: f32
 
     switch self.display_type {
-    case StrobeDisplayType.SPINNING_WHEEL:
+    case .SPINNING_WHEEL:
         // Full circles
         curvature_radius = 100.0
         band_height = 26.0
         period_count = 4.0 // how many strobe periods to fit in a circle
-    case StrobeDisplayType.CURVED_TRACKS:
+    case .CURVED_TRACKS:
         curvature_radius = 1000.0
         band_height = 66.0
         period_count = 24.0
@@ -211,7 +216,9 @@ draw_strobe_display :: proc(self: ^StrobeDisplay, phase_info: ^core.PhaseTracker
             &band.scaled_phase,
             rl.ShaderUniformDataType.FLOAT,
         )
+
         rl.SetShaderValue(self.shader, self.amp_loc, &band.amp, rl.ShaderUniformDataType.FLOAT)
+
         rl.SetShaderValue(
             self.shader,
             self.norm_freq_loc,
@@ -225,7 +232,6 @@ draw_strobe_display :: proc(self: ^StrobeDisplay, phase_info: ^core.PhaseTracker
             &band.err_cents,
             rl.ShaderUniformDataType.FLOAT,
         )
-
         {
             rl.BeginShaderMode(self.shader)
             rl.DrawTextureV(self.texture, {rect.x, rect.y}, rl.WHITE)

@@ -1,7 +1,6 @@
 package core
 
 import "base:runtime"
-import "core:fmt"
 import "core:slice"
 
 import pa_rb "../vendor/odin-pa_ringbuffer"
@@ -45,10 +44,7 @@ read_ringbuffer :: proc (rb_ptr: ^RingBuffer, buffer: []f32, frame_count: u32) -
     data_ptr: rawptr
     total_frames_read: u32 = 0
 
-    assert(
-        len(buffer) >= int(frame_count),
-        fmt.aprintf("frame_count %v larger than buffer size %v", frame_count, len(buffer)),
-    )
+    assert(len(buffer) >= int(frame_count), "frame_count larger than buffer size")
 
     num_read := pa_rb.ReadRingBuffer(rb_ptr, raw_data(buffer), i32(frame_count))
     return u32(num_read)

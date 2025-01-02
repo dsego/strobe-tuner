@@ -15,8 +15,11 @@ init_font :: proc(font_size: i32) {
 
     // Root directory relative to this file
     root_dir := filepath.dir(#file)
+    defer delete(root_dir)
 
     path := filepath.join({root_dir, "../assets/NotoSansMono-Medium.ttf"})
+    defer delete(path)
+
     font = rl.LoadFontEx(cstring(raw_data(path)), font_size, codepoints, count)
 }
 

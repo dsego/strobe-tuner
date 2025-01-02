@@ -57,9 +57,6 @@ StrobeBand :: struct {
 
     // fade out if the spinning is too rapid
     attenuation:          f32,
-
-    sin_avg:          MovingAvg,
-    cos_avg:          MovingAvg,
 }
 
 PhaseTracker :: struct {
@@ -76,7 +73,6 @@ PhaseTracker :: struct {
     dft:              SingleFreqDFT, // vernier mode
     data_points:      []DataPoint,
     data_points_head: int,
-    // moving_avg:           MovingAvg,
 }
 
 
@@ -107,8 +103,6 @@ init_phase_tracker :: proc(
     for i in 0 ..< band_count {
         band := StrobeBand{}
         band.dft = init_dft(fft_size)
-        band.sin_avg = init_moving_avg(32)
-        band.cos_avg = init_moving_avg(32)
         append(&self.bands, band)
     }
 
@@ -122,10 +116,10 @@ destroy_phase_tracker :: proc(self: ^PhaseTracker) {
     delete(self.sample_buffer)
     destory_dft(&self.dft)
     for &band in self.bands {
-        destroy_moving_avg(&band.sin_avg)
-        destroy_moving_avg(&band.cos_avg)
         destory_dft(&band.dft)
     }
+    delete(self.bands)
+    free(self)
 }
 
 set_phase_tracker_freq :: proc(
@@ -244,14 +238,6 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
 
         // Phase correction, this can move the phase outside of the -π, π range
         phase = phase - f32(self.phase_correction) * angle_freq
-
-
-        // TODO: avg with vector of magnitude
-        // cos_avg := run_moving_avg(&band.cos_avg, math.cos(   phase))
-        // sin_avg := run_moving_avg(&band.sin_avg, math.sin(phase))
-        // phase = math.atan2(sin_avg, cos_avg)
-
-
         band.phase = phase
 
 

@@ -2,6 +2,7 @@ package app
 
 import "../core"
 
+
 Config :: struct {
     // eg A 440Hz
     pitch_standard:         f32,
@@ -35,7 +36,7 @@ Config :: struct {
     strobe_display_type:    StrobeDisplayType,
 }
 
-config := Config {
+config :: Config {
     pitch_standard         = 440.0,
     strobe_count           = 3,
     pitch_detect_fft_size  = 4096,
@@ -45,4 +46,5 @@ config := Config {
     note_detection_mode    = .AUTO,
     base_sensitivity       = 0.01,
     sensitivity_multiplier = 2.0,
+    strobe_display_type    = .CURVED_TRACKS,
 }

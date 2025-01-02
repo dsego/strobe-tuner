@@ -30,8 +30,8 @@ init_pitch_detector :: proc(samplerate: int, fft_size: int) -> (self: PitchDetec
 }
 
 destroy_pitch_detector :: proc(self: ^PitchDetector) {
-    destroy_audio_capture_node(self)
     nsdf_destroy(&self.nsdf)
+    destroy_audio_capture_node(self)
     delete(self.samples)
 }
 
