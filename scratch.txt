@@ -34,11 +34,46 @@ icon idea - strobe + tuning fork (ala xcode hammer icon)
 
 
 MVP:
-- harmonic - tracks pitch & overtones ✅
-- attenuate/fade out strobe when it moves too fast ✅
-- note auto detect on/off - if off can cycle through notes for the chosen instrument
-- Note display ✅
-- flat/sharp indicator
+
+
+
+-----------------------------
+--       MAIN SCREEN       --
+-----------------------------
+
+    - strobe display
+    - flat/sharp indicator
+    - note name
+        - manual tuning preset dropdown (eg chromatic, guitar eadgbe, ukulele, etc)
+        - note picker (in manual mode)
+    - note map (TBD)
+    - cents deviation number
+    - frequency Hz number
+    - cents deviation line
+    - mode toggle button (harmonic vs vernier)
+    - auto/manual toggle
+
+
+
+-----------------------------
+--     SETTINGS SCREEN     --
+-----------------------------
+
+    - microphone / audio input dropdown
+    - sampling rate dropdown
+    - sensitivity slider
+    - color theme dropdown
+    - strobe display dropdown: spinning wheel / tracks
+    - contrast (gain) - slider
+    - pitch standard - 440hz - number spinner
+    - load tuning (pitch std, stretched, cents offset per note, aka sweetened, etc)
+        - default is -none-
+
+
+
+
+----------------------------------------------------------------------------------------------------
+
 
 - note line with notes that match the instrument highlighted, easy to spot the pitch area at a glance
     eg for guitar tuning the low E string
@@ -46,11 +81,6 @@ MVP:
       B2   C2  <|>  D2   [E2]   F2
     --------------------------------
 
-- cents error display
-- settings
-    - pitch standard - 440hz
-    - manual mode tuning (eg chromatic, guitar eadgbe, ukulele, etc)
-    - cents offset per note
 
 
 

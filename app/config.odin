@@ -36,7 +36,7 @@ Config :: struct {
     strobe_display_type:    StrobeDisplayType,
 }
 
-config :: Config {
+config := Config {
     pitch_standard         = 440.0,
     strobe_count           = 3,
     pitch_detect_fft_size  = 4096,

@@ -35,28 +35,27 @@ DataPoint :: struct {
 
 
 StrobeBand :: struct {
-    freq_hz:              f32,
-    norm_freq:            f32,
-    freq_diff_hz:         f32,
-    estimated_freq_hz:    f32,
-    dft:                  SingleFreqDFT, // harmonic mode
-    time_stretch:         f32,
-    freq_multiplier:      f32, // to get more or less stripes in the pattern
-    phase:                f32,
-    amp:                  f32,
-    phase_diff:           f32,
-    err_cents:            f32,
-    err_cents_avg:        f32,
-    prev_unwrapped_phase: f32,
-    unwrapped_phase:      f32,
-    scaled_phase:         f32,
-    detected:             bool,
+    freq_hz:           f32,
+    norm_freq:         f32,
+    freq_diff_hz:      f32,
+    estimated_freq_hz: f32,
+    dft:               SingleFreqDFT, // harmonic mode
+    time_stretch:      f32,
+    freq_multiplier:   f32, // to get more or less stripes in the pattern
+    phase:             f32,
+    amp:               f32,
+    phase_diff:        f32,
+    err_cents:         f32,
+    err_cents_avg:     f32,
+    unwrapped_phase:   f32,
+    scaled_phase:      f32,
+    detected:          bool,
 
     // a number < 1 will slow down the strobe and > 1 will increase the strobe spinning rate
-    sensitivity:          f32,
+    sensitivity:       f32,
 
     // fade out if the spinning is too rapid
-    attenuation:          f32,
+    attenuation:       f32,
 }
 
 PhaseTracker :: struct {
@@ -165,28 +164,27 @@ set_phase_tracker_freq :: proc(
 scale_phase :: proc(band: ^StrobeBand) {
     // Unwrap phase to range [0, 2π]
     unwrapped_phase := band.phase
+
     for unwrapped_phase < 0.0 do unwrapped_phase += math.TAU
-    for unwrapped_phase > math.PI do unwrapped_phase -= math.TAU
+    for unwrapped_phase > math.TAU do unwrapped_phase -= math.TAU
 
-    phase_diff := unwrapped_phase - band.prev_unwrapped_phase
+    phase_diff := unwrapped_phase - band.unwrapped_phase
 
-    // Handle the jump from 2π to 0 or 0 to 2π
-    // (need to handle both rotation directions)
-    if phase_diff > math.PI do phase_diff -= math.TAU
-    if phase_diff < -math.PI do phase_diff += math.TAU
+    // Handle the jump from 2π to 0 or 0 to 2π (both rotation directions)
+    for phase_diff > math.PI do phase_diff -= math.TAU
+    for phase_diff < -math.PI do phase_diff += math.TAU
 
     band.phase_diff = phase_diff
 
     // Output is scaled down by factor
     band.scaled_phase += phase_diff * band.sensitivity
 
-
     // Technically not necessary to unwrap the phase,
     // Question: is there a benefit to doing so?
     for band.scaled_phase < 0.0 do band.scaled_phase += math.TAU
     for band.scaled_phase > math.PI do band.scaled_phase -= math.TAU
 
-    band.prev_unwrapped_phase = unwrapped_phase
+    band.unwrapped_phase = unwrapped_phase
 }
 
 run_dft_analysis :: proc(self: ^PhaseTracker) {
@@ -194,7 +192,8 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
 
     if available <= 0 do return
 
-    time_delta := math.TAU * f64(available) / f64(self.samplerate)
+    time_delta := (math.TAU * f64(available)) / f64(self.samplerate)
+    one_over_time := 1.0 / time_delta
 
     sensitivity: f32 = 1.0
 
@@ -248,7 +247,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         // Calculate estimated frequency
         scale_phase(&band)
 
-        band.freq_diff_hz = -band.phase_diff / f32(time_delta)
+        band.freq_diff_hz = -band.phase_diff * f32(one_over_time)
         band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
         band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
 
@@ -271,7 +270,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         band.amp = clamp(band.amp, 0.0, 50.0)
 
         // apply attenuation after clamping to get the desired effect
-        band.amp *= band.attenuation
+        // band.amp *= band.attenuation
 
 
         band.freq_multiplier = 1.0
@@ -286,4 +285,3 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
     }
     self.data_points_head = (self.data_points_head + 1) % len(self.data_points)
 }
-

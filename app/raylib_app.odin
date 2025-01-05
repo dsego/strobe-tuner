@@ -2,16 +2,16 @@ package app
 
 import "core:fmt"
 import "core:math"
+import "core:path/filepath"
 import "core:strings"
 import "core:time"
-import "core:path/filepath"
 
 import "../core"
 import rl "vendor:raylib"
 
 
 run_raylib_app :: proc() {
-    target_freq_hz: f32 = 110.0
+    target_freq_hz: f32 = 329.6275569128699
     freq_estimation_active := false
 
     pitch_info := core.PitchInfo{}
@@ -64,13 +64,24 @@ run_raylib_app :: proc() {
         config.strobe_mode,
     )
 
-    // config.note_detection_mode = .MANUAL
+    config.note_detection_mode = .MANUAL
 
     detected_note = core.find_note(target_freq_hz)
 
     for !rl.WindowShouldClose() {
 
-        if config.note_detection_mode == .AUTO {
+        if config.note_detection_mode == .MANUAL {
+
+            if rl.IsKeyPressed(.LEFT) {
+
+
+            }
+
+            if rl.IsKeyPressed(.RIGHT) {
+
+            }
+
+        } else if config.note_detection_mode == .AUTO {
             pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
 
             // Keep previous measurement if there is no detected note
@@ -115,7 +126,7 @@ run_raylib_app :: proc() {
             )
             rl.DrawTextEx(
                 font,
-                fmt.ctprintf("%+.1fc", base_band.err_cents),
+                fmt.ctprintf("Cents\n%+.1f", base_band.err_cents),
                 {300, 300},
                 24,
                 0,
@@ -123,11 +134,19 @@ run_raylib_app :: proc() {
             )
             rl.DrawTextEx(
                 font,
-                fmt.ctprintf("%+.1fHz", base_band.estimated_freq_hz),
+                fmt.ctprintf("Hertz\n %+.1f", base_band.estimated_freq_hz),
                 {400, 300},
                 24,
                 0,
                 rl.PURPLE,
+            )
+            rl.DrawTextEx(
+                font,
+                fmt.ctprintf("%+.5f\n%+.5f", base_band.phase_diff, base_band.amp),
+                {400, 400},
+                24,
+                0,
+                rl.ORANGE,
             )
         }
     }
