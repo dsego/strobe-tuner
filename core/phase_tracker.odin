@@ -72,6 +72,7 @@ PhaseTracker :: struct {
     dft:              SingleFreqDFT, // vernier mode
     data_points:      []DataPoint,
     data_points_head: int,
+    available:        int,
 }
 
 
@@ -190,9 +191,15 @@ scale_phase :: proc(band: ^StrobeBand) {
 run_dft_analysis :: proc(self: ^PhaseTracker) {
     available := audio_capture_read(self, self.sample_buffer)
 
-    if available <= 0 do return
+    self.available = int(available)
+
+    // Skip there are no new samples, the phase difference stays the same
+    if available <= 0 {
+        return
+    }
 
     time_delta := (math.TAU * f64(available)) / f64(self.samplerate)
+
     one_over_time := 1.0 / time_delta
 
     sensitivity: f32 = 1.0
@@ -267,10 +274,11 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         band.amp = amp
 
         // limit max amp to avoid jagged edges in the strobe display
+        // TODO: different amp per strobe track
         band.amp = clamp(band.amp, 0.0, 50.0)
 
         // apply attenuation after clamping to get the desired effect
-        // band.amp *= band.attenuation
+        band.amp *= band.attenuation
 
 
         band.freq_multiplier = 1.0

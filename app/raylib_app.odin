@@ -21,7 +21,8 @@ run_raylib_app :: proc() {
     // raylib_style_path := filepath.join({root_dir, "../assets/style_dark.txt.rgs"})
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
-    rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
+    rl.SetConfigFlags({.WINDOW_HIGHDPI})
+    // rl.SetTargetFPS(120)
     rl.GuiSetStyle(.DEFAULT, i32(rl.GuiDefaultProperty.TEXT_SIZE), 16)
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
     defer rl.CloseWindow()
@@ -114,6 +115,7 @@ run_raylib_app :: proc() {
         defer rl.EndDrawing()
         {
             rl.ClearBackground(rl.BLACK)
+            // rl.DrawFPS(10, 10)
 
             draw_strobe_display(&strobe_display, phase_tracker)
             draw_cent_deviation(phase_tracker)
