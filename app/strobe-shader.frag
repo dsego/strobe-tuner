@@ -81,7 +81,7 @@ void main()
 
     // Calculate the center so the circle touches the top of the viewport
     // vertically and is centered horizontally
-    vec2 center = vec2(0.5 * size.x, curvatureRadius + thickness);
+    vec2 center = vec2(0.5 * size.x, curvatureRadius);
 
     // This is the pixel position in terms of distance from the circle center
     vec2 distance = center - position.xy;

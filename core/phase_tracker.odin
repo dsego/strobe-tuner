@@ -30,7 +30,7 @@ DataPoint :: struct {
     phase:        f32,
     freq_diff_hz: f32,
     err_cents:    f32,
-    // err_cents_avg: f32,
+    sample_count: int,
 }
 
 
@@ -94,7 +94,7 @@ init_phase_tracker :: proc(
     fft_size := self.window_size * 2.0
 
     self.sample_buffer = make([]f32, fft_size)
-    self.data_points = make([]DataPoint, 1024)
+    self.data_points = make([]DataPoint, 4096)
     self.mode = mode
     self.base_freq_hz = base_freq_hz
 
@@ -188,12 +188,12 @@ scale_phase :: proc(band: ^StrobeBand) {
     band.unwrapped_phase = unwrapped_phase
 }
 
-run_dft_analysis :: proc(self: ^PhaseTracker) {
+run_phase_detection :: proc(self: ^PhaseTracker) {
     available := audio_capture_read(self, self.sample_buffer)
 
     self.available = int(available)
 
-    // Skip there are no new samples, the phase difference stays the same
+    // Skip there are no new samples, the scaled phase stays the same
     if available <= 0 {
         return
     }
@@ -278,8 +278,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         band.amp = clamp(band.amp, 0.0, 50.0)
 
         // apply attenuation after clamping to get the desired effect
-        band.amp *= band.attenuation
-
+        // band.amp *= band.attenuation
 
         band.freq_multiplier = 1.0
     }
@@ -289,7 +288,7 @@ run_dft_analysis :: proc(self: ^PhaseTracker) {
         self.bands[0].scaled_phase,
         self.bands[0].freq_diff_hz,
         self.bands[0].err_cents,
-        // self.bands[0].err_cents_avg,
+        int(available),
     }
     self.data_points_head = (self.data_points_head + 1) % len(self.data_points)
 }

@@ -42,7 +42,7 @@ run_raylib_app :: proc() {
     defer core.destroy_phase_tracker(phase_tracker)
 
 
-    strobe_display := init_strobe_display()
+    strobe_display := init_strobe_display(SCREEN_WIDTH, 330)
     defer destroy_strobe_display(&strobe_display)
 
     pitch_detector := core.init_pitch_detector(config.samplerate, config.pitch_detect_fft_size)
@@ -107,48 +107,39 @@ run_raylib_app :: proc() {
             }
         }
 
-        core.run_dft_analysis(phase_tracker)
+        core.run_phase_detection(phase_tracker)
 
         base_band := phase_tracker.bands[0]
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
         {
-            rl.ClearBackground(rl.BLACK)
+            rl.ClearBackground(rl.GetColor(config.background_color))
             // rl.DrawFPS(10, 10)
 
-            draw_strobe_display(&strobe_display, phase_tracker)
-            draw_cent_deviation(phase_tracker)
+            draw_strobe_display(&strobe_display, phase_tracker, {0, 24}, config.strobe_color)
 
             draw_note(
                 detected_note,
-                {160, 280},
+                {24, 280},
                 96,
                 rl.WHITE if freq_estimation_active else rl.GRAY,
             )
             rl.DrawTextEx(
                 font,
                 fmt.ctprintf("Cents\n%+.1f", base_band.err_cents),
-                {300, 300},
+                {128, 300},
                 24,
                 0,
                 rl.GREEN,
             )
             rl.DrawTextEx(
                 font,
-                fmt.ctprintf("Hertz\n %+.1f", base_band.estimated_freq_hz),
-                {400, 300},
+                fmt.ctprintf("Hertz\n%+.1f", base_band.estimated_freq_hz),
+                {192, 300},
                 24,
                 0,
                 rl.PURPLE,
-            )
-            rl.DrawTextEx(
-                font,
-                fmt.ctprintf("%+.5f\n%+.5f", base_band.phase_diff, base_band.amp),
-                {400, 400},
-                24,
-                0,
-                rl.ORANGE,
             )
         }
     }

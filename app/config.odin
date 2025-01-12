@@ -34,6 +34,10 @@ Config :: struct {
 
     // How to render the strobe effect
     strobe_display_type:    StrobeDisplayType,
+
+    // Color scheme for strobe track display, two hex values
+    strobe_color:           [2]u32,
+    background_color:       u32,
 }
 
 config := Config {
@@ -47,4 +51,7 @@ config := Config {
     base_sensitivity       = 0.01,
     sensitivity_multiplier = 2.0,
     strobe_display_type    = .CURVED_TRACKS,
+    strobe_color           = {0xB5F2DBAA, 0x6B3D7DAA},
+    // strobe_color           = {0xE26546AA, 0x54202BAA},
+    background_color       = 0x0D0C10AA,
 }

@@ -34,19 +34,23 @@ StrobeDisplay :: struct {
 }
 
 
-init_strobe_display :: proc() -> (self: StrobeDisplay) {
-    self.texture_width = 400
-    self.texture_height = 410
+init_strobe_display :: proc(width: int, height: int) -> (self: StrobeDisplay) {
+    self.texture_width = i32(width)
+    self.texture_height = i32(height)
 
     // We need this to draw the fragment shader
-    textureImage := rl.GenImageColor(self.texture_width, self.texture_height, rl.Color{255, 0, 0, 255})
+    textureImage := rl.GenImageColor(
+        self.texture_width,
+        self.texture_height,
+        rl.Color{255, 0, 0, 255},
+    )
     self.texture = rl.LoadTextureFromImage(textureImage)
     rl.UnloadImage(textureImage)
 
 
     // File path relative to our current odin file
     dir := filepath.dir(#file)
-    frag_shader_path := filepath.join({dir, "./shader.frag"})
+    frag_shader_path := filepath.join({dir, "./strobe-shader.frag"})
     self.shader = rl.LoadShader(nil, cstring(raw_data(frag_shader_path)))
     delete(dir)
     delete(frag_shader_path)
@@ -64,7 +68,8 @@ init_strobe_display :: proc() -> (self: StrobeDisplay) {
     self.band_height_loc = rl.GetShaderLocation(self.shader, "bandHeight")
     self.err_cents_loc = rl.GetShaderLocation(self.shader, "errCents")
     self.period_count_loc = rl.GetShaderLocation(self.shader, "periodCount")
-    self.display_type = StrobeDisplayType.CURVED_TRACKS
+    // self.display_type = .SPINNING_WHEEL
+    self.display_type = .CURVED_TRACKS
 
     return
 }
@@ -79,14 +84,18 @@ set_display_type :: proc(self: ^StrobeDisplay, display_type: StrobeDisplayType) 
 }
 
 
-draw_strobe_display :: proc(self: ^StrobeDisplay, phase_info: ^core.PhaseTracker) {
+draw_strobe_display :: proc(
+    self: ^StrobeDisplay,
+    phase_info: ^core.PhaseTracker,
+    position: [2]f32,
+    colors: [2]u32,
+) {
     curvature_radius: f32
     band_height: f32
     period_count: f32
 
     switch self.display_type {
     case .SPINNING_WHEEL:
-        // Full circles
         curvature_radius = 100.0
         band_height = 26.0
         period_count = 4.0 // how many strobe periods to fit in a circle
@@ -95,11 +104,6 @@ draw_strobe_display :: proc(self: ^StrobeDisplay, phase_info: ^core.PhaseTracker
         band_height = 66.0
         period_count = 24.0
     }
-
-
-    // RED SCHEME
-    // color_a := rl.ColorNormalize(rl.Color{248, 120, 85, 255})
-    // color_b := rl.ColorNormalize(rl.Color{88, 27, 26, 255})
 
     rl.SetShaderValue(
         self.shader,
@@ -110,51 +114,17 @@ draw_strobe_display :: proc(self: ^StrobeDisplay, phase_info: ^core.PhaseTracker
 
     // Draw circular bands from the center outwards, so the lowest frequency is the bottom one
     for &band, band_idx in phase_info.bands {
-
-        // if band_idx > 0 do break
-
         order := len(phase_info.bands) - 1 - band_idx
 
         rect := rl.Rectangle {
-            120,
-            band_height * f32(order),
+            position.x,
+            position.y + band_height * f32(order),
             f32(self.texture_width),
             f32(self.texture_height),
         }
 
-
-        // If note is within 10 cents color the strobe green
-        // TODO: replace conditional with a smoothstep to blend between greenish and redish color - need to convert to HSV and blend hue??
-        // TODO: min/max threshold to avoid flicker - eg if green, needs to fall below 15 cents to turn red and above 10 to turn green
-        // if (abs(errCents) < 5) {
-        //     vec3 a = vec3(.78, .89, .29);
-        //     vec3 b = vec3(.17, .33, .13);
-        //     intuneColor = mix(a, b, value);
-        // }
-
-        color_a := rl.Color{226, 101, 70, 255}
-        color_b := rl.Color{84, 32, 43, 255}
-        // color_a := rl.ColorNormalize(rl.Color{226, 101, 70})
-        // color_b := rl.ColorNormalize(rl.Color{})
-        // color_hsv_a := rl.ColorToHSV(color_a)
-        // color_hsv_b := rl.ColorToHSV(color_b)
-
-        // Show accented color if strobe is in tune, ie within 10 cents of the target frequency
-
-        // color_hsv_accent_a := rl.ColorToHSV(rl.Color{199, 228, 74, 255})
-        // color_hsv_accent_b := rl.ColorToHSV(rl.Color{43, 84, 33, 255})
-
-        // gradient: f32 = math.smoothstep(f32(25.0), f32(5.0), math.abs(err_cents))
-
-        // color_hsv_a.x = gradient * (color_hsv_accent_a.x - color_hsv_a.x)
-        // color_hsv_b.x = gradient * (color_hsv_accent_b.x - color_hsv_b.x)
-
-
-        // n_color_a := rl.ColorNormalize(rl.ColorFromHSV(color_hsv_a.x, color_hsv_a.y, color_hsv_a.z))
-        // n_color_b := rl.ColorNormalize(rl.ColorFromHSV(color_hsv_b.x, color_hsv_b.y, color_hsv_b.z))
-
-        n_color_a := rl.ColorNormalize(color_a)
-        n_color_b := rl.ColorNormalize(color_b)
+        n_color_a := rl.ColorNormalize(rl.GetColor(colors.x))
+        n_color_b := rl.ColorNormalize(rl.GetColor(colors.y))
 
 
         rl.SetShaderValue(

@@ -35,31 +35,38 @@ draw_note :: proc(
 }
 
 
-draw_cent_deviation :: proc(phase_tracker: ^core.PhaseTracker) {
+draw_cent_deviation :: proc(
+    phase_tracker: ^core.PhaseTracker,
+    rect: rl.Rectangle,
+    max_samples: int,
+) {
+    rl.DrawRectangleLinesEx(rect, 1.0, rl.ORANGE)
+
     data_points := phase_tracker.data_points
-    x: f32 = 86
+    x: f32 = rect.x
+    y: f32 = rect.y + rect.height * 0.5
+
+    dx := rect.width / f32(max_samples - 1)
     i := phase_tracker.data_points_head
 
-    draw_point :: proc(x: f32, value: f32, alpha: f32) {
-        y := 400 - value * 10
-        if y > 300 {
-            rl.DrawPixelV({x, y}, rl.ColorAlpha(rl.GREEN, alpha))
-        }
+    draw_point :: proc(x: f32, y: f32, value: f32, alpha: f32) {
+        rl.DrawPixelV({x, y - value}, rl.ColorAlpha(rl.GREEN, alpha))
     }
+    limit := rect.x + rect.width
 
-    for i >= 0 {
-        draw_point(x, data_points[i].err_cents, data_points[i].amp)
-        x += 0.5
+    for i >= 0 && x <= limit {
+        draw_point(x, y, data_points[i].err_cents, data_points[i].amp)
+        x += dx * f32(data_points[i].sample_count)
         i -= 1
     }
 
     i = len(data_points) - 1
 
-    for i > phase_tracker.data_points_head {
-        draw_point(x, data_points[i].err_cents, data_points[i].amp)
-        x += 0.5
+    for i > phase_tracker.data_points_head && x <= limit {
+        draw_point(x, y, data_points[i].err_cents, data_points[i].amp)
+        x += dx * f32(data_points[i].sample_count)
         i -= 1
     }
 
-    rl.DrawLineV({86.0, 400.0}, {598.0, 400.0}, rl.LIGHTGRAY)
+    rl.DrawLineV({rect.x, y}, {rect.x+rect.width, y}, rl.LIGHTGRAY)
 }
