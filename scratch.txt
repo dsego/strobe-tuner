@@ -1,14 +1,3 @@
-TODO:
-
-
-
-phase
-
-slerp
-
-
-spherical interpolateion
-
 
 
 
@@ -27,6 +16,32 @@ sharp symbol is added to the note name as super script
 
 --------------
 
+
+
+use the mix of strobe colors as background
+try to use more curvature
+add shadow box
+
+
+
+target note vs detected note
+
+
+detected note -- sets phase tracker  -> produce detected freq, cents measurement
+
+target note --> can be the detected note in AUTO mode or manually set in MANUAL note
+
+
+when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display
+
+
+--> indicator ◀︎◀︎◀︎ / ◀︎◀︎ / ◀︎ to mark how off the measured freq is from the target
+
+
+
+
+
+------------
 
 icon idea - strobe + tuning fork (ala xcode hammer icon)
 
