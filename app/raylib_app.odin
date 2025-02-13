@@ -79,9 +79,9 @@ run_raylib_app :: proc() {
         config.strobe_mode,
     )
 
-    config.note_detection_mode = .MANUAL
-
     target_note = core.find_note(target_freq_hz)
+
+    always_track_detected_note := false
 
     for !rl.WindowShouldClose() {
 
@@ -91,17 +91,18 @@ run_raylib_app :: proc() {
         if core.is_strong_pitch(pitch_info) {
             if detected_note.cents != pitch_info.detected_note.cents {
                 detected_note = pitch_info.detected_note
+                if config.note_detection_mode == .AUTO {
+                    target_note = detected_note
+                }
                 core.set_phase_tracker_freq(
                     phase_tracker,
-                    detected_note.frequency,
+                    detected_note.frequency if always_track_detected_note else target_note.frequency,
                     config.pitch_standard,
                     config.strobe_speed,
                     config.speed_multiplier,
                     config.strobe_mode,
                 )
-                if config.note_detection_mode == .AUTO {
-                    target_note = detected_note
-                }
+
             }
             freq_estimation_active = true
         }
@@ -121,20 +122,19 @@ run_raylib_app :: proc() {
         // TODO: explanation
         out_of_range := detected_note.cents != target_note.cents
 
-        // TODO!!!!!!
-        core.run_phase_detection(phase_tracker, 1.0, config.apply_attenuation, out_of_range)
+        core.run_phase_detection(phase_tracker, config.apply_attenuation)
         base_band := phase_tracker.bands[0]
 
         err_cents := core.cents_deviation(base_band.estimated_freq_hz, target_note.frequency)
+
+        // update_strobe_display(&strobe_display, phase_tracker, false)
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
         {
             rl.ClearBackground(rl.GetColor(config.window_bg_color))
-            // rl.DrawFPS(10, 10)
 
-            // TODO!!!!!!
-            draw_strobe_display(&strobe_display, phase_tracker, fake)
+            draw_strobe_display(&strobe_display, phase_tracker, out_of_range)
 
             draw_note(target_note, {24, 280}, 96, rl.WHITE if freq_estimation_active else rl.GRAY)
 

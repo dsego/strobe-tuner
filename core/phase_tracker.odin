@@ -49,7 +49,7 @@ StrobeBand :: struct {
     err_cents_avg:     f32,
     unwrapped_phase:   f32,
     scaled_phase:      f32, // phase scaled based on desired strobe speed
-    limited_phase:     f32,
+    dummy_phase:     f32,
     detected:          bool,
 
     // a number < 1 will slow down the strobe and > 1 will increase the strobe spinning rate
@@ -191,9 +191,7 @@ scale_phase :: proc(band: ^StrobeBand) {
 
 run_phase_detection :: proc(
     self: ^PhaseTracker,
-    speed_limit: f32,
     apply_attenuation: bool,
-    out_of_range: bool,
 ) {
     available := audio_capture_read(self, self.sample_buffer)
 
@@ -265,14 +263,13 @@ run_phase_detection :: proc(
         band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
 
 
-        // Fake a steady strobing effect for frequencies that are out of range of phase comparison,
-        //   otherwise the strobing effect falls apart
+        // TODO: Fake a steady strobing effect for frequencies that are out of range of phase comparison
 
-        limited_phase_diff := speed_limit * f32(time_delta)
-        if band_idx == 0 do fmt.println(band.phase_diff, limited_phase_diff)
-        if out_of_range || math.abs(band.phase_diff) > limited_phase_diff {
-            band.limited_phase = unwrap_phase(band.limited_phase - limited_phase_diff * band.speed)
-        }
+        // dummy_phase_diff := 0.1 * f32(time_delta)
+        // band.dummy_phase -= dummy_phase_diff
+
+        // if band_idx == 0 do fmt.println(band.phase_diff, dummy_phase_diff)
+
 
         // Exponentially Weighted Moving Average
         // band.err_cents_avg += 0.1 * (band.err_cents - band.err_cents_avg)

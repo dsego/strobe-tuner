@@ -129,7 +129,7 @@ set_display_type :: proc(self: ^StrobeDisplay, display_type: StrobeDisplayType) 
 draw_strobe_display :: proc(
     self: ^StrobeDisplay,
     phase_info: ^core.PhaseTracker,
-    limit_speed: bool,
+    out_of_range: bool,
 ) {
     curvature_radius: f32
     band_height: f32
@@ -226,14 +226,15 @@ draw_strobe_display :: proc(
         rl.SetShaderValue(
             self.strobe_shader,
             self.phase_loc,
-            &band.limited_phase if limit_speed else &band.scaled_phase,
+            // &band.dummy_phase if out_of_range else &band.scaled_phase,
+            &band.scaled_phase,
             rl.ShaderUniformDataType.FLOAT,
         )
 
         amp := self.contrast * band.amp
-        // if !fake_effect {
-        //     amp *= band.amp
-        // }
+        if out_of_range {
+            // amp = 0.0
+        }
 
         rl.SetShaderValue(self.strobe_shader, self.amp_loc, &amp, rl.ShaderUniformDataType.FLOAT)
 
