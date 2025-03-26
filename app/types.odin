@@ -9,6 +9,3 @@ StrobeDisplayType :: enum {
     SPINNING_WHEEL,
     CURVED_TRACKS,
 }
-
-
-

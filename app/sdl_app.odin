@@ -10,10 +10,7 @@ import SDL "vendor:sdl2"
 import "../core"
 
 
-
-
 run_sdl_app :: proc() {
-
 
 
 }

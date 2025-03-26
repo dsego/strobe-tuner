@@ -6,7 +6,7 @@ import "core:testing"
 
 FirFilter :: struct {
     buffer:  []f32,
-    weights: []f32,  // aka impulse response
+    weights: []f32, // aka impulse response
     average: f32,
     index:   int,
 }

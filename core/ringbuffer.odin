@@ -9,7 +9,7 @@ import pa_rb "../vendor/odin-pa_ringbuffer"
 RingBuffer :: pa_rb.RingBuffer
 
 
-init_ringbuffer :: proc (size: int) -> (RingBuffer, []u8) {
+init_ringbuffer :: proc(size: int) -> (RingBuffer, []u8) {
     rb := RingBuffer{}
     rb_data := make([]u8, size * size_of(f32))
     pa_rb.InitializeRingBuffer(&rb, i32(size_of(f32)), i32(size), raw_data(rb_data))
@@ -17,30 +17,30 @@ init_ringbuffer :: proc (size: int) -> (RingBuffer, []u8) {
 }
 
 
-advance_ringbuffer_read :: proc (rb_ptr: ^RingBuffer, frames_to_skip: i32) -> i32 {
+advance_ringbuffer_read :: proc(rb_ptr: ^RingBuffer, frames_to_skip: i32) -> i32 {
     return pa_rb.AdvanceRingBufferReadIndex(rb_ptr, frames_to_skip)
 }
 
 
-advance_ringbuffer_write :: proc (rb_ptr: ^RingBuffer, frames_to_skip: i32) -> i32 {
+advance_ringbuffer_write :: proc(rb_ptr: ^RingBuffer, frames_to_skip: i32) -> i32 {
     return pa_rb.AdvanceRingBufferWriteIndex(rb_ptr, frames_to_skip)
 }
 
-frames_available_in_ringbuffer :: proc (rb_ptr: ^RingBuffer) -> i32 {
+frames_available_in_ringbuffer :: proc(rb_ptr: ^RingBuffer) -> i32 {
     return pa_rb.GetRingBufferReadAvailable(rb_ptr)
 }
 
 
-flush_ringbuffer :: proc (rb_ptr: ^RingBuffer) {
+flush_ringbuffer :: proc(rb_ptr: ^RingBuffer) {
     pa_rb.FlushRingBuffer(rb_ptr)
 }
 
-write_to_ringbuffer :: proc (rb_ptr: ^RingBuffer, input: []f32) {
+write_to_ringbuffer :: proc(rb_ptr: ^RingBuffer, input: []f32) {
     pa_rb.WriteRingBuffer(rb_ptr, raw_data(input), i32(len(input)))
 }
 
 
-read_ringbuffer :: proc (rb_ptr: ^RingBuffer, buffer: []f32, frame_count: u32) -> u32 {
+read_ringbuffer :: proc(rb_ptr: ^RingBuffer, buffer: []f32, frame_count: u32) -> u32 {
     data_ptr: rawptr
     total_frames_read: u32 = 0
 
@@ -50,7 +50,7 @@ read_ringbuffer :: proc (rb_ptr: ^RingBuffer, buffer: []f32, frame_count: u32) -
     return u32(num_read)
 }
 
-get_ringbuffer_write_regions :: proc (
+get_ringbuffer_write_regions :: proc(
     rb_ptr: ^RingBuffer,
     frame_count: int,
 ) -> (

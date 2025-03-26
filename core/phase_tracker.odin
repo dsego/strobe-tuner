@@ -49,7 +49,7 @@ StrobeBand :: struct {
     err_cents_avg:     f32,
     unwrapped_phase:   f32,
     scaled_phase:      f32, // phase scaled based on desired strobe speed
-    dummy_phase:     f32,
+    dummy_phase:       f32,
     detected:          bool,
 
     // a number < 1 will slow down the strobe and > 1 will increase the strobe spinning rate
@@ -189,10 +189,7 @@ scale_phase :: proc(band: ^StrobeBand) {
     band.scaled_phase = band.scaled_phase + band.phase_diff * band.speed
 }
 
-run_phase_detection :: proc(
-    self: ^PhaseTracker,
-    apply_attenuation: bool,
-) {
+run_phase_detection :: proc(self: ^PhaseTracker, apply_attenuation: bool) {
     available := audio_capture_read(self, self.sample_buffer)
 
     self.available = int(available)

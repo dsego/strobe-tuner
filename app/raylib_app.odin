@@ -24,7 +24,6 @@ run_raylib_app :: proc() {
     target_note := core.Note{}
 
 
-
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetConfigFlags({.WINDOW_HIGHDPI})
     rl.InitWindow(800, 600, "Strobe Tuner")

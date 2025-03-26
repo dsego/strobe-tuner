@@ -10,7 +10,7 @@ SingleFreqDFT :: struct {
 }
 
 
-init_dft :: proc (size: int) -> SingleFreqDFT {
+init_dft :: proc(size: int) -> SingleFreqDFT {
     self := SingleFreqDFT{}
     self.size = size
     self.window = make([]f32, size)
@@ -24,7 +24,7 @@ init_dft :: proc (size: int) -> SingleFreqDFT {
     return self
 }
 
-set_dft_freq :: proc (self: ^SingleFreqDFT, norm_freq: f32) {
+set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32) {
     for i in 0 ..< self.size {
         time := f32(i)
         phase := math.TAU * time * norm_freq
@@ -33,12 +33,12 @@ set_dft_freq :: proc (self: ^SingleFreqDFT, norm_freq: f32) {
     }
 }
 
-destory_dft :: proc (self: ^SingleFreqDFT) {
+destory_dft :: proc(self: ^SingleFreqDFT) {
     delete(self.window)
     delete(self.twiddle_lookup)
 }
 
-run_single_dft :: proc (self: ^SingleFreqDFT, samples: []f32) -> complex64 {
+run_single_dft :: proc(self: ^SingleFreqDFT, samples: []f32) -> complex64 {
     assert(len(samples) >= self.size)
 
     dft: complex64 = complex(0, 0)

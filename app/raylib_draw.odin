@@ -68,5 +68,5 @@ draw_cent_deviation :: proc(
         i -= 1
     }
 
-    rl.DrawLineV({rect.x, y}, {rect.x+rect.width, y}, rl.LIGHTGRAY)
+    rl.DrawLineV({rect.x, y}, {rect.x + rect.width, y}, rl.LIGHTGRAY)
 }
