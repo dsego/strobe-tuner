@@ -22,5 +22,4 @@ main :: proc() {
     }
 
     run_raylib_app()
-
 }

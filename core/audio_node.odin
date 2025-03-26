@@ -11,7 +11,8 @@ AudioCaptureNode :: struct {
 }
 
 init_audio_capture_node :: proc(self: ^AudioCaptureNode, name: string) {
-    rb, rb_data := init_ringbuffer(DEFAULT_RB_SIZE)
+    // NOTE: Needs to be a power of 2 for portaudio ring buffers
+    rb, rb_data := init_ringbuffer(65536)
     self.name = name
     self.ringbuffer = rb
     self.ringbuffer_data = rb_data

@@ -5,9 +5,9 @@ import "core:math"
 import "core:path/filepath"
 import "core:strings"
 import "core:time"
+import rl "vendor:raylib"
 
 import "../core"
-import rl "vendor:raylib"
 
 
 run_raylib_app :: proc() {
@@ -23,19 +23,28 @@ run_raylib_app :: proc() {
     // Target note for tuning via the strobe effect
     target_note := core.Note{}
 
-    // root_dir := filepath.dir(#file)
-    // raylib_style_path := filepath.join({root_dir, "../assets/style_dark.txt.rgs"})
+
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetConfigFlags({.WINDOW_HIGHDPI})
-    // rl.SetTargetFPS(120)
-    rl.GuiSetStyle(.DEFAULT, i32(rl.GuiDefaultProperty.TEXT_SIZE), 16)
-    rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Strobe Tuner")
+    rl.InitWindow(800, 600, "Strobe Tuner")
     defer rl.CloseWindow()
 
     init_font(192)
     defer destroy_font()
 
+
+    // --- Gui styles ----
+    root_dir := filepath.dir(#file)
+    defer delete(root_dir)
+    raylib_style_path := filepath.join({root_dir, "../assets/dark.rgs"})
+    defer delete(raylib_style_path)
+
+    rl.GuiSetFont(font)
+    rl.GuiSetStyle(.DEFAULT, i32(rl.GuiDefaultProperty.TEXT_SIZE), 14)
+    rl.GuiLoadStyle(cstring(raw_data(raylib_style_path)))
+
+    //  ------------------
 
     phase_tracker := core.init_phase_tracker(
         target_freq_hz,
@@ -49,7 +58,7 @@ run_raylib_app :: proc() {
 
     strobe_display := init_strobe_display(
         {0, 0},
-        {SCREEN_WIDTH, 240},
+        {400, 240},
         config.strobe_color,
         config.strobe_bg_color,
         config.strobe_contrast,
@@ -162,12 +171,14 @@ run_raylib_app :: proc() {
             )
             rl.DrawTextEx(
                 font,
-                fmt.ctprintf("Hertz\n%+.1f", base_band.estimated_freq_hz),
+                fmt.ctprintf("Hertz\n%+.1f   %+.5f", base_band.estimated_freq_hz, base_band.amp),
                 {256, 300},
                 24,
                 0,
                 rl.PURPLE,
             )
+
+            rl.GuiToggle(rl.Rectangle{420, 20, 100, 40}, "ATTENUATE", &config.apply_attenuation)
         }
     }
 }

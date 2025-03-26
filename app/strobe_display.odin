@@ -73,12 +73,12 @@ init_strobe_display :: proc(
     defer delete(dir)
 
     {
-        frag_shader_path := filepath.join({dir, "./strobe-shader.frag"})
+        frag_shader_path := filepath.join({dir, "../shaders/strobe-shader.frag"})
         self.strobe_shader = rl.LoadShader(nil, cstring(raw_data(frag_shader_path)))
         delete(frag_shader_path)
     }
     {
-        frag_shader_path := filepath.join({dir, "./inner-shadow-shader.frag"})
+        frag_shader_path := filepath.join({dir, "../shaders/inner-shadow-shader.frag"})
         self.inner_shadow_shader = rl.LoadShader(nil, cstring(raw_data(frag_shader_path)))
         delete(frag_shader_path)
     }

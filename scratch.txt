@@ -1,6 +1,8 @@
 
 
 
+
+
 - Label to show active mode: vernier/harmonic
 - Draw note line with notes that match the instrument highlighted ?
 - Show cents error display

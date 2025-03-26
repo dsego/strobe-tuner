@@ -133,7 +133,7 @@ set_phase_tracker_freq :: proc(
 ) {
     flush_audio_capture_ringbuffer(self)
 
-    fmt.println("Set phase tracker freq", base_freq_hz)
+    // fmt.println("Set phase tracker freq", base_freq_hz)
 
     self.phase_correction = 0.0
     multiplier: f32 = 1.0
