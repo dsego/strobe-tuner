@@ -1,5 +1,15 @@
 package app
 
+
+import "core:fmt"
+import "core:os"
+import "core:path/filepath"
+import "core:encoding/ini"
+import "core:strconv"
+import "core:reflect"
+import "core:strings"
+
+
 import "../core"
 
 
@@ -47,7 +57,7 @@ Config :: struct {
     window_bg_color:       u32,
 }
 
-config := Config {
+defaults := Config {
     pitch_standard        = 440.0,
     strobe_count          = 3,
     pitch_detect_fft_size = 4096,
@@ -65,3 +75,70 @@ config := Config {
     strobe_bg_color       = 0x7F889CFF,
     window_bg_color       = 0x0D0C10FF,
 }
+
+
+load_config :: proc () -> Config {
+    // start with the default config
+    config := defaults
+
+    ini_map, ok := load_ini("strobe-tuner")
+    defer if ok do ini.delete_map(ini_map)
+
+    section := ini_map[""]
+
+    // count := reflect.struct_field_count(T)
+    // for i in 0 ..< count {
+    //     field := reflect.struct_field_at(T, i)
+    // }
+
+    config.pitch_standard = strconv.parse_f32(section["pitch_standard"]) or_else defaults.pitch_standard
+    config.strobe_count = strconv.parse_int(section["strobe_count"]) or_else defaults.strobe_count
+    config.pitch_detect_fft_size = strconv.parse_int(section["pitch_detect_fft_size"]) or_else defaults.pitch_detect_fft_size
+    config.samplerate = strconv.parse_int(section["samplerate"]) or_else defaults.samplerate
+    config.strobe_window_size = strconv.parse_int(section["strobe_window_size"]) or_else defaults.strobe_window_size
+    config.strobe_mode = reflect.enum_from_name(core.StrobeMode, section["strobe_mode"]) or_else defaults.strobe_mode
+    config.note_detection_mode = reflect.enum_from_name(NoteDetectionMode, section["note_detection_mode"]) or_else defaults.note_detection_mode
+    config.strobe_speed = strconv.parse_f32(section["strobe_speed"]) or_else defaults.strobe_speed
+    config.speed_multiplier = strconv.parse_f32(section["speed_multiplier"]) or_else defaults.speed_multiplier
+    config.strobe_contrast = strconv.parse_f32(section["strobe_contrast"]) or_else defaults.strobe_contrast
+    config.apply_attenuation = strconv.parse_bool(section["apply_attenuation"]) or_else defaults.apply_attenuation
+    config.strobe_display_type = reflect.enum_from_name(StrobeDisplayType, section["strobe_display_type"]) or_else defaults.strobe_display_type
+
+    config.window_bg_color = cast(u32) (strconv.parse_uint(section["window_bg_color"]) or_else uint(defaults.window_bg_color))
+    config.strobe_bg_color = cast(u32) (strconv.parse_uint(section["strobe_bg_color"]) or_else uint(defaults.strobe_bg_color))
+
+    parts := strings.split(section["strobe_color"], ",")
+    if len(parts) == 2 {
+        config.strobe_color = {
+            u32(strconv.parse_uint(strings.trim_space(parts[0])) or_else uint(defaults.strobe_color[0])),
+            u32(strconv.parse_uint(strings.trim_space(parts[1])) or_else uint(defaults.strobe_color[1]))
+        }
+    }
+
+    return config
+}
+
+
+
+
+// save_config :: proc(config_path: string, config: ^Config) ->
+
+// save_config :: proc(config: ^Config) -> ConfigError {
+//     config_file_path := filepath.join({config_path, CONFIG_NAME})
+
+//     // Convert map to JSON
+//     json_data, marshal_err := json.marshal(config.data)
+//     if marshal_err != .None {
+//         fmt.eprintln("Config marshal error:", marshal_err)
+//         return .WriteError
+//     }
+//     defer delete(json_data)
+
+//     // Write to file
+//     write_ok := os.write_entire_file(config_file_path, json_data)
+//     if !write_ok {
+//         return .WriteError
+//     }
+
+//     return .None
+// }

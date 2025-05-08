@@ -25,5 +25,6 @@ main :: proc() {
         }
     }
 
-    run_raylib_app()
+    config := load_config()
+    run_raylib_app(config)
 }

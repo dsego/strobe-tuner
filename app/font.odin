@@ -20,6 +20,8 @@ init_font :: proc(font_size: i32) {
     path := filepath.join({root_dir, "../assets/NotoSansMono-Medium.ttf"})
     defer delete(path)
 
+    // TODO - use #load and LoadFontFromMemory
+    // https://odin-lang.org/docs/overview/#loadstring-path-or-loadstring-path-type
     font = rl.LoadFontEx(cstring(raw_data(path)), font_size, codepoints, count)
 }
 

@@ -10,7 +10,7 @@ import rl "vendor:raylib"
 import "../core"
 
 
-run_raylib_app :: proc() {
+run_raylib_app :: proc(config: Config) {
     // target_freq_hz: f32 = 329.6275569128699
     target_freq_hz: f32 = 110.0
     freq_estimation_active := false
@@ -177,7 +177,7 @@ run_raylib_app :: proc() {
                 rl.PURPLE,
             )
 
-            rl.GuiToggle(rl.Rectangle{420, 20, 100, 40}, "ATTENUATE", &config.apply_attenuation)
+            // rl.GuiToggle(rl.Rectangle{420, 20, 100, 40}, "ATTENUATE", &config.apply_attenuation)
         }
     }
 }
