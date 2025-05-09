@@ -1,9 +1,9 @@
 package app
 
+import "core:encoding/ini"
 import "core:fmt"
 import "core:os"
 import "core:path/filepath"
-import "core:encoding/ini"
 
 
 load_ini :: proc(app_name: string) -> (ini.Map, bool) {
@@ -29,7 +29,7 @@ load_ini :: proc(app_name: string) -> (ini.Map, bool) {
         return nil, false
     }
 
-    ini_map, err, ok := ini.load_map_from_path(ini_path, allocator=context.allocator)
+    ini_map, err, ok := ini.load_map_from_path(ini_path, allocator = context.allocator)
 
     if !ok {
         fmt.println("Failed to load config file", ini_path)

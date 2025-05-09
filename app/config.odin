@@ -1,12 +1,12 @@
 package app
 
 
+import "core:encoding/ini"
 import "core:fmt"
 import "core:os"
 import "core:path/filepath"
-import "core:encoding/ini"
-import "core:strconv"
 import "core:reflect"
+import "core:strconv"
 import "core:strings"
 
 
@@ -52,7 +52,8 @@ Config :: struct {
     strobe_display_type:   StrobeDisplayType,
 
     // Color scheme for strobe track display, two hex values
-    strobe_color:          [2]u32,
+    strobe_color_1:        u32,
+    strobe_color_2:        u32,
     strobe_bg_color:       u32,
     window_bg_color:       u32,
 }
@@ -71,13 +72,14 @@ defaults := Config {
     apply_attenuation     = false,
     strobe_display_type   = .CURVED_TRACKS,
     // strobe_color             = {0xB5F2DBFF, 0x6B3D7DFF},
-    strobe_color          = {0xE26546FF, 0x54202BFF},
+    strobe_color_1        = 0xE26546FF,
+    strobe_color_2        = 0x54202BFF,
     strobe_bg_color       = 0x7F889CFF,
     window_bg_color       = 0x0D0C10FF,
 }
 
 
-load_config :: proc () -> Config {
+load_config :: proc() -> Config {
     // start with the default config
     config := defaults
 
@@ -86,39 +88,75 @@ load_config :: proc () -> Config {
 
     section := ini_map[""]
 
-    // count := reflect.struct_field_count(T)
-    // for i in 0 ..< count {
-    //     field := reflect.struct_field_at(T, i)
-    // }
+    count := reflect.struct_field_count(Config)
+    offsets := reflect.struct_field_offsets(Config)
 
-    config.pitch_standard = strconv.parse_f32(section["pitch_standard"]) or_else defaults.pitch_standard
-    config.strobe_count = strconv.parse_int(section["strobe_count"]) or_else defaults.strobe_count
-    config.pitch_detect_fft_size = strconv.parse_int(section["pitch_detect_fft_size"]) or_else defaults.pitch_detect_fft_size
-    config.samplerate = strconv.parse_int(section["samplerate"]) or_else defaults.samplerate
-    config.strobe_window_size = strconv.parse_int(section["strobe_window_size"]) or_else defaults.strobe_window_size
-    config.strobe_mode = reflect.enum_from_name(core.StrobeMode, section["strobe_mode"]) or_else defaults.strobe_mode
-    config.note_detection_mode = reflect.enum_from_name(NoteDetectionMode, section["note_detection_mode"]) or_else defaults.note_detection_mode
-    config.strobe_speed = strconv.parse_f32(section["strobe_speed"]) or_else defaults.strobe_speed
-    config.speed_multiplier = strconv.parse_f32(section["speed_multiplier"]) or_else defaults.speed_multiplier
-    config.strobe_contrast = strconv.parse_f32(section["strobe_contrast"]) or_else defaults.strobe_contrast
-    config.apply_attenuation = strconv.parse_bool(section["apply_attenuation"]) or_else defaults.apply_attenuation
-    config.strobe_display_type = reflect.enum_from_name(StrobeDisplayType, section["strobe_display_type"]) or_else defaults.strobe_display_type
+    for i in 0 ..< count {
+        field := reflect.struct_field_at(Config, i)
+        raw_ptr := rawptr(uintptr(&config) + offsets[i])
 
-    config.window_bg_color = cast(u32) (strconv.parse_uint(section["window_bg_color"]) or_else uint(defaults.window_bg_color))
-    config.strobe_bg_color = cast(u32) (strconv.parse_uint(section["strobe_bg_color"]) or_else uint(defaults.strobe_bg_color))
-
-    parts := strings.split(section["strobe_color"], ",")
-    if len(parts) == 2 {
-        config.strobe_color = {
-            u32(strconv.parse_uint(strings.trim_space(parts[0])) or_else uint(defaults.strobe_color[0])),
-            u32(strconv.parse_uint(strings.trim_space(parts[1])) or_else uint(defaults.strobe_color[1]))
+        #partial switch v in field.type.variant {
+        case reflect.Type_Info_Float:
+            val, ok := strconv.parse_f32(section[field.name])
+            if ok {
+                ptr := cast(^f32)raw_ptr
+                ptr^ = val
+            }
+        case reflect.Type_Info_Integer:
+            val, ok := strconv.parse_int(section[field.name])
+            if ok {
+                switch field.type.id {
+                case int:
+                    ptr := cast(^int)raw_ptr
+                    ptr^ = int(val)
+                case u32:
+                    ptr := cast(^u32)raw_ptr
+                    ptr^ = u32(val)
+                }
+            }
+        case reflect.Type_Info_Boolean:
+            val, ok := strconv.parse_bool(section[field.name])
+            if ok {
+                ptr := cast(^bool)raw_ptr
+                ptr^ = val
+            }
+        case reflect.Type_Info_Named:
+            val, ok := reflect.enum_from_name_any(field.type.id, section[field.name])
+            if ok {
+                ptr := cast(^int)raw_ptr
+                ptr^ = int(val)
+            }
+        case:
+            fmt.println("Unsupported config type.")
+        // ignore
         }
     }
+
+    // config.pitch_standard = strconv.parse_f32(section["pitch_standard"]) or_else defaults.pitch_standard
+    // config.strobe_count = strconv.parse_int(section["strobe_count"]) or_else defaults.strobe_count
+    // config.pitch_detect_fft_size = strconv.parse_int(section["pitch_detect_fft_size"]) or_else defaults.pitch_detect_fft_size
+    // config.samplerate = strconv.parse_int(section["samplerate"]) or_else defaults.samplerate
+    // config.strobe_window_size = strconv.parse_int(section["strobe_window_size"]) or_else defaults.strobe_window_size
+    // config.strobe_mode = reflect.enum_from_name(core.StrobeMode, section["strobe_mode"]) or_else defaults.strobe_mode
+    // config.note_detection_mode = reflect.enum_from_name(NoteDetectionMode, section["note_detection_mode"]) or_else defaults.note_detection_mode
+    // config.strobe_speed = strconv.parse_f32(section["strobe_speed"]) or_else defaults.strobe_speed
+    // config.speed_multiplier = strconv.parse_f32(section["speed_multiplier"]) or_else defaults.speed_multiplier
+    // config.strobe_contrast = strconv.parse_f32(section["strobe_contrast"]) or_else defaults.strobe_contrast
+    // config.apply_attenuation = strconv.parse_bool(section["apply_attenuation"]) or_else defaults.apply_attenuation
+    // config.strobe_display_type = reflect.enum_from_name(StrobeDisplayType, section["strobe_display_type"]) or_else defaults.strobe_display_type
+
+    // config.window_bg_color = cast(u32) (strconv.parse_uint(section["window_bg_color"]) or_else uint(defaults.window_bg_color))
+    // config.strobe_bg_color = cast(u32) (strconv.parse_uint(section["strobe_bg_color"]) or_else uint(defaults.strobe_bg_color))
+    // config.strobe_color_1 = cast(u32) (strconv.parse_uint(section["strobe_color_1"]) or_else uint(defaults.strobe_color_1))
+    // config.strobe_color_2 = cast(u32) (strconv.parse_uint(section["strobe_color_2"]) or_else uint(defaults.strobe_color_2))
 
     return config
 }
 
 
+deserialize_config :: proc () {
+
+}
 
 
 // save_config :: proc(config_path: string, config: ^Config) ->

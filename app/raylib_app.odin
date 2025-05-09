@@ -58,7 +58,7 @@ run_raylib_app :: proc(config: Config) {
     strobe_display := init_strobe_display(
         {0, 0},
         {400, 240},
-        config.strobe_color,
+        {config.strobe_color_1, config.strobe_color_2},
         config.strobe_bg_color,
         config.strobe_contrast,
     )
