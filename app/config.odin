@@ -54,6 +54,8 @@ Config :: struct {
     // Color scheme for strobe track display, two hex values
     strobe_color_1:        u32 "color",
     strobe_color_2:        u32 "color",
+
+    // Background colors
     strobe_bg_color:       u32 "color",
     window_bg_color:       u32 "color",
 }
