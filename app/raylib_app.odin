@@ -148,19 +148,6 @@ run_raylib_app :: proc(config: Config) {
 
             rl.DrawTextEx(
                 font,
-                fmt.ctprintf(
-                    "Detected: %v%v%v",
-                    detected_note.name,
-                    "♯" if detected_note.is_accidental else "",
-                    detected_note.octave,
-                ),
-                {24, 380},
-                18,
-                0,
-                rl.GRAY,
-            )
-            rl.DrawTextEx(
-                font,
                 // Deviation from the target frequency, not the detected frequency
                 fmt.ctprintf("Cents\n%+.1f", err_cents),
                 {128, 300},
