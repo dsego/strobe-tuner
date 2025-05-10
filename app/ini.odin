@@ -1,25 +1,34 @@
 package app
 
+import "base:intrinsics"
 import "core:encoding/ini"
 import "core:fmt"
 import "core:os"
+import "core:io"
 import "core:path/filepath"
+import "core:reflect"
+import "core:strconv"
 
+CONFIG_NAME :: "config.ini"
+APP_NAME :: "strobe-tuner"
 
-load_ini :: proc(app_name: string) -> (ini.Map, bool) {
-
-    // Load or create config directory in a standard location based on the OS
-    dir_path := get_config_directory(app_name)
-    {
-        err := os.make_directory(dir_path)
-
-        if err != os.ERROR_NONE && err != os.EEXIST {
-            return nil, false
-        }
+create_app_directory :: proc() -> Maybe(string) {
+    dir_path := get_config_directory(APP_NAME)
+    err := os.make_directory(dir_path)
+    if err != os.ERROR_NONE && err != os.EEXIST {
+        return nil
     }
+    return dir_path
+}
+
+load_ini :: proc() -> (ini.Map, bool) {
+    // Load or create config directory in a standard location based on the OS
+    dir_path, dir_ok := create_app_directory().?
+
+    if !dir_ok do return nil, false
 
     // Load or create an ini file
-    ini_path := filepath.join({dir_path, "config.ini"})
+    ini_path := filepath.join({dir_path, CONFIG_NAME})
     defer delete(ini_path)
 
     if os.exists(ini_path) {
@@ -37,6 +46,25 @@ load_ini :: proc(app_name: string) -> (ini.Map, bool) {
     }
 
     return ini_map, true
+}
+
+save_ini :: proc(ini_map: ini.Map) {
+    dir_path, dir_ok := create_app_directory().?
+    ini_path := filepath.join({dir_path, CONFIG_NAME})
+    defer delete(ini_path)
+
+    file, err := os.open(ini_path, os.O_WRONLY | os.O_CREATE, 0o644)
+    if err != nil {
+        fmt.println("Failed to load the config file.", ini_path)
+        return
+    }
+    defer os.close(file)
+
+    fmt.println("Saving config to.", ini_path)
+
+    stream := os.stream_from_handle(file)
+    defer io.close(stream)
+    ini.write_map(stream, ini_map)
 }
 
 get_config_directory :: proc(app_name: string) -> string {
@@ -57,4 +85,20 @@ get_config_directory :: proc(app_name: string) -> string {
         }
         return filepath.join({config_home, app_name})
     }
+}
+
+get_config :: proc(ini_map: ini.Map, name: string, $T: typeid, default: T) -> T {
+    section := ini_map[""]
+    when intrinsics.type_is_enum(T) {
+        value, ok := reflect.enum_from_name_any(T, section[name])
+        if ok do return cast(T)value
+        return default
+    } else when T == f32 {
+        return strconv.parse_f32(section[name]) or_else default
+    } else when T == int {
+        return strconv.parse_int(section[name]) or_else default
+    } else when T == bool {
+        return strconv.parse_bool(section[name]) or_else default
+    }
+    return default
 }
