@@ -15,7 +15,14 @@ init_font :: proc(font_size: i32) {
     count := i32(0)
     codepoints := rl.LoadCodepoints(font_atlas, &count)
     defer rl.UnloadCodepoints(codepoints)
-    font = rl.LoadFontFromMemory(".ttf", raw_data(font_data), i32(len(font_data)), font_size, codepoints, count )
+    font = rl.LoadFontFromMemory(
+        ".ttf",
+        raw_data(font_data),
+        i32(len(font_data)),
+        font_size,
+        codepoints,
+        count,
+    )
 }
 
 destroy_font :: proc() {
