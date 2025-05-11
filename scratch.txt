@@ -31,6 +31,9 @@ target note vs detected note
 
 detected note -- sets phase tracker  -> produce detected freq, cents measurement
 
+--- if detected note is outside of measurement scope -> use estimated freq
+--- if detected note is close to target note -> use phase diff for fine freq display
+
 target note --> can be the detected note in AUTO mode or manually set in MANUAL note
 
 

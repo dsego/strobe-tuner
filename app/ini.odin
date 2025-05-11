@@ -60,7 +60,7 @@ save_ini :: proc(ini_map: ini.Map) {
     }
     defer os.close(file)
 
-    fmt.println("Saving config to.", ini_path)
+    fmt.println("Saving config to", ini_path)
 
     stream := os.stream_from_handle(file)
     defer io.close(stream)
