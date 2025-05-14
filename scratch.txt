@@ -3,6 +3,14 @@
 
 
 
+
+
+determine what is the limit of phase diff detection -- beat freq ?
+
+
+
+
+
 - Label to show active mode: vernier/harmonic
 - Draw note line with notes that match the instrument highlighted ?
 - Show cents error display
@@ -41,6 +49,12 @@ when the detected note is too far away from the target, set a fixed spinning rat
 
 
 --> indicator ◀︎◀︎◀︎ / ◀︎◀︎ / ◀︎ to mark how off the measured freq is from the target
+
+eg:
+
+◀︎◀︎◀︎ note ▶︎▶︎▶︎ - more than 400 cents off ?
+ ◀︎◀︎ note ▶︎▶︎  - more than 200 cents off
+  ◀︎ note  ▶︎  - more than 100 cents off
 
 
 

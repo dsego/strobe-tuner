@@ -128,7 +128,7 @@ set_display_type :: proc(self: ^StrobeDisplay, display_type: StrobeDisplayType) 
 
 draw_strobe_display :: proc(
     self: ^StrobeDisplay,
-    phase_info: ^core.PhaseTracker,
+    phase_info: ^core.PhaseComparator,
     out_of_range: bool,
 ) {
     curvature_radius: f32

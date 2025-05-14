@@ -9,12 +9,15 @@ import "../core"
 
 
 load_config :: proc() -> Config {
-    // start with the default config
+    // Load config from the standard OS path, eg ~/Library/Application Support/strobe-tuner/config.ini on MacOS.
+    // Initiate fields to default values if a setting is not found in the configuration file.
+
     config := Config{}
 
     ini_map, ok := load_ini()
     defer if ok do ini.delete_map(ini_map)
 
+    config.target_freq_hz = get_config(ini_map, "target_freq_hz", f32, 110.0)
     config.pitch_standard = get_config(ini_map, "pitch_standard", f32, 440.0)
     config.strobe_count = get_config(ini_map, "strobe_count", int, 3)
     config.pitch_detect_fft_size = get_config(ini_map, "pitch_detect_fft_size", int, 4096)
@@ -60,7 +63,6 @@ save_config :: proc(config: Config) {
     defer delete(section)
 
     fields := reflect.struct_fields_zipped(Config)
-    defer delete(fields)
 
     for field in fields {
         value := reflect.struct_field_value(config, field)

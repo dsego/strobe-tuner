@@ -13,6 +13,10 @@ StrobeDisplayType :: enum {
 }
 
 Config :: struct {
+
+    // Initial target frequency for the strobe
+    target_freq_hz:        f32,
+
     // eg A 440Hz
     pitch_standard:        f32,
 

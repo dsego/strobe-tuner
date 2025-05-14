@@ -12,7 +12,7 @@ import "../core"
 
 run_raylib_app :: proc(config: Config) {
     // target_freq_hz: f32 = 329.6275569128699
-    target_freq_hz: f32 = 110.0
+    target_freq_hz: f32 = config.target_freq_hz
     freq_estimation_active := false
 
     pitch_info := core.PitchInfo{}
@@ -45,14 +45,14 @@ run_raylib_app :: proc(config: Config) {
 
     //  ------------------
 
-    phase_tracker := core.init_phase_tracker(
+    phase_comparator := core.init_phase_comparator(
         target_freq_hz,
         f32(config.samplerate),
         config.strobe_count,
         config.strobe_window_size,
         config.strobe_mode,
     )
-    defer core.destroy_phase_tracker(phase_tracker)
+    defer core.destroy_phase_comparator(phase_comparator)
 
 
     strobe_display := init_strobe_display(
@@ -75,11 +75,11 @@ run_raylib_app :: proc(config: Config) {
 
 
     register_audio_node(audio_capture, &pitch_detector)
-    register_audio_node(audio_capture, phase_tracker)
+    register_audio_node(audio_capture, phase_comparator)
     start_audio_capture(audio_capture)
 
-    core.set_phase_tracker_freq(
-        phase_tracker,
+    core.set_phase_comparator_freq(
+        phase_comparator,
         target_freq_hz,
         config.pitch_standard,
         config.strobe_speed,
@@ -102,8 +102,8 @@ run_raylib_app :: proc(config: Config) {
                 if config.note_detection_mode == .AUTO {
                     target_note = detected_note
                 }
-                core.set_phase_tracker_freq(
-                    phase_tracker,
+                core.set_phase_comparator_freq(
+                    phase_comparator,
                     detected_note.frequency if always_track_detected_note else target_note.frequency,
                     config.pitch_standard,
                     config.strobe_speed,
@@ -130,21 +130,21 @@ run_raylib_app :: proc(config: Config) {
         // TODO: explanation
         out_of_range := detected_note.cents != target_note.cents
 
-        core.run_phase_detection(phase_tracker, config.apply_attenuation)
-        base_band := phase_tracker.bands[0]
+        est_freq_hz, err_cents := core.run_phase_detection(phase_comparator)
 
-        err_cents := core.cents_deviation(base_band.estimated_freq_hz, target_note.frequency)
 
-        // update_strobe_display(&strobe_display, phase_tracker, false)
+
+        // update_strobe_display(&strobe_display, phase_comparator, false)
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
         {
             rl.ClearBackground(rl.GetColor(config.window_bg_color))
 
-            draw_strobe_display(&strobe_display, phase_tracker, out_of_range)
+            draw_strobe_display(&strobe_display, phase_comparator, out_of_range)
 
             draw_note(target_note, {24, 280}, 96, rl.WHITE if freq_estimation_active else rl.GRAY)
+
 
             rl.DrawTextEx(
                 font,
@@ -157,11 +157,38 @@ run_raylib_app :: proc(config: Config) {
             )
             rl.DrawTextEx(
                 font,
-                fmt.ctprintf("Hertz\n%+.1f   %+.5f", base_band.estimated_freq_hz, base_band.amp),
+                fmt.ctprintf("Hertz\n%+.1f ", est_freq_hz),
                 {256, 300},
                 24,
                 0,
                 rl.PURPLE,
+            )
+
+            // rl.DrawTextEx(
+            //     font,
+            //     "◀︎◀︎◀︎ / ◀︎◀︎ / ◀︎",
+            //     {10, 350},
+            //     32,
+            //     0,
+            //     rl.GRAY,
+            // )
+
+            rl.DrawTextEx(
+                font,
+                fmt.ctprintf("hz diff %+.1f hz | ph %+.1f ", phase_comparator.bands[0].freq_diff_hz, phase_comparator.bands[0].phase_diff),
+                {10, 380},
+                24,
+                0,
+                rl.GRAY,
+            )
+
+            rl.DrawTextEx(
+                font,
+                fmt.ctprintf("%+.1f", phase_comparator.bands[0].unwrapped_phase),
+                {10, 440},
+                24,
+                0,
+                rl.GRAY,
             )
 
             // rl.GuiToggle(rl.Rectangle{420, 20, 100, 40}, "ATTENUATE", &config.apply_attenuation)

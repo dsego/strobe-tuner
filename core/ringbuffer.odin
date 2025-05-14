@@ -6,6 +6,13 @@ import "core:slice"
 import pa_rb "../vendor/odin-pa_ringbuffer"
 
 
+/* -------------------------------------------------------------------------------------------------
+
+    A shallow wrapper around the PortAudio ringbuffer implementation
+
+------------------------------------------------------------------------------------------------- */
+
+
 RingBuffer :: pa_rb.RingBuffer
 
 
