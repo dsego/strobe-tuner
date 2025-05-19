@@ -49,7 +49,6 @@ run_raylib_app :: proc(config: Config) {
         target_freq_hz,
         f32(config.samplerate),
         config.strobe_count,
-        config.strobe_window_size,
         config.strobe_mode,
     )
     defer core.destroy_phase_comparator(phase_comparator)

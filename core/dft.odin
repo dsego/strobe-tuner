@@ -12,23 +12,33 @@ SingleFreqDFT :: struct {
 }
 
 
-init_dft :: proc(size: int) -> SingleFreqDFT {
+
+// TODO -- choose window size such that the DFT filter is not as strong - smear the frequencies
+// ---- need this to keep the strobe effect visible
+
+// --- spectral leakage is desirable
+
+
+
+init_dft :: proc(max_size: int) -> SingleFreqDFT {
     self := SingleFreqDFT{}
     self.size = size
-    self.window = make([]f32, size)
-    self.twiddles = make([]complex64, size)
+    self.window = make([]f32, max_size)
+    self.twiddles = make([]complex64, max_size)
+    return self
+}
+
+set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32) {
+
+
+    self.norm_freq = norm_freq
+    w := math.TAU * norm_freq
 
     // Generate the windowing function
     for i in 0 ..< size {
         self.window[i] = blackmann_window(f32(i), f32(size))
     }
 
-    return self
-}
-
-set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32) {
-    self.norm_freq = norm_freq
-    w := math.TAU * norm_freq
 
     // Recalculate windowed twiddles for fast lookup
     for i in 0 ..< self.size {
@@ -59,6 +69,9 @@ run_single_dft :: proc(self: ^SingleFreqDFT, samples: []f32) -> complex64 {
 
 // Recursive DFT based on a previous fully computed DFT value.
 // Rotates accumulated DFT result by a fixed twiddle for the hop.
+
+// TODO: this won't work with windowed twiddles!
+
 run_recursive_dft :: proc(self: ^SingleFreqDFT, samples: []f32, hop_size: int) -> complex64 {
     assert(len(samples) >= self.size + hop_size)
 

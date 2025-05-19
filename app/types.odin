@@ -7,10 +7,15 @@ NoteDetectionMode :: enum {
     MANUAL,
 }
 
+
+
 StrobeDisplayType :: enum {
     SPINNING_WHEEL,
     CURVED_TRACKS,
 }
+
+
+
 
 Config :: struct {
 
@@ -28,9 +33,6 @@ Config :: struct {
 
     // audio card sampling rate, e.g. 44.100 Hz
     samplerate:            int,
-
-    // how many samples to use for single bin phase detection
-    strobe_window_size:    int,
 
     // harmonic to track multiple frequencies or "vernier" to track one pitch at different sensitivities
     strobe_mode:           core.StrobeMode,

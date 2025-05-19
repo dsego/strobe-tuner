@@ -11,14 +11,20 @@
 package core
 
 import "base:runtime"
+import "core:c/libc"
 import "core:fmt"
 import "core:math"
 import "core:math/cmplx"
 import "core:math/linalg"
+import "core:testing"
+
 
 
 MAX_BANDS :: 8
+MAX_WINDOW_SIZE :: 4096
 MAX_HOP_SIZE :: 4096
+
+
 
 
 StrobeMode :: enum {
@@ -57,7 +63,6 @@ PhaseComparator :: struct {
     using node:         AudioCaptureNode,
     base_freq_hz:       f32,
     sample_buffer:      []f32,
-    window_size:        int,
     phase_correction:   f64,
     reference_interval: f64,
     time_reference:     f64,
@@ -70,23 +75,22 @@ PhaseComparator :: struct {
 }
 
 
+
+
+
 init_phase_comparator :: proc(
     base_freq_hz: f32,
     samplerate: f32,
     band_count: int,
-    window_size: int,
     mode: StrobeMode,
 ) -> ^PhaseComparator {
     self := new(PhaseComparator)
-    self.window_size = window_size
+
     assert(band_count <= MAX_BANDS)
 
     init_audio_capture_node(self, "phase-tracker")
 
-    // zero pad to get more DFT precision & smoother response
-    fft_size := self.window_size * 2.0
-
-    self.sample_buffer = make([]f32, fft_size + MAX_HOP_SIZE)
+    self.sample_buffer = make([]f32, MAX_WINDOW_SIZE + MAX_HOP_SIZE)
 
     self.mode = mode
     self.base_freq_hz = base_freq_hz
@@ -94,7 +98,7 @@ init_phase_comparator :: proc(
     for i in 0 ..< band_count {
         band := PhaseBand{}
         band.freq_multiplier = 1.0
-        band.dft_config = init_dft(fft_size)
+        band.dft_config = init_dft(MAX_WINDOW_SIZE)
         append(&self.bands, band)
     }
 
@@ -189,21 +193,66 @@ run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32) {
 }
 
 
+// Choose best window size for adaptive spectra leakage based on cents and not Hz
+best_dft_window_size :: proc(freq_hz: f32, samplerate: int, cents_resolution: int) -> int {
+    ratio := libc.exp2(f32(cents_resolution) / 1200.0)
+    frequency_step := freq_hz * (ratio - 1.0)
+    win := math.ceil(f32(samplerate) / f32(frequency_step))
+    return int(win)
+}
+
+
+@(test)
+test_best_dft_window_size :: proc(t: ^testing.T) {
+    v1 := best_dft_window_size(110.0, 48_000, 100)
+    v2 := best_dft_window_size(440.0, 48_000, 100)
+    v3 := best_dft_window_size(4186.0, 48_000, 100)
+
+    testing.expect_value(t, v1, 7339)
+    testing.expect_value(t, v2, 1835)
+    testing.expect_value(t, v3, 193)
+}
+
+
+// Max hop size for staying within 100 cents tolerance
+best_hop_size :: proc(cents_offset: int, freq_hz: f32, samplerate: int) -> int {
+    ratio := libc.exp2(f32(cents_offset) / 1200.0)
+    freq_max := freq_hz * ratio
+    freq_deviation := freq_max - freq_hz
+
+    min_phase_delta_rad: f32 = 0.5 // ???
+
+    hop := math.ceil(min_phase_delta_rad * f32(samplerate) / (math.TAU * freq_deviation))
+    return int(hop)
+}
+
+@(test)
+test_best_hop_size :: proc(t: ^testing.T) {
+    v1 := best_hop_size(110.0, 48_000, 100)
+    v2 := best_hop_size(440.0, 48_000, 100)
+    v3 := best_hop_size(4186.0, 48_000, 100)
+
+    testing.expect_value(t, v1, 584)
+    testing.expect_value(t, v2, 146)
+    testing.expect_value(t, v3, 16)
+}
+
+
+
 determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx: int) {
     dft: complex64 = complex(0, 0)
 
     // Harmonic mode - each band tracks a separate frequency
     // Vernier mode - only the baser band needs to run the DFT
-    if self.mode == .HARMONIC_MODE || band_idx == 0 {
 
-        // TODO: run this as a recursive DFT ?
+    // Run a single bin DFT and estimate frequency based on phase drift
+    if self.mode == .HARMONIC_MODE || band_idx == 0 {
         dft = run_single_dft(&band.dft_config, self.sample_buffer)
-        hop_size := 100
+        hop_size := 6
 
         dft_hop := run_single_dft(&band.dft_config, self.sample_buffer[hop_size:])
-        // dft_hop := run_recursive_dft(&band.dft_config, self.sample_buffer, hop_size)
 
-        // fmt.println( cmplx.phase(dft_hop), cmplx.phase(dft))
+        // measured phase difference
         phase_delta := cmplx.phase(dft_hop) - cmplx.phase(dft)
 
         // how much the phase of a bin rotates over HOP samples for a signal at frequency f
@@ -217,18 +266,10 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
         for phase_delta > math.PI do phase_delta -= math.TAU
         for phase_delta < -math.PI do phase_delta += math.TAU
 
-        // fmt.println(expected_delta, phase_delta)
+        phase_drift := phase_delta - expected_delta
 
-
-        // fmt.println(expected_delta, phase_delta)
-        phase_deviation := phase_delta - expected_delta
-
-        // // Handle the jump from 2π to 0 or 0 to 2π (both rotation directions)
-        // for phase_deviation > math.PI do phase_deviation -= math.TAU
-        // for phase_deviation < -math.PI do phase_deviation += math.TAU
-
-
-        band.freq_diff_hz = self.samplerate * phase_deviation / (math.TAU * f32(hop_size))
+        // Frequency estimation from phase drift
+        band.freq_diff_hz = self.samplerate * phase_drift / (math.TAU * f32(hop_size))
 
         band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
         band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)

@@ -23,7 +23,6 @@ load_config :: proc() -> Config {
     config.strobe_count = get_config(ini_map, "strobe_count", int, 3)
     config.pitch_detect_fft_size = get_config(ini_map, "pitch_detect_fft_size", int, 4096)
     config.samplerate = get_config(ini_map, "samplerate", int, 48_000)
-    config.strobe_window_size = get_config(ini_map, "strobe_window_size", int, 4800)
     config.strobe_mode = get_config(
         ini_map,
         "strobe_mode",

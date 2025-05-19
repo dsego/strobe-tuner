@@ -5,6 +5,7 @@ import "core:mem"
 
 
 main :: proc() {
+
     // Tracking allocator that warns you if your program is leaking memory
     when ODIN_DEBUG {
         track: mem.Tracking_Allocator
@@ -25,7 +26,9 @@ main :: proc() {
         }
     }
 
+
     config := load_config()
     run_raylib_app(config)
     save_config(config)
+
 }
