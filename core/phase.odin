@@ -295,6 +295,12 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
     phase = phase - f32(self.phase_correction) * w
     band.phase = phase
 
+
+
+    // TODO : why does it flip direction after 50Hz ?
+    // 4186 + 50 reverses direction
+
+
     // Unwrap phase to range [0, 2π]
     unwrapped_phase := unwrap_phase(band.phase)
 

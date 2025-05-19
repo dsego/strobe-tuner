@@ -47,7 +47,7 @@ run_single_dft :: proc(self: ^SingleFreqDFT, samples: []f32) -> complex64 {
         self.dft += complex(samples[i], 0) * self.twiddles[i]
     }
 
-    return self.dft
+    return self.dft / complex(f32(self.window_size), 0.0)
 }
 
 

@@ -37,7 +37,7 @@ load_config :: proc() -> Config {
     )
     config.strobe_speed = get_config(ini_map, "strobe_speed", f32, 0.01)
     config.speed_multiplier = get_config(ini_map, "speed_multiplier", f32, 2.0)
-    config.strobe_contrast = get_config(ini_map, "strobe_contrast", f32, 1.0)
+    config.strobe_contrast = get_config(ini_map, "strobe_contrast", f32, 1000.0)
     config.apply_attenuation = get_config(ini_map, "apply_attenuation", bool, false)
     config.strobe_display_type = get_config(
         ini_map,
