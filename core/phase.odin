@@ -150,7 +150,8 @@ set_phase_comparator_freq :: proc(
         band.norm_freq = band.freq_hz / self.samplerate
 
         if self.mode == .HARMONIC_MODE || i == 0 {
-            set_dft_freq(&band.dft_config, band.norm_freq)
+            window_size := best_dft_window_size(band.freq_hz, self.samplerate, 100)
+            set_dft_freq(&band.dft_config, band.norm_freq, window_size)
         }
     }
 }
@@ -194,10 +195,10 @@ run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32) {
 
 
 // Choose best window size for adaptive spectra leakage based on cents and not Hz
-best_dft_window_size :: proc(freq_hz: f32, samplerate: int, cents_resolution: int) -> int {
+best_dft_window_size :: proc(freq_hz: f32, samplerate: f32, cents_resolution: int) -> int {
     ratio := libc.exp2(f32(cents_resolution) / 1200.0)
     frequency_step := freq_hz * (ratio - 1.0)
-    win := math.ceil(f32(samplerate) / f32(frequency_step))
+    win := math.ceil(samplerate / frequency_step)
     return int(win)
 }
 
@@ -288,7 +289,7 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
     amp := magnitude(dft)
 
     // rotation 2πf/FS
-    w: f32 = math.TAU * band.freq_hz / self.samplerate
+    w: f32 = math.TAU * band.norm_freq
 
     // Phase correction - this can move the phase outside of the -π, π range
     phase = phase - f32(self.phase_correction) * w
