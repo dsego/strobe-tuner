@@ -4,9 +4,11 @@ import "core:math"
 
 
 SingleFreqDFT :: struct {
-    size:           int,
-    twiddle_lookup: []complex64,
-    window:         []f32, // eg Blackmann window
+    size:      int,
+    norm_freq: f32, // normalized frequency, eg 440Hz/ 48,000Hz
+    twiddles:  []complex64, // precomputed twiddle lookup (windowed)
+    dft:       complex64, // stores the resulting DFT after calling run_single_dft
+    window:    []f32, // eg Blackmann window
 }
 
 
@@ -14,7 +16,7 @@ init_dft :: proc(size: int) -> SingleFreqDFT {
     self := SingleFreqDFT{}
     self.size = size
     self.window = make([]f32, size)
-    self.twiddle_lookup = make([]complex64, size)
+    self.twiddles = make([]complex64, size)
 
     // Generate the windowing function
     for i in 0 ..< size {
@@ -25,27 +27,55 @@ init_dft :: proc(size: int) -> SingleFreqDFT {
 }
 
 set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32) {
+    self.norm_freq = norm_freq
+    w := math.TAU * norm_freq
+
+    // Recalculate windowed twiddles for fast lookup
     for i in 0 ..< self.size {
-        time := f32(i)
-        phase := math.TAU * time * norm_freq
-        self.twiddle_lookup[i] =
-            complex(self.window[i], 0) * complex(math.cos(phase), math.sin(phase))
+        rotation := w * f32(i)
+
+        // exp(-j*2π*k*i/N)
+        self.twiddles[i] = complex(self.window[i], 0) * complex(math.cos(rotation), -math.sin(rotation))
     }
 }
 
 destory_dft :: proc(self: ^SingleFreqDFT) {
     delete(self.window)
-    delete(self.twiddle_lookup)
+    delete(self.twiddles)
 }
 
+// Compute full DFT once
 run_single_dft :: proc(self: ^SingleFreqDFT, samples: []f32) -> complex64 {
     assert(len(samples) >= self.size)
 
-    dft: complex64 = complex(0, 0)
+    self.dft = complex(0, 0)
 
     for i in 0 ..< self.size {
-        dft += complex(samples[i], 0) * self.twiddle_lookup[i]
+        self.dft += complex(samples[i], 0) * self.twiddles[i]
     }
 
-    return dft
+    return self.dft
+}
+
+// Recursive DFT based on a previous fully computed DFT value.
+// Rotates accumulated DFT result by a fixed twiddle for the hop.
+run_recursive_dft :: proc(self: ^SingleFreqDFT, samples: []f32, hop_size: int) -> complex64 {
+    assert(len(samples) >= self.size + hop_size)
+
+    delta: complex64 = complex(0, 0)
+    w := math.TAU * self.norm_freq
+
+    for i in 0 ..< hop_size {
+        rotation := w * f32(i)
+        twiddle := complex(math.cos(rotation), -math.sin(rotation))
+        delta += complex(samples[i + self.size] - samples[i], 0) * twiddle
+    }
+    w_h := w * f32(hop_size)
+
+    twiddle_hop := complex(math.cos(w_h), math.sin(w_h))
+    dft_recursive: complex64 = (self.dft + delta) * twiddle_hop
+
+    self.dft = dft_recursive
+
+    return self.dft
 }

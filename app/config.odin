@@ -17,7 +17,8 @@ load_config :: proc() -> Config {
     ini_map, ok := load_ini()
     defer if ok do ini.delete_map(ini_map)
 
-    config.target_freq_hz = get_config(ini_map, "target_freq_hz", f32, 110.0)
+    // config.target_freq_hz = get_config(ini_map, "target_freq_hz", f32, 110.0)
+    config.target_freq_hz = get_config(ini_map, "target_freq_hz", f32, 440.0)
     config.pitch_standard = get_config(ini_map, "pitch_standard", f32, 440.0)
     config.strobe_count = get_config(ini_map, "strobe_count", int, 3)
     config.pitch_detect_fft_size = get_config(ini_map, "pitch_detect_fft_size", int, 4096)

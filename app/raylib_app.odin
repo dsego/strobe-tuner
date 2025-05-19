@@ -133,7 +133,6 @@ run_raylib_app :: proc(config: Config) {
         est_freq_hz, err_cents := core.run_phase_detection(phase_comparator)
 
 
-
         // update_strobe_display(&strobe_display, phase_comparator, false)
 
         rl.BeginDrawing()
@@ -175,17 +174,11 @@ run_raylib_app :: proc(config: Config) {
 
             rl.DrawTextEx(
                 font,
-                fmt.ctprintf("hz diff %+.1f hz | ph %+.1f ", phase_comparator.bands[0].freq_diff_hz, phase_comparator.bands[0].phase_diff),
+                fmt.ctprintf(
+                    "hz diff %+.1f",
+                    phase_comparator.bands[0].freq_diff_hz,
+                ),
                 {10, 380},
-                24,
-                0,
-                rl.GRAY,
-            )
-
-            rl.DrawTextEx(
-                font,
-                fmt.ctprintf("%+.1f", phase_comparator.bands[0].unwrapped_phase),
-                {10, 440},
                 24,
                 0,
                 rl.GRAY,

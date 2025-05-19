@@ -13,10 +13,12 @@ package core
 import "base:runtime"
 import "core:fmt"
 import "core:math"
+import "core:math/cmplx"
 import "core:math/linalg"
 
 
 MAX_BANDS :: 8
+MAX_HOP_SIZE :: 4096
 
 
 StrobeMode :: enum {
@@ -24,19 +26,20 @@ StrobeMode :: enum {
     VERNIER_MODE, // displays the same frequency at different sensitivities
 }
 
+
 PhaseBand :: struct {
+    hop_size:          int, // number of samples between consecutive DFT windows, affects phase-based frequency tracking
     freq_hz:           f32,
     norm_freq:         f32,
     freq_diff_hz:      f32,
     estimated_freq_hz: f32,
-    dft:               SingleFreqDFT, // harmonic mode
+    dft_config:        SingleFreqDFT,
     time_stretch:      f32,
     freq_multiplier:   f32, // to get more or less stripes in the pattern
     phase:             f32, // actual measured phase
     amp:               f32,
-    phase_diff:        f32,
+    phase_diff:        f32, // phase difference between detection frames
     err_cents:         f32,
-    err_cents_avg:     f32,
     unwrapped_phase:   f32,
     scaled_phase:      f32, // phase scaled based on desired strobe speed
     // dummy_phase:       f32,
@@ -48,6 +51,7 @@ PhaseBand :: struct {
     // fade out if the spinning is too rapid
     attenuation:       f32,
 }
+
 
 PhaseComparator :: struct {
     using node:         AudioCaptureNode,
@@ -61,7 +65,6 @@ PhaseComparator :: struct {
     band_count:         int,
     samplerate:         f32,
     mode:               StrobeMode,
-    dft:                SingleFreqDFT, // vernier mode
     available:          int,
     apply_attenuation:  bool,
 }
@@ -80,19 +83,18 @@ init_phase_comparator :: proc(
 
     init_audio_capture_node(self, "phase-tracker")
 
-    // zero pad to get more DFT precision & smoother response (?)
+    // zero pad to get more DFT precision & smoother response
     fft_size := self.window_size * 2.0
 
-    self.sample_buffer = make([]f32, fft_size)
+    self.sample_buffer = make([]f32, fft_size + MAX_HOP_SIZE)
+
     self.mode = mode
     self.base_freq_hz = base_freq_hz
-
-    self.dft = init_dft(fft_size)
 
     for i in 0 ..< band_count {
         band := PhaseBand{}
         band.freq_multiplier = 1.0
-        band.dft = init_dft(fft_size)
+        band.dft_config = init_dft(fft_size)
         append(&self.bands, band)
     }
 
@@ -101,16 +103,17 @@ init_phase_comparator :: proc(
     return self
 }
 
+
 destroy_phase_comparator :: proc(self: ^PhaseComparator) {
     destroy_audio_capture_node(self)
     delete(self.sample_buffer)
-    destory_dft(&self.dft)
     for &band in self.bands {
-        destory_dft(&band.dft)
+        destory_dft(&band.dft_config)
     }
     delete(self.bands)
     free(self)
 }
+
 
 set_phase_comparator_freq :: proc(
     self: ^PhaseComparator,
@@ -127,10 +130,6 @@ set_phase_comparator_freq :: proc(
     self.base_freq_hz = base_freq_hz
     self.mode = mode
 
-    if self.mode == .VERNIER_MODE {
-        set_dft_freq(&self.dft, base_freq_hz / self.samplerate)
-    }
-
     speed: f32 = base_speed * pitch_standard / base_freq_hz
 
     for &band, i in self.bands {
@@ -146,11 +145,12 @@ set_phase_comparator_freq :: proc(
         }
         band.norm_freq = band.freq_hz / self.samplerate
 
-        if self.mode == .HARMONIC_MODE {
-            set_dft_freq(&band.dft, band.norm_freq)
+        if self.mode == .HARMONIC_MODE || i == 0 {
+            set_dft_freq(&band.dft_config, band.norm_freq)
         }
     }
 }
+
 
 unwrap_phase :: proc(phase: f32) -> f32 {
     unwrapped_phase := phase
@@ -159,18 +159,17 @@ unwrap_phase :: proc(phase: f32) -> f32 {
     return unwrapped_phase
 }
 
+
 run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32) {
     available := audio_capture_read(self, self.sample_buffer)
     base_band := self.bands[0]
-
-    self.available = int(available)
 
     // Skip there are no new samples, the scaled phase stays the same
     if available <= 0 {
         return base_band.estimated_freq_hz, base_band.err_cents
     }
 
-    speed: f32 = 1.0
+    self.available = int(available)
 
     // phase runaway compensation
     self.time_reference += f64(available)
@@ -182,50 +181,77 @@ run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32) {
     self.time_reference -= full_periods
     self.phase_correction = full_periods - self.time_reference
 
-    // We can run only one phase calculation since all bands are tracking the same frequency
-    dft: complex64 = complex(0, 0)
-    if self.mode == .VERNIER_MODE {
-        dft = run_single_dft(&self.dft, self.sample_buffer)
-    }
-
     for &band, band_idx in self.bands {
-
-        // Calculate DFT for this band in harmonic mode
-        if self.mode == .HARMONIC_MODE {
-            dft = run_single_dft(&band.dft, self.sample_buffer)
-        }
-
-        determine_band_phase(self, &band, dft)
+        determine_band_phase(self, &band, band_idx)
     }
 
     return base_band.estimated_freq_hz, base_band.err_cents
 }
 
 
+determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx: int) {
+    dft: complex64 = complex(0, 0)
 
-determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, dft: complex64) {
+    // Harmonic mode - each band tracks a separate frequency
+    // Vernier mode - only the baser band needs to run the DFT
+    if self.mode == .HARMONIC_MODE || band_idx == 0 {
 
-    time_delta := (math.TAU * f64(self.available)) / f64(self.samplerate)
-    one_over_time := 1.0 / time_delta
+        // TODO: run this as a recursive DFT ?
+        dft = run_single_dft(&band.dft_config, self.sample_buffer)
+        hop_size := 100
 
-    cos := real(dft)
-    sin := imag(dft)
+        dft_hop := run_single_dft(&band.dft_config, self.sample_buffer[hop_size:])
+        // dft_hop := run_recursive_dft(&band.dft_config, self.sample_buffer, hop_size)
 
-    // if both cos & sin are zero or close to zero, that means there is nothing detected
-    band.detected = math.abs(cos) > DETECTION_THRESHOLD && math.abs(sin) > DETECTION_THRESHOLD
+        // fmt.println( cmplx.phase(dft_hop), cmplx.phase(dft))
+        phase_delta := cmplx.phase(dft_hop) - cmplx.phase(dft)
 
-    if !band.detected {
-        return
+        // how much the phase of a bin rotates over HOP samples for a signal at frequency f
+        expected_delta := math.TAU * f32(hop_size) * band.norm_freq
+
+        for expected_delta > math.PI do expected_delta -= math.TAU
+        for expected_delta < -math.PI do expected_delta += math.TAU
+
+
+        // Handle the jump from 2π to 0 or 0 to 2π (both rotation directions)
+        for phase_delta > math.PI do phase_delta -= math.TAU
+        for phase_delta < -math.PI do phase_delta += math.TAU
+
+        // fmt.println(expected_delta, phase_delta)
+
+
+        // fmt.println(expected_delta, phase_delta)
+        phase_deviation := phase_delta - expected_delta
+
+        // // Handle the jump from 2π to 0 or 0 to 2π (both rotation directions)
+        // for phase_deviation > math.PI do phase_deviation -= math.TAU
+        // for phase_deviation < -math.PI do phase_deviation += math.TAU
+
+
+        band.freq_diff_hz = self.samplerate * phase_deviation / (math.TAU * f32(hop_size))
+
+        band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
+        band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
     }
 
-    phase := math.atan2(sin, cos) // [-π, π]
+
+    // // TODO: fix threshold
+    // band.detected = math.abs(dft) > DETECTION_THRESHOLD
+
+    // if !band.detected {
+    //     return
+    // }
+
+
+    phase := -cmplx.phase(dft) // [-π, π]
     amp := magnitude(dft)
-    angle_freq: f32 = math.TAU * band.freq_hz / self.samplerate
 
-    // Phase correction, this can move the phase outside of the -π, π range
-    phase = phase - f32(self.phase_correction) * angle_freq
+    // rotation 2πf/FS
+    w: f32 = math.TAU * band.freq_hz / self.samplerate
+
+    // Phase correction - this can move the phase outside of the -π, π range
+    phase = phase - f32(self.phase_correction) * w
     band.phase = phase
-
 
     // Unwrap phase to range [0, 2π]
     unwrapped_phase := unwrap_phase(band.phase)
@@ -245,11 +271,6 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, dft: comp
     // Adding π/2 aligns phases to get the stripes lined up ???
     // FIXME: This used to work before the phase scaling was added
     // phase += math.PI * 0.5
-
-
-    band.freq_diff_hz = -band.phase_diff * f32(one_over_time)
-    band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
-    band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
 
 
     // TODO: Fake a steady strobing effect for frequencies that are out of range of phase comparison
