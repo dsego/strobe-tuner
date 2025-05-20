@@ -21,7 +21,7 @@ import "core:testing"
 
 
 MAX_BANDS :: 8
-MAX_WINDOW_SIZE :: 8192
+MAX_WINDOW_SIZE :: 32_768
 MAX_HOP_SIZE :: 4096
 
 
@@ -216,14 +216,14 @@ test_best_dft_window_size :: proc(t: ^testing.T) {
 
 
 // Max hop size for staying within 100 cents tolerance
-best_hop_size :: proc(cents_offset: int, freq_hz: f32, samplerate: int) -> int {
+best_hop_size :: proc(cents_offset: int, freq_hz: f32, samplerate: f32) -> int {
     ratio := libc.exp2(f32(cents_offset) / 1200.0)
     freq_max := freq_hz * ratio
     freq_deviation := freq_max - freq_hz
 
     min_phase_delta_rad: f32 = 0.5 // ???
 
-    hop := math.ceil(min_phase_delta_rad * f32(samplerate) / (math.TAU * freq_deviation))
+    hop := math.ceil(min_phase_delta_rad * samplerate / (math.TAU * freq_deviation))
     return int(hop)
 }
 
@@ -248,31 +248,31 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
     // Run a single bin DFT and estimate frequency based on phase drift
     if self.mode == .HARMONIC_MODE || band_idx == 0 {
         dft = run_single_dft(&band.dft_config, self.sample_buffer)
-        hop_size := 6
+        // hop_size := best_hop_size(100, band.freq_hz, self.samplerate)
 
-        dft_hop := run_single_dft(&band.dft_config, self.sample_buffer[hop_size:])
+        // dft_hop := run_single_dft(&band.dft_config, self.sample_buffer[hop_size:])
 
-        // measured phase difference
-        phase_delta := cmplx.phase(dft_hop) - cmplx.phase(dft)
+        // // measured phase difference
+        // phase_delta := cmplx.phase(dft_hop) - cmplx.phase(dft)
 
-        // how much the phase of a bin rotates over HOP samples for a signal at frequency f
-        expected_delta := math.TAU * f32(hop_size) * band.norm_freq
+        // // how much the phase of a bin rotates over HOP samples for a signal at frequency f
+        // expected_delta := math.TAU * f32(hop_size) * band.norm_freq
 
-        for expected_delta > math.PI do expected_delta -= math.TAU
-        for expected_delta < -math.PI do expected_delta += math.TAU
+        // for expected_delta > math.PI do expected_delta -= math.TAU
+        // for expected_delta < -math.PI do expected_delta += math.TAU
 
 
-        // Handle the jump from 2π to 0 or 0 to 2π (both rotation directions)
-        for phase_delta > math.PI do phase_delta -= math.TAU
-        for phase_delta < -math.PI do phase_delta += math.TAU
+        // // Handle the jump from 2π to 0 or 0 to 2π (both rotation directions)
+        // for phase_delta > math.PI do phase_delta -= math.TAU
+        // for phase_delta < -math.PI do phase_delta += math.TAU
 
-        phase_drift := phase_delta - expected_delta
+        // phase_drift := phase_delta - expected_delta
 
-        // Frequency estimation from phase drift
-        band.freq_diff_hz = self.samplerate * phase_drift / (math.TAU * f32(hop_size))
+        // // Frequency estimation from phase drift
+        // band.freq_diff_hz = self.samplerate * phase_drift / (math.TAU * f32(hop_size))
 
-        band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
-        band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
+        // band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
+        // band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
     }
 
 
