@@ -18,6 +18,8 @@ init_dft :: proc(max_size: int) -> SingleFreqDFT {
 }
 
 set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32, window_size: int) {
+    assert(window_size <= len(self.twiddles))
+
     self.window_size = window_size
     self.norm_freq = norm_freq
     w := math.TAU * norm_freq

@@ -21,7 +21,7 @@ import "core:testing"
 
 
 MAX_BANDS :: 8
-MAX_WINDOW_SIZE :: 4096
+MAX_WINDOW_SIZE :: 8192
 MAX_HOP_SIZE :: 4096
 
 
@@ -178,7 +178,7 @@ run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32) {
 
     // phase runaway compensation
     self.time_reference += f64(available)
-    self.reference_interval = f64(self.samplerate / self.bands[0].freq_hz)
+    self.reference_interval = f64(self.samplerate / base_band.freq_hz)
     num_periods := self.time_reference / self.reference_interval
 
     // wrap back closer to zero, only interested in relative time reference
@@ -237,7 +237,6 @@ test_best_hop_size :: proc(t: ^testing.T) {
     testing.expect_value(t, v2, 146)
     testing.expect_value(t, v3, 16)
 }
-
 
 
 determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx: int) {
@@ -299,6 +298,7 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
 
     // TODO : why does it flip direction after 50Hz ?
     // 4186 + 50 reverses direction
+    // 440 + 50 also
 
 
     // Unwrap phase to range [0, 2π]

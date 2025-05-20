@@ -7,6 +7,7 @@ import "core:os"
 import "core:io"
 import "core:path/filepath"
 import "core:reflect"
+import "core:slice"
 import "core:strconv"
 
 CONFIG_NAME :: "config.ini"
@@ -64,7 +65,21 @@ save_ini :: proc(ini_map: ini.Map) {
 
     stream := os.stream_from_handle(file)
     defer io.close(stream)
-    ini.write_map(stream, ini_map)
+
+    section := ini_map[""]
+
+    keys, keys_err := slice.map_keys(section)
+    if keys_err != nil {
+        fmt.println("Failed to save config file", ini_path)
+        return
+    }
+
+    // Keep order the same in the ini file
+    slice.sort(keys)
+
+    for k in keys {
+        ini.write_pair(stream, k, section[k])
+    }
 }
 
 get_config_directory :: proc(app_name: string) -> string {
