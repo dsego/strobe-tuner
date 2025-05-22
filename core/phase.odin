@@ -124,10 +124,12 @@ set_phase_comparator_freq :: proc(
     multiplier: f32 = 1.0
     self.base_freq_hz = base_freq_hz
     self.mode = mode
+    self.reference_interval = f64(self.samplerate / base_freq_hz)
 
     speed: f32 = base_speed * pitch_standard / base_freq_hz
 
     for &band, i in self.bands {
+        band.time_stretch = f32(self.reference_interval)
         band.phase = 0.0
         band.speed = speed
         if self.mode == .HARMONIC_MODE {
@@ -285,8 +287,6 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
     band.scaled_phase = band.scaled_phase - band.phase_diff * band.speed
 
     // TODO: Fake a steady strobing effect for frequencies that are out of range of phase comparison
-
-    band.time_stretch = f32(self.reference_interval)
 
     // TODO: slower attenuation slope
     band.attenuation = linalg.smoothstep(
