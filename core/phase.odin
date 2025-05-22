@@ -166,8 +166,10 @@ unwrap_phase :: proc(phase: f32) -> f32 {
 
 
 run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32) {
-    available := audio_capture_read(self, self.sample_buffer)
     base_band := self.bands[0]
+
+    // Need to keep this buffer slice relatively small to keep the display refresh without latency.
+    available := audio_capture_read(self, self.sample_buffer[:base_band.dft_config.window_size])
 
     // Skip there are no new samples, the scaled phase stays the same
     if available <= 0 {
