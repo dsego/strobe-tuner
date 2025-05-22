@@ -82,7 +82,7 @@ void main()
     vec2 distance = center - position.xy;
 
     // Color the pixel at position based on whether it sits in the donut shape
-    float curvedTrack = draw_curved_track(size, thickness, curvature_radius, feathering, distance);
+    float curved_track = draw_curved_track(size, thickness, curvature_radius, feathering, distance);
 
 
     // Color in the generated strobe signal
@@ -108,5 +108,5 @@ void main()
     // Blend colors
     vec3 rgb = mix(color_a, color_b, value);
 
-    finalColor = vec4(rgb, curvedTrack);
+    finalColor = vec4(rgb, curved_track);
 }

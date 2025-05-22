@@ -270,11 +270,19 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
 
         phase_drift := phase_delta - expected_delta
 
+        // Handle the jump from 2π to 0 or 0 to 2π (both rotation directions)
+        for phase_drift > math.PI do phase_drift -= math.TAU
+        for phase_drift < -math.PI do phase_drift += math.TAU
+
+
+
         // Frequency estimation from phase drift
         band.freq_diff_hz = self.samplerate * phase_drift / (math.TAU * f32(hop_size))
 
         band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
         band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
+
+
 
         band.phase_diff = phase_drift
     }
