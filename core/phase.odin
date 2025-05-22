@@ -1,9 +1,10 @@
 /* ------------------------------------------------------------------------------------------------
 
-    Phase tracker
-    - Generates a reference signal and detects the phase difference between the reference
-        and target. The reference phase is calculated in the drawing method and synthesizes a strobe
-        based on the detected phase difference.
+    Phase comparator
+
+    Runs two single bin DFTs separated by a hop size and compares their phases.
+    The frequency deviation is detected by comparing the expected phase shift for the target frequency
+    against the measured phase offset.
 
  -------------------------------------------------------------------------------------------------*/
 
@@ -19,12 +20,9 @@ import "core:math/linalg"
 import "core:testing"
 
 
-
 MAX_BANDS :: 8
 MAX_WINDOW_SIZE :: 32_768
 MAX_HOP_SIZE :: 4096
-
-
 
 
 StrobeMode :: enum {
@@ -46,7 +44,6 @@ PhaseBand :: struct {
     amp:               f32,
     phase_diff:        f32, // phase difference between detection frames
     err_cents:         f32,
-    unwrapped_phase:   f32,
     scaled_phase:      f32, // phase scaled based on desired strobe speed
     // dummy_phase:       f32,
     detected:          bool,
@@ -63,9 +60,7 @@ PhaseComparator :: struct {
     using node:         AudioCaptureNode,
     base_freq_hz:       f32,
     sample_buffer:      []f32,
-    phase_correction:   f64,
     reference_interval: f64,
-    time_reference:     f64,
     bands:              [dynamic]PhaseBand,
     band_count:         int,
     samplerate:         f32,
@@ -73,9 +68,6 @@ PhaseComparator :: struct {
     available:          int,
     apply_attenuation:  bool,
 }
-
-
-
 
 
 init_phase_comparator :: proc(
@@ -129,7 +121,6 @@ set_phase_comparator_freq :: proc(
 ) {
     flush_audio_capture_ringbuffer(self)
 
-    self.phase_correction = 0.0
     multiplier: f32 = 1.0
     self.base_freq_hz = base_freq_hz
     self.mode = mode
@@ -177,16 +168,6 @@ run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32) {
     }
 
     self.available = int(available)
-
-    // phase runaway compensation
-    self.time_reference += f64(available)
-    self.reference_interval = f64(self.samplerate / base_band.freq_hz)
-    num_periods := self.time_reference / self.reference_interval
-
-    // wrap back closer to zero, only interested in relative time reference
-    full_periods := math.trunc(num_periods) * self.reference_interval
-    self.time_reference -= full_periods
-    self.phase_correction = full_periods - self.time_reference
 
     for &band, band_idx in self.bands {
         determine_band_phase(self, &band, band_idx)
@@ -275,13 +256,11 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
         for phase_drift < -math.PI do phase_drift += math.TAU
 
 
-
         // Frequency estimation from phase drift
         band.freq_diff_hz = self.samplerate * phase_drift / (math.TAU * f32(hop_size))
 
         band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
         band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
-
 
 
         band.phase_diff = phase_drift
@@ -302,31 +281,8 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
     // rotation 2πf/FS
     w: f32 = math.TAU * band.norm_freq
 
-    // Phase correction - this can move the phase outside of the -π, π range
-    // phase = phase - f32(self.phase_correction) * w
-    // band.phase = phase
-
-
-
-    // Unwrap phase to range [0, 2π]
-    // unwrapped_phase := unwrap_phase(band.phase)
-
-    // band.phase_diff = unwrapped_phase - band.unwrapped_phase
-
-    // Handle the jump from 2π to 0 or 0 to 2π (both rotation directions)
-    // for band.phase_diff > math.PI do band.phase_diff -= math.TAU
-    // for band.phase_diff < -math.PI do band.phase_diff += math.TAU
-
-    // Remember the phase for next diff
-    // band.unwrapped_phase = unwrapped_phase
-
     // Scale down by factor and unwrap
     band.scaled_phase = band.scaled_phase - band.phase_diff * band.speed
-
-    // Adding π/2 aligns phases to get the stripes lined up ???
-    // FIXME: This used to work before the phase scaling was added
-    // phase += math.PI * 0.5
-
 
     // TODO: Fake a steady strobing effect for frequencies that are out of range of phase comparison
 
