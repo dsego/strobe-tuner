@@ -250,31 +250,33 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
     // Run a single bin DFT and estimate frequency based on phase drift
     if self.mode == .HARMONIC_MODE || band_idx == 0 {
         dft = run_single_dft(&band.dft_config, self.sample_buffer)
-        // hop_size := best_hop_size(100, band.freq_hz, self.samplerate)
+        hop_size := best_hop_size(100, band.freq_hz, self.samplerate)
 
-        // dft_hop := run_single_dft(&band.dft_config, self.sample_buffer[hop_size:])
+        dft_hop := run_single_dft(&band.dft_config, self.sample_buffer[hop_size:])
 
-        // // measured phase difference
-        // phase_delta := cmplx.phase(dft_hop) - cmplx.phase(dft)
+        // measured phase difference
+        phase_delta := cmplx.phase(dft_hop) - cmplx.phase(dft)
 
-        // // how much the phase of a bin rotates over HOP samples for a signal at frequency f
-        // expected_delta := math.TAU * f32(hop_size) * band.norm_freq
+        // how much the phase of a bin rotates over HOP samples for a signal at frequency f
+        expected_delta := math.TAU * f32(hop_size) * band.norm_freq
 
-        // for expected_delta > math.PI do expected_delta -= math.TAU
-        // for expected_delta < -math.PI do expected_delta += math.TAU
+        for expected_delta > math.PI do expected_delta -= math.TAU
+        for expected_delta < -math.PI do expected_delta += math.TAU
 
 
-        // // Handle the jump from 2π to 0 or 0 to 2π (both rotation directions)
-        // for phase_delta > math.PI do phase_delta -= math.TAU
-        // for phase_delta < -math.PI do phase_delta += math.TAU
+        // Handle the jump from 2π to 0 or 0 to 2π (both rotation directions)
+        for phase_delta > math.PI do phase_delta -= math.TAU
+        for phase_delta < -math.PI do phase_delta += math.TAU
 
-        // phase_drift := phase_delta - expected_delta
+        phase_drift := phase_delta - expected_delta
 
-        // // Frequency estimation from phase drift
-        // band.freq_diff_hz = self.samplerate * phase_drift / (math.TAU * f32(hop_size))
+        // Frequency estimation from phase drift
+        band.freq_diff_hz = self.samplerate * phase_drift / (math.TAU * f32(hop_size))
 
-        // band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
-        // band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
+        band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
+        band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
+
+        band.phase_diff = phase_drift
     }
 
 
@@ -293,27 +295,22 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
     w: f32 = math.TAU * band.norm_freq
 
     // Phase correction - this can move the phase outside of the -π, π range
-    phase = phase - f32(self.phase_correction) * w
-    band.phase = phase
+    // phase = phase - f32(self.phase_correction) * w
+    // band.phase = phase
 
-
-
-    // TODO : why does it flip direction after 50Hz ?
-    // 4186 + 50 reverses direction
-    // 440 + 50 also
 
 
     // Unwrap phase to range [0, 2π]
-    unwrapped_phase := unwrap_phase(band.phase)
+    // unwrapped_phase := unwrap_phase(band.phase)
 
-    band.phase_diff = unwrapped_phase - band.unwrapped_phase
+    // band.phase_diff = unwrapped_phase - band.unwrapped_phase
 
     // Handle the jump from 2π to 0 or 0 to 2π (both rotation directions)
-    for band.phase_diff > math.PI do band.phase_diff -= math.TAU
-    for band.phase_diff < -math.PI do band.phase_diff += math.TAU
+    // for band.phase_diff > math.PI do band.phase_diff -= math.TAU
+    // for band.phase_diff < -math.PI do band.phase_diff += math.TAU
 
     // Remember the phase for next diff
-    band.unwrapped_phase = unwrapped_phase
+    // band.unwrapped_phase = unwrapped_phase
 
     // Scale down by factor and unwrap
     band.scaled_phase = band.scaled_phase + band.phase_diff * band.speed
