@@ -313,7 +313,7 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
     // band.unwrapped_phase = unwrapped_phase
 
     // Scale down by factor and unwrap
-    band.scaled_phase = band.scaled_phase + band.phase_diff * band.speed
+    band.scaled_phase = band.scaled_phase - band.phase_diff * band.speed
 
     // Adding π/2 aligns phases to get the stripes lined up ???
     // FIXME: This used to work before the phase scaling was added
