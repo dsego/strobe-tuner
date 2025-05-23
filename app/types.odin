@@ -60,4 +60,7 @@ Config :: struct {
     // Background colors
     strobe_bg_color:       u32 "color",
     window_bg_color:       u32 "color",
+
+    // attenuate strobe effect when it spins so fast it becomes distracting
+    apply_attenuation:     bool,
 }

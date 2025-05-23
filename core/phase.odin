@@ -45,11 +45,12 @@ PhaseBand :: struct {
     phase_diff:        f32, // phase difference between detection frames
     err_cents:         f32,
     scaled_phase:      f32, // phase scaled based on desired strobe speed
-    // dummy_phase:       f32,
-    detected:          bool,
 
     // a number < 1 will slow down the strobe and > 1 will increase the strobe spinning rate
     speed:             f32,
+
+    // fade out if the spinning is too rapid
+    attenuation:       f32,
 }
 
 
@@ -63,6 +64,7 @@ PhaseComparator :: struct {
     samplerate:         f32,
     mode:               StrobeMode,
     available:          int,
+    apply_attenuation:  bool,
 }
 
 
@@ -71,6 +73,7 @@ init_phase_comparator :: proc(
     samplerate: f32,
     band_count: int,
     mode: StrobeMode,
+    apply_attenuation: bool,
 ) -> ^PhaseComparator {
     self := new(PhaseComparator)
 
@@ -82,6 +85,7 @@ init_phase_comparator :: proc(
 
     self.mode = mode
     self.base_freq_hz = base_freq_hz
+    self.apply_attenuation = self.apply_attenuation
 
     for i in 0 ..< band_count {
         band := PhaseBand{}
@@ -237,7 +241,7 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
         phase_delta := cmplx.phase(dft_hop) - cmplx.phase(dft)
         phase_delta = unwrap_phase(phase_delta)
 
-        // how much the phase of a bin rotates over HOP samples for a signal at frequency f
+        // how much the phase of a bin should rotate over HOP samples for a signal at frequency f
         expected_delta := math.TAU * f32(hop_size) * band.norm_freq
         expected_delta = unwrap_phase(expected_delta)
 
@@ -250,10 +254,6 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
         band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
 
         band.phase_diff = phase_drift
-
-
-        // rotation 2πf/FS
-        w: f32 = math.TAU * band.norm_freq
 
         // Scale down by factor
         band.scaled_phase = band.scaled_phase - band.phase_diff * band.speed
@@ -271,12 +271,13 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
     }
 
 
-    // // TODO: fix threshold
-    // band.detected = math.abs(dft) > DETECTION_THRESHOLD
-
-    // if !band.detected {
-    //     return
-    // }
-
-
+    // Fade out strobe when it spins so rapidly to become distracting
+    if self.apply_attenuation {
+        band.attenuation = linalg.smoothstep(
+            f32(0.01),
+            f32(0.008),
+            math.abs(band.phase_diff * band.speed),
+        )
+        band.amp *= band.attenuation
+    }
 }

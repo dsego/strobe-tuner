@@ -50,9 +50,9 @@ run_raylib_app :: proc(config: Config) {
         f32(config.samplerate),
         config.strobe_count,
         config.strobe_mode,
+        config.apply_attenuation,
     )
     defer core.destroy_phase_comparator(phase_comparator)
-
 
     strobe_display := init_strobe_display(
         {0, 0},
@@ -174,9 +174,9 @@ run_raylib_app :: proc(config: Config) {
             rl.DrawTextEx(
                 font,
                 fmt.ctprintf(
-                    "hz diff %+ .1f | phase diff %+ .2f",
+                    "hz diff %+ .1f |  %+ .6f",
                     phase_comparator.bands[0].freq_diff_hz,
-                    phase_comparator.bands[0].phase_diff,
+                    phase_comparator.bands[2].phase_diff * phase_comparator.bands[2].speed,
                 ),
                 {10, 380},
                 24,
