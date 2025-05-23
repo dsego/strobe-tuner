@@ -47,9 +47,6 @@ Config :: struct {
     // contrast or gain of the strobe wheel, higher contrast will amplify the signal to make the stripes more prominent
     strobe_contrast:       f32,
 
-    // attenuate strobe effect when it spins faster than desired
-    apply_attenuation:     bool,
-
     // auto detection vs manual selection of note to track
     note_detection_mode:   NoteDetectionMode,
 

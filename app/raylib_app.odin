@@ -174,7 +174,7 @@ run_raylib_app :: proc(config: Config) {
             rl.DrawTextEx(
                 font,
                 fmt.ctprintf(
-                    "hz diff %+.1f | phase diff %+.2f",
+                    "hz diff %+ .1f | phase diff %+ .2f",
                     phase_comparator.bands[0].freq_diff_hz,
                     phase_comparator.bands[0].phase_diff,
                 ),
@@ -183,8 +183,6 @@ run_raylib_app :: proc(config: Config) {
                 0,
                 rl.GRAY,
             )
-
-            // rl.GuiToggle(rl.Rectangle{420, 20, 100, 40}, "ATTENUATE", &config.apply_attenuation)
         }
     }
 }

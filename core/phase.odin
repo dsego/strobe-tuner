@@ -50,9 +50,6 @@ PhaseBand :: struct {
 
     // a number < 1 will slow down the strobe and > 1 will increase the strobe spinning rate
     speed:             f32,
-
-    // fade out if the spinning is too rapid
-    attenuation:       f32,
 }
 
 
@@ -66,7 +63,6 @@ PhaseComparator :: struct {
     samplerate:         f32,
     mode:               StrobeMode,
     available:          int,
-    apply_attenuation:  bool,
 }
 
 
@@ -150,11 +146,12 @@ set_phase_comparator_freq :: proc(
 }
 
 
+// Handle the jump from 2π to 0 or 0 to 2π (both rotation directions)
 unwrap_phase :: proc(phase: f32) -> f32 {
-    unwrapped_phase := phase
-    for unwrapped_phase < 0.0 do unwrapped_phase += math.TAU
-    for unwrapped_phase > math.TAU do unwrapped_phase -= math.TAU
-    return unwrapped_phase
+    phase := phase
+    for phase > math.PI do phase -= math.TAU
+    for phase < -math.PI do phase += math.TAU
+    return phase
 }
 
 
@@ -226,10 +223,9 @@ test_best_hop_size :: proc(t: ^testing.T) {
 
 determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx: int) {
     dft: complex64 = complex(0, 0)
+    base_band := self.bands[0]
 
     // Harmonic mode - each band tracks a separate frequency
-    // Vernier mode - only the baser band needs to run the DFT
-
     // Run a single bin DFT and estimate frequency based on phase drift
     if self.mode == .HARMONIC_MODE || band_idx == 0 {
         dft = run_single_dft(&band.dft_config, self.sample_buffer)
@@ -239,33 +235,39 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
 
         // measured phase difference
         phase_delta := cmplx.phase(dft_hop) - cmplx.phase(dft)
+        phase_delta = unwrap_phase(phase_delta)
 
         // how much the phase of a bin rotates over HOP samples for a signal at frequency f
         expected_delta := math.TAU * f32(hop_size) * band.norm_freq
-
-        for expected_delta > math.PI do expected_delta -= math.TAU
-        for expected_delta < -math.PI do expected_delta += math.TAU
-
-
-        // Handle the jump from 2π to 0 or 0 to 2π (both rotation directions)
-        for phase_delta > math.PI do phase_delta -= math.TAU
-        for phase_delta < -math.PI do phase_delta += math.TAU
+        expected_delta = unwrap_phase(expected_delta)
 
         phase_drift := phase_delta - expected_delta
-
-        // Handle the jump from 2π to 0 or 0 to 2π (both rotation directions)
-        for phase_drift > math.PI do phase_drift -= math.TAU
-        for phase_drift < -math.PI do phase_drift += math.TAU
-
+        phase_drift = unwrap_phase(phase_drift)
 
         // Frequency estimation from phase drift
         band.freq_diff_hz = self.samplerate * phase_drift / (math.TAU * f32(hop_size))
-
         band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
         band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
 
-
         band.phase_diff = phase_drift
+
+
+        // rotation 2πf/FS
+        w: f32 = math.TAU * band.norm_freq
+
+        // Scale down by factor
+        band.scaled_phase = band.scaled_phase - band.phase_diff * band.speed
+
+        amp := magnitude(dft)
+
+        // limit max amp to avoid jagged edges in the strobe display
+        band.amp = clamp(amp, 0.0, 50.0)
+
+    } else {
+        // Vernier mode - only the base band needs to run the DFT, other bands display varying speeds
+        band.amp = base_band.amp
+        band.phase_diff = base_band.phase_diff
+        band.scaled_phase = band.scaled_phase - band.phase_diff * band.speed
     }
 
 
@@ -277,30 +279,4 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
     // }
 
 
-    phase := -cmplx.phase(dft) // [-π, π]
-    amp := magnitude(dft)
-
-    // rotation 2πf/FS
-    w: f32 = math.TAU * band.norm_freq
-
-    // Scale down by factor and unwrap
-    band.scaled_phase = band.scaled_phase - band.phase_diff * band.speed
-
-    // TODO: Fake a steady strobing effect for frequencies that are out of range of phase comparison
-
-    // TODO: slower attenuation slope
-    band.attenuation = linalg.smoothstep(
-        f32(0.14),
-        f32(0.01),
-        math.abs(band.freq_diff_hz * band.speed),
-    )
-
-    band.amp = amp
-
-    // limit max amp to avoid jagged edges in the strobe display
-    // TODO: different amp per strobe track
-    band.amp = clamp(band.amp, 0.0, 50.0)
-
-    // apply attenuation after clamping to get the desired effect
-    if self.apply_attenuation do band.amp *= band.attenuation
 }
