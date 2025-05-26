@@ -45,7 +45,7 @@ load_config :: proc() -> Config {
         StrobeDisplayType.CURVED_TRACKS,
     )
     config.window_bg_color = cast(u32)get_config(ini_map, "window_bg_color", int, 0x0D0C10FF)
-    config.strobe_bg_color = cast(u32)get_config(ini_map, "strobe_bg_color", int, 0x7F889CFF)
+    config.strobe_bg_color = cast(u32)get_config(ini_map, "strobe_bg_color", int, 0x0D0C10FF)
     config.strobe_color_1 = cast(u32)get_config(ini_map, "strobe_color_1", int, 0xE26546FF)
     config.strobe_color_2 = cast(u32)get_config(ini_map, "strobe_color_2", int, 0x54202BFF)
 

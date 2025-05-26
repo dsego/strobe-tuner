@@ -1,6 +1,7 @@
 
 
-A fixed window size in samples produces a constant frequency resolution in Hz, not in musical units like cents (which are logarithmic).
+A fixed window size in samples produces a constant frequency resolution in Hz,
+not in musical units like cents (which are logarithmic).
 
 
 So if your bin is offset by 10 Hz:

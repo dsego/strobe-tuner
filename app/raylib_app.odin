@@ -11,7 +11,7 @@ import "../core"
 
 
 run_raylib_app :: proc(config: Config) {
-    // target_freq_hz: f32 = 329.6275569128699
+
     target_freq_hz: f32 = config.target_freq_hz
     freq_estimation_active := false
 
@@ -33,15 +33,15 @@ run_raylib_app :: proc(config: Config) {
     defer destroy_font()
 
 
-    // --- Gui styles ----
+    // GUI styles
     root_dir := filepath.dir(#file)
     defer delete(root_dir)
-    raylib_style_path := filepath.join({root_dir, "../assets/dark.rgs"})
+    raylib_style_path := filepath.join({root_dir, "../assets/style_dark.rgs"})
     defer delete(raylib_style_path)
 
+    rl.GuiLoadStyle(cstring(raw_data(raylib_style_path)))
     rl.GuiSetFont(font)
     rl.GuiSetStyle(.DEFAULT, i32(rl.GuiDefaultProperty.TEXT_SIZE), 14)
-    rl.GuiLoadStyle(cstring(raw_data(raylib_style_path)))
 
     //  ------------------
 
@@ -132,8 +132,6 @@ run_raylib_app :: proc(config: Config) {
         est_freq_hz, err_cents := core.run_phase_detection(phase_comparator)
 
 
-        // update_strobe_display(&strobe_display, phase_comparator, false)
-
         rl.BeginDrawing()
         defer rl.EndDrawing()
         {
@@ -171,6 +169,7 @@ run_raylib_app :: proc(config: Config) {
             //     rl.GRAY,
             // )
 
+
             rl.DrawTextEx(
                 font,
                 fmt.ctprintf(
@@ -183,6 +182,7 @@ run_raylib_app :: proc(config: Config) {
                 0,
                 rl.GRAY,
             )
+            rl.GuiButton({ 424, 324, 120, 30 }, "#191#SHOW MESSAGE")
         }
     }
 }
