@@ -29,19 +29,19 @@ run_raylib_app :: proc(config: Config) {
     rl.InitWindow(800, 600, "Strobe Tuner")
     defer rl.CloseWindow()
 
-    init_font(192)
-    defer destroy_font()
+    init_fonts()
+    defer destroy_fonts()
 
 
     // GUI styles
     root_dir := filepath.dir(#file)
     defer delete(root_dir)
-    raylib_style_path := filepath.join({root_dir, "../assets/style_dark.rgs"})
+    raylib_style_path := filepath.join({root_dir, "../assets/style_cyber.rgs"})
     defer delete(raylib_style_path)
 
     rl.GuiLoadStyle(cstring(raw_data(raylib_style_path)))
-    rl.GuiSetFont(font)
-    rl.GuiSetStyle(.DEFAULT, i32(rl.GuiDefaultProperty.TEXT_SIZE), 14)
+    rl.GuiSetFont(font_store._32)
+    rl.GuiSetStyle(.DEFAULT, i32(rl.GuiDefaultProperty.TEXT_SIZE), 16)
 
     //  ------------------
 
@@ -139,11 +139,11 @@ run_raylib_app :: proc(config: Config) {
 
             draw_strobe_display(&strobe_display, phase_comparator, out_of_range)
 
-            draw_note(target_note, {24, 280}, 96, rl.WHITE if freq_estimation_active else rl.GRAY)
+            draw_note(target_note, {24, 280}, rl.WHITE if freq_estimation_active else rl.GRAY)
 
 
             rl.DrawTextEx(
-                font,
+                font_store._48,
                 // Deviation from the target frequency, not the detected frequency
                 fmt.ctprintf("Cents\n%+.1f", err_cents),
                 {128, 300},
@@ -152,7 +152,7 @@ run_raylib_app :: proc(config: Config) {
                 rl.GREEN,
             )
             rl.DrawTextEx(
-                font,
+                font_store._48,
                 fmt.ctprintf("Hertz\n%+.1f ", est_freq_hz),
                 {256, 300},
                 24,
@@ -169,20 +169,7 @@ run_raylib_app :: proc(config: Config) {
             //     rl.GRAY,
             // )
 
-
-            rl.DrawTextEx(
-                font,
-                fmt.ctprintf(
-                    "hz diff %+ .1f |  %+ .6f",
-                    phase_comparator.bands[0].freq_diff_hz,
-                    phase_comparator.bands[2].phase_diff * phase_comparator.bands[2].speed,
-                ),
-                {10, 380},
-                24,
-                0,
-                rl.GRAY,
-            )
-            rl.GuiButton({ 424, 324, 120, 30 }, "#191#SHOW MESSAGE")
+            rl.GuiButton({ 424, 324, 120, 30 }, "#191#Show message")
         }
     }
 }

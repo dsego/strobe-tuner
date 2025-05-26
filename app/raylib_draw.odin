@@ -9,26 +9,25 @@ import "../core"
 draw_note :: proc(
     note: core.Note,
     pos: [2]f32,
-    size: f32,
     color: rl.Color,
     hide_accidental: bool = false,
 ) {
     if note.frequency == 0 do return
 
     // Note name
-    rl.DrawTextEx(font, fmt.ctprintf("%v", note.name), pos, size, 0, color)
+    rl.DrawTextEx(font_store._192, fmt.ctprintf("%v", note.name), pos, 96, 0, color)
 
     // Sharp sign
     if note.is_accidental && !hide_accidental {
-        rl.DrawTextEx(font, "♯", {pos.x + size / 2, pos.y + size / 8}, size / 2.5, 0, color)
+        rl.DrawTextEx(font_store._192, "♯", {pos.x + 48, pos.y + 12}, 38, 0, color)
     }
 
     // Octave number
     rl.DrawTextEx(
-        font,
+        font_store._192,
         fmt.ctprintf("%v", note.octave),
-        {pos.x + size / 2, pos.y + size / 2},
-        size / 2.5,
+        {pos.x + 48, pos.y + 48},
+        38,
         0,
         color,
     )
