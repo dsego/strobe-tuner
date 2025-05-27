@@ -15,16 +15,16 @@ draw_note :: proc(
     if note.frequency == 0 do return
 
     // Note name
-    rl.DrawTextEx(font_store._192, fmt.ctprintf("%v", note.name), pos, 96, 0, color)
+    rl.DrawTextEx(font_store.size_192, fmt.ctprintf("%v", note.name), pos, 96, 0, color)
 
     // Sharp sign
     if note.is_accidental && !hide_accidental {
-        rl.DrawTextEx(font_store._192, "♯", {pos.x + 48, pos.y + 12}, 38, 0, color)
+        rl.DrawTextEx(font_store.size_192, "♯", {pos.x + 48, pos.y + 12}, 38, 0, color)
     }
 
     // Octave number
     rl.DrawTextEx(
-        font_store._192,
+        font_store.size_192,
         fmt.ctprintf("%v", note.octave),
         {pos.x + 48, pos.y + 48},
         38,

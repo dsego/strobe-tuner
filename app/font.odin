@@ -6,10 +6,10 @@ import rl "vendor:raylib"
 
 
 FontStore :: struct {
-    _32:  rl.Font,
-    _48:  rl.Font,
-    _76:  rl.Font,
-    _192: rl.Font,
+    size_32:  rl.Font,
+    size_48:  rl.Font,
+    size_76:  rl.Font,
+    size_192: rl.Font,
 }
 
 
@@ -24,7 +24,7 @@ init_fonts :: proc() {
     codepoints := rl.LoadCodepoints(font_atlas, &count)
     defer rl.UnloadCodepoints(codepoints)
 
-    font_store._32 = rl.LoadFontFromMemory(
+    font_store.size_32 = rl.LoadFontFromMemory(
         ".ttf",
         raw_data(font_data),
         i32(len(font_data)),
@@ -33,7 +33,7 @@ init_fonts :: proc() {
         count,
     )
 
-    font_store._48 = rl.LoadFontFromMemory(
+    font_store.size_48 = rl.LoadFontFromMemory(
         ".ttf",
         raw_data(font_data),
         i32(len(font_data)),
@@ -42,7 +42,7 @@ init_fonts :: proc() {
         count,
     )
 
-    font_store._76 = rl.LoadFontFromMemory(
+    font_store.size_76 = rl.LoadFontFromMemory(
         ".ttf",
         raw_data(font_data),
         i32(len(font_data)),
@@ -51,7 +51,7 @@ init_fonts :: proc() {
         count,
     )
 
-    font_store._192 = rl.LoadFontFromMemory(
+    font_store.size_192 = rl.LoadFontFromMemory(
         ".ttf",
         raw_data(font_data),
         i32(len(font_data)),
@@ -62,8 +62,8 @@ init_fonts :: proc() {
 }
 
 destroy_fonts :: proc() {
-    rl.UnloadFont(font_store._32)
-    rl.UnloadFont(font_store._48)
-    rl.UnloadFont(font_store._76)
-    rl.UnloadFont(font_store._192)
+    rl.UnloadFont(font_store.size_32)
+    rl.UnloadFont(font_store.size_48)
+    rl.UnloadFont(font_store.size_76)
+    rl.UnloadFont(font_store.size_192)
 }

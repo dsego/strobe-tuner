@@ -40,7 +40,7 @@ run_raylib_app :: proc(config: Config) {
     defer delete(raylib_style_path)
 
     rl.GuiLoadStyle(cstring(raw_data(raylib_style_path)))
-    rl.GuiSetFont(font_store._32)
+    rl.GuiSetFont(font_store.size_32)
     rl.GuiSetStyle(.DEFAULT, i32(rl.GuiDefaultProperty.TEXT_SIZE), 16)
 
     //  ------------------
@@ -143,7 +143,7 @@ run_raylib_app :: proc(config: Config) {
 
 
             rl.DrawTextEx(
-                font_store._48,
+                font_store.size_48,
                 // Deviation from the target frequency, not the detected frequency
                 fmt.ctprintf("Cents\n%+.1f", err_cents),
                 {128, 300},
@@ -152,7 +152,7 @@ run_raylib_app :: proc(config: Config) {
                 rl.GREEN,
             )
             rl.DrawTextEx(
-                font_store._48,
+                font_store.size_48,
                 fmt.ctprintf("Hertz\n%+.1f ", est_freq_hz),
                 {256, 300},
                 24,
