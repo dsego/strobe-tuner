@@ -40,14 +40,6 @@ target note --> can be the detected note in AUTO mode or manually set in MANUAL 
 when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display
 
 
---> indicator ◀︎◀︎◀︎ / ◀︎◀︎ / ◀︎ to mark how off the measured freq is from the target
-
-eg:
-
-◀︎◀︎◀︎ note ▶︎▶︎▶︎ - more than 400 cents off ?
- ◀︎◀︎ note ▶︎▶︎  - more than 200 cents off
-  ◀︎ note  ▶︎  - more than 100 cents off
-
 
 
 

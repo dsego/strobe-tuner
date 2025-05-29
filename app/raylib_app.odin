@@ -11,8 +11,7 @@ import rl "vendor:raylib"
 import "../core"
 
 
-run_raylib_app :: proc(config: Config) {
-
+run_raylib_app :: proc(config: ^Config) {
     target_freq_hz: f32 = config.target_freq_hz
     freq_estimation_active := false
 
@@ -91,6 +90,9 @@ run_raylib_app :: proc(config: Config) {
 
     always_track_detected_note := false
 
+    // Load initial value from the config
+    manual_detection_active := config.note_detection_mode == .MANUAL
+
     for !rl.WindowShouldClose() {
 
         pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
@@ -165,9 +167,12 @@ run_raylib_app :: proc(config: Config) {
                 rl.PURPLE,
             )
 
-
-
-            rl.GuiButton({ 424, 324, 120, 30 }, "#191#Show message")
+            rl.GuiToggle({ 424, 24, 120, 30 }, "MANUAL" if manual_detection_active else "AUTO" , &manual_detection_active)
+            if manual_detection_active {
+                config.note_detection_mode = .MANUAL
+            } else {
+                config.note_detection_mode = .AUTO
+            }
         }
     }
 }
