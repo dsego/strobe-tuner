@@ -57,6 +57,8 @@ PhaseBand :: struct {
 PhaseComparator :: struct {
     using node:         AudioCaptureNode,
     base_freq_hz:       f32,
+    speed_multiplier:   f32,
+    pitch_standard:     f32,
     sample_buffer:      []f32,
     reference_interval: f64,
     bands:              [dynamic]PhaseBand,
@@ -110,6 +112,16 @@ destroy_phase_comparator :: proc(self: ^PhaseComparator) {
     free(self)
 }
 
+set_phase_comparator_speed :: proc(self: ^PhaseComparator, base_speed: f32) {
+    speed: f32 = base_speed * self.pitch_standard / self.base_freq_hz
+    for &band, i in self.bands {
+        band.speed = speed
+        if self.mode == .VERNIER_MODE {
+            speed *= self.speed_multiplier
+        }
+    }
+}
+
 
 set_phase_comparator_freq :: proc(
     self: ^PhaseComparator,
@@ -124,6 +136,8 @@ set_phase_comparator_freq :: proc(
     multiplier: f32 = 1.0
     self.base_freq_hz = base_freq_hz
     self.mode = mode
+    self.pitch_standard = pitch_standard
+    self.speed_multiplier = speed_multiplier
     self.reference_interval = f64(self.samplerate / base_freq_hz)
 
     speed: f32 = base_speed * pitch_standard / base_freq_hz

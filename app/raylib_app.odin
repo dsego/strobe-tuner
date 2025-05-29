@@ -95,7 +95,6 @@ run_raylib_app :: proc(config: ^Config) {
 
     // --- GUI CONTROLS ----------------------------------------------------------------------------
 
-    // Load initial value from the config
     manual_detection_active := config.note_detection_mode == .MANUAL
     harmonic_mode_active := config.strobe_mode == .HARMONIC_MODE
 
@@ -104,6 +103,8 @@ run_raylib_app :: proc(config: ^Config) {
 
     tuning_preset_dropdown_active := false
     tuning_preset_choice: i32 = 0
+
+    strobe_speed_slider_value := config.strobe_speed
 
 
     // ---------------------------------------------------------------------------------------------
@@ -162,7 +163,7 @@ run_raylib_app :: proc(config: ^Config) {
         pitch_cents_err := core.cents_deviation(pitch_info.detected_freq, target_note.frequency)
 
         phase_freq_hz, phase_err_cents := core.run_phase_detection(phase_comparator)
-        strobe_contrast_slider := math.log10(config.strobe_contrast)
+        strobe_contrast_slider_value := math.log10(config.strobe_contrast)
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -228,11 +229,17 @@ run_raylib_app :: proc(config: ^Config) {
                 config.strobe_mode = .VERNIER_MODE
             }
 
-            rl.GuiSlider({424, 140, 120, 30}, "", "", &strobe_contrast_slider, 0.0, 5.0)
-            config.strobe_contrast = linalg.exp10(strobe_contrast_slider)
+            rl.GuiSlider({424, 140, 120, 30}, "", "", &strobe_contrast_slider_value, 0.0, 5.0)
+            config.strobe_contrast = linalg.exp10(strobe_contrast_slider_value)
+
+            rl.GuiSlider({424, 180, 120, 30}, "", "", &strobe_speed_slider_value, 0.001, 0.05)
+            if strobe_speed_slider_value != config.strobe_speed {
+                config.strobe_speed = strobe_speed_slider_value
+                core.set_phase_comparator_speed(phase_comparator, strobe_speed_slider_value)
+            }
 
             if rl.GuiDropdownBox(
-                {424, 180, 120, 30},
+                {424, 220, 120, 30},
                 "TRACKS;WHEEL",
                 &display_type_choice,
                 display_type_dropdown_active,
@@ -272,7 +279,6 @@ run_raylib_app :: proc(config: ^Config) {
             // pitch standard - 440hz - number spinner
             // microphone / audio input dropdown
             // color theme dropdown
-            // TODO tuning preset dropdown
             // TODO speed slider
         }
     }
