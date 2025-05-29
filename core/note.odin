@@ -4,8 +4,12 @@ package core
 import "core:c/libc"
 import "core:fmt"
 import "core:math"
+import "core:strconv"
 import "core:testing"
 import "core:unicode/utf8"
+
+
+// GUITAR_STD_NOTES :: []
 
 
 // Assumes equal temperament
@@ -22,7 +26,80 @@ Note :: struct {
 }
 
 
-// TODO: new note from string, eg new_note("A#2")
+note_str :: proc(note: Note) -> string {
+    return fmt.aprintf("{}{}{}", note.name, "#" if note.is_accidental else "", note.octave)
+}
+
+
+// new note from string, eg new_note("A#2")
+new_note :: proc(label: string, pitch_standard: f32 = 440.0) -> (Note, bool) {
+    if len(label) < 2 || len(label) > 3 do return Note{}, false
+
+    octave := 0
+    name := rune(label[0])
+    is_accidental := false
+
+    if len(label) == 2 {
+        octave = strconv.parse_int(label[1:]) or_else 0
+    }
+
+    if len(label) == 3 && label[1] == '#' {
+        is_accidental = true
+        octave = strconv.parse_int(label[2:]) or_else 0
+    }
+
+    cents := 0
+
+    // octave 4
+    if (name == 'C') do cents = -900
+    else // C#
+    if (name == 'D') do cents = -700
+    else // D#
+    if (name == 'E') do cents = -500
+    else if (name == 'F') do cents = -400
+    else // F#
+    if (name == 'G') do cents = -200
+    else if (name == 'A') do cents = 0
+    else // A#
+    if (name == 'B') do cents = 200
+    else do return Note{}, false
+
+    if is_accidental do cents += 100
+
+    // move to the correct octave
+    if octave > 4 do cents += 1200 * (octave - 4)
+    if octave < 4 do cents -= 1200 * (4 - octave)
+
+    new_note := cents_to_note(f32(cents), pitch_standard)
+
+    return new_note, true
+}
+
+@(test)
+test_new_note :: proc(t: ^testing.T) {
+    note, ok := new_note("C2")
+    testing.expect_value(t, ok, true)
+    testing.expect_value(t, note.name, 'C')
+    testing.expect_value(t, note.octave, 2)
+    testing.expect(t, note.frequency - 65.41 <= 0.00001)
+
+    note, ok = new_note("A#5")
+    testing.expect_value(t, ok, true)
+    testing.expect_value(t, note.name, 'A')
+    testing.expect_value(t, note.octave, 5)
+    testing.expect(t, note.frequency - 932.33 <= 0.00001)
+
+    // bad notes
+    note, ok = new_note("")
+    testing.expect_value(t, ok, false)
+
+    note, ok = new_note("K")
+    testing.expect_value(t, ok, false)
+
+    note, ok = new_note("A#2#")
+    testing.expect_value(t, ok, false)
+
+}
 
 
 // Cents difference from the pitch standard A440
@@ -155,6 +232,7 @@ find_note :: proc(freq: f32, pitch_standard: f32 = 440.0) -> Note {
     return note
 }
 
+
 @(test)
 test_find_note :: proc(t: ^testing.T) {
     // C# 277.18 Hz (above middle C)
@@ -210,7 +288,7 @@ octave_down :: proc(note: Note) -> Note {
     new_note := cents_to_note(f32(cents), note.pitch_standard)
 
     // lowest we can go is A0
-    if new_note.name != 'A' && new_note.name != 'B'  && new_note.octave == 0 do return note
+    if new_note.name != 'A' && new_note.name != 'B' && new_note.octave == 0 do return note
     if new_note.octave < 0 do return note
 
     return new_note

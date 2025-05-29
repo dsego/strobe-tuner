@@ -11,8 +11,11 @@ import rl "vendor:raylib"
 
 import "../core"
 
+guitar_std_notes: [6]string = {"E2", "A2", "G3", "D3", "B3", "E4"}
+ukulele_concert_notes: [4]string = {"G4", "C4", "E4", "A4"}
 
 run_raylib_app :: proc(config: ^Config) {
+
     target_freq_hz: f32 = config.target_freq_hz
     freq_estimation_active := false
 
@@ -90,8 +93,6 @@ run_raylib_app :: proc(config: ^Config) {
 
     target_note = core.find_note(target_freq_hz)
 
-    always_track_detected_note := false
-
 
     // --- GUI CONTROLS ----------------------------------------------------------------------------
 
@@ -105,6 +106,8 @@ run_raylib_app :: proc(config: ^Config) {
     tuning_preset_choice: i32 = 0
 
     strobe_speed_slider_value := config.strobe_speed
+
+    selected_note_idx := 0
 
 
     // ---------------------------------------------------------------------------------------------
@@ -126,7 +129,7 @@ run_raylib_app :: proc(config: ^Config) {
                 }
                 core.set_phase_comparator_freq(
                     phase_comparator,
-                    detected_note.frequency if always_track_detected_note else target_note.frequency,
+                    target_note.frequency,
                     config.pitch_standard,
                     config.strobe_speed,
                     config.speed_multiplier,
@@ -145,16 +148,28 @@ run_raylib_app :: proc(config: ^Config) {
             if config.tuning_preset == .CHROMATIC {
                 if rl.IsKeyPressed(.UP) {
                     target_note = core.octave_up(target_note)
-                }
-                else if rl.IsKeyPressed(.DOWN) {
+                } else if rl.IsKeyPressed(.DOWN) {
                     target_note = core.octave_down(target_note)
-                }
-                else if rl.IsKeyPressed(.LEFT) {
+                } else if rl.IsKeyPressed(.LEFT) {
                     target_note = core.prev_note_in_scale(target_note)
-                }
-                else if rl.IsKeyPressed(.RIGHT) {
+                } else if rl.IsKeyPressed(.RIGHT) {
                     target_note = core.next_note_in_scale(target_note)
                 }
+            } else {
+                tuning_notes: []string = {}
+                length := 0
+
+                if config.tuning_preset == .UKULELE_CONCERT do tuning_notes = ukulele_concert_notes[:]
+                if config.tuning_preset == .GUITAR_STD do tuning_notes = guitar_std_notes[:]
+
+                if rl.IsKeyPressed(.LEFT) {
+                    selected_note_idx -= 1
+                } else if rl.IsKeyPressed(.RIGHT) {
+                    selected_note_idx += 1
+                }
+                selected_note_idx = selected_note_idx %% len(tuning_notes)
+                selected_note := tuning_notes[selected_note_idx]
+                target_note, ok = core.new_note(selected_note)
             }
         }
 
@@ -216,18 +231,32 @@ run_raylib_app :: proc(config: ^Config) {
                 config.note_detection_mode = .AUTO
             }
 
-
-
             rl.GuiToggle(
                 {424, 100, 120, 30},
                 "HARMONIC" if harmonic_mode_active else "VERNIER",
                 &harmonic_mode_active,
             )
-            if harmonic_mode_active {
+
+            strobe_mode_changed := false
+            if harmonic_mode_active && config.strobe_mode != .HARMONIC_MODE {
                 config.strobe_mode = .HARMONIC_MODE
-            } else {
+                strobe_mode_changed = true
+            } else if !harmonic_mode_active && config.strobe_mode != .VERNIER_MODE {
                 config.strobe_mode = .VERNIER_MODE
+                strobe_mode_changed = true
             }
+
+            if strobe_mode_changed {
+                core.set_phase_comparator_freq(
+                    phase_comparator,
+                    target_note.frequency,
+                    config.pitch_standard,
+                    config.strobe_speed,
+                    config.speed_multiplier,
+                    config.strobe_mode,
+                )
+            }
+
 
             rl.GuiSlider({424, 140, 120, 30}, "", "", &strobe_contrast_slider_value, 0.0, 5.0)
             config.strobe_contrast = linalg.exp10(strobe_contrast_slider_value)
@@ -257,7 +286,7 @@ run_raylib_app :: proc(config: ^Config) {
             }
             if rl.GuiDropdownBox(
                 {424, 60, 120, 30},
-                "CHROMATIC;GUITAR STD;UKULELE STD",
+                "CHROMATIC;GUITAR STD;UKULELE CONCERT",
                 &tuning_preset_choice,
                 tuning_preset_dropdown_active,
             ) {
@@ -267,19 +296,15 @@ run_raylib_app :: proc(config: ^Config) {
 
             rl.GuiSetState(i32(rl.GuiState.STATE_NORMAL))
 
-
-
             setup_strobe_display(
                 &strobe_display,
                 config.strobe_contrast,
                 config.strobe_display_type,
             )
 
-
             // pitch standard - 440hz - number spinner
             // microphone / audio input dropdown
             // color theme dropdown
-            // TODO speed slider
         }
     }
 }
