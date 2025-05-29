@@ -231,9 +231,9 @@ best_hop_size :: proc(cents_offset: int, freq_hz: f32, samplerate: f32) -> int {
 
 @(test)
 test_best_hop_size :: proc(t: ^testing.T) {
-    v1 := best_hop_size(110.0, 48_000, 100)
-    v2 := best_hop_size(440.0, 48_000, 100)
-    v3 := best_hop_size(4186.0, 48_000, 100)
+    v1 := best_hop_size(100, 110.0, 48_000)
+    v2 := best_hop_size(100, 440.0, 48_000)
+    v3 := best_hop_size(100, 4186.0, 48_000)
 
     testing.expect_value(t, v1, 584)
     testing.expect_value(t, v2, 146)
