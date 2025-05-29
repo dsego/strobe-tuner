@@ -2,6 +2,7 @@ package app
 
 import "core:fmt"
 import "core:math"
+import "core:math/linalg"
 import "core:path/filepath"
 import "core:strings"
 import "core:time"
@@ -60,6 +61,7 @@ run_raylib_app :: proc(config: ^Config) {
         {config.strobe_color_1, config.strobe_color_2},
         config.strobe_bg_color,
         config.strobe_contrast,
+        config.strobe_display_type,
     )
     defer destroy_strobe_display(&strobe_display)
 
@@ -90,12 +92,26 @@ run_raylib_app :: proc(config: ^Config) {
 
     always_track_detected_note := false
 
+
+    // --- GUI CONTROLS ----------------------------------------------------------------------------
+
     // Load initial value from the config
     manual_detection_active := config.note_detection_mode == .MANUAL
+    harmonic_mode_active := config.strobe_mode == .HARMONIC_MODE
 
+    displayTypeDropdownActive := false
+    displayTypeChoice: i32 = 0
+
+
+    // ---------------------------------------------------------------------------------------------
+
+    // MAIN LOOP
     for !rl.WindowShouldClose() {
 
         pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
+
+        // TODO: detect strobe mode change and reset phase comparator
+        // TODO: detect strobe speed change and reset phase comparator
 
         // Keep previous measurement if there is no detected note
         if core.is_strong_pitch(pitch_info) {
@@ -134,24 +150,30 @@ run_raylib_app :: proc(config: ^Config) {
         pitch_cents_err := core.cents_deviation(pitch_info.detected_freq, target_note.frequency)
 
         phase_freq_hz, phase_err_cents := core.run_phase_detection(phase_comparator)
+        strobe_contrast_slider := math.log10(config.strobe_contrast)
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
         {
             rl.ClearBackground(rl.GetColor(config.window_bg_color))
 
+            // TODO
+            // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
             draw_strobe_display(&strobe_display, phase_comparator, out_of_range)
 
             draw_note(target_note, {24, 280}, rl.WHITE if freq_estimation_active else rl.GRAY)
 
             if freq_estimation_active {
                 if pitch_cents_err < -10 do rl.DrawTextEx(font_store.size_76, "◀", {0, 240}, 38, 0, rl.PURPLE)
-                if pitch_cents_err > 10 do  rl.DrawTextEx(font_store.size_76, "▶︎", {370, 240}, 38, 0, rl.PURPLE)
+                if pitch_cents_err > 10 do rl.DrawTextEx(font_store.size_76, "▶︎", {370, 240}, 38, 0, rl.PURPLE)
             }
+
+            // TODO:
+            // --- if detected note is outside of measurement scope -> use estimated freq
+            // --- if detected note is close to target note -> use phase diff for fine freq display
 
             rl.DrawTextEx(
                 font_store.size_48,
-                // Deviation from the target frequency, not the detected frequency
                 fmt.ctprintf("Cents\n%+.1f", phase_err_cents),
                 {128, 300},
                 24,
@@ -167,12 +189,61 @@ run_raylib_app :: proc(config: ^Config) {
                 rl.PURPLE,
             )
 
-            rl.GuiToggle({ 424, 24, 120, 30 }, "MANUAL" if manual_detection_active else "AUTO" , &manual_detection_active)
+
+            rl.GuiToggle(
+                {424, 20, 120, 30},
+                "MANUAL" if manual_detection_active else "AUTO",
+                &manual_detection_active,
+            )
             if manual_detection_active {
                 config.note_detection_mode = .MANUAL
             } else {
                 config.note_detection_mode = .AUTO
             }
+
+            rl.GuiToggle(
+                {424, 60, 120, 30},
+                "HARMONIC" if harmonic_mode_active else "VERNIER",
+                &harmonic_mode_active,
+            )
+            if harmonic_mode_active {
+                config.strobe_mode = .HARMONIC_MODE
+            } else {
+                config.strobe_mode = .VERNIER_MODE
+            }
+
+            rl.GuiSlider({424, 100, 120, 30}, "", "", &strobe_contrast_slider, 0.0, 5.0)
+            config.strobe_contrast = linalg.exp10(strobe_contrast_slider)
+
+            if rl.GuiDropdownBox(
+                {424, 140, 120, 30},
+                "TRACKS;WHEEL",
+                &displayTypeChoice,
+                displayTypeDropdownActive,
+            ) {
+                displayTypeDropdownActive = !displayTypeDropdownActive
+            }
+
+            switch displayTypeChoice {
+            case 0:
+                config.strobe_display_type = .CURVED_TRACKS
+            case 1:
+                config.strobe_display_type = .SPINNING_WHEEL
+            }
+
+            setup_strobe_display(
+                &strobe_display,
+                config.strobe_contrast,
+                config.strobe_display_type,
+            )
+
+
+            // pitch standard - 440hz - number spinner
+
+            // microphone / audio input dropdown
+            // color theme dropdown
+            // TODO tuning preset dropdown
+            // TODO speed slider
         }
     }
 }

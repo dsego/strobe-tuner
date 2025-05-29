@@ -19,6 +19,11 @@ StrobeDisplayType :: enum {
     CURVED_TRACKS,
 }
 
+TuningPreset :: enum {
+    CHROMATIC,
+    GUITAR_STD,
+    UKULELE_STD,
+}
 
 Config :: struct {
     // Initial target frequency for the strobe
@@ -65,6 +70,8 @@ Config :: struct {
 
     // attenuate strobe effect when it spins so fast it becomes distracting
     apply_attenuation:     bool,
+
+    tuning_preset:         TuningPreset,
 }
 
 
@@ -109,6 +116,12 @@ load_config :: proc() -> Config {
     config.strobe_color_1 = cast(u32)get_config(ini_map, "strobe_color_1", int, 0xE26546FF)
     config.strobe_color_2 = cast(u32)get_config(ini_map, "strobe_color_2", int, 0x54202BFF)
 
+    config.tuning_preset = get_config(
+        ini_map,
+        "tuning_preset",
+        TuningPreset,
+        TuningPreset.CHROMATIC,
+    )
     return config
 }
 

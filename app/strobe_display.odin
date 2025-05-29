@@ -48,6 +48,7 @@ init_strobe_display :: proc(
     colors: [2]u32,
     background: u32,
     contrast: f32,
+    display_type: StrobeDisplayType,
 ) -> (
     self: StrobeDisplay,
 ) {
@@ -108,11 +109,14 @@ init_strobe_display :: proc(
         &shadow_dimensions,
         rl.ShaderUniformDataType.VEC2,
     )
-
-    // self.display_type = .SPINNING_WHEEL
-    self.display_type = .CURVED_TRACKS
+    self.display_type = display_type
 
     return
+}
+
+setup_strobe_display :: proc(self: ^StrobeDisplay, contrast: f32, display_type: StrobeDisplayType) {
+    self.contrast = contrast
+    self.display_type = display_type
 }
 
 destroy_strobe_display :: proc(self: ^StrobeDisplay) {
