@@ -178,6 +178,9 @@ test_find_note_g4 :: proc(t: ^testing.T) {
 
 // TODO: test next_in_scale
 next_note_in_scale :: proc(note: Note) -> Note {
+    // C8 is the highest note
+    if note.name == 'C' && note.octave >= 8 do return note
+
     cents := note.cents
     switch note.name {
     case 'B', 'E':
@@ -189,6 +192,9 @@ next_note_in_scale :: proc(note: Note) -> Note {
 }
 
 prev_note_in_scale :: proc(note: Note) -> Note {
+    // A0 is the lowest note
+    if note.name == 'A' && note.octave <= 0 do return note
+
     cents := note.cents
     switch note.name {
     case 'C', 'F':
@@ -197,6 +203,27 @@ prev_note_in_scale :: proc(note: Note) -> Note {
         cents -= 300 if note.is_accidental else 200
     }
     return cents_to_note(f32(cents), note.pitch_standard)
+}
+
+octave_down :: proc(note: Note) -> Note {
+    cents := note.cents - 1200
+    new_note := cents_to_note(f32(cents), note.pitch_standard)
+
+    // lowest we can go is A0
+    if new_note.name != 'A' && new_note.name != 'B'  && new_note.octave == 0 do return note
+    if new_note.octave < 0 do return note
+
+    return new_note
+}
+
+octave_up :: proc(note: Note) -> Note {
+    cents := note.cents + 1200
+    new_note := cents_to_note(f32(cents), note.pitch_standard)
+
+    // highest we can go is C8
+    if new_note.name != 'C' && new_note.octave >= 8 do return note
+
+    return new_note
 }
 
 

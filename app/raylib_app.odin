@@ -141,11 +141,20 @@ run_raylib_app :: proc(config: ^Config) {
         }
 
         if config.note_detection_mode == .MANUAL {
-            // TODO: let the user choose the active note
-            // if rl.IsKeyPressed(.LEFT) {
-            // }
-            // if rl.IsKeyPressed(.RIGHT) {
-            // }
+            if config.tuning_preset == .CHROMATIC {
+                if rl.IsKeyPressed(.UP) {
+                    target_note = core.octave_up(target_note)
+                }
+                else if rl.IsKeyPressed(.DOWN) {
+                    target_note = core.octave_down(target_note)
+                }
+                else if rl.IsKeyPressed(.LEFT) {
+                    target_note = core.prev_note_in_scale(target_note)
+                }
+                else if rl.IsKeyPressed(.RIGHT) {
+                    target_note = core.next_note_in_scale(target_note)
+                }
+            }
         }
 
         // TODO: explanation
@@ -206,8 +215,10 @@ run_raylib_app :: proc(config: ^Config) {
                 config.note_detection_mode = .AUTO
             }
 
+
+
             rl.GuiToggle(
-                {424, 60, 120, 30},
+                {424, 100, 120, 30},
                 "HARMONIC" if harmonic_mode_active else "VERNIER",
                 &harmonic_mode_active,
             )
@@ -217,11 +228,11 @@ run_raylib_app :: proc(config: ^Config) {
                 config.strobe_mode = .VERNIER_MODE
             }
 
-            rl.GuiSlider({424, 100, 120, 30}, "", "", &strobe_contrast_slider, 0.0, 5.0)
+            rl.GuiSlider({424, 140, 120, 30}, "", "", &strobe_contrast_slider, 0.0, 5.0)
             config.strobe_contrast = linalg.exp10(strobe_contrast_slider)
 
             if rl.GuiDropdownBox(
-                {424, 140, 120, 30},
+                {424, 180, 120, 30},
                 "TRACKS;WHEEL",
                 &display_type_choice,
                 display_type_dropdown_active,
@@ -232,26 +243,31 @@ run_raylib_app :: proc(config: ^Config) {
             config.strobe_display_type = StrobeDisplayType(display_type_choice)
 
 
+            // TODO: when changing to guitar, should reset starting note to low E
+
+            if config.note_detection_mode == .AUTO {
+                rl.GuiSetState(i32(rl.GuiState.STATE_DISABLED))
+            }
+            if rl.GuiDropdownBox(
+                {424, 60, 120, 30},
+                "CHROMATIC;GUITAR STD;UKULELE STD",
+                &tuning_preset_choice,
+                tuning_preset_dropdown_active,
+            ) {
+                tuning_preset_dropdown_active = !tuning_preset_dropdown_active
+            }
+            config.tuning_preset = TuningPreset(tuning_preset_choice)
+
+            rl.GuiSetState(i32(rl.GuiState.STATE_NORMAL))
+
+
+
             setup_strobe_display(
                 &strobe_display,
                 config.strobe_contrast,
                 config.strobe_display_type,
             )
 
-            // if rl.GuiDropdownBox(
-            //     {424, 180, 120, 30},
-            //     "CHROMATIC;GUITAR STD;UKULELE STD;",
-            //     &tuning_preset_choice,
-            //     tuning_preset_dropdown_active,
-            // ) {
-            //     tuning_preset_dropdown_active = !tuning_preset_dropdown_active
-            // }
-            // switch tuning_preset_choice {
-            // case 0:
-            //     config.strobe_display_type = .CURVED_TRACKS
-            // case 1:
-            //     config.strobe_display_type = .SPINNING_WHEEL
-            // }
 
             // pitch standard - 440hz - number spinner
             // microphone / audio input dropdown
