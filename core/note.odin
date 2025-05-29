@@ -176,6 +176,7 @@ test_find_note_g4 :: proc(t: ^testing.T) {
     testing.expect_value(t, note.name, 'G')
 }
 
+// TODO: test next_in_scale
 next_note_in_scale :: proc(note: Note) -> Note {
     cents := note.cents
     switch note.name {
@@ -197,9 +198,6 @@ prev_note_in_scale :: proc(note: Note) -> Note {
     }
     return cents_to_note(f32(cents), note.pitch_standard)
 }
-
-
-// TODO: test next_in_scale
 
 
 cents_deviation :: proc(freq_1_hz: f32, freq_2_hz: f32) -> f32 {

@@ -181,6 +181,8 @@ run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32) {
 
 
 // Choose best window size for adaptive spectra leakage based on cents and not Hz
+// A fixed window size in samples produces a constant frequency resolution in Hz, not in musical units like cents.
+// For higher frequencies we need less samples to show the strobing effect.
 best_dft_window_size :: proc(freq_hz: f32, samplerate: f32, cents_resolution: int) -> int {
     ratio := libc.exp2(f32(cents_resolution) / 1200.0)
     frequency_step := freq_hz * (ratio - 1.0)

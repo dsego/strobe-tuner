@@ -5,6 +5,7 @@ import "core:math"
 import "core:path/filepath"
 import "core:strings"
 import "core:time"
+
 import rl "vendor:raylib"
 
 import "../core"
@@ -128,9 +129,9 @@ run_raylib_app :: proc(config: Config) {
 
         // TODO: explanation
         out_of_range := detected_note.cents != target_note.cents
+        pitch_cents_err := core.cents_deviation(pitch_info.detected_freq, target_note.frequency)
 
-        est_freq_hz, err_cents := core.run_phase_detection(phase_comparator)
-
+        phase_freq_hz, phase_err_cents := core.run_phase_detection(phase_comparator)
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -141,11 +142,15 @@ run_raylib_app :: proc(config: Config) {
 
             draw_note(target_note, {24, 280}, rl.WHITE if freq_estimation_active else rl.GRAY)
 
+            if freq_estimation_active {
+                if pitch_cents_err < -10 do rl.DrawTextEx(font_store.size_76, "◀", {0, 240}, 38, 0, rl.PURPLE)
+                if pitch_cents_err > 10 do  rl.DrawTextEx(font_store.size_76, "▶︎", {370, 240}, 38, 0, rl.PURPLE)
+            }
 
             rl.DrawTextEx(
                 font_store.size_48,
                 // Deviation from the target frequency, not the detected frequency
-                fmt.ctprintf("Cents\n%+.1f", err_cents),
+                fmt.ctprintf("Cents\n%+.1f", phase_err_cents),
                 {128, 300},
                 24,
                 0,
@@ -153,21 +158,14 @@ run_raylib_app :: proc(config: Config) {
             )
             rl.DrawTextEx(
                 font_store.size_48,
-                fmt.ctprintf("Hertz\n%+.1f ", est_freq_hz),
+                fmt.ctprintf("Hertz\n%+.1f ", phase_freq_hz),
                 {256, 300},
                 24,
                 0,
                 rl.PURPLE,
             )
 
-            // rl.DrawTextEx(
-            //     font,
-            //     "◀︎◀︎◀︎ / ◀︎◀︎ / ◀︎",
-            //     {10, 350},
-            //     32,
-            //     0,
-            //     rl.GRAY,
-            // )
+
 
             rl.GuiButton({ 424, 324, 120, 30 }, "#191#Show message")
         }
