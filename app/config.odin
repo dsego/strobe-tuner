@@ -15,8 +15,8 @@ NoteDetectionMode :: enum {
 
 
 StrobeDisplayType :: enum {
-    SPINNING_WHEEL,
     CURVED_TRACKS,
+    SPINNING_WHEEL,
 }
 
 TuningPreset :: enum {

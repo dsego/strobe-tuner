@@ -99,8 +99,11 @@ run_raylib_app :: proc(config: ^Config) {
     manual_detection_active := config.note_detection_mode == .MANUAL
     harmonic_mode_active := config.strobe_mode == .HARMONIC_MODE
 
-    displayTypeDropdownActive := false
-    displayTypeChoice: i32 = 0
+    display_type_dropdown_active := false
+    display_type_choice: i32 = i32(config.strobe_display_type)
+
+    tuning_preset_dropdown_active := false
+    tuning_preset_choice: i32 = 0
 
 
     // ---------------------------------------------------------------------------------------------
@@ -163,6 +166,8 @@ run_raylib_app :: proc(config: ^Config) {
 
             draw_note(target_note, {24, 280}, rl.WHITE if freq_estimation_active else rl.GRAY)
 
+            // TODO
+            // make sure it doesn't flash, build in some thresholds, schmitt trigger
             if freq_estimation_active {
                 if pitch_cents_err < -10 do rl.DrawTextEx(font_store.size_76, "◀", {0, 240}, 38, 0, rl.PURPLE)
                 if pitch_cents_err > 10 do rl.DrawTextEx(font_store.size_76, "▶︎", {370, 240}, 38, 0, rl.PURPLE)
@@ -218,18 +223,14 @@ run_raylib_app :: proc(config: ^Config) {
             if rl.GuiDropdownBox(
                 {424, 140, 120, 30},
                 "TRACKS;WHEEL",
-                &displayTypeChoice,
-                displayTypeDropdownActive,
+                &display_type_choice,
+                display_type_dropdown_active,
             ) {
-                displayTypeDropdownActive = !displayTypeDropdownActive
+                display_type_dropdown_active = !display_type_dropdown_active
             }
 
-            switch displayTypeChoice {
-            case 0:
-                config.strobe_display_type = .CURVED_TRACKS
-            case 1:
-                config.strobe_display_type = .SPINNING_WHEEL
-            }
+            config.strobe_display_type = StrobeDisplayType(display_type_choice)
+
 
             setup_strobe_display(
                 &strobe_display,
@@ -237,9 +238,22 @@ run_raylib_app :: proc(config: ^Config) {
                 config.strobe_display_type,
             )
 
+            // if rl.GuiDropdownBox(
+            //     {424, 180, 120, 30},
+            //     "CHROMATIC;GUITAR STD;UKULELE STD;",
+            //     &tuning_preset_choice,
+            //     tuning_preset_dropdown_active,
+            // ) {
+            //     tuning_preset_dropdown_active = !tuning_preset_dropdown_active
+            // }
+            // switch tuning_preset_choice {
+            // case 0:
+            //     config.strobe_display_type = .CURVED_TRACKS
+            // case 1:
+            //     config.strobe_display_type = .SPINNING_WHEEL
+            // }
 
             // pitch standard - 440hz - number spinner
-
             // microphone / audio input dropdown
             // color theme dropdown
             // TODO tuning preset dropdown
