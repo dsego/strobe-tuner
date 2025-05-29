@@ -103,7 +103,7 @@ run_raylib_app :: proc(config: ^Config) {
     display_type_choice: i32 = i32(config.strobe_display_type)
 
     tuning_preset_dropdown_active := false
-    tuning_preset_choice: i32 = 0
+    tuning_preset_choice: i32 = i32(config.tuning_preset)
 
     strobe_speed_slider_value := config.strobe_speed
 
