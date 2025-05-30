@@ -11,7 +11,7 @@ import rl "vendor:raylib"
 
 import "../core"
 
-guitar_std_notes: [6]string = {"E2", "A2", "G3", "D3", "B3", "E4"}
+guitar_std_notes: [6]string = {"E2", "A2", "D3", "G3", "B3", "E4"}
 ukulele_std_notes: [4]string = {"G4", "C4", "E4", "A4"}
 
 run_raylib_app :: proc(config: ^Config) {
@@ -98,6 +98,8 @@ run_raylib_app :: proc(config: ^Config) {
 
     manual_detection_active := config.note_detection_mode == .MANUAL
     harmonic_mode_active := config.strobe_mode == .HARMONIC_MODE
+
+    show_strobe_wheel := config.strobe_display_type == .SPINNING_WHEEL
 
     display_type_dropdown_active := false
     display_type_choice: i32 = i32(config.strobe_display_type)
@@ -257,42 +259,28 @@ run_raylib_app :: proc(config: ^Config) {
                 )
             }
 
-            rl.DrawTextEx(
-                font_store.size_32,
-                "Contrast",
-                {424, 140},
-                16,
-                0,
-                rl.GRAY,
-            )
+            rl.DrawTextEx(font_store.size_32, "Contrast", {424, 140}, 16, 0, rl.GRAY)
             rl.GuiSlider({424, 160, 120, 15}, "", "", &strobe_contrast_slider_value, 0.0, 5.0)
             config.strobe_contrast = linalg.exp10(strobe_contrast_slider_value)
 
-            rl.DrawTextEx(
-                font_store.size_32,
-                "Sensitivity",
-                {424, 190},
-                16,
-                0,
-                rl.GRAY,
-            )
+            rl.DrawTextEx(font_store.size_32, "Sensitivity", {424, 190}, 16, 0, rl.GRAY)
             rl.GuiSlider({424, 210, 120, 15}, "", "", &strobe_speed_slider_value, 0.001, 0.05)
             if strobe_speed_slider_value != config.strobe_speed {
                 config.strobe_speed = strobe_speed_slider_value
                 core.set_phase_comparator_speed(phase_comparator, strobe_speed_slider_value)
             }
 
-            if rl.GuiDropdownBox(
+
+            rl.GuiToggle(
                 {424, 250, 120, 30},
-                "TRACKS;WHEEL",
-                &display_type_choice,
-                display_type_dropdown_active,
-            ) {
-                display_type_dropdown_active = !display_type_dropdown_active
+                "WHEEL" if show_strobe_wheel else "TRACKS",
+                &show_strobe_wheel,
+            )
+            if show_strobe_wheel {
+                config.strobe_display_type = StrobeDisplayType.SPINNING_WHEEL
+            } else {
+                config.strobe_display_type = StrobeDisplayType.CURVED_TRACKS
             }
-
-            config.strobe_display_type = StrobeDisplayType(display_type_choice)
-
 
             // TODO: when changing to guitar, should reset starting note to low E
 
