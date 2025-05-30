@@ -1,8 +1,6 @@
 package core
 
 import "core:math"
-import "core:testing"
-import rl "vendor:raylib"
 
 
 // Complex number magnitude

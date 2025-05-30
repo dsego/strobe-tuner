@@ -112,6 +112,10 @@ run_raylib_app :: proc(config: ^Config) {
     selected_note_idx := 0
 
 
+    note_low_state := false
+    note_high_state := false
+
+
     // ---------------------------------------------------------------------------------------------
 
     // MAIN LOOP
@@ -177,6 +181,7 @@ run_raylib_app :: proc(config: ^Config) {
 
         // TODO: explanation
         out_of_range := detected_note.cents != target_note.cents
+
         pitch_cents_err := core.cents_deviation(pitch_info.detected_freq, target_note.frequency)
 
         phase_freq_hz, phase_err_cents := core.run_phase_detection(phase_comparator)
@@ -193,11 +198,12 @@ run_raylib_app :: proc(config: ^Config) {
 
             draw_note(target_note, {24, 320}, rl.WHITE if freq_estimation_active else rl.GRAY)
 
-            // TODO
-            // make sure it doesn't flash, build in some thresholds or smooth step
             if freq_estimation_active {
-                if pitch_cents_err < -10 do rl.DrawTextEx(font_store.size_76, "◀", {0, 240}, 38, 0, rl.PURPLE)
-                if pitch_cents_err > 10 do rl.DrawTextEx(font_store.size_76, "▶︎", {370, 240}, 38, 0, rl.PURPLE)
+                note_low_state = core.schmitt_trigger_neg(note_low_state, pitch_cents_err, -8, -10)
+                note_high_state = core.schmitt_trigger(note_high_state, pitch_cents_err, 8, 10)
+
+                if note_low_state do rl.DrawTextEx(font_store.size_76, "◀", {0, 240}, 38, 0, rl.PURPLE)
+                if note_high_state do rl.DrawTextEx(font_store.size_76, "▶︎", {370, 240}, 38, 0, rl.PURPLE)
             }
 
             // TODO:
