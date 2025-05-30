@@ -12,7 +12,7 @@ import rl "vendor:raylib"
 import "../core"
 
 guitar_std_notes: [6]string = {"E2", "A2", "G3", "D3", "B3", "E4"}
-ukulele_concert_notes: [4]string = {"G4", "C4", "E4", "A4"}
+ukulele_std_notes: [4]string = {"G4", "C4", "E4", "A4"}
 
 run_raylib_app :: proc(config: ^Config) {
 
@@ -60,7 +60,7 @@ run_raylib_app :: proc(config: ^Config) {
 
     strobe_display := init_strobe_display(
         {0, 0},
-        {400, 240},
+        {400, 400},
         {config.strobe_color_1, config.strobe_color_2},
         config.strobe_bg_color,
         config.strobe_contrast,
@@ -159,7 +159,7 @@ run_raylib_app :: proc(config: ^Config) {
                 tuning_notes: []string = {}
                 length := 0
 
-                if config.tuning_preset == .UKULELE_CONCERT do tuning_notes = ukulele_concert_notes[:]
+                if config.tuning_preset == .UKULELE_STD do tuning_notes = ukulele_std_notes[:]
                 if config.tuning_preset == .GUITAR_STD do tuning_notes = guitar_std_notes[:]
 
                 if rl.IsKeyPressed(.LEFT) {
@@ -189,10 +189,10 @@ run_raylib_app :: proc(config: ^Config) {
             // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
             draw_strobe_display(&strobe_display, phase_comparator, out_of_range)
 
-            draw_note(target_note, {24, 280}, rl.WHITE if freq_estimation_active else rl.GRAY)
+            draw_note(target_note, {24, 320}, rl.WHITE if freq_estimation_active else rl.GRAY)
 
             // TODO
-            // make sure it doesn't flash, build in some thresholds, schmitt trigger
+            // make sure it doesn't flash, build in some thresholds or smooth step
             if freq_estimation_active {
                 if pitch_cents_err < -10 do rl.DrawTextEx(font_store.size_76, "◀", {0, 240}, 38, 0, rl.PURPLE)
                 if pitch_cents_err > 10 do rl.DrawTextEx(font_store.size_76, "▶︎", {370, 240}, 38, 0, rl.PURPLE)
@@ -205,7 +205,7 @@ run_raylib_app :: proc(config: ^Config) {
             rl.DrawTextEx(
                 font_store.size_48,
                 fmt.ctprintf("Cents\n%+.1f", phase_err_cents),
-                {128, 300},
+                {128, 340},
                 24,
                 0,
                 rl.GREEN,
@@ -213,7 +213,7 @@ run_raylib_app :: proc(config: ^Config) {
             rl.DrawTextEx(
                 font_store.size_48,
                 fmt.ctprintf("Hertz\n%+.1f ", phase_freq_hz),
-                {256, 300},
+                {256, 340},
                 24,
                 0,
                 rl.PURPLE,
@@ -257,18 +257,33 @@ run_raylib_app :: proc(config: ^Config) {
                 )
             }
 
-
-            rl.GuiSlider({424, 140, 120, 30}, "", "", &strobe_contrast_slider_value, 0.0, 5.0)
+            rl.DrawTextEx(
+                font_store.size_32,
+                "Contrast",
+                {424, 140},
+                16,
+                0,
+                rl.GRAY,
+            )
+            rl.GuiSlider({424, 160, 120, 15}, "", "", &strobe_contrast_slider_value, 0.0, 5.0)
             config.strobe_contrast = linalg.exp10(strobe_contrast_slider_value)
 
-            rl.GuiSlider({424, 180, 120, 30}, "", "", &strobe_speed_slider_value, 0.001, 0.05)
+            rl.DrawTextEx(
+                font_store.size_32,
+                "Sensitivity",
+                {424, 190},
+                16,
+                0,
+                rl.GRAY,
+            )
+            rl.GuiSlider({424, 210, 120, 15}, "", "", &strobe_speed_slider_value, 0.001, 0.05)
             if strobe_speed_slider_value != config.strobe_speed {
                 config.strobe_speed = strobe_speed_slider_value
                 core.set_phase_comparator_speed(phase_comparator, strobe_speed_slider_value)
             }
 
             if rl.GuiDropdownBox(
-                {424, 220, 120, 30},
+                {424, 250, 120, 30},
                 "TRACKS;WHEEL",
                 &display_type_choice,
                 display_type_dropdown_active,
@@ -286,7 +301,7 @@ run_raylib_app :: proc(config: ^Config) {
             }
             if rl.GuiDropdownBox(
                 {424, 60, 120, 30},
-                "CHROMATIC;GUITAR STD;UKULELE CONCERT",
+                "CHROMATIC;GUITAR STD;UKULELE STD",
                 &tuning_preset_choice,
                 tuning_preset_dropdown_active,
             ) {

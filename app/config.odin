@@ -22,7 +22,7 @@ StrobeDisplayType :: enum {
 TuningPreset :: enum {
     CHROMATIC,
     GUITAR_STD,
-    UKULELE_CONCERT,
+    UKULELE_STD,
 }
 
 Config :: struct {
