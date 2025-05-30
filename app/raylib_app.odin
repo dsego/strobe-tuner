@@ -151,9 +151,9 @@ run_raylib_app :: proc(config: ^Config) {
                 } else if rl.IsKeyPressed(.DOWN) {
                     target_note = core.octave_down(target_note)
                 } else if rl.IsKeyPressed(.LEFT) {
-                    target_note = core.prev_note_in_scale(target_note)
+                    target_note = core.prev_chromatic_note(target_note)
                 } else if rl.IsKeyPressed(.RIGHT) {
-                    target_note = core.next_note_in_scale(target_note)
+                    target_note = core.next_chromatic_note(target_note)
                 }
             } else {
                 tuning_notes: []string = {}
