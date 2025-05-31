@@ -87,7 +87,7 @@ init_phase_comparator :: proc(
 
     self.mode = mode
     self.base_freq_hz = base_freq_hz
-    self.apply_attenuation = self.apply_attenuation
+    self.apply_attenuation = apply_attenuation
 
     for i in 0 ..< band_count {
         band := PhaseBand{}
@@ -288,7 +288,7 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
 
 
     // Fade out strobe when it spins so rapidly to become distracting
-    if self.apply_attenuation {
+    if self.apply_attenuation && self.mode == .VERNIER_MODE {
         band.attenuation = linalg.smoothstep(
             f32(0.01),
             f32(0.008),

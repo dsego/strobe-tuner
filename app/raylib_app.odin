@@ -203,7 +203,7 @@ run_raylib_app :: proc(config: ^Config) {
                 note_high_state = core.schmitt_trigger(note_high_state, pitch_cents_err, 8, 10)
 
                 if note_low_state do rl.DrawTextEx(font_store.size_76, "◀", {0, 240}, 38, 0, rl.PURPLE)
-                if note_high_state do rl.DrawTextEx(font_store.size_76, "▶︎", {370, 240}, 38, 0, rl.PURPLE)
+                else if note_high_state do rl.DrawTextEx(font_store.size_76, "▶︎", {370, 240}, 38, 0, rl.PURPLE)
             }
 
             // TODO:
@@ -287,8 +287,6 @@ run_raylib_app :: proc(config: ^Config) {
             } else {
                 config.strobe_display_type = StrobeDisplayType.CURVED_TRACKS
             }
-
-            // TODO: when changing to guitar, should reset starting note to low E
 
             if config.note_detection_mode == .AUTO {
                 rl.GuiSetState(i32(rl.GuiState.STATE_DISABLED))
