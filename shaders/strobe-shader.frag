@@ -22,6 +22,8 @@ uniform float norm_freq;
 uniform float band_height;
 uniform float err_cents;
 uniform float period_count;
+uniform float min_radius;
+uniform float max_radius;
 
 
 float generate_signal(
@@ -87,15 +89,13 @@ void main()
 
     // Color in the generated strobe signal
 
-    // TODO: color glow effect based on distance from center of strobe!!!
-
     // Current pixel angle
     float angle = atan(distance.y, distance.x);
 
     // Time is translated from the linear to radial
     float time = angle / TAU;
 
-    float value = generate_signal(
+    float signal_value = generate_signal(
         norm_freq,
         phase,
         amp,
@@ -106,7 +106,17 @@ void main()
 
 
     // Blend colors
-    vec3 rgb = mix(color_a, color_b, value);
+    vec3 rgb = mix(color_a, color_b, signal_value);
+
+
+    // Circular gradient from center to the outer edge
+
+    // vec3 color_a = vec3(255.0, 10.0, 125.0); // pink
+    // vec3 color_b = vec3(255.0, 140.0, 20.0); // orange
+
+    // float radial_position = length(distance);
+    // float gradient_position = 1.2 * (radial_position - min_radius) / (max_radius - min_radius);
+    // vec3 rgb = mix(color_b / 255.0, color_a / 255.0, gradient_position);
 
     finalColor = vec4(rgb, curved_track);
 }

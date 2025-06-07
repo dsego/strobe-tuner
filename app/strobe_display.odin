@@ -32,6 +32,8 @@ StrobeDisplay :: struct {
     norm_freq_loc:         i32,
     bounding_rect_loc:     i32,
     curvature_radius_loc:  i32,
+    min_radius_loc:        i32,
+    max_radius_loc:        i32,
     band_height_loc:       i32,
     err_cents_loc:         i32,
     freq_multiplier_loc:   i32,
@@ -96,6 +98,8 @@ init_strobe_display :: proc(
     self.band_height_loc = rl.GetShaderLocation(self.strobe_shader, "band_height")
     self.err_cents_loc = rl.GetShaderLocation(self.strobe_shader, "err_cents")
     self.period_count_loc = rl.GetShaderLocation(self.strobe_shader, "period_count")
+    self.min_radius_loc = rl.GetShaderLocation(self.strobe_shader, "min_radius")
+    self.max_radius_loc = rl.GetShaderLocation(self.strobe_shader, "max_radius")
 
     // Shadow shader
     self.shadow_dimensions_loc = rl.GetShaderLocation(
@@ -114,7 +118,11 @@ init_strobe_display :: proc(
     return
 }
 
-setup_strobe_display :: proc(self: ^StrobeDisplay, contrast: f32, display_type: StrobeDisplayType) {
+setup_strobe_display :: proc(
+    self: ^StrobeDisplay,
+    contrast: f32,
+    display_type: StrobeDisplayType,
+) {
     self.contrast = contrast
     self.display_type = display_type
 }
@@ -178,6 +186,26 @@ draw_strobe_display :: proc(
         self.color_b_loc,
         raw_data(n_color_b[:]),
         rl.ShaderUniformDataType.VEC3,
+    )
+
+    // most inner radius
+    min_radius := curvature_radius - band_height
+
+    // most outer radius
+    max_radius := curvature_radius + band_height * f32(len(phase_info.bands) - 1)
+
+    rl.SetShaderValue(
+        self.strobe_shader,
+        self.min_radius_loc,
+        &min_radius,
+        rl.ShaderUniformDataType.FLOAT,
+    )
+
+    rl.SetShaderValue(
+        self.strobe_shader,
+        self.max_radius_loc,
+        &max_radius,
+        rl.ShaderUniformDataType.FLOAT,
     )
 
 
