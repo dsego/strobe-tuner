@@ -30,7 +30,7 @@ run_raylib_app :: proc(config: ^Config) {
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetConfigFlags({.WINDOW_HIGHDPI})
-    rl.InitWindow(800, 600, "Strobe Tuner")
+    rl.InitWindow(650, 500, "Strobe Tuner")
     defer rl.CloseWindow()
 
     init_fonts()
@@ -96,6 +96,16 @@ run_raylib_app :: proc(config: ^Config) {
 
     // --- GUI CONTROLS ----------------------------------------------------------------------------
 
+
+    audio_devices := list_audio_devices(audio_capture)
+    defer delete(audio_devices)
+
+    audio_devices_str := strings.join(audio_devices[:], ";")
+    defer delete(audio_devices_str)
+
+    audio_device_choice: i32 = audio_capture.active_device
+    audio_device_dropdown_active := false
+
     manual_detection_active := config.note_detection_mode == .MANUAL
     harmonic_mode_active := config.strobe_mode == .HARMONIC_MODE
 
@@ -122,9 +132,6 @@ run_raylib_app :: proc(config: ^Config) {
     for !rl.WindowShouldClose() {
 
         pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
-
-        // TODO: detect strobe mode change and reset phase comparator
-        // TODO: detect strobe speed change and reset phase comparator
 
         // Keep previous measurement if there is no detected note
         if core.is_strong_pitch(pitch_info) {
@@ -228,19 +235,9 @@ run_raylib_app :: proc(config: ^Config) {
             )
 
 
-            rl.GuiToggle(
-                {424, 20, 120, 30},
-                "MANUAL" if manual_detection_active else "AUTO",
-                &manual_detection_active,
-            )
-            if manual_detection_active {
-                config.note_detection_mode = .MANUAL
-            } else {
-                config.note_detection_mode = .AUTO
-            }
 
             rl.GuiToggle(
-                {424, 100, 120, 30},
+                {424, 60, 200, 30},
                 "HARMONIC" if harmonic_mode_active else "VERNIER",
                 &harmonic_mode_active,
             )
@@ -266,11 +263,11 @@ run_raylib_app :: proc(config: ^Config) {
             }
 
             rl.DrawTextEx(font_store.size_32, "Contrast", {424, 140}, 16, 0, rl.GRAY)
-            rl.GuiSlider({424, 160, 120, 15}, "", "", &strobe_contrast_slider_value, 0.0, 5.0)
+            rl.GuiSlider({424, 160, 200, 15}, "", "", &strobe_contrast_slider_value, 0.0, 5.0)
             config.strobe_contrast = linalg.exp10(strobe_contrast_slider_value)
 
             rl.DrawTextEx(font_store.size_32, "Sensitivity", {424, 190}, 16, 0, rl.GRAY)
-            rl.GuiSlider({424, 210, 120, 15}, "", "", &strobe_speed_slider_value, 0.001, 0.05)
+            rl.GuiSlider({424, 210, 200, 15}, "", "", &strobe_speed_slider_value, 0.001, 0.05)
             if strobe_speed_slider_value != config.strobe_speed {
                 config.strobe_speed = strobe_speed_slider_value
                 core.set_phase_comparator_speed(phase_comparator, strobe_speed_slider_value)
@@ -278,7 +275,7 @@ run_raylib_app :: proc(config: ^Config) {
 
 
             rl.GuiToggle(
-                {424, 250, 120, 30},
+                {424, 250, 200, 30},
                 "WHEEL" if show_strobe_wheel else "TRACKS",
                 &show_strobe_wheel,
             )
@@ -292,7 +289,7 @@ run_raylib_app :: proc(config: ^Config) {
                 rl.GuiSetState(i32(rl.GuiState.STATE_DISABLED))
             }
             if rl.GuiDropdownBox(
-                {424, 60, 120, 30},
+                {424, 330, 200, 30},
                 "CHROMATIC;GUITAR STD;UKULELE STD",
                 &tuning_preset_choice,
                 tuning_preset_dropdown_active,
@@ -303,14 +300,42 @@ run_raylib_app :: proc(config: ^Config) {
 
             rl.GuiSetState(i32(rl.GuiState.STATE_NORMAL))
 
+
+            if rl.GuiDropdownBox(
+                {424, 20, 200, 30},
+                cstring(raw_data(audio_devices_str)),
+                &audio_device_choice,
+                audio_device_dropdown_active,
+            ) {
+                audio_device_dropdown_active = !audio_device_dropdown_active
+            }
+
+            // Choose new audio input
+            if audio_device_choice != audio_capture.active_device {
+                switch_audio_device(audio_capture, audio_device_choice)
+            }
+
+
+            rl.GuiToggle(
+                {424, 290, 200, 30},
+                "MANUAL" if manual_detection_active else "AUTO",
+                &manual_detection_active,
+            )
+            if manual_detection_active {
+                config.note_detection_mode = .MANUAL
+            } else {
+                config.note_detection_mode = .AUTO
+            }
+
+
             setup_strobe_display(
                 &strobe_display,
                 config.strobe_contrast,
                 config.strobe_display_type,
             )
 
+            // TODO:
             // pitch standard - 440hz - number spinner
-            // microphone / audio input dropdown
             // color theme dropdown
         }
     }

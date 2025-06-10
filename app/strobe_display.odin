@@ -76,14 +76,12 @@ init_strobe_display :: proc(
     defer delete(dir)
 
     {
-        frag_shader_path := filepath.join({dir, "../shaders/strobe-shader.frag"})
-        self.strobe_shader = rl.LoadShader(nil, cstring(raw_data(frag_shader_path)))
-        delete(frag_shader_path)
+        frag_shader_data := #load("../shaders/strobe-shader.frag")
+        self.strobe_shader = rl.LoadShaderFromMemory(nil, cstring(&frag_shader_data[0]))
     }
     {
-        frag_shader_path := filepath.join({dir, "../shaders/inner-shadow-shader.frag"})
-        self.inner_shadow_shader = rl.LoadShader(nil, cstring(raw_data(frag_shader_path)))
-        delete(frag_shader_path)
+        frag_shader_data := #load("../shaders/inner-shadow-shader.frag")
+        self.inner_shadow_shader = rl.LoadShaderFromMemory(nil, cstring(&frag_shader_data[0]))
     }
 
     // Get uniform locations
@@ -296,7 +294,7 @@ draw_strobe_display :: proc(
         }
     }
 
-    rl.BeginShaderMode(self.inner_shadow_shader)
-    rl.DrawTextureV(self.texture, {self.position.x, self.position.y}, rl.WHITE)
-    rl.EndShaderMode()
+    // rl.BeginShaderMode(self.inner_shadow_shader)
+    // rl.DrawTextureV(self.texture, {self.position.x, self.position.y}, rl.WHITE)
+    // rl.EndShaderMode()
 }

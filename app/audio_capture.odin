@@ -17,6 +17,59 @@ AudioCapture :: struct {
     active_device: i32,
     stream:        ^pa.Stream,
     nodes:         [dynamic]^core.AudioCaptureNode,
+    samplerate:    u32,
+}
+
+
+// TODO: list only input devices
+list_audio_devices :: proc(self: ^AudioCapture) -> [dynamic]string {
+    device_list: [dynamic]string = {}
+    device_count := pa.GetDeviceCount()
+    for i in 0 ..< device_count {
+        info := pa.GetDeviceInfo(i)
+        append(&device_list, string(info.name))
+    }
+    return device_list
+}
+
+
+switch_audio_device :: proc(self: ^AudioCapture, device_index: i32) {
+    pa.AbortStream(self.stream)
+
+    self.active_device = device_index
+    info := pa.GetDeviceInfo(device_index)
+
+    fmt.println("Switching audio device to: ", info.name)
+
+    open_stream_on_active_device(self)
+    start_audio_capture(self)
+}
+
+open_stream_on_active_device :: proc(self: ^AudioCapture) -> bool {
+    stream_params := pa.StreamParameters {
+        device                    = self.active_device,
+        channelCount              = 1,
+        sampleFormat              = pa.Float32,
+        suggestedLatency          = pa.GetDeviceInfo(self.active_device).defaultLowInputLatency,
+        hostApiSpecificStreamInfo = nil,
+    }
+
+    err := pa.OpenStream(
+        stream = &self.stream,
+        inputParameters = &stream_params,
+        outputParameters = nil,
+        sampleRate = f64(self.samplerate),
+        framesPerBuffer = pa.FramesPerBufferUnspecified,
+        streamFlags = 0,
+        streamCallback = stream_callback,
+        userData = self,
+    )
+
+    if check(err) do return false
+
+    fmt.println("Opened input stream")
+
+    return true
 }
 
 
@@ -26,6 +79,7 @@ init_audio_capture :: proc(samplerate: u32) -> (bool, ^AudioCapture) {
     err: pa.Error
 
     self := new(AudioCapture)
+    self.samplerate = samplerate
 
     err = pa.Initialize()
     if check(err) do return false, self
@@ -44,30 +98,9 @@ init_audio_capture :: proc(samplerate: u32) -> (bool, ^AudioCapture) {
         fmt.printf(str, i, info.name, info.maxInputChannels)
     }
 
-    stream_params := pa.StreamParameters {
-        device                    = self.active_device,
-        channelCount              = 1,
-        sampleFormat              = pa.Float32,
-        suggestedLatency          = pa.GetDeviceInfo(self.active_device).defaultLowInputLatency,
-        hostApiSpecificStreamInfo = nil,
-    }
+    ok := open_stream_on_active_device(self)
 
-    err = pa.OpenStream(
-        stream = &self.stream,
-        inputParameters = &stream_params,
-        outputParameters = nil,
-        sampleRate = f64(samplerate),
-        framesPerBuffer = pa.FramesPerBufferUnspecified,
-        streamFlags = 0,
-        streamCallback = stream_callback,
-        userData = self,
-    )
-
-    if check(err) do return false, self
-
-    fmt.println("Opened input stream")
-
-    return true, self
+    return ok, self
 }
 
 
