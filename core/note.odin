@@ -126,6 +126,7 @@ test_cents_to_freq :: proc(t: ^testing.T) {
 }
 
 
+// FIXME: handle negative octaves
 cents_to_octave :: proc(cents: f32) -> (f32, f32) {
     nearest: f32 = math.round(cents / 100.0)
     octave := math.trunc((nearest / 12.0) + 4.75)
@@ -285,13 +286,15 @@ prev_note_in_scale :: proc(note: Note) -> Note {
 
 next_chromatic_note :: proc(note: Note) -> Note {
     // C8 is the highest note
-    if note.name == 'C' && note.octave >= 8 do return note
+    if note.frequency >= 4186.009 do return note
+
     return cents_to_note(f32(note.cents + 100), note.pitch_standard)
 }
 
 prev_chromatic_note :: proc(note: Note) -> Note {
     // A0 is the lowest note
-    if note.name == 'A' && note.octave <= 0 do return note
+    if note.frequency <= 27.5 do return note
+
     return cents_to_note(f32(note.cents - 100), note.pitch_standard)
 }
 
@@ -300,8 +303,7 @@ octave_down :: proc(note: Note) -> Note {
     new_note := cents_to_note(f32(cents), note.pitch_standard)
 
     // lowest we can go is A0
-    if new_note.name != 'A' && new_note.name != 'B' && new_note.octave == 0 do return note
-    if new_note.octave < 0 do return note
+    if new_note.frequency < 27.5 do return note
 
     return new_note
 }
@@ -311,7 +313,7 @@ octave_up :: proc(note: Note) -> Note {
     new_note := cents_to_note(f32(cents), note.pitch_standard)
 
     // highest we can go is C8
-    if new_note.name != 'C' && new_note.octave >= 8 do return note
+    if new_note.frequency > 4186.009 do return note
 
     return new_note
 }

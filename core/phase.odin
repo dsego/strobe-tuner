@@ -21,7 +21,7 @@ import "core:testing"
 
 
 MAX_BANDS :: 8
-MAX_WINDOW_SIZE :: 65_536
+MAX_WINDOW_SIZE :: 262_144
 MAX_HOP_SIZE :: 4096
 
 
@@ -160,7 +160,7 @@ set_phase_comparator_freq :: proc(
         band.norm_freq = band.freq_hz / self.samplerate
 
         if self.mode == .HARMONIC_MODE || i == 0 {
-            window_size := best_dft_window_size(band.freq_hz, self.samplerate, 50)
+            window_size := best_dft_window_size(band.freq_hz, self.samplerate, 20)
             set_dft_freq(&band.dft_config, band.norm_freq, window_size)
         }
     }

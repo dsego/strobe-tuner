@@ -4,9 +4,8 @@ import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 import "core:path/filepath"
-import "core:strings"
 import "core:sort"
-import "core:time"
+import "core:strings"
 
 import rl "vendor:raylib"
 
@@ -16,9 +15,6 @@ guitar_std_notes: [6]string = {"E2", "A2", "D3", "G3", "B3", "E4"}
 ukulele_std_notes: [4]string = {"G4", "C4", "E4", "A4"}
 
 run_raylib_app :: proc(config: ^Config) {
-
-    median_buffer: [16]f32 = {}
-    median_buffer_position: int= 0
 
     target_freq_hz: f32 = config.target_freq_hz
     freq_estimation_active := false
@@ -132,6 +128,8 @@ run_raylib_app :: proc(config: ^Config) {
     note_low_state := false
     note_high_state := false
 
+    median_cents_err: f32 = 0.0
+
 
     // ---------------------------------------------------------------------------------------------
 
@@ -139,6 +137,7 @@ run_raylib_app :: proc(config: ^Config) {
     // ------------------------------------------------
     //                   MAIN LOOP
     // ------------------------------------------------
+
 
     for !rl.WindowShouldClose() {
 
@@ -218,14 +217,6 @@ run_raylib_app :: proc(config: ^Config) {
         phase_freq_hz, phase_err_cents, no_change := core.run_phase_detection(phase_comparator)
         strobe_contrast_slider_value := math.log10(config.strobe_contrast)
 
-        if !no_change {
-            median_buffer[median_buffer_position] = phase_err_cents
-            median_buffer_position += 1
-            if median_buffer_position >= len(median_buffer) do median_buffer_position = 0
-        }
-        // TODO: replace brute force approach with a sorted data structure
-        sort.quick_sort(median_buffer[:])
-        median_cents_err := median_buffer[7]
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -250,11 +241,10 @@ run_raylib_app :: proc(config: ^Config) {
             // --- if detected note is outside of measurement scope -> use estimated freq
             // --- if detected note is close to target note -> use phase diff for fine freq display
 
-            // Tame a “twitchy” tuner read-out by decoupling the analysis rate from the display rate, display refresh rate ~10Hz
-            // median-filter a handful of recent readings
             rl.DrawTextEx(
                 font_store.size_48,
-                fmt.ctprintf("Cents\n%+.1f", median_cents_err),
+                // fmt.ctprintf("Cents\n%+.1f", median_cents_err),
+                fmt.ctprintf("Cents\n%+.1f", phase_err_cents),
                 {128, 340},
                 24,
                 0,
