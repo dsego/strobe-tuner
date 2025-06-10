@@ -37,6 +37,8 @@ PhaseBand :: struct {
     norm_freq:         f32,
     freq_diff_hz:      f32,
     estimated_freq_hz: f32,
+    smoothed_freq_hz:  f32,
+    ewma_state: EwmaState,
     dft_config:        SingleFreqDFT,
     time_stretch:      f32,
     freq_multiplier:   f32, // to get more or less stripes in the pattern
@@ -93,6 +95,7 @@ init_phase_comparator :: proc(
         band := PhaseBand{}
         band.freq_multiplier = 1.0
         band.dft_config = init_dft(MAX_WINDOW_SIZE)
+        band.ewma_state = init_ewma(0.1)
         append(&self.bands, band)
     }
 
@@ -173,15 +176,15 @@ unwrap_phase :: proc(phase: f32) -> f32 {
 }
 
 
-run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32) {
+run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32, bool) {
     base_band := self.bands[0]
 
     // Need to keep this buffer slice relatively small to keep the display refresh without latency.
     available := audio_capture_read(self, self.sample_buffer[:base_band.dft_config.window_size])
 
-    // Skip there are no new samples, the scaled phase stays the same
+    // Skip when there are no new samples, the scaled phase stays the same
     if available <= 0 {
-        return base_band.estimated_freq_hz, base_band.err_cents
+        return base_band.smoothed_freq_hz, base_band.err_cents, true
     }
 
     self.available = int(available)
@@ -190,7 +193,7 @@ run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32) {
         determine_band_phase(self, &band, band_idx)
     }
 
-    return base_band.estimated_freq_hz, base_band.err_cents
+    return base_band.smoothed_freq_hz, base_band.err_cents, false
 }
 
 
@@ -267,7 +270,10 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
         // Frequency estimation from phase drift
         band.freq_diff_hz = self.samplerate * phase_drift / (math.TAU * f32(hop_size))
         band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
-        band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
+        band.smoothed_freq_hz = ewma_filter(&band.ewma_state, band.estimated_freq_hz)
+
+        // Convert to cents only after smoothing:
+        band.err_cents = cents_deviation(band.smoothed_freq_hz, band.freq_hz)
 
         band.phase_diff = phase_drift
 

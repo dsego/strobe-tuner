@@ -5,6 +5,7 @@ import "core:math"
 import "core:math/linalg"
 import "core:path/filepath"
 import "core:strings"
+import "core:sort"
 import "core:time"
 
 import rl "vendor:raylib"
@@ -16,6 +17,9 @@ ukulele_std_notes: [4]string = {"G4", "C4", "E4", "A4"}
 
 run_raylib_app :: proc(config: ^Config) {
 
+    median_buffer: [16]f32 = {}
+    median_buffer_position: int= 0
+
     target_freq_hz: f32 = config.target_freq_hz
     freq_estimation_active := false
 
@@ -23,7 +27,9 @@ run_raylib_app :: proc(config: ^Config) {
 
     // Note detected by the auto-correlation method
     // FIXME: assigning a dummy cents value for undefined note
-    detected_note := core.Note{cents=-1}
+    detected_note := core.Note {
+        cents = -1,
+    }
 
     // Target note for tuning via the strobe effect
     target_note := core.Note{}
@@ -209,8 +215,17 @@ run_raylib_app :: proc(config: ^Config) {
         pitch_cents_err := core.cents_deviation(pitch_info.detected_freq, target_note.frequency)
 
         // TODO: calculate cents deviation based on rounded freq to make the reading more steady?
-        phase_freq_hz, phase_err_cents := core.run_phase_detection(phase_comparator)
+        phase_freq_hz, phase_err_cents, no_change := core.run_phase_detection(phase_comparator)
         strobe_contrast_slider_value := math.log10(config.strobe_contrast)
+
+        if !no_change {
+            median_buffer[median_buffer_position] = phase_err_cents
+            median_buffer_position += 1
+            if median_buffer_position >= len(median_buffer) do median_buffer_position = 0
+        }
+        // TODO: replace brute force approach with a sorted data structure
+        sort.quick_sort(median_buffer[:])
+        median_cents_err := median_buffer[7]
 
         rl.BeginDrawing()
         defer rl.EndDrawing()
@@ -235,9 +250,11 @@ run_raylib_app :: proc(config: ^Config) {
             // --- if detected note is outside of measurement scope -> use estimated freq
             // --- if detected note is close to target note -> use phase diff for fine freq display
 
+            // Tame a “twitchy” tuner read-out by decoupling the analysis rate from the display rate, display refresh rate ~10Hz
+            // median-filter a handful of recent readings
             rl.DrawTextEx(
                 font_store.size_48,
-                fmt.ctprintf("Cents\n%+.1f", phase_err_cents),
+                fmt.ctprintf("Cents\n%+.1f", median_cents_err),
                 {128, 340},
                 24,
                 0,
@@ -251,7 +268,6 @@ run_raylib_app :: proc(config: ^Config) {
                 0,
                 rl.PURPLE,
             )
-
 
 
             rl.GuiToggle(
@@ -319,6 +335,18 @@ run_raylib_app :: proc(config: ^Config) {
             rl.GuiSetState(i32(rl.GuiState.STATE_NORMAL))
 
 
+            rl.GuiToggle(
+                {424, 290, 200, 30},
+                "MANUAL" if manual_detection_active else "AUTO",
+                &manual_detection_active,
+            )
+            if manual_detection_active {
+                config.note_detection_mode = .MANUAL
+            } else {
+                config.note_detection_mode = .AUTO
+            }
+
+            // TODO: add refresh button to show newly connected devices
             if rl.GuiDropdownBox(
                 {424, 20, 200, 30},
                 cstring(raw_data(audio_devices_str)),
@@ -333,18 +361,6 @@ run_raylib_app :: proc(config: ^Config) {
                 switch_audio_device(audio_capture, audio_device_choice)
                 core.flush_audio_capture_ringbuffer(&pitch_detector)
                 core.flush_audio_capture_ringbuffer(phase_comparator)
-            }
-
-
-            rl.GuiToggle(
-                {424, 290, 200, 30},
-                "MANUAL" if manual_detection_active else "AUTO",
-                &manual_detection_active,
-            )
-            if manual_detection_active {
-                config.note_detection_mode = .MANUAL
-            } else {
-                config.note_detection_mode = .AUTO
             }
 
 
