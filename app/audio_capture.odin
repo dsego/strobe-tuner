@@ -34,7 +34,8 @@ list_audio_devices :: proc(self: ^AudioCapture) -> [dynamic]string {
 
 
 switch_audio_device :: proc(self: ^AudioCapture, device_index: i32) {
-    pa.AbortStream(self.stream)
+    err := pa.AbortStream(self.stream)
+    if check(err) do return
 
     self.active_device = device_index
     info := pa.GetDeviceInfo(device_index)

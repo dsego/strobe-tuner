@@ -158,6 +158,8 @@ run_raylib_app :: proc(config: ^Config) {
         }
 
         if config.note_detection_mode == .MANUAL {
+            prev_target_note := target_note
+
             if config.tuning_preset == .CHROMATIC {
                 if rl.IsKeyPressed(.UP) {
                     target_note = core.octave_up(target_note)
@@ -183,6 +185,17 @@ run_raylib_app :: proc(config: ^Config) {
                 selected_note_idx = selected_note_idx %% len(tuning_notes)
                 selected_note := tuning_notes[selected_note_idx]
                 target_note, ok = core.new_note(selected_note)
+            }
+
+            if prev_target_note != target_note {
+                core.set_phase_comparator_freq(
+                    phase_comparator,
+                    target_note.frequency,
+                    config.pitch_standard,
+                    config.strobe_speed,
+                    config.speed_multiplier,
+                    config.strobe_mode,
+                )
             }
         }
 
@@ -314,6 +327,8 @@ run_raylib_app :: proc(config: ^Config) {
             // Choose new audio input
             if audio_device_choice != audio_capture.active_device {
                 switch_audio_device(audio_capture, audio_device_choice)
+                core.flush_audio_capture_ringbuffer(&pitch_detector)
+                core.flush_audio_capture_ringbuffer(phase_comparator)
             }
 
 
