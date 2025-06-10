@@ -191,6 +191,7 @@ run_raylib_app :: proc(config: ^Config) {
 
         pitch_cents_err := core.cents_deviation(pitch_info.detected_freq, target_note.frequency)
 
+        // TODO: calculate cents deviation based on rounded freq to make the reading more steady?
         phase_freq_hz, phase_err_cents := core.run_phase_detection(phase_comparator)
         strobe_contrast_slider_value := math.log10(config.strobe_contrast)
 
