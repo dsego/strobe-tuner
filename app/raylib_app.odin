@@ -155,7 +155,9 @@ run_raylib_app :: proc(config: ^Config) {
                 }
             }
             freq_estimation_active = true
-        } else {
+        }
+
+        if core.is_weak_pitch(pitch_info) {
             freq_estimation_active = false
         }
 
