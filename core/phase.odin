@@ -23,6 +23,7 @@ import "core:testing"
 MAX_BANDS :: 8
 MAX_WINDOW_SIZE :: 262_144
 MAX_HOP_SIZE :: 4096
+EWMA_THRESHOLD :: 5.0
 
 
 StrobeMode :: enum {
@@ -46,6 +47,7 @@ PhaseBand :: struct {
     amp:               f32,
     phase_diff:        f32, // phase difference between detection frames
     err_cents:         f32,
+    smoothed_err_cents:         f32,
     scaled_phase:      f32, // phase scaled based on desired strobe speed
 
     // a number < 1 will slow down the strobe and > 1 will increase the strobe spinning rate
@@ -270,10 +272,19 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
         // Frequency estimation from phase drift
         band.freq_diff_hz = self.samplerate * phase_drift / (math.TAU * f32(hop_size))
         band.estimated_freq_hz = band.freq_hz + band.freq_diff_hz
+
+        band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
+
+        // adjust the EWMA when large jumps occur
+        // TODO: something is not right here
+        if math.abs(band.smoothed_err_cents - band.err_cents) > EWMA_THRESHOLD {
+            reset_ewma(&band.ewma_state)
+        }
+
         band.smoothed_freq_hz = ewma_filter(&band.ewma_state, band.estimated_freq_hz)
 
         // Convert to cents only after smoothing:
-        band.err_cents = cents_deviation(band.smoothed_freq_hz, band.freq_hz)
+        band.smoothed_err_cents = cents_deviation(band.smoothed_freq_hz, band.freq_hz)
 
         band.phase_diff = phase_drift
 
