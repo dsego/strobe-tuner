@@ -22,7 +22,8 @@ run_raylib_app :: proc(config: ^Config) {
     pitch_info := core.PitchInfo{}
 
     // Note detected by the auto-correlation method
-    detected_note := core.Note{}
+    // FIXME: assigning a dummy cents value for undefined note
+    detected_note := core.Note{cents=-1}
 
     // Target note for tuning via the strobe effect
     target_note := core.Note{}
@@ -128,7 +129,11 @@ run_raylib_app :: proc(config: ^Config) {
 
     // ---------------------------------------------------------------------------------------------
 
-    // MAIN LOOP
+
+    // ------------------------------------------------
+    //                   MAIN LOOP
+    // ------------------------------------------------
+
     for !rl.WindowShouldClose() {
 
         pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
@@ -139,21 +144,18 @@ run_raylib_app :: proc(config: ^Config) {
                 detected_note = pitch_info.detected_note
                 if config.note_detection_mode == .AUTO {
                     target_note = detected_note
+                    core.set_phase_comparator_freq(
+                        phase_comparator,
+                        target_note.frequency,
+                        config.pitch_standard,
+                        config.strobe_speed,
+                        config.speed_multiplier,
+                        config.strobe_mode,
+                    )
                 }
-                core.set_phase_comparator_freq(
-                    phase_comparator,
-                    target_note.frequency,
-                    config.pitch_standard,
-                    config.strobe_speed,
-                    config.speed_multiplier,
-                    config.strobe_mode,
-                )
-
             }
             freq_estimation_active = true
-        }
-
-        if core.is_weak_pitch(pitch_info) {
+        } else {
             freq_estimation_active = false
         }
 
