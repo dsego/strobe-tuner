@@ -164,7 +164,7 @@ set_phase_comparator_freq :: proc(
         band.norm_freq = band.freq_hz / self.samplerate
 
         if self.mode == .HARMONIC_MODE || i == 0 {
-            window_size := best_dft_window_size(band.freq_hz, self.samplerate, 50)
+            window_size := best_dft_window_size(band.freq_hz, self.samplerate, 25)
             set_dft_freq(&band.dft_config, band.norm_freq, window_size)
         }
     }
@@ -204,11 +204,11 @@ run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32, bool) {
 // Choose best window size for adaptive spectra leakage based on cents and not Hz
 // A fixed window size in samples produces a constant frequency resolution in Hz, not in musical units like cents.
 // For higher frequencies we need less samples to show the strobing effect.
+// The cents_resolution determines how finely we want to distinguish two frequencies.
 best_dft_window_size :: proc(freq_hz: f32, samplerate: f32, cents_resolution: int) -> int {
     ratio := libc.exp2(f32(cents_resolution) / 1200.0)
-    frequency_step := freq_hz * (ratio - 1.0)
-    win := math.ceil(samplerate / frequency_step)
-    // fmt.println(freq_hz, win)
+    freq_resolution := freq_hz * (ratio - 1.0)
+    win := math.ceil(samplerate / freq_resolution)
     return int(win)
 }
 
@@ -225,15 +225,21 @@ test_best_dft_window_size :: proc(t: ^testing.T) {
 }
 
 
-// Max hop size for staying within 100 cents tolerance
+// Max hop size for staying within cents offset tolerance
+// The cents_offset is the smallest tuning drift to track per update.
 best_hop_size :: proc(cents_offset: int, freq_hz: f32, samplerate: f32) -> int {
     ratio := libc.exp2(f32(cents_offset) / 1200.0)
     freq_max := freq_hz * ratio
     freq_deviation := freq_max - freq_hz
 
-    min_phase_delta_rad: f32 = 0.5 // ???
+    // Range 0.0 to 1.0
+    // Hop size increases or decreases proportionally from.
+    // Larger values result in longer time between updates but more robust to noise/jitter.
+    // Smaller values decrease hop size and get finer resolution but more vulnerable to phase noise.
+    target_phase_shift: f32 = 0.5
 
-    hop := math.ceil(min_phase_delta_rad * samplerate / (math.TAU * freq_deviation))
+    hop := math.ceil(target_phase_shift * samplerate / (math.TAU * freq_deviation))
+    // fmt.println("hop", freq_hz, hop)
     return int(hop)
 }
 
@@ -257,7 +263,7 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
     // Run a single bin DFT and estimate frequency based on phase drift
     if self.mode == .HARMONIC_MODE || band_idx == 0 {
         dft = run_single_dft(&band.dft_config, self.sample_buffer)
-        hop_size := best_hop_size(100, band.freq_hz, self.samplerate)
+        hop_size := best_hop_size(25, band.freq_hz, self.samplerate)
 
         dft_hop := run_single_dft(&band.dft_config, self.sample_buffer[hop_size:])
 

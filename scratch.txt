@@ -1,12 +1,19 @@
 
 
 
+
+
+
 how to stabilize the cents and hz display ???
 
 ewma? avg?
 
+- Apply a low-pass filter or moving average to the estimated frequency from phase differencing
+
+- “fast attack, slow release” system
 
 remove raygui ---> custom widgets
+
 
 
 
