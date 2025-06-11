@@ -128,8 +128,6 @@ run_raylib_app :: proc(config: ^Config) {
     note_low_state := false
     note_high_state := false
 
-    median_cents_err: f32 = 0.0
-
 
     // ---------------------------------------------------------------------------------------------
 
@@ -243,7 +241,6 @@ run_raylib_app :: proc(config: ^Config) {
 
             rl.DrawTextEx(
                 font_store.size_48,
-                // fmt.ctprintf("Cents\n%+.1f", median_cents_err),
                 fmt.ctprintf("Cents\n%+.1f", phase_err_cents),
                 {128, 340},
                 24,

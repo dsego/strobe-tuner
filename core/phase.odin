@@ -23,7 +23,6 @@ import "core:testing"
 MAX_BANDS :: 8
 MAX_WINDOW_SIZE :: 262_144
 MAX_HOP_SIZE :: 4096
-EWMA_THRESHOLD :: 5.0
 
 
 StrobeMode :: enum {
@@ -38,8 +37,8 @@ PhaseBand :: struct {
     norm_freq:         f32,
     freq_diff_hz:      f32,
     estimated_freq_hz: f32,
-    smoothed_freq_hz:  f32,
-    ewma_state: EwmaState,
+    // smoothed_freq_hz:  f32,
+    // ewma_state:        EwmaState,
     dft_config:        SingleFreqDFT,
     time_stretch:      f32,
     freq_multiplier:   f32, // to get more or less stripes in the pattern
@@ -47,7 +46,7 @@ PhaseBand :: struct {
     amp:               f32,
     phase_diff:        f32, // phase difference between detection frames
     err_cents:         f32,
-    smoothed_err_cents:         f32,
+    // smoothed_err_cents:         f32,
     scaled_phase:      f32, // phase scaled based on desired strobe speed
 
     // a number < 1 will slow down the strobe and > 1 will increase the strobe spinning rate
@@ -97,7 +96,7 @@ init_phase_comparator :: proc(
         band := PhaseBand{}
         band.freq_multiplier = 1.0
         band.dft_config = init_dft(MAX_WINDOW_SIZE)
-        band.ewma_state = init_ewma(0.1)
+        // band.ewma_state = init_ewma(0.1)
         append(&self.bands, band)
     }
 
@@ -147,7 +146,10 @@ set_phase_comparator_freq :: proc(
 
     speed: f32 = base_speed * pitch_standard / base_freq_hz
 
+
     for &band, i in self.bands {
+        // reset_ewma(&band.ewma_state)
+
         band.time_stretch = f32(self.reference_interval)
         band.phase = 0.0
         band.speed = speed
@@ -162,7 +164,7 @@ set_phase_comparator_freq :: proc(
         band.norm_freq = band.freq_hz / self.samplerate
 
         if self.mode == .HARMONIC_MODE || i == 0 {
-            window_size := best_dft_window_size(band.freq_hz, self.samplerate, 20)
+            window_size := best_dft_window_size(band.freq_hz, self.samplerate, 50)
             set_dft_freq(&band.dft_config, band.norm_freq, window_size)
         }
     }
@@ -186,7 +188,7 @@ run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32, bool) {
 
     // Skip when there are no new samples, the scaled phase stays the same
     if available <= 0 {
-        return base_band.smoothed_freq_hz, base_band.err_cents, true
+        return base_band.estimated_freq_hz, base_band.err_cents, true
     }
 
     self.available = int(available)
@@ -195,7 +197,7 @@ run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32, bool) {
         determine_band_phase(self, &band, band_idx)
     }
 
-    return base_band.smoothed_freq_hz, base_band.err_cents, false
+    return base_band.estimated_freq_hz, base_band.err_cents, false
 }
 
 
@@ -206,6 +208,7 @@ best_dft_window_size :: proc(freq_hz: f32, samplerate: f32, cents_resolution: in
     ratio := libc.exp2(f32(cents_resolution) / 1200.0)
     frequency_step := freq_hz * (ratio - 1.0)
     win := math.ceil(samplerate / frequency_step)
+    // fmt.println(freq_hz, win)
     return int(win)
 }
 
@@ -276,15 +279,14 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
         band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
 
         // adjust the EWMA when large jumps occur
-        // TODO: something is not right here
-        if math.abs(band.smoothed_err_cents - band.err_cents) > EWMA_THRESHOLD {
-            reset_ewma(&band.ewma_state)
-        }
+        // if math.abs(band.smoothed_err_cents - band.err_cents) > 10.0 {
+        //     reset_ewma(&band.ewma_state)
+        // }
 
-        band.smoothed_freq_hz = ewma_filter(&band.ewma_state, band.estimated_freq_hz)
+        // band.smoothed_freq_hz = ewma_filter(&band.ewma_state, band.estimated_freq_hz)
 
         // Convert to cents only after smoothing:
-        band.smoothed_err_cents = cents_deviation(band.smoothed_freq_hz, band.freq_hz)
+        // band.smoothed_err_cents = cents_deviation(band.smoothed_freq_hz, band.freq_hz)
 
         band.phase_diff = phase_drift
 
