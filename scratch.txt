@@ -10,7 +10,7 @@ ewma? avg?
 
 - Apply a low-pass filter or moving average to the estimated frequency from phase differencing
 
-- “fast attack, slow release” system
+- “fast attack, slow release” system --- two different DFTs with hop & windows sizes, one for fast tracking, other for slow tracking
 
 remove raygui ---> custom widgets
 

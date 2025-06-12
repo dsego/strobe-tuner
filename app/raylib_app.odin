@@ -15,6 +15,9 @@ guitar_std_notes: [6]string = {"E2", "A2", "D3", "G3", "B3", "E4"}
 ukulele_std_notes: [4]string = {"G4", "C4", "E4", "A4"}
 
 run_raylib_app :: proc(config: ^Config) {
+    // when ODIN_OS == .Darwin {
+    //     setup_mac_app()
+    // }
 
     target_freq_hz: f32 = config.target_freq_hz
     freq_estimation_active := false
@@ -35,6 +38,10 @@ run_raylib_app :: proc(config: ^Config) {
     rl.SetConfigFlags({.WINDOW_HIGHDPI})
     rl.InitWindow(650, 500, "Strobe Tuner")
     defer rl.CloseWindow()
+
+
+    // Bring the window to front
+    // [NSApp activateIgnoringOtherApps:YES];
 
     init_fonts()
     defer destroy_fonts()

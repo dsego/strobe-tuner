@@ -18,7 +18,6 @@ font_store: FontStore
 
 init_fonts :: proc() {
     font_data := #load("../assets/NotoSansMono-Medium.ttf")
-
     font_atlas: cstring = "ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuwvxyzz♯♭/+-1234567890.:π!▶︎◀︎|"
     count := i32(0)
     codepoints := rl.LoadCodepoints(font_atlas, &count)

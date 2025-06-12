@@ -6,48 +6,6 @@ import "core:fmt"
 import "../core"
 
 
-RoundedBox :: struct {
-    shader: rl.Shader,
-    top_left_radius_loc: i32,
-    top_right_radius_loc: i32,
-    bottom_left_radius_loc: i32,
-    bottom_right_radius_loc: i32,
-    border_color_loc: i32,
-    border_thickness_locs: i32,
-}
-
-rounded_box : RoundedBox = {}
-
-
-
-// rl.SetShaderValue(
-//     rounded_box_shader,
-//     self.shadow_dimensions_loc,
-//     &shadow_dimensions,
-//     rl.ShaderUniformDataType.VEC2,
-// )
-
-
-
-
-// init_gui_shaders :: proc () {
-//     {
-//         shader_data := #load("../shaders/rounded_box.frag")
-//         rounded_box.shader = rl.LoadShaderFromMemory(nil, shader_data)
-//         rounded_box.top_left_radius_loc = rl.GetShaderLocation(rounded_box.shader, "top_left_radius")
-//         rounded_box.top_right_radius_loc = rl.GetShaderLocation(rounded_box.shader, "top_right_radius")
-//         rounded_box.bottom_left_radius_loc = rl.GetShaderLocation(rounded_box.shader, "bottom_left_radius")
-//         rounded_box.bottom_right_radius_loc = rl.GetShaderLocation(rounded_box.shader, "bottom_right_radius")
-
-//     }
-// }
-
-// destroy_gui_shaders :: proc () {
-//     rl.UnloadShader(rounded_box.shader)
-// }
-
-
-
 // gui_toggle :: proc (bounds: rl.Rectangle, options: []string, choice: int) -> int {
 
 //     choice := choice
@@ -69,10 +27,7 @@ rounded_box : RoundedBox = {}
 //         }
 //     }
 
-//     // rl.BeginShaderMode(rounded_box.shader)
-//     // rl.DrawTextureV(self.texture, {rect.x, rect.y + 10}, rl.WHITE)
-//     // rl.EndShaderMode(rounded_box.shader)
-
+//     draw texture
 
 //     for opt in options {
 
