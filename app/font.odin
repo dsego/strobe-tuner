@@ -6,6 +6,7 @@ import rl "vendor:raylib"
 
 
 FontStore :: struct {
+    size_24:  rl.Font,
     size_32:  rl.Font,
     size_48:  rl.Font,
     size_76:  rl.Font,
@@ -22,6 +23,15 @@ init_fonts :: proc() {
     count := i32(0)
     codepoints := rl.LoadCodepoints(font_atlas, &count)
     defer rl.UnloadCodepoints(codepoints)
+
+    font_store.size_24 = rl.LoadFontFromMemory(
+        ".ttf",
+        raw_data(font_data),
+        i32(len(font_data)),
+        24,
+        codepoints,
+        count,
+    )
 
     font_store.size_32 = rl.LoadFontFromMemory(
         ".ttf",
@@ -58,6 +68,8 @@ init_fonts :: proc() {
         codepoints,
         count,
     )
+
+    // rl.SetTextureFilter(font_store.size_48.texture, rl.TextureFilter.TRILINEAR)
 }
 
 destroy_fonts :: proc() {

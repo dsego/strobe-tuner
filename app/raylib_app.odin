@@ -46,6 +46,9 @@ run_raylib_app :: proc(config: ^Config) {
     init_fonts()
     defer destroy_fonts()
 
+    load_texture_atlas()
+    defer unload_texture_atlas()
+
 
     // GUI styles
     root_dir := filepath.dir(#file)
@@ -228,6 +231,7 @@ run_raylib_app :: proc(config: ^Config) {
         {
             rl.ClearBackground(rl.GetColor(config.window_bg_color))
 
+
             // TODO
             // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
             draw_strobe_display(&strobe_display, phase_comparator, out_of_range)
@@ -264,31 +268,31 @@ run_raylib_app :: proc(config: ^Config) {
             )
 
 
-            rl.GuiToggle(
-                {424, 60, 200, 30},
-                "HARMONIC" if harmonic_mode_active else "VERNIER",
-                &harmonic_mode_active,
-            )
+            // rl.GuiToggle(
+            //     {424, 60, 200, 30},
+            //     "HARMONIC" if harmonic_mode_active else "VERNIER",
+            //     &harmonic_mode_active,
+            // )
 
-            strobe_mode_changed := false
-            if harmonic_mode_active && config.strobe_mode != .HARMONIC_MODE {
-                config.strobe_mode = .HARMONIC_MODE
-                strobe_mode_changed = true
-            } else if !harmonic_mode_active && config.strobe_mode != .VERNIER_MODE {
-                config.strobe_mode = .VERNIER_MODE
-                strobe_mode_changed = true
-            }
+            // strobe_mode_changed := false
+            // if harmonic_mode_active && config.strobe_mode != .HARMONIC_MODE {
+            //     config.strobe_mode = .HARMONIC_MODE
+            //     strobe_mode_changed = true
+            // } else if !harmonic_mode_active && config.strobe_mode != .VERNIER_MODE {
+            //     config.strobe_mode = .VERNIER_MODE
+            //     strobe_mode_changed = true
+            // }
 
-            if strobe_mode_changed {
-                core.set_phase_comparator_freq(
-                    phase_comparator,
-                    target_note.frequency,
-                    config.pitch_standard,
-                    config.strobe_speed,
-                    config.speed_multiplier,
-                    config.strobe_mode,
-                )
-            }
+            // if strobe_mode_changed {
+            //     core.set_phase_comparator_freq(
+            //         phase_comparator,
+            //         target_note.frequency,
+            //         config.pitch_standard,
+            //         config.strobe_speed,
+            //         config.speed_multiplier,
+            //         config.strobe_mode,
+            //     )
+            // }
 
             rl.DrawTextEx(font_store.size_32, "Contrast", {424, 140}, 16, 0, rl.GRAY)
             rl.GuiSlider({424, 160, 200, 15}, "", "", &strobe_contrast_slider_value, 0.0, 5.0)
@@ -329,16 +333,16 @@ run_raylib_app :: proc(config: ^Config) {
             rl.GuiSetState(i32(rl.GuiState.STATE_NORMAL))
 
 
-            rl.GuiToggle(
-                {424, 290, 200, 30},
-                "MANUAL" if manual_detection_active else "AUTO",
-                &manual_detection_active,
-            )
-            if manual_detection_active {
-                config.note_detection_mode = .MANUAL
-            } else {
-                config.note_detection_mode = .AUTO
-            }
+            // rl.GuiToggle(
+            //     {424, 290, 200, 30},
+            //     "MANUAL" if manual_detection_active else "AUTO",
+            //     &manual_detection_active,
+            // )
+            // if manual_detection_active {
+            //     config.note_detection_mode = .MANUAL
+            // } else {
+            //     config.note_detection_mode = .AUTO
+            // }
 
             // TODO: add refresh button to show newly connected devices
             if rl.GuiDropdownBox(
@@ -363,6 +367,25 @@ run_raylib_app :: proc(config: ^Config) {
                 config.strobe_contrast,
                 config.strobe_display_type,
             )
+
+
+            strobe_mode, strobe_mode_changed := gui_strobe_mode_toggle({100, 400}, config.strobe_mode)
+            if strobe_mode_changed {
+                config.strobe_mode = strobe_mode
+                core.set_phase_comparator_freq(
+                    phase_comparator,
+                    target_note.frequency,
+                    config.pitch_standard,
+                    config.strobe_speed,
+                    config.speed_multiplier,
+                    config.strobe_mode,
+                )
+            }
+
+            note_detection_mode, note_detection_mode_changed := gui_note_detection_mode_toggle({300, 400}, config.note_detection_mode)
+            if note_detection_mode_changed {
+                config.note_detection_mode = note_detection_mode
+            }
 
             // TODO:
             // pitch standard - 440hz - number spinner
