@@ -285,7 +285,7 @@ run_raylib_app :: proc(config: ^Config) {
                 rl.GuiSetState(i32(rl.GuiState.STATE_DISABLED))
             }
             if rl.GuiDropdownBox(
-                {424, 330, 200, 30},
+                {424, 130, 200, 30},
                 "CHROMATIC;GUITAR STD;UKULELE STD",
                 &tuning_preset_choice,
                 tuning_preset_dropdown_active,
@@ -355,7 +355,7 @@ run_raylib_app :: proc(config: ^Config) {
                 config.note_detection_mode = note_detection_mode
             }
 
-            gui_slider({400, 400}, &strobe_contrast_slider_value, 0.0, 5.0)
+            gui_contrast_slider({400, 400}, &strobe_contrast_slider_value)
             config.strobe_contrast = linalg.exp10(strobe_contrast_slider_value)
 
             // rl.DrawTextEx(
@@ -368,7 +368,7 @@ run_raylib_app :: proc(config: ^Config) {
             // )
 
 
-            gui_slider({400, 432}, &strobe_speed_slider_value, 0.001, 0.05)
+            gui_speed_slider({400, 432}, &strobe_speed_slider_value)
             if strobe_speed_slider_value != config.strobe_speed {
                 config.strobe_speed = strobe_speed_slider_value
                 core.set_phase_comparator_speed(phase_comparator, strobe_speed_slider_value)

@@ -10,6 +10,10 @@ import "../core"
 
 texture_atlas: rl.Texture2D
 
+// position can serve as an ID for slider controls
+active_slider_position: [2]f32 = {}
+active_slider_mode := false
+text_color := rl.GetColor(0x15141BFF)
 
 load_texture_atlas :: proc() {
     file_data := #load("../assets/atlas.2x.png")
@@ -84,8 +88,6 @@ gui_note_detection_mode_toggle :: proc(
     NoteDetectionMode,
     bool,
 ) {
-    text_color := rl.GetColor(0x15141BFF)
-
     if active_detection_mode == .AUTO {
         rl.DrawTexturePro(
             texture_atlas,
@@ -131,9 +133,45 @@ gui_note_detection_mode_toggle :: proc(
 }
 
 
-// position can serve as an ID for slider controls
-active_slider_position: [2]f32 = {}
-active_slider_mode := false
+gui_contrast_slider :: proc(position: [2]f32, value: ^f32) {
+    gui_slider(position, value, 0.0, 5.0)
+    rl.DrawTexturePro(
+        texture_atlas,
+        rl.Rectangle{0, 192, 32, 32},
+        rl.Rectangle{position.x + 6, position.y + 4, 16, 16},
+        rl.Vector2{0, 0},
+        0,
+        rl.WHITE,
+    )
+    rl.DrawTextEx(
+        font_store.size_28,
+        "CONTRAST",
+        rl.Vector2{position.x + 32.0, position.y + 5},
+        14,
+        0.5,
+        text_color,
+    )
+}
+
+gui_speed_slider :: proc(position: [2]f32, value: ^f32) {
+    gui_slider(position, value, 0.001, 0.05)
+    rl.DrawTexturePro(
+        texture_atlas,
+        rl.Rectangle{32, 192, 32, 32},
+        rl.Rectangle{position.x + 6, position.y + 4, 16, 16},
+        rl.Vector2{0, 0},
+        0,
+        rl.WHITE,
+    )
+    rl.DrawTextEx(
+        font_store.size_28,
+        "SENSITIVITY", // speed ?
+        rl.Vector2{position.x + 32.0, position.y + 5},
+        14,
+        0.5,
+        text_color,
+    )
+}
 
 
 // assumes value is between 0 & 1
@@ -160,8 +198,7 @@ gui_slider :: proc(position: [2]f32, value: ^f32, min: f32, max: f32) {
             active_slider_mode = false
             active_slider_position = {}
         }
-    }
-    else if rl.CheckCollisionPointRec(mouse_point, bounds) {
+    } else if rl.CheckCollisionPointRec(mouse_point, bounds) {
         // start drag
         if !active_slider_mode && rl.IsMouseButtonDown(rl.MouseButton.LEFT) {
             active_slider_mode = true
