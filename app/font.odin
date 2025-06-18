@@ -7,18 +7,18 @@ import rl "vendor:raylib"
 
 FontStore :: struct {
     size_24:  rl.Font,
+    size_28:  rl.Font,
     size_32:  rl.Font,
     size_48:  rl.Font,
     size_76:  rl.Font,
     size_192: rl.Font,
 }
 
-
 font_store: FontStore
 
 
 init_fonts :: proc() {
-    font_data := #load("../assets/NotoSansMono-Medium.ttf")
+    font_data := #load("../assets/Inter-Medium.ttf")
     font_atlas: cstring = "ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuwvxyzz♯♭/+-1234567890.:π!▶︎◀︎|"
     count := i32(0)
     codepoints := rl.LoadCodepoints(font_atlas, &count)
@@ -29,6 +29,15 @@ init_fonts :: proc() {
         raw_data(font_data),
         i32(len(font_data)),
         24,
+        codepoints,
+        count,
+    )
+
+    font_store.size_28 = rl.LoadFontFromMemory(
+        ".ttf",
+        raw_data(font_data),
+        i32(len(font_data)),
+        28,
         codepoints,
         count,
     )
@@ -69,10 +78,16 @@ init_fonts :: proc() {
         count,
     )
 
+    // rl.SetTextureFilter(font_store.size_24.texture, rl.TextureFilter.TRILINEAR)
+    // rl.SetTextureFilter(font_store.size_32.texture, rl.TextureFilter.TRILINEAR)
     // rl.SetTextureFilter(font_store.size_48.texture, rl.TextureFilter.TRILINEAR)
+    // rl.SetTextureFilter(font_store.size_76.texture, rl.TextureFilter.TRILINEAR)
+    // rl.SetTextureFilter(font_store.size_192.texture, rl.TextureFilter.TRILINEAR)
 }
 
 destroy_fonts :: proc() {
+    rl.UnloadFont(font_store.size_24)
+    rl.UnloadFont(font_store.size_28)
     rl.UnloadFont(font_store.size_32)
     rl.UnloadFont(font_store.size_48)
     rl.UnloadFont(font_store.size_76)

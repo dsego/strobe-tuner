@@ -14,6 +14,9 @@ import "../core"
 guitar_std_notes: [6]string = {"E2", "A2", "D3", "G3", "B3", "E4"}
 ukulele_std_notes: [4]string = {"G4", "C4", "E4", "A4"}
 
+// Add gui controls to choose strobe colors
+COLOR_CONTROLS :: false
+
 run_raylib_app :: proc(config: ^Config) {
     // when ODIN_OS == .Darwin {
     //     setup_mac_app()
@@ -36,7 +39,7 @@ run_raylib_app :: proc(config: ^Config) {
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetConfigFlags({.WINDOW_HIGHDPI})
-    rl.InitWindow(650, 500, "Strobe Tuner")
+    rl.InitWindow(650, 800 if COLOR_CONTROLS else 488, "Strobe Tuner")
     defer rl.CloseWindow()
 
 
@@ -139,6 +142,9 @@ run_raylib_app :: proc(config: ^Config) {
     note_high_state := false
 
 
+    color1 := rl.GetColor(config.strobe_color_1)
+    color2 := rl.GetColor(config.strobe_color_2)
+
     // ---------------------------------------------------------------------------------------------
 
 
@@ -226,6 +232,14 @@ run_raylib_app :: proc(config: ^Config) {
         strobe_contrast_slider_value := math.log10(config.strobe_contrast)
 
 
+        if rl.IsKeyPressed(.TAB) {
+            if config.strobe_display_type == .CURVED_TRACKS {
+                config.strobe_display_type = .SPINNING_WHEEL
+            } else {
+                config.strobe_display_type = .CURVED_TRACKS
+            }
+        }
+
         rl.BeginDrawing()
         defer rl.EndDrawing()
         {
@@ -268,32 +282,6 @@ run_raylib_app :: proc(config: ^Config) {
             )
 
 
-            // rl.GuiToggle(
-            //     {424, 60, 200, 30},
-            //     "HARMONIC" if harmonic_mode_active else "VERNIER",
-            //     &harmonic_mode_active,
-            // )
-
-            // strobe_mode_changed := false
-            // if harmonic_mode_active && config.strobe_mode != .HARMONIC_MODE {
-            //     config.strobe_mode = .HARMONIC_MODE
-            //     strobe_mode_changed = true
-            // } else if !harmonic_mode_active && config.strobe_mode != .VERNIER_MODE {
-            //     config.strobe_mode = .VERNIER_MODE
-            //     strobe_mode_changed = true
-            // }
-
-            // if strobe_mode_changed {
-            //     core.set_phase_comparator_freq(
-            //         phase_comparator,
-            //         target_note.frequency,
-            //         config.pitch_standard,
-            //         config.strobe_speed,
-            //         config.speed_multiplier,
-            //         config.strobe_mode,
-            //     )
-            // }
-
             rl.DrawTextEx(font_store.size_32, "Contrast", {424, 140}, 16, 0, rl.GRAY)
             rl.GuiSlider({424, 160, 200, 15}, "", "", &strobe_contrast_slider_value, 0.0, 5.0)
             config.strobe_contrast = linalg.exp10(strobe_contrast_slider_value)
@@ -305,17 +293,6 @@ run_raylib_app :: proc(config: ^Config) {
                 core.set_phase_comparator_speed(phase_comparator, strobe_speed_slider_value)
             }
 
-
-            rl.GuiToggle(
-                {424, 250, 200, 30},
-                "WHEEL" if show_strobe_wheel else "TRACKS",
-                &show_strobe_wheel,
-            )
-            if show_strobe_wheel {
-                config.strobe_display_type = StrobeDisplayType.SPINNING_WHEEL
-            } else {
-                config.strobe_display_type = StrobeDisplayType.CURVED_TRACKS
-            }
 
             if config.note_detection_mode == .AUTO {
                 rl.GuiSetState(i32(rl.GuiState.STATE_DISABLED))
@@ -361,15 +338,16 @@ run_raylib_app :: proc(config: ^Config) {
                 core.flush_audio_capture_ringbuffer(phase_comparator)
             }
 
-
             setup_strobe_display(
                 &strobe_display,
                 config.strobe_contrast,
                 config.strobe_display_type,
             )
 
-
-            strobe_mode, strobe_mode_changed := gui_strobe_mode_toggle({100, 400}, config.strobe_mode)
+            strobe_mode, strobe_mode_changed := gui_strobe_mode_toggle(
+                {100, 410},
+                config.strobe_mode,
+            )
             if strobe_mode_changed {
                 config.strobe_mode = strobe_mode
                 core.set_phase_comparator_freq(
@@ -382,9 +360,67 @@ run_raylib_app :: proc(config: ^Config) {
                 )
             }
 
-            note_detection_mode, note_detection_mode_changed := gui_note_detection_mode_toggle({300, 400}, config.note_detection_mode)
+            note_detection_mode, note_detection_mode_changed := gui_note_detection_mode_toggle(
+                {232, 410},
+                config.note_detection_mode,
+            )
             if note_detection_mode_changed {
                 config.note_detection_mode = note_detection_mode
+            }
+
+            gui_slider({400, 400}, &strobe_contrast_slider_value, 0.0, 5.0)
+            config.strobe_contrast = linalg.exp10(strobe_contrast_slider_value)
+
+            // rl.DrawTextEx(
+            //     font_store.size_32,
+            //     fmt.ctprintf("%v", config.strobe_contrast),
+            //     {300, 400},
+            //     16,
+            //     0,
+            //     rl.LIGHTGRAY,
+            // )
+
+
+            gui_slider({400, 432}, &strobe_speed_slider_value, 0.001, 0.05)
+            if strobe_speed_slider_value != config.strobe_speed {
+                config.strobe_speed = strobe_speed_slider_value
+                core.set_phase_comparator_speed(phase_comparator, strobe_speed_slider_value)
+            }
+
+            // rl.DrawTextEx(
+            //     font_store.size_32,
+            //     fmt.ctprintf("%v", strobe_speed_slider_value),
+            //     {300, 432},
+            //     16,
+            //     0,
+            //     rl.LIGHTGRAY,
+            // )
+
+
+            if COLOR_CONTROLS {
+                rl.GuiColorPicker({20, 500, 200, 200}, nil, &color1)
+                config.strobe_color_1 = rl.ColorToInt(color1)
+                rl.DrawTextEx(
+                    font_store.size_32,
+                    fmt.ctprintf("%x", config.strobe_color_1),
+                    {20, 480},
+                    16,
+                    0,
+                    rl.LIGHTGRAY,
+                )
+
+                rl.GuiColorPicker({300, 500, 200, 200}, nil, &color2)
+                config.strobe_color_2 = rl.ColorToInt(color2)
+                rl.DrawTextEx(
+                    font_store.size_32,
+                    fmt.ctprintf("%x", config.strobe_color_2),
+                    {300, 480},
+                    16,
+                    0,
+                    rl.LIGHTGRAY,
+                )
+
+                set_strobe_colors(&strobe_display, {config.strobe_color_1, config.strobe_color_2})
             }
 
             // TODO:

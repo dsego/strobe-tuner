@@ -42,11 +42,11 @@ gui_strobe_mode_toggle :: proc(
             rl.WHITE,
         )
         rl.DrawTextEx(
-            font_store.size_48,
+            font_store.size_28,
             "HARMONIC",
-            rl.Vector2{position.x + 18.0, position.y},
-            24,
-            0,
+            rl.Vector2{position.x + 27.0, position.y + 5},
+            14,
+            0.5,
             text_color,
         )
     } else {
@@ -59,11 +59,11 @@ gui_strobe_mode_toggle :: proc(
             rl.WHITE,
         )
         rl.DrawTextEx(
-            font_store.size_48,
+            font_store.size_28,
             "VERNIER",
-            rl.Vector2{position.x + 22.0, position.y},
-            24,
-            0,
+            rl.Vector2{position.x + 32.0, position.y + 5},
+            14,
+            0.5,
             text_color,
         )
     }
@@ -96,11 +96,11 @@ gui_note_detection_mode_toggle :: proc(
             rl.WHITE,
         )
         rl.DrawTextEx(
-            font_store.size_48,
+            font_store.size_28,
             "AUTO",
-            rl.Vector2{position.x + 18.0, position.y},
-            24,
-            0,
+            rl.Vector2{position.x + 42.0, position.y + 5},
+            14,
+            0.5,
             text_color,
         )
     } else {
@@ -113,11 +113,11 @@ gui_note_detection_mode_toggle :: proc(
             rl.WHITE,
         )
         rl.DrawTextEx(
-            font_store.size_48,
+            font_store.size_28,
             "MANUAL",
-            rl.Vector2{position.x + 22.0, position.y},
-            24,
-            0,
+            rl.Vector2{position.x + 34.0, position.y + 5},
+            14,
+            0.5,
             text_color,
         )
     }
@@ -128,6 +128,67 @@ gui_note_detection_mode_toggle :: proc(
     }
 
     return active_detection_mode, false
+}
+
+
+// position can serve as an ID for slider controls
+active_slider_position: [2]f32 = {}
+active_slider_mode := false
+
+
+// assumes value is between 0 & 1
+gui_slider :: proc(position: [2]f32, value: ^f32, min: f32, max: f32) {
+    value^ = clamp(value^, min, max)
+    fraction := (value^ - min) / (max - min)
+
+    mouse_point := rl.GetMousePosition()
+
+    width: f32 = 146
+    height: f32 = 24
+
+    bounds := rl.Rectangle{position.x, position.y, width, height}
+
+    // use position to determine if this is the active slider
+    is_active := active_slider_position.x == position.x && active_slider_position.y == position.y
+
+    if active_slider_mode && is_active {
+        // still dragging
+        if rl.IsMouseButtonDown(rl.MouseButton.LEFT) {
+            fraction = clamp(mouse_point.x - position.x, 0, width) / width
+            value^ = math.lerp(min, max, fraction)
+        } else {
+            active_slider_mode = false
+            active_slider_position = {}
+        }
+    }
+    else if rl.CheckCollisionPointRec(mouse_point, bounds) {
+        // start drag
+        if !active_slider_mode && rl.IsMouseButtonDown(rl.MouseButton.LEFT) {
+            active_slider_mode = true
+            active_slider_position = position
+            fraction = clamp(mouse_point.x - position.x, 0, width) / width
+            value^ = math.lerp(min, max, fraction)
+        }
+    }
+
+    slider_position: f32 = fraction * width
+
+    rl.DrawTexturePro(
+        texture_atlas,
+        rl.Rectangle{240, 48, width * 2, height * 2},
+        rl.Rectangle{position.x, position.y, width, height},
+        rl.Vector2{0, 0},
+        0,
+        rl.WHITE,
+    )
+    rl.DrawTexturePro(
+        texture_atlas,
+        rl.Rectangle{240, 96, slider_position * 2, height * 2},
+        rl.Rectangle{position.x, position.y, slider_position, height},
+        rl.Vector2{0, 0},
+        0,
+        rl.WHITE,
+    )
 }
 
 // note_detection_mode_toggle
@@ -148,7 +209,7 @@ gui_note_detection_mode_toggle :: proc(
 gui_button :: proc(bounds: rl.Rectangle) -> bool {
     mouse_point := rl.GetMousePosition()
     if rl.CheckCollisionPointRec(mouse_point, bounds) {
-        if rl.IsMouseButtonReleased(rl.MouseButton.LEFT) {
+        if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
             return true
         }
     }

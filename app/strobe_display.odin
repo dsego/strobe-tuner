@@ -135,6 +135,9 @@ set_display_type :: proc(self: ^StrobeDisplay, display_type: StrobeDisplayType) 
     self.display_type = display_type
 }
 
+set_strobe_colors :: proc(self: ^StrobeDisplay, colors: [2]u32) {
+    self.colors = {rl.GetColor(colors.x), rl.GetColor(colors.y)}
+}
 
 draw_strobe_display :: proc(
     self: ^StrobeDisplay,
@@ -152,14 +155,14 @@ draw_strobe_display :: proc(
         band_height = 26.0
         period_count = 4.0 // how many strobe periods to fit in a circle
     case .CURVED_TRACKS:
-        curvature_radius = 800.0
+        curvature_radius = 400.0
         band_height = 66.0
-        period_count = 24.0
+        period_count = 12.0
     }
 
     rl.DrawRectangleV(
         self.position,
-        {f32(self.texture_width), f32(self.texture_height)},
+        {f32(self.texture_width), 300.0},
         self.background,
     )
 
