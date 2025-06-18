@@ -254,14 +254,14 @@ run_raylib_app :: proc(config: ^Config) {
             // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
             draw_strobe_display(&strobe_display, phase_comparator, out_of_range)
 
-            draw_note(target_note, {24, 320}, rl.WHITE if freq_estimation_active else rl.GRAY)
+            draw_note(target_note, {24, 320}, rl.GetColor(0xFBFBFBFF) if freq_estimation_active else rl.GetColor(0x7D7E8FFF))
 
             if freq_estimation_active {
                 note_low_state = core.schmitt_trigger_neg(note_low_state, pitch_cents_err, -8, -10)
                 note_high_state = core.schmitt_trigger(note_high_state, pitch_cents_err, 8, 10)
 
-                if note_low_state do rl.DrawTextEx(font_store.size_76, "◀", {0, 240}, 38, 0, rl.PURPLE)
-                else if note_high_state do rl.DrawTextEx(font_store.size_76, "▶︎", {370, 240}, 38, 0, rl.PURPLE)
+                if note_low_state do rl.DrawTextEx(font_store.size_32, "◀", {10, 10}, 16, 0, rl.GetColor(0x82E2FFFF))
+                else if note_high_state do rl.DrawTextEx(font_store.size_32, "▶︎", {378, 10}, 16, 0, rl.GetColor(0x82E2FFFF))
             }
 
             // TODO:
@@ -285,38 +285,6 @@ run_raylib_app :: proc(config: ^Config) {
                 rl.PURPLE,
             )
 
-            // if config.note_detection_mode == .AUTO {
-            //     rl.GuiSetState(i32(rl.GuiState.STATE_DISABLED))
-            // }
-            // if rl.GuiDropdownBox(
-            //     {424, 130, 200, 30},
-            //     "CHROMATIC;GUITAR STD;UKULELE STD",
-            //     &tuning_preset_choice,
-            //     tuning_preset_dropdown_active,
-            // ) {
-            //     tuning_preset_dropdown_active = !tuning_preset_dropdown_active
-            // }
-            // config.tuning_preset = TuningPreset(tuning_preset_choice)
-
-            // rl.GuiSetState(i32(rl.GuiState.STATE_NORMAL))
-
-            audio_device_dropdown_active = gui_dropdown(
-                {424, 80},
-                200,
-                audio_devices[:],
-                &audio_device_choice,
-                audio_device_dropdown_active,
-            )
-
-            // TODO: add refresh button to show newly connected devices
-            // if rl.GuiDropdownBox(
-            //     {424, 20, 200, 30},
-            //     cstring(raw_data(audio_devices_str)),
-            //     &audio_device_choice,
-            //     audio_device_dropdown_active,
-            // ) {
-            //     audio_device_dropdown_active = !audio_device_dropdown_active
-            // }
 
             // Choose new audio input
             if audio_device_choice != audio_capture.active_device {
@@ -332,7 +300,7 @@ run_raylib_app :: proc(config: ^Config) {
             )
 
             strobe_mode, strobe_mode_changed := gui_strobe_mode_toggle(
-                {100, 410},
+                {100, 400},
                 config.strobe_mode,
             )
             if strobe_mode_changed {
@@ -348,7 +316,7 @@ run_raylib_app :: proc(config: ^Config) {
             }
 
             note_detection_mode, note_detection_mode_changed := gui_note_detection_mode_toggle(
-                {232, 410},
+                {232, 400},
                 config.note_detection_mode,
             )
             if note_detection_mode_changed {
@@ -363,6 +331,41 @@ run_raylib_app :: proc(config: ^Config) {
                 config.strobe_speed = strobe_speed_slider_value
                 core.set_phase_comparator_speed(phase_comparator, strobe_speed_slider_value)
             }
+
+            // TODO: add refresh button to show newly connected devices
+            audio_device_dropdown_active = gui_dropdown(
+                {100, 440},
+                240,
+                audio_devices[:],
+                &audio_device_choice,
+                audio_device_dropdown_active,
+                left_pad=32
+            )
+            // microphone icon
+            rl.DrawTexturePro(
+                texture_atlas,
+                rl.Rectangle{96, 192, 32, 32},
+                rl.Rectangle{108, 444, 16, 16},
+                rl.Vector2{0, 0},
+                0,
+                rl.WHITE,
+            )
+
+            if config.note_detection_mode != .AUTO {
+                tuning_preset_dropdown_active = gui_dropdown(
+                    {424, 340},
+                    200,
+                    {
+                        "CHROMATIC",
+                        "GUITAR STD",
+                        "UKULELE STD",
+                    },
+                    &tuning_preset_choice,
+                    tuning_preset_dropdown_active,
+                )
+                config.tuning_preset = TuningPreset(tuning_preset_choice)
+            }
+
 
             if COLOR_CONTROLS {
                 rl.GuiColorPicker({20, 500, 200, 200}, nil, &color1)
@@ -389,6 +392,8 @@ run_raylib_app :: proc(config: ^Config) {
 
                 set_strobe_colors(&strobe_display, {config.strobe_color_1, config.strobe_color_2})
             }
+
+
 
             // TODO:
             // pitch standard - 440hz - number spinner

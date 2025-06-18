@@ -12,9 +12,14 @@ texture_atlas: rl.Texture2D
 
 // position can serve as an ID for slider controls
 active_slider_position: [2]f32 = {}
-active_slider_mode := false
+
+// an active dropdown menu or slider dragging should not trigger other GUI controls
+exclusive_control_mode := false
+
 text_color_dark := rl.GetColor(0x15141BFF)
 text_color_light := rl.GetColor(0xBDBDBDFF)
+
+// gui_disabled_state := false
 
 
 load_texture_atlas :: proc() {
@@ -39,6 +44,7 @@ gui_strobe_mode_toggle :: proc(
     text_color_dark := rl.GetColor(0x15141BFF)
 
     if active_strobe_mode == .HARMONIC_MODE {
+        // rounded button texture
         rl.DrawTexturePro(
             texture_atlas,
             rl.Rectangle{0, 96, 240, 48},
@@ -56,6 +62,7 @@ gui_strobe_mode_toggle :: proc(
             text_color_dark,
         )
     } else {
+        // rounded button texture grey
         rl.DrawTexturePro(
             texture_atlas,
             rl.Rectangle{0, 0, 240, 48},
@@ -91,6 +98,7 @@ gui_note_detection_mode_toggle :: proc(
     bool,
 ) {
     if active_detection_mode == .AUTO {
+        // rounded button texture
         rl.DrawTexturePro(
             texture_atlas,
             rl.Rectangle{0, 48, 240, 48},
@@ -108,6 +116,7 @@ gui_note_detection_mode_toggle :: proc(
             text_color_dark,
         )
     } else {
+        // rounded button texture
         rl.DrawTexturePro(
             texture_atlas,
             rl.Rectangle{0, 0, 240, 48},
@@ -193,19 +202,19 @@ gui_slider :: proc(position: [2]f32, value: ^f32, min: f32, max: f32) {
     // use position to determine if this is the active slider
     is_active := active_slider_position.x == position.x && active_slider_position.y == position.y
 
-    if active_slider_mode && is_active {
+    if exclusive_control_mode && is_active {
         // still dragging
         if rl.IsMouseButtonDown(rl.MouseButton.LEFT) {
             fraction = clamp(mouse_point.x - position.x, 0, width) / width
             value^ = math.lerp(min, max, fraction)
         } else {
-            active_slider_mode = false
+            exclusive_control_mode = false
             active_slider_position = {}
         }
     } else if rl.CheckCollisionPointRec(mouse_point, bounds) {
         // start drag
-        if !active_slider_mode && rl.IsMouseButtonDown(rl.MouseButton.LEFT) {
-            active_slider_mode = true
+        if !exclusive_control_mode && rl.IsMouseButtonDown(rl.MouseButton.LEFT) {
+            exclusive_control_mode = true
             active_slider_position = position
             fraction = clamp(mouse_point.x - position.x, 0, width) / width
             value^ = math.lerp(min, max, fraction)
@@ -236,7 +245,7 @@ gui_slider :: proc(position: [2]f32, value: ^f32, min: f32, max: f32) {
 
 gui_button :: proc(bounds: rl.Rectangle) -> bool {
     mouse_point := rl.GetMousePosition()
-    if rl.CheckCollisionPointRec(mouse_point, bounds) {
+    if rl.CheckCollisionPointRec(mouse_point, bounds) && !exclusive_control_mode {
         if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
             return true
         }
@@ -250,6 +259,7 @@ gui_dropdown :: proc(
     options: []string,
     selected_idx: ^i32,
     edit_mode: bool,
+    left_pad: f32 = 12,
 ) -> bool {
     edit_mode := edit_mode
     btn_bounds := rl.Rectangle{position.x, position.y, width, 24}
@@ -289,7 +299,7 @@ gui_dropdown :: proc(
         rl.DrawTextEx(
             font_store.size_28,
             cstring(raw_data(options[selected_idx^])),
-            {position.x + 24, position.y + 5},
+            {position.x + left_pad, position.y + 5},
             14,
             0,
             text_color_light,
@@ -298,7 +308,7 @@ gui_dropdown :: proc(
 
     // menu height without the top & bottom caps
     menu_height := f32(len(options) * 24)
-    menu_bounds := rl.Rectangle{position.x, position.y + 30, width, menu_height + 32}
+    menu_bounds := rl.Rectangle{position.x, position.y - menu_height - 30, width, menu_height + 30}
 
     mouse_point := rl.GetMousePosition()
 
@@ -307,21 +317,25 @@ gui_dropdown :: proc(
             // clicked outside
             if !rl.CheckCollisionPointRec(mouse_point, menu_bounds) {
                 edit_mode = false
+                exclusive_control_mode = false
             }
         } else {
-            if rl.CheckCollisionPointRec(mouse_point, btn_bounds) {
+            if !exclusive_control_mode && rl.CheckCollisionPointRec(mouse_point, btn_bounds) {
                 edit_mode = true
+                exclusive_control_mode = true
             }
         }
     }
 
     // Draw the dropdown menu
     if edit_mode {
+        menu_position := rl.Vector2{position.x, position.y - menu_height - 30}
+
         // Top cap
         rl.DrawTexturePro(
             texture_atlas,
             rl.Rectangle{0, 144, width * 2, 24},
-            rl.Rectangle{position.x, position.y + 30, width - 16, 12},
+            rl.Rectangle{menu_position.x, menu_position.y, width - 16, 12},
             rl.Vector2{0, 0},
             0,
             rl.WHITE,
@@ -329,20 +343,23 @@ gui_dropdown :: proc(
         rl.DrawTexturePro(
             texture_atlas,
             rl.Rectangle{0, 144, -32, 24},
-            rl.Rectangle{position.x + width - 16, position.y + 30, 16, 12},
+            rl.Rectangle{position.x + width - 16, menu_position.y, 16, 12},
             rl.Vector2{0, 0},
             0,
             rl.WHITE,
         )
 
-        menu_position := rl.Vector2{position.x, position.y + 38}
-        rl.DrawRectangleV(menu_position, {width, menu_height}, rl.GetColor(0x2D2E35FF))
+        rl.DrawRectangleV(
+            {menu_position.x, menu_position.y + 12},
+            {width, menu_height},
+            rl.GetColor(0x2D2E35FF),
+        )
 
         // Bottom cap
         rl.DrawTexturePro(
             texture_atlas,
             rl.Rectangle{0, 144, width * 2, -24},
-            rl.Rectangle{menu_position.x, menu_position.y + menu_height, width - 16, 12},
+            rl.Rectangle{menu_position.x, menu_position.y + 12 + menu_height, width - 16, 12},
             rl.Vector2{0, 0},
             0,
             rl.WHITE,
@@ -350,16 +367,18 @@ gui_dropdown :: proc(
         rl.DrawTexturePro(
             texture_atlas,
             rl.Rectangle{0, 144, -32, -24},
-            rl.Rectangle{menu_position.x + width - 16, menu_position.y + menu_height, 16, 12},
+            rl.Rectangle{menu_position.x + width - 16, menu_position.y + 12 + menu_height, 16, 12},
             rl.Vector2{0, 0},
             0,
             rl.WHITE,
         )
+        // debug
+        // rl.DrawRectangleLinesEx(menu_bounds, 1.0, rl.ORANGE)
 
         for opt, i in options {
             option_bounds := rl.Rectangle {
                 menu_position.x,
-                menu_position.y + f32(i * 24),
+                menu_position.y + 12 + f32(i * 24),
                 width,
                 24,
             }
@@ -370,6 +389,7 @@ gui_dropdown :: proc(
                 hover = true
                 if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
                     edit_mode = false
+                    exclusive_control_mode = false
                     selected_idx^ = i32(i)
                 }
             }
@@ -382,7 +402,7 @@ gui_dropdown :: proc(
                 )
             }
 
-            text_pos := rl.Vector2{menu_position.x + 12, menu_position.y + 4 + f32(i * 24)}
+            text_pos := rl.Vector2{option_bounds.x + 12, option_bounds.y + 4}
             rl.DrawTextEx(
                 font_store.size_28,
                 cstring(raw_data(opt)),
