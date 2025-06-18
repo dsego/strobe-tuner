@@ -13,7 +13,9 @@ texture_atlas: rl.Texture2D
 // position can serve as an ID for slider controls
 active_slider_position: [2]f32 = {}
 active_slider_mode := false
-text_color := rl.GetColor(0x15141BFF)
+text_color_dark := rl.GetColor(0x15141BFF)
+text_color_light := rl.GetColor(0xBDBDBDFF)
+
 
 load_texture_atlas :: proc() {
     file_data := #load("../assets/atlas.2x.png")
@@ -34,7 +36,7 @@ gui_strobe_mode_toggle :: proc(
     core.StrobeMode,
     bool,
 ) {
-    text_color := rl.GetColor(0x15141BFF)
+    text_color_dark := rl.GetColor(0x15141BFF)
 
     if active_strobe_mode == .HARMONIC_MODE {
         rl.DrawTexturePro(
@@ -51,7 +53,7 @@ gui_strobe_mode_toggle :: proc(
             rl.Vector2{position.x + 27.0, position.y + 5},
             14,
             0.5,
-            text_color,
+            text_color_dark,
         )
     } else {
         rl.DrawTexturePro(
@@ -68,7 +70,7 @@ gui_strobe_mode_toggle :: proc(
             rl.Vector2{position.x + 32.0, position.y + 5},
             14,
             0.5,
-            text_color,
+            text_color_dark,
         )
     }
 
@@ -103,7 +105,7 @@ gui_note_detection_mode_toggle :: proc(
             rl.Vector2{position.x + 42.0, position.y + 5},
             14,
             0.5,
-            text_color,
+            text_color_dark,
         )
     } else {
         rl.DrawTexturePro(
@@ -120,7 +122,7 @@ gui_note_detection_mode_toggle :: proc(
             rl.Vector2{position.x + 34.0, position.y + 5},
             14,
             0.5,
-            text_color,
+            text_color_dark,
         )
     }
 
@@ -135,6 +137,7 @@ gui_note_detection_mode_toggle :: proc(
 
 gui_contrast_slider :: proc(position: [2]f32, value: ^f32) {
     gui_slider(position, value, 0.0, 5.0)
+    // Draw the contrast icon
     rl.DrawTexturePro(
         texture_atlas,
         rl.Rectangle{0, 192, 32, 32},
@@ -149,12 +152,13 @@ gui_contrast_slider :: proc(position: [2]f32, value: ^f32) {
         rl.Vector2{position.x + 32.0, position.y + 5},
         14,
         0.5,
-        text_color,
+        text_color_dark,
     )
 }
 
 gui_speed_slider :: proc(position: [2]f32, value: ^f32) {
     gui_slider(position, value, 0.001, 0.05)
+    // Draw the crosshair icon
     rl.DrawTexturePro(
         texture_atlas,
         rl.Rectangle{32, 192, 32, 32},
@@ -169,7 +173,7 @@ gui_speed_slider :: proc(position: [2]f32, value: ^f32) {
         rl.Vector2{position.x + 32.0, position.y + 5},
         14,
         0.5,
-        text_color,
+        text_color_dark,
     )
 }
 
@@ -210,6 +214,7 @@ gui_slider :: proc(position: [2]f32, value: ^f32, min: f32, max: f32) {
 
     slider_position: f32 = fraction * width
 
+    // Draw the slider background
     rl.DrawTexturePro(
         texture_atlas,
         rl.Rectangle{240, 48, width * 2, height * 2},
@@ -218,6 +223,7 @@ gui_slider :: proc(position: [2]f32, value: ^f32, min: f32, max: f32) {
         0,
         rl.WHITE,
     )
+    // Draw the filled (highlighted) area
     rl.DrawTexturePro(
         texture_atlas,
         rl.Rectangle{240, 96, slider_position * 2, height * 2},
@@ -227,21 +233,6 @@ gui_slider :: proc(position: [2]f32, value: ^f32, min: f32, max: f32) {
         rl.WHITE,
     )
 }
-
-// note_detection_mode_toggle
-
-
-// rl.DrawTexture(texture_atlas, 10, 10, rl.WHITE)
-// rl.DrawTexturePro(
-//     texture_atlas,
-//     rl.Rectangle{0, 48, 240, 48},
-//     rl.Rectangle{0, 0, 120, 24},
-//     rl.Vector2{-100, -400},
-//     0,
-//     rl.WHITE,
-// )
-// rl.DrawRectangleLines(100, 10, 120,24, rl.ORANGE)
-
 
 gui_button :: proc(bounds: rl.Rectangle) -> bool {
     mouse_point := rl.GetMousePosition()
@@ -253,6 +244,158 @@ gui_button :: proc(bounds: rl.Rectangle) -> bool {
     return false
 }
 
+gui_dropdown :: proc(
+    position: [2]f32,
+    width: f32,
+    options: []string,
+    selected_idx: ^i32,
+    edit_mode: bool,
+) -> bool {
+    edit_mode := edit_mode
+    btn_bounds := rl.Rectangle{position.x, position.y, width, 24}
+
+    // Draw the button
+    {
+        // Draw the left part of the dropdown button
+        rl.DrawTexturePro(
+            texture_atlas,
+            rl.Rectangle{0, 144, width * 2, 48},
+            rl.Rectangle{position.x, position.y, width - 16, 24},
+            rl.Vector2{0, 0},
+            0,
+            rl.WHITE,
+        )
+        // Draw the rounded cap on the right side
+        rl.DrawTexturePro(
+            texture_atlas,
+            rl.Rectangle{0, 144, -32, 48},
+            rl.Rectangle{position.x + width - 16, position.y, 16, 24},
+            rl.Vector2{0, 0},
+            0,
+            rl.WHITE,
+        )
+        // Draw the triangle icon
+        rl.DrawTexturePro(
+            texture_atlas,
+            rl.Rectangle{128, 192, 32, 32},
+            rl.Rectangle{position.x + width - 20, position.y + 4, 16, 16},
+            rl.Vector2{0, 0},
+            0,
+            rl.WHITE,
+        )
+    }
+
+    if selected_idx != nil {
+        rl.DrawTextEx(
+            font_store.size_28,
+            cstring(raw_data(options[selected_idx^])),
+            {position.x + 24, position.y + 5},
+            14,
+            0,
+            text_color_light,
+        )
+    }
+
+    // menu height without the top & bottom caps
+    menu_height := f32(len(options) * 24)
+    menu_bounds := rl.Rectangle{position.x, position.y + 30, width, menu_height + 32}
+
+    mouse_point := rl.GetMousePosition()
+
+    if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+        if edit_mode {
+            // clicked outside
+            if !rl.CheckCollisionPointRec(mouse_point, menu_bounds) {
+                edit_mode = false
+            }
+        } else {
+            if rl.CheckCollisionPointRec(mouse_point, btn_bounds) {
+                edit_mode = true
+            }
+        }
+    }
+
+    // Draw the dropdown menu
+    if edit_mode {
+        // Top cap
+        rl.DrawTexturePro(
+            texture_atlas,
+            rl.Rectangle{0, 144, width * 2, 24},
+            rl.Rectangle{position.x, position.y + 30, width - 16, 12},
+            rl.Vector2{0, 0},
+            0,
+            rl.WHITE,
+        )
+        rl.DrawTexturePro(
+            texture_atlas,
+            rl.Rectangle{0, 144, -32, 24},
+            rl.Rectangle{position.x + width - 16, position.y + 30, 16, 12},
+            rl.Vector2{0, 0},
+            0,
+            rl.WHITE,
+        )
+
+        menu_position := rl.Vector2{position.x, position.y + 38}
+        rl.DrawRectangleV(menu_position, {width, menu_height}, rl.GetColor(0x2D2E35FF))
+
+        // Bottom cap
+        rl.DrawTexturePro(
+            texture_atlas,
+            rl.Rectangle{0, 144, width * 2, -24},
+            rl.Rectangle{menu_position.x, menu_position.y + menu_height, width - 16, 12},
+            rl.Vector2{0, 0},
+            0,
+            rl.WHITE,
+        )
+        rl.DrawTexturePro(
+            texture_atlas,
+            rl.Rectangle{0, 144, -32, -24},
+            rl.Rectangle{menu_position.x + width - 16, menu_position.y + menu_height, 16, 12},
+            rl.Vector2{0, 0},
+            0,
+            rl.WHITE,
+        )
+
+        for opt, i in options {
+            option_bounds := rl.Rectangle {
+                menu_position.x,
+                menu_position.y + f32(i * 24),
+                width,
+                24,
+            }
+
+            hover := false
+
+            if edit_mode && rl.CheckCollisionPointRec(mouse_point, option_bounds) {
+                hover = true
+                if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+                    edit_mode = false
+                    selected_idx^ = i32(i)
+                }
+            }
+
+            if hover {
+                rl.DrawRectangleV(
+                    {option_bounds.x, option_bounds.y},
+                    {option_bounds.width, option_bounds.height},
+                    rl.GetColor(0x15141BFF),
+                )
+            }
+
+            text_pos := rl.Vector2{menu_position.x + 12, menu_position.y + 4 + f32(i * 24)}
+            rl.DrawTextEx(
+                font_store.size_28,
+                cstring(raw_data(opt)),
+                text_pos,
+                14,
+                0,
+                rl.GetColor(0xFFFFFFFF) if hover else text_color_light,
+            )
+        }
+    }
+
+    return edit_mode
+}
 
 draw_note :: proc(note: core.Note, pos: [2]f32, color: rl.Color, hide_accidental: bool = false) {
     if note.frequency == 0 do return

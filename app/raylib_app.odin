@@ -13,6 +13,9 @@ import "../core"
 
 guitar_std_notes: [6]string = {"E2", "A2", "D3", "G3", "B3", "E4"}
 ukulele_std_notes: [4]string = {"G4", "C4", "E4", "A4"}
+window_bg_color: u32 = 0x40414AFF
+strobe_bg_color: u32 = 0x15141BFF
+
 
 // Add gui controls to choose strobe colors
 COLOR_CONTROLS :: false
@@ -78,7 +81,7 @@ run_raylib_app :: proc(config: ^Config) {
         {0, 0},
         {400, 400},
         {config.strobe_color_1, config.strobe_color_2},
-        config.strobe_bg_color,
+        strobe_bg_color,
         config.strobe_contrast,
         config.strobe_display_type,
     )
@@ -180,6 +183,7 @@ run_raylib_app :: proc(config: ^Config) {
             freq_estimation_active = false
         }
 
+        // Keyboard arrow navigation for choosing target notes manually
         if config.note_detection_mode == .MANUAL {
             prev_target_note := target_note
 
@@ -240,11 +244,11 @@ run_raylib_app :: proc(config: ^Config) {
             }
         }
 
+        // Draw the GUI controls
         rl.BeginDrawing()
         defer rl.EndDrawing()
         {
-            rl.ClearBackground(rl.GetColor(config.window_bg_color))
-
+            rl.ClearBackground(rl.GetColor(window_bg_color))
 
             // TODO
             // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
@@ -281,42 +285,38 @@ run_raylib_app :: proc(config: ^Config) {
                 rl.PURPLE,
             )
 
-            if config.note_detection_mode == .AUTO {
-                rl.GuiSetState(i32(rl.GuiState.STATE_DISABLED))
-            }
-            if rl.GuiDropdownBox(
-                {424, 130, 200, 30},
-                "CHROMATIC;GUITAR STD;UKULELE STD",
-                &tuning_preset_choice,
-                tuning_preset_dropdown_active,
-            ) {
-                tuning_preset_dropdown_active = !tuning_preset_dropdown_active
-            }
-            config.tuning_preset = TuningPreset(tuning_preset_choice)
-
-            rl.GuiSetState(i32(rl.GuiState.STATE_NORMAL))
-
-
-            // rl.GuiToggle(
-            //     {424, 290, 200, 30},
-            //     "MANUAL" if manual_detection_active else "AUTO",
-            //     &manual_detection_active,
-            // )
-            // if manual_detection_active {
-            //     config.note_detection_mode = .MANUAL
-            // } else {
-            //     config.note_detection_mode = .AUTO
+            // if config.note_detection_mode == .AUTO {
+            //     rl.GuiSetState(i32(rl.GuiState.STATE_DISABLED))
             // }
+            // if rl.GuiDropdownBox(
+            //     {424, 130, 200, 30},
+            //     "CHROMATIC;GUITAR STD;UKULELE STD",
+            //     &tuning_preset_choice,
+            //     tuning_preset_dropdown_active,
+            // ) {
+            //     tuning_preset_dropdown_active = !tuning_preset_dropdown_active
+            // }
+            // config.tuning_preset = TuningPreset(tuning_preset_choice)
 
-            // TODO: add refresh button to show newly connected devices
-            if rl.GuiDropdownBox(
-                {424, 20, 200, 30},
-                cstring(raw_data(audio_devices_str)),
+            // rl.GuiSetState(i32(rl.GuiState.STATE_NORMAL))
+
+            audio_device_dropdown_active = gui_dropdown(
+                {424, 80},
+                200,
+                audio_devices[:],
                 &audio_device_choice,
                 audio_device_dropdown_active,
-            ) {
-                audio_device_dropdown_active = !audio_device_dropdown_active
-            }
+            )
+
+            // TODO: add refresh button to show newly connected devices
+            // if rl.GuiDropdownBox(
+            //     {424, 20, 200, 30},
+            //     cstring(raw_data(audio_devices_str)),
+            //     &audio_device_choice,
+            //     audio_device_dropdown_active,
+            // ) {
+            //     audio_device_dropdown_active = !audio_device_dropdown_active
+            // }
 
             // Choose new audio input
             if audio_device_choice != audio_capture.active_device {
@@ -358,31 +358,11 @@ run_raylib_app :: proc(config: ^Config) {
             gui_contrast_slider({400, 400}, &strobe_contrast_slider_value)
             config.strobe_contrast = linalg.exp10(strobe_contrast_slider_value)
 
-            // rl.DrawTextEx(
-            //     font_store.size_32,
-            //     fmt.ctprintf("%v", config.strobe_contrast),
-            //     {300, 400},
-            //     16,
-            //     0,
-            //     rl.LIGHTGRAY,
-            // )
-
-
             gui_speed_slider({400, 432}, &strobe_speed_slider_value)
             if strobe_speed_slider_value != config.strobe_speed {
                 config.strobe_speed = strobe_speed_slider_value
                 core.set_phase_comparator_speed(phase_comparator, strobe_speed_slider_value)
             }
-
-            // rl.DrawTextEx(
-            //     font_store.size_32,
-            //     fmt.ctprintf("%v", strobe_speed_slider_value),
-            //     {300, 432},
-            //     16,
-            //     0,
-            //     rl.LIGHTGRAY,
-            // )
-
 
             if COLOR_CONTROLS {
                 rl.GuiColorPicker({20, 500, 200, 200}, nil, &color1)

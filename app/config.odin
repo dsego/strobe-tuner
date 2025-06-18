@@ -64,10 +64,6 @@ Config :: struct {
     strobe_color_1:        u32 "color",
     strobe_color_2:        u32 "color",
 
-    // Background colors
-    strobe_bg_color:       u32 "color",
-    window_bg_color:       u32 "color",
-
     // attenuate strobe effect when it spins so fast it becomes distracting
     apply_attenuation:     bool,
     tuning_preset:         TuningPreset,
@@ -110,8 +106,6 @@ load_config :: proc() -> Config {
         StrobeDisplayType,
         StrobeDisplayType.CURVED_TRACKS,
     )
-    config.window_bg_color = cast(u32)get_config(ini_map, "window_bg_color", int, 0x40414AFF)
-    config.strobe_bg_color = cast(u32)get_config(ini_map, "strobe_bg_color", int, 0x15141BFF)
     config.strobe_color_1 = cast(u32)get_config(ini_map, "strobe_color_1", int, 0xFF6767FF)
     config.strobe_color_2 = cast(u32)get_config(ini_map, "strobe_color_2", int, 0x663434FF)
 
