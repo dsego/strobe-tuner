@@ -117,7 +117,6 @@ run_raylib_app :: proc(config: ^Config) {
 
 
     audio_devices := list_audio_devices(audio_capture)
-    audio_devices[0] = "This is a very long input name input name"
     defer delete(audio_devices)
 
     audio_devices_str := strings.join(audio_devices[:], ";")
