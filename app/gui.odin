@@ -2,6 +2,7 @@ package app
 
 import "core:fmt"
 import "core:math"
+import "core:strings"
 
 import rl "vendor:raylib"
 
@@ -264,6 +265,9 @@ gui_dropdown :: proc(
     edit_mode := edit_mode
     btn_bounds := rl.Rectangle{position.x, position.y, width, 24}
 
+    // TODO: make it either a prop or depend on actual width
+    max_text_len := 27
+
     // Draw the button
     {
         // Draw the left part of the dropdown button
@@ -296,12 +300,13 @@ gui_dropdown :: proc(
     }
 
     if selected_idx != nil {
+        label := strings.cut(options[selected_idx^], 0, max_text_len)
         rl.DrawTextEx(
             font_store.size_28,
-            cstring(raw_data(options[selected_idx^])),
+            fmt.ctprintf("%s", label),
             {position.x + left_pad, position.y + 5},
             14,
-            0,
+            0.5,
             text_color_light,
         )
     }
@@ -403,12 +408,13 @@ gui_dropdown :: proc(
             }
 
             text_pos := rl.Vector2{option_bounds.x + 12, option_bounds.y + 4}
+            label := strings.cut(opt, 0, max_text_len)
             rl.DrawTextEx(
                 font_store.size_28,
-                cstring(raw_data(opt)),
+                fmt.ctprintf("%s", label),
                 text_pos,
                 14,
-                0,
+                0.5,
                 rl.GetColor(0xFFFFFFFF) if hover else text_color_light,
             )
         }

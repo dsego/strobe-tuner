@@ -42,7 +42,7 @@ run_raylib_app :: proc(config: ^Config) {
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetConfigFlags({.WINDOW_HIGHDPI})
-    rl.InitWindow(650, 800 if COLOR_CONTROLS else 488, "Strobe Tuner")
+    rl.InitWindow(488, 800 if COLOR_CONTROLS else 532, "Strobe Tuner")
     defer rl.CloseWindow()
 
 
@@ -79,7 +79,7 @@ run_raylib_app :: proc(config: ^Config) {
 
     strobe_display := init_strobe_display(
         {0, 0},
-        {400, 400},
+        {488, 560},
         {config.strobe_color_1, config.strobe_color_2},
         strobe_bg_color,
         config.strobe_contrast,
@@ -117,6 +117,7 @@ run_raylib_app :: proc(config: ^Config) {
 
 
     audio_devices := list_audio_devices(audio_capture)
+    audio_devices[0] = "This is a very long input name input name"
     defer delete(audio_devices)
 
     audio_devices_str := strings.join(audio_devices[:], ";")
@@ -254,7 +255,7 @@ run_raylib_app :: proc(config: ^Config) {
             // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
             draw_strobe_display(&strobe_display, phase_comparator, out_of_range)
 
-            draw_note(target_note, {24, 320}, rl.GetColor(0xFBFBFBFF) if freq_estimation_active else rl.GetColor(0x7D7E8FFF))
+            draw_note(target_note, {20, 300}, rl.GetColor(0xFBFBFBFF) if freq_estimation_active else rl.GetColor(0x7D7E8FFF))
 
             if freq_estimation_active {
                 note_low_state = core.schmitt_trigger_neg(note_low_state, pitch_cents_err, -8, -10)
@@ -274,15 +275,15 @@ run_raylib_app :: proc(config: ^Config) {
                 {128, 340},
                 24,
                 0,
-                rl.GREEN,
+                rl.GetColor(0xFBFBFBFF),
             )
             rl.DrawTextEx(
                 font_store.size_48,
-                fmt.ctprintf("Hertz\n%+.1f ", phase_freq_hz),
+                fmt.ctprintf("Hz\n%+.1f ", phase_freq_hz),
                 {256, 340},
                 24,
                 0,
-                rl.PURPLE,
+                rl.GetColor(0xFBFBFBFF),
             )
 
 
@@ -300,7 +301,7 @@ run_raylib_app :: proc(config: ^Config) {
             )
 
             strobe_mode, strobe_mode_changed := gui_strobe_mode_toggle(
-                {100, 400},
+                {20, 456},
                 config.strobe_mode,
             )
             if strobe_mode_changed {
@@ -316,17 +317,17 @@ run_raylib_app :: proc(config: ^Config) {
             }
 
             note_detection_mode, note_detection_mode_changed := gui_note_detection_mode_toggle(
-                {232, 400},
+                {152, 456},
                 config.note_detection_mode,
             )
             if note_detection_mode_changed {
                 config.note_detection_mode = note_detection_mode
             }
 
-            gui_contrast_slider({400, 400}, &strobe_contrast_slider_value)
+            gui_contrast_slider({330, 320}, &strobe_contrast_slider_value)
             config.strobe_contrast = linalg.exp10(strobe_contrast_slider_value)
 
-            gui_speed_slider({400, 432}, &strobe_speed_slider_value)
+            gui_speed_slider({330, 352}, &strobe_speed_slider_value)
             if strobe_speed_slider_value != config.strobe_speed {
                 config.strobe_speed = strobe_speed_slider_value
                 core.set_phase_comparator_speed(phase_comparator, strobe_speed_slider_value)
@@ -334,7 +335,7 @@ run_raylib_app :: proc(config: ^Config) {
 
             // TODO: add refresh button to show newly connected devices
             audio_device_dropdown_active = gui_dropdown(
-                {100, 440},
+                {20, 496},
                 240,
                 audio_devices[:],
                 &audio_device_choice,
@@ -345,7 +346,7 @@ run_raylib_app :: proc(config: ^Config) {
             rl.DrawTexturePro(
                 texture_atlas,
                 rl.Rectangle{96, 192, 32, 32},
-                rl.Rectangle{108, 444, 16, 16},
+                rl.Rectangle{28, 500, 16, 16},
                 rl.Vector2{0, 0},
                 0,
                 rl.WHITE,
@@ -353,8 +354,8 @@ run_raylib_app :: proc(config: ^Config) {
 
             if config.note_detection_mode != .AUTO {
                 tuning_preset_dropdown_active = gui_dropdown(
-                    {424, 340},
-                    200,
+                    {268, 496},
+                    140,
                     {
                         "CHROMATIC",
                         "GUITAR STD",
