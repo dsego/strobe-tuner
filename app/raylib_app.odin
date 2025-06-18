@@ -254,14 +254,14 @@ run_raylib_app :: proc(config: ^Config) {
             // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
             draw_strobe_display(&strobe_display, phase_comparator, out_of_range)
 
-            draw_note(target_note, {20, 300}, rl.GetColor(0xFBFBFBFF) if freq_estimation_active else rl.GetColor(0x7D7E8FFF))
+            draw_note(target_note, {20, 316}, rl.GetColor(0xFBFBFBFF) if freq_estimation_active else rl.GetColor(0x7D7E8FFF))
 
             if freq_estimation_active {
                 note_low_state = core.schmitt_trigger_neg(note_low_state, pitch_cents_err, -8, -10)
                 note_high_state = core.schmitt_trigger(note_high_state, pitch_cents_err, 8, 10)
 
                 if note_low_state do rl.DrawTextEx(font_store.size_32, "◀", {10, 10}, 16, 0, rl.GetColor(0x82E2FFFF))
-                else if note_high_state do rl.DrawTextEx(font_store.size_32, "▶︎", {378, 10}, 16, 0, rl.GetColor(0x82E2FFFF))
+                else if note_high_state do rl.DrawTextEx(font_store.size_32, "▶︎", {466, 10}, 16, 0, rl.GetColor(0x82E2FFFF))
             }
 
             // TODO:

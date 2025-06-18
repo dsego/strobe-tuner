@@ -118,10 +118,16 @@ destroy_phase_comparator :: proc(self: ^PhaseComparator) {
 
 set_phase_comparator_speed :: proc(self: ^PhaseComparator, base_speed: f32) {
     speed: f32 = base_speed * self.pitch_standard / self.base_freq_hz
+
+    harmonic_multiplier: f32 = 1.0
+
     for &band, i in self.bands {
         band.speed = speed
         if self.mode == .VERNIER_MODE {
             speed *= self.speed_multiplier
+        } else if self.mode == .HARMONIC_MODE {
+            band.speed *= harmonic_multiplier
+            harmonic_multiplier *= 2
         }
     }
 }
@@ -153,11 +159,12 @@ set_phase_comparator_freq :: proc(
         band.time_stretch = f32(self.reference_interval)
         band.phase = 0.0
         band.speed = speed
+
         if self.mode == .HARMONIC_MODE {
             band.freq_hz = f32(multiplier) * base_freq_hz
+            band.speed *= multiplier
             multiplier *= 2
-        }
-        if self.mode == .VERNIER_MODE {
+        } else if self.mode == .VERNIER_MODE {
             band.freq_hz = base_freq_hz
             speed *= speed_multiplier
         }
@@ -313,12 +320,13 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
 
 
     // Fade out strobe when it spins so rapidly to become distracting
+    // TODO: fix, shouldn't hide bands at 7.8 cents diff, eg 101.5Hz
     if self.apply_attenuation && self.mode == .VERNIER_MODE {
-        band.attenuation = linalg.smoothstep(
-            f32(0.01),
-            f32(0.008),
-            math.abs(band.phase_diff * band.speed),
-        )
-        band.amp *= band.attenuation
+        // band.attenuation = linalg.smoothstep(
+        //     f32(0.01),
+        //     f32(0.008),
+        //     math.abs(band.phase_diff * band.speed),
+        // )
+        // band.amp *= band.attenuation
     }
 }

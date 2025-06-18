@@ -74,6 +74,7 @@ void main()
     float feathering = 2; // 2 px feathering for smoothstep
 
     // Define the thickness of our donut shape (track), leave a gap between tracks
+    // TODO: define gap in strobe display struct
     float thickness = band_height - 4;
 
     // Calculate the center so the circle touches the top of the viewport

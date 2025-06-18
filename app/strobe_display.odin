@@ -62,13 +62,13 @@ init_strobe_display :: proc(
     self.contrast = contrast
 
     // We need this to draw the fragment shader
-    textureImage := rl.GenImageColor(
+    texture_image := rl.GenImageColor(
         self.texture_width,
         self.texture_height,
         rl.Color{255, 0, 0, 255},
     )
-    self.texture = rl.LoadTextureFromImage(textureImage)
-    rl.UnloadImage(textureImage)
+    self.texture = rl.LoadTextureFromImage(texture_image)
+    rl.UnloadImage(texture_image)
 
 
     // File path relative to our current odin file
@@ -151,18 +151,21 @@ draw_strobe_display :: proc(
 
     switch self.display_type {
     case .SPINNING_WHEEL:
-        curvature_radius = 100.0
+        curvature_radius = 90.0
         band_height = 26.0
         period_count = 4.0 // how many strobe periods to fit in a circle
     case .CURVED_TRACKS:
-        curvature_radius = 400.0
+        curvature_radius = 440.0
         band_height = 66.0
         period_count = 12.0
     }
 
+    rl.BeginScissorMode(0, 0, 488, 306)
+    defer rl.EndScissorMode()
+
     rl.DrawRectangleV(
         self.position,
-        {f32(self.texture_width), 300.0},
+        {f32(self.texture_width), 306.0},
         self.background,
     )
 
@@ -213,14 +216,17 @@ draw_strobe_display :: proc(
     // Draw circular bands from the center outwards, so the lowest frequency is the bottom one
     for &band, band_idx in phase_info.bands {
         order := len(phase_info.bands) - 1 - band_idx
+        y := self.position.y
+        if self.display_type == .CURVED_TRACKS {
+            y += 32
+        }
 
         rect := rl.Rectangle {
             self.position.x,
-            self.position.y + band_height * f32(order),
+            y + band_height * f32(order),
             f32(self.texture_width),
             f32(self.texture_height),
         }
-
 
         bounding_rect := [4]f32{rect.x, rect.y, rect.width, rect.height}
 
