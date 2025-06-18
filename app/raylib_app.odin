@@ -281,19 +281,6 @@ run_raylib_app :: proc(config: ^Config) {
                 rl.PURPLE,
             )
 
-
-            rl.DrawTextEx(font_store.size_32, "Contrast", {424, 140}, 16, 0, rl.GRAY)
-            rl.GuiSlider({424, 160, 200, 15}, "", "", &strobe_contrast_slider_value, 0.0, 5.0)
-            config.strobe_contrast = linalg.exp10(strobe_contrast_slider_value)
-
-            rl.DrawTextEx(font_store.size_32, "Sensitivity", {424, 190}, 16, 0, rl.GRAY)
-            rl.GuiSlider({424, 210, 200, 15}, "", "", &strobe_speed_slider_value, 0.001, 0.05)
-            if strobe_speed_slider_value != config.strobe_speed {
-                config.strobe_speed = strobe_speed_slider_value
-                core.set_phase_comparator_speed(phase_comparator, strobe_speed_slider_value)
-            }
-
-
             if config.note_detection_mode == .AUTO {
                 rl.GuiSetState(i32(rl.GuiState.STATE_DISABLED))
             }
