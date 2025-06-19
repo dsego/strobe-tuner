@@ -274,16 +274,16 @@ run_raylib_app :: proc(config: ^Config) {
                 "Hz",
                 {147, 323},
                 16,
-                0,
+                1,
                 rl.GetColor(0xFBFBFBFF),
             )
 
             rl.DrawTextEx(
                 font_store.bold_36,
-                fmt.ctprintf("% .1f ", phase_freq_hz),
+                "-" if !freq_estimation_active || out_of_range else fmt.ctprintf("% .1f ", phase_freq_hz),
                 {147, 344},
                 18,
-                0.5,
+                1,
                 rl.GetColor(0xFBFBFBFF),
             )
 
@@ -292,16 +292,16 @@ run_raylib_app :: proc(config: ^Config) {
                 "Cents",
                 {232, 323},
                 16,
-                0.5,
+                1,
                 rl.GetColor(0xFBFBFBFF),
             )
 
             rl.DrawTextEx(
                 font_store.bold_36,
-                fmt.ctprintf("% .1f", phase_err_cents),
+                "-" if !freq_estimation_active || out_of_range else fmt.ctprintf("% .1f", phase_err_cents),
                 {232, 344},
                 18,
-                0.5,
+                1,
                 rl.GetColor(0xFBFBFBFF),
             )
 

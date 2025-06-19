@@ -45,43 +45,23 @@ gui_strobe_mode_toggle :: proc(
 ) {
     text_color_dark := rl.GetColor(0x15141BFF)
 
-    if active_strobe_mode == .HARMONIC_MODE {
-        // rounded button texture
-        rl.DrawTexturePro(
-            texture_atlas,
-            rl.Rectangle{0, 96, 240, 48},
-            rl.Rectangle{position.x, position.y, 120, 24},
-            rl.Vector2{0, 0},
-            0,
-            rl.WHITE,
-        )
-        rl.DrawTextEx(
-            font_store.medium_28,
-            "HARMONIC",
-            rl.Vector2{position.x + 27.0, position.y + 5},
-            14,
-            0.5,
-            text_color_dark,
-        )
-    } else {
-        // rounded button texture grey
-        rl.DrawTexturePro(
-            texture_atlas,
-            rl.Rectangle{0, 0, 240, 48},
-            rl.Rectangle{position.x, position.y, 120, 24},
-            rl.Vector2{0, 0},
-            0,
-            rl.WHITE,
-        )
-        rl.DrawTextEx(
-            font_store.medium_28,
-            "VERNIER",
-            rl.Vector2{position.x + 32.0, position.y + 5},
-            14,
-            0.5,
-            text_color_dark,
-        )
-    }
+    // rounded button texture
+    rl.DrawTexturePro(
+        texture_atlas,
+        rl.Rectangle{0, 96, 240, 48} if active_strobe_mode == .HARMONIC_MODE  else rl.Rectangle{0, 0, 240, 48},
+        rl.Rectangle{position.x, position.y, 120, 24},
+        rl.Vector2{0, 0},
+        0,
+        rl.WHITE,
+    )
+    rl.DrawTextEx(
+        font_store.medium_28,
+        "HARMONIC" if active_strobe_mode == .HARMONIC_MODE else "VERNIER",
+        rl.Vector2{position.x + 27.0, position.y + 5},
+        14,
+        1,
+        text_color_dark,
+    )
 
     if gui_button({position.x, position.y, 120, 24}) {
         if active_strobe_mode == .HARMONIC_MODE do return .VERNIER_MODE, true
@@ -119,43 +99,24 @@ gui_note_detection_mode_toggle :: proc(
     NoteDetectionMode,
     bool,
 ) {
-    if active_detection_mode == .AUTO {
-        // rounded button texture
-        rl.DrawTexturePro(
-            texture_atlas,
-            rl.Rectangle{0, 48, 240, 48},
-            rl.Rectangle{position.x, position.y, 120, 24},
-            rl.Vector2{0, 0},
-            0,
-            rl.WHITE,
-        )
-        rl.DrawTextEx(
-            font_store.medium_28,
-            "AUTO",
-            rl.Vector2{position.x + 42.0, position.y + 5},
-            14,
-            0.5,
-            text_color_dark,
-        )
-    } else {
-        // rounded button texture
-        rl.DrawTexturePro(
-            texture_atlas,
-            rl.Rectangle{0, 0, 240, 48},
-            rl.Rectangle{position.x, position.y, 120, 24},
-            rl.Vector2{0, 0},
-            0,
-            rl.WHITE,
-        )
-        rl.DrawTextEx(
-            font_store.medium_28,
-            "MANUAL",
-            rl.Vector2{position.x + 34.0, position.y + 5},
-            14,
-            0.5,
-            text_color_dark,
-        )
-    }
+
+    // rounded button texture
+    rl.DrawTexturePro(
+        texture_atlas,
+        rl.Rectangle{0, 48, 240, 48} if active_detection_mode == .AUTO else rl.Rectangle{0, 0, 240, 48},
+        rl.Rectangle{position.x, position.y, 120, 24},
+        rl.Vector2{0, 0},
+        0,
+        rl.WHITE,
+    )
+    rl.DrawTextEx(
+        font_store.medium_28,
+        "AUTO"  if active_detection_mode == .AUTO  else "MANUAL",
+        rl.Vector2{position.x + 42.0, position.y + 5},
+        14,
+        1,
+        text_color_dark,
+    )
 
     if gui_button({position.x, position.y, 120, 24}) {
         if active_detection_mode == .AUTO do return .MANUAL, true
@@ -182,7 +143,7 @@ gui_contrast_slider :: proc(position: [2]f32, value: ^f32) {
         "CONTRAST",
         rl.Vector2{position.x + 32.0, position.y + 5},
         14,
-        0.5,
+        1,
         text_color_dark,
     )
 }
@@ -203,7 +164,7 @@ gui_speed_slider :: proc(position: [2]f32, value: ^f32) {
         "SENSITIVITY", // speed ?
         rl.Vector2{position.x + 32.0, position.y + 5},
         14,
-        0.5,
+        1,
         text_color_dark,
     )
 }
@@ -327,7 +288,7 @@ gui_dropdown :: proc(
             fmt.ctprintf("%s", label),
             {position.x + left_pad, position.y + 5},
             14,
-            0.5,
+            1,
             text_color_light,
         )
     }
@@ -435,7 +396,7 @@ gui_dropdown :: proc(
                 fmt.ctprintf("%s", label),
                 text_pos,
                 14,
-                0.5,
+                1,
                 rl.GetColor(0xFFFFFFFF) if hover else text_color_light,
             )
         }
@@ -466,6 +427,7 @@ draw_note :: proc(note: core.Note, pos: [2]f32, color: rl.Color, hide_accidental
     )
 }
 
+// TODO: show cents deviation as a graph
 
 // draw_cent_deviation :: proc(
 //     phase_comparator: ^core.PhaseComparator,
