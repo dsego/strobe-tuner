@@ -300,7 +300,7 @@ run_raylib_app :: proc(config: ^Config) {
             )
 
             strobe_mode, strobe_mode_changed := gui_strobe_mode_toggle(
-                {20, 456},
+                {16, 456},
                 config.strobe_mode,
             )
             if strobe_mode_changed {
@@ -316,7 +316,7 @@ run_raylib_app :: proc(config: ^Config) {
             }
 
             note_detection_mode, note_detection_mode_changed := gui_note_detection_mode_toggle(
-                {152, 456},
+                {148, 456},
                 config.note_detection_mode,
             )
             if note_detection_mode_changed {
@@ -334,7 +334,7 @@ run_raylib_app :: proc(config: ^Config) {
 
             // TODO: add refresh button to show newly connected devices
             audio_device_dropdown_active = gui_dropdown(
-                {20, 496},
+                {12, 496},
                 240,
                 audio_devices[:],
                 &audio_device_choice,
@@ -345,7 +345,7 @@ run_raylib_app :: proc(config: ^Config) {
             rl.DrawTexturePro(
                 texture_atlas,
                 rl.Rectangle{96, 192, 32, 32},
-                rl.Rectangle{28, 500, 16, 16},
+                rl.Rectangle{20, 500, 16, 16},
                 rl.Vector2{0, 0},
                 0,
                 rl.WHITE,
@@ -353,7 +353,7 @@ run_raylib_app :: proc(config: ^Config) {
 
             if config.note_detection_mode != .AUTO {
                 tuning_preset_dropdown_active = gui_dropdown(
-                    {268, 496},
+                    {262, 496},
                     140,
                     {
                         "CHROMATIC",
