@@ -63,7 +63,7 @@ run_raylib_app :: proc(config: ^Config) {
     defer delete(raylib_style_path)
 
     rl.GuiLoadStyle(cstring(raw_data(raylib_style_path)))
-    rl.GuiSetFont(font_store.size_32)
+    rl.GuiSetFont(font_store.medium_32)
     rl.GuiSetStyle(.DEFAULT, i32(rl.GuiDefaultProperty.TEXT_SIZE), 16)
 
     //  ------------------
@@ -249,9 +249,11 @@ run_raylib_app :: proc(config: ^Config) {
             // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
             draw_strobe_display(&strobe_display, phase_comparator, out_of_range)
 
+            // -------------------------------------------------------------------------------------
+
             draw_note(
                 target_note,
-                {20, 316},
+                {16, 303},
                 rl.GetColor(0xFBFBFBFF) if freq_estimation_active else rl.GetColor(0x7D7E8FFF),
             )
 
@@ -259,8 +261,8 @@ run_raylib_app :: proc(config: ^Config) {
                 note_low_state = core.schmitt_trigger_neg(note_low_state, pitch_cents_err, -8, -10)
                 note_high_state = core.schmitt_trigger(note_high_state, pitch_cents_err, 8, 10)
 
-                if note_low_state do rl.DrawTextEx(font_store.size_32, "◀", {10, 10}, 16, 0, rl.GetColor(0x82E2FFFF))
-                else if note_high_state do rl.DrawTextEx(font_store.size_32, "▶︎", {466, 10}, 16, 0, rl.GetColor(0x82E2FFFF))
+                if note_low_state do rl.DrawTextEx(font_store.medium_32, "◀", {10, 10}, 16, 0, rl.GetColor(0x82E2FFFF))
+                else if note_high_state do rl.DrawTextEx(font_store.medium_32, "▶︎", {466, 10}, 16, 0, rl.GetColor(0x82E2FFFF))
             }
 
             // TODO:
@@ -268,21 +270,43 @@ run_raylib_app :: proc(config: ^Config) {
             // --- if detected note is close to target note -> use phase diff for fine freq display
 
             rl.DrawTextEx(
-                font_store.size_48,
-                fmt.ctprintf("Cents\n%+.1f", phase_err_cents),
-                {128, 340},
-                24,
+                font_store.medium_32,
+                "Hz",
+                {147, 323},
+                16,
                 0,
                 rl.GetColor(0xFBFBFBFF),
             )
+
             rl.DrawTextEx(
-                font_store.size_48,
-                fmt.ctprintf("Hz\n%+.1f ", phase_freq_hz),
-                {256, 340},
-                24,
-                0,
+                font_store.bold_36,
+                fmt.ctprintf("% .1f ", phase_freq_hz),
+                {147, 344},
+                18,
+                0.5,
                 rl.GetColor(0xFBFBFBFF),
             )
+
+            rl.DrawTextEx(
+                font_store.medium_32,
+                "Cents",
+                {232, 323},
+                16,
+                0.5,
+                rl.GetColor(0xFBFBFBFF),
+            )
+
+            rl.DrawTextEx(
+                font_store.bold_36,
+                fmt.ctprintf("% .1f", phase_err_cents),
+                {232, 344},
+                18,
+                0.5,
+                rl.GetColor(0xFBFBFBFF),
+            )
+
+
+            // -------------------------------------------------------------------------------------
 
 
             // Choose new audio input
@@ -313,6 +337,7 @@ run_raylib_app :: proc(config: ^Config) {
                     config.strobe_mode,
                 )
             }
+
 
             note_detection_mode, note_detection_mode_changed := gui_note_detection_mode_toggle(
                 {148, 456},
@@ -367,7 +392,7 @@ run_raylib_app :: proc(config: ^Config) {
                 rl.GuiColorPicker({20, 500, 200, 200}, nil, &color1)
                 config.strobe_color_1 = rl.ColorToInt(color1)
                 rl.DrawTextEx(
-                    font_store.size_32,
+                    font_store.medium_32,
                     fmt.ctprintf("%x", config.strobe_color_1),
                     {20, 480},
                     16,
@@ -378,7 +403,7 @@ run_raylib_app :: proc(config: ^Config) {
                 rl.GuiColorPicker({300, 500, 200, 200}, nil, &color2)
                 config.strobe_color_2 = rl.ColorToInt(color2)
                 rl.DrawTextEx(
-                    font_store.size_32,
+                    font_store.medium_32,
                     fmt.ctprintf("%x", config.strobe_color_2),
                     {300, 480},
                     16,

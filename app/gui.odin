@@ -55,7 +55,7 @@ gui_strobe_mode_toggle :: proc(
             rl.WHITE,
         )
         rl.DrawTextEx(
-            font_store.size_28,
+            font_store.medium_28,
             "HARMONIC",
             rl.Vector2{position.x + 27.0, position.y + 5},
             14,
@@ -73,7 +73,7 @@ gui_strobe_mode_toggle :: proc(
             rl.WHITE,
         )
         rl.DrawTextEx(
-            font_store.size_28,
+            font_store.medium_28,
             "VERNIER",
             rl.Vector2{position.x + 32.0, position.y + 5},
             14,
@@ -109,7 +109,7 @@ gui_note_detection_mode_toggle :: proc(
             rl.WHITE,
         )
         rl.DrawTextEx(
-            font_store.size_28,
+            font_store.medium_28,
             "AUTO",
             rl.Vector2{position.x + 42.0, position.y + 5},
             14,
@@ -127,7 +127,7 @@ gui_note_detection_mode_toggle :: proc(
             rl.WHITE,
         )
         rl.DrawTextEx(
-            font_store.size_28,
+            font_store.medium_28,
             "MANUAL",
             rl.Vector2{position.x + 34.0, position.y + 5},
             14,
@@ -157,7 +157,7 @@ gui_contrast_slider :: proc(position: [2]f32, value: ^f32) {
         rl.WHITE,
     )
     rl.DrawTextEx(
-        font_store.size_28,
+        font_store.medium_28,
         "CONTRAST",
         rl.Vector2{position.x + 32.0, position.y + 5},
         14,
@@ -178,7 +178,7 @@ gui_speed_slider :: proc(position: [2]f32, value: ^f32) {
         rl.WHITE,
     )
     rl.DrawTextEx(
-        font_store.size_28,
+        font_store.medium_28,
         "SENSITIVITY", // speed ?
         rl.Vector2{position.x + 32.0, position.y + 5},
         14,
@@ -302,7 +302,7 @@ gui_dropdown :: proc(
     if selected_idx != nil {
         label := strings.cut(options[selected_idx^], 0, max_text_len)
         rl.DrawTextEx(
-            font_store.size_28,
+            font_store.medium_28,
             fmt.ctprintf("%s", label),
             {position.x + left_pad, position.y + 5},
             14,
@@ -410,7 +410,7 @@ gui_dropdown :: proc(
             text_pos := rl.Vector2{option_bounds.x + 12, option_bounds.y + 4}
             label := strings.cut(opt, 0, max_text_len)
             rl.DrawTextEx(
-                font_store.size_28,
+                font_store.medium_28,
                 fmt.ctprintf("%s", label),
                 text_pos,
                 14,
@@ -427,18 +427,18 @@ draw_note :: proc(note: core.Note, pos: [2]f32, color: rl.Color, hide_accidental
     if note.frequency == 0 do return
 
     // Note name
-    rl.DrawTextEx(font_store.size_192, fmt.ctprintf("%v", note.name), pos, 96, 0, color)
+    rl.DrawTextEx(font_store.medium_256, fmt.ctprintf("%v", note.name), pos, 128, 0, color)
 
     // Sharp sign
     if note.is_accidental && !hide_accidental {
-        rl.DrawTextEx(font_store.size_192, "♯", {pos.x + 48, pos.y + 12}, 38, 0, color)
+        rl.DrawTextEx(font_store.noto_medium_96, "♯", {pos.x + 76, pos.y + 12}, 48, 0, color)
     }
 
     // Octave number
     rl.DrawTextEx(
-        font_store.size_192,
+        font_store.medium_76,
         fmt.ctprintf("%v", note.octave),
-        {pos.x + 48, pos.y + 48},
+        {pos.x + 76, pos.y + 72},
         38,
         0,
         color,
