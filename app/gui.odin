@@ -1,9 +1,9 @@
 package app
 
+import "core:c/libc"
 import "core:fmt"
 import "core:math"
 import "core:strings"
-import "core:c/libc"
 
 import rl "vendor:raylib"
 
@@ -43,25 +43,31 @@ gui_strobe_mode_toggle :: proc(
     core.StrobeMode,
     bool,
 ) {
-    text_color_dark := rl.GetColor(0x15141BFF)
+    tex_src: rl.Rectangle
+    label: cstring
+    label_pos: rl.Vector2
+
+    if active_strobe_mode == .HARMONIC_MODE {
+        tex_src = rl.Rectangle{0, 96, 240, 48}
+        label = "HARMONIC"
+        label_pos = rl.Vector2{position.x + 27.0, position.y + 5}
+    } else {
+        tex_src = rl.Rectangle{0, 0, 240, 48}
+        label = "VERNIER"
+        label_pos = rl.Vector2{position.x + 32.0, position.y + 5}
+    }
 
     // rounded button texture
     rl.DrawTexturePro(
         texture_atlas,
-        rl.Rectangle{0, 96, 240, 48} if active_strobe_mode == .HARMONIC_MODE  else rl.Rectangle{0, 0, 240, 48},
+        tex_src,
         rl.Rectangle{position.x, position.y, 120, 24},
         rl.Vector2{0, 0},
         0,
         rl.WHITE,
     )
-    rl.DrawTextEx(
-        font_store.medium_28,
-        "HARMONIC" if active_strobe_mode == .HARMONIC_MODE else "VERNIER",
-        rl.Vector2{position.x + 27.0, position.y + 5},
-        14,
-        1,
-        text_color_dark,
-    )
+
+    rl.DrawTextEx(font_store.medium_28, label, label_pos, 14, 1, text_color_dark)
 
     if gui_button({position.x, position.y, 120, 24}) {
         if active_strobe_mode == .HARMONIC_MODE do return .VERNIER_MODE, true
@@ -99,24 +105,30 @@ gui_note_detection_mode_toggle :: proc(
     NoteDetectionMode,
     bool,
 ) {
+    tex_src: rl.Rectangle
+    label: cstring
+    label_pos: rl.Vector2
+
+    if active_detection_mode == .AUTO {
+        tex_src = rl.Rectangle{0, 48, 240, 48}
+        label = "AUTO"
+        label_pos = rl.Vector2{position.x + 42.0, position.y + 5}
+    } else {
+        tex_src = rl.Rectangle{0, 0, 240, 48}
+        label = "MANUAL"
+        label_pos = rl.Vector2{position.x + 34.0, position.y + 5}
+    }
 
     // rounded button texture
     rl.DrawTexturePro(
         texture_atlas,
-        rl.Rectangle{0, 48, 240, 48} if active_detection_mode == .AUTO else rl.Rectangle{0, 0, 240, 48},
+        tex_src,
         rl.Rectangle{position.x, position.y, 120, 24},
         rl.Vector2{0, 0},
         0,
         rl.WHITE,
     )
-    rl.DrawTextEx(
-        font_store.medium_28,
-        "AUTO"  if active_detection_mode == .AUTO  else "MANUAL",
-        rl.Vector2{position.x + 42.0, position.y + 5},
-        14,
-        1,
-        text_color_dark,
-    )
+    rl.DrawTextEx(font_store.medium_28, label, label_pos, 14, 1, text_color_dark)
 
     if gui_button({position.x, position.y, 120, 24}) {
         if active_detection_mode == .AUTO do return .MANUAL, true
