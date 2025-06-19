@@ -387,6 +387,8 @@ run_raylib_app :: proc(config: ^Config) {
                 config.tuning_preset = TuningPreset(tuning_preset_choice)
             }
 
+            gui_feedback_button({461, 504})
+
 
             if COLOR_CONTROLS {
                 rl.GuiColorPicker({20, 500, 200, 200}, nil, &color1)

@@ -3,6 +3,7 @@ package app
 import "core:fmt"
 import "core:math"
 import "core:strings"
+import "core:c/libc"
 
 import rl "vendor:raylib"
 
@@ -88,6 +89,26 @@ gui_strobe_mode_toggle :: proc(
     }
 
     return active_strobe_mode, false
+}
+
+
+gui_feedback_button :: proc(position: [2]f32) {
+    // bug icon texture
+    rl.DrawTexturePro(
+        texture_atlas,
+        rl.Rectangle{64, 192, 32, 32},
+        rl.Rectangle{position.x, position.y, 16, 16},
+        rl.Vector2{0, 0},
+        0,
+        rl.WHITE,
+    )
+
+    if gui_button({position.x, position.y, 16, 16}) {
+        // TODO: support windows & linux
+        when ODIN_OS == .Darwin {
+            libc.system(cstring("open https://github.com/dsego/strobe-tuner"))
+        }
+    }
 }
 
 
