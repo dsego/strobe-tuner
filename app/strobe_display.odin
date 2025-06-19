@@ -7,6 +7,7 @@ import rl "vendor:raylib"
 
 import "../core"
 
+shadow_data := #load("../assets/shadow.2x.png")
 
 StrobeDisplay :: struct {
     // GL Shader
@@ -15,6 +16,7 @@ StrobeDisplay :: struct {
 
     // this is just a dummy texture to get the texture coordinates working right in the fragment shader
     texture:               rl.Texture,
+    shadow_tex:            rl.Texture,
     texture_width:         i32,
     texture_height:        i32,
     position:              [2]f32,
@@ -60,6 +62,7 @@ init_strobe_display :: proc(
     self.colors = {rl.GetColor(colors.x), rl.GetColor(colors.y)}
     self.background = rl.GetColor(background)
     self.contrast = contrast
+
 
     // We need this to draw the fragment shader
     texture_image := rl.GenImageColor(
@@ -113,6 +116,13 @@ init_strobe_display :: proc(
     // )
     self.display_type = display_type
 
+    // Load shadow texture
+    {
+        image := rl.LoadImageFromMemory(".png", raw_data(shadow_data), i32(len(shadow_data)))
+        defer rl.UnloadImage(image)
+        self.shadow_tex = rl.LoadTextureFromImage(image)
+    }
+
     return
 }
 
@@ -129,6 +139,7 @@ destroy_strobe_display :: proc(self: ^StrobeDisplay) {
     rl.UnloadShader(self.strobe_shader)
     rl.UnloadShader(self.inner_shadow_shader)
     rl.UnloadTexture(self.texture)
+    rl.UnloadTexture(self.shadow_tex)
 }
 
 set_display_type :: proc(self: ^StrobeDisplay, display_type: StrobeDisplayType) {
@@ -163,11 +174,7 @@ draw_strobe_display :: proc(
     rl.BeginScissorMode(0, 0, 488, 306)
     defer rl.EndScissorMode()
 
-    rl.DrawRectangleV(
-        self.position,
-        {f32(self.texture_width), 306.0},
-        self.background,
-    )
+    rl.DrawRectangleV(self.position, {f32(self.texture_width), 306.0}, self.background)
 
     rl.SetShaderValue(
         self.strobe_shader,
@@ -302,6 +309,18 @@ draw_strobe_display :: proc(
             period_count *= 2.0
         }
     }
+
+    rl.DrawTexturePro(
+        self.shadow_tex,
+        rl.Rectangle{0, 0, f32(self.shadow_tex.width), f32(self.shadow_tex.height)},
+        rl.Rectangle{0, -20, 488, 328},
+        rl.Vector2{0, 0},
+        0,
+        rl.WHITE,
+    )
+
+    // rl.DrawTexture(self.shadow_tex, rl.Vector2{0, 0}, 0, 0.5, rl.WHITE)
+    // rl.DrawRectangleLinesEx({0, 0, 488, 308}, 1, rl.ORANGE)
 
     // rl.BeginShaderMode(self.inner_shadow_shader)
     // rl.DrawTextureV(self.texture, {self.position.x, self.position.y}, rl.WHITE)
