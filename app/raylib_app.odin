@@ -321,6 +321,7 @@ run_raylib_app :: proc(config: ^Config) {
                 config.strobe_contrast,
                 config.strobe_display_type,
             )
+            rl.DrawLineEx({0, 306}, {488, 306}, 2.0, rl.GetColor(0x52535AFF))
 
             strobe_mode, strobe_mode_changed := gui_strobe_mode_toggle(
                 {16, 456},
