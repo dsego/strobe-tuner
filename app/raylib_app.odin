@@ -122,29 +122,18 @@ run_raylib_app :: proc(config: ^Config) {
     audio_devices_str := strings.join(audio_devices[:], ";")
     defer delete(audio_devices_str)
 
-    audio_device_choice: i32 = audio_capture.active_device
-    audio_device_dropdown_active := false
-
-    manual_detection_active := config.note_detection_mode == .MANUAL
-    harmonic_mode_active := config.strobe_mode == .HARMONIC_MODE
-
-    show_strobe_wheel := config.strobe_display_type == .SPINNING_WHEEL
-
-    display_type_dropdown_active := false
-    display_type_choice: i32 = i32(config.strobe_display_type)
-
-    tuning_preset_dropdown_active := false
-    tuning_preset_choice: i32 = i32(config.tuning_preset)
-
-    strobe_speed_slider_value := config.strobe_speed
-
     selected_note_idx := 0
+    audio_device_dropdown_active := false
+    tuning_preset_dropdown_active := false
 
+    audio_device_choice: i32 = audio_capture.active_device
 
     note_low_state := false
     note_high_state := false
 
 
+    strobe_speed_slider_value := config.strobe_speed
+    tuning_preset_choice: i32 = i32(config.tuning_preset)
     color1 := rl.GetColor(config.strobe_color_1)
     color2 := rl.GetColor(config.strobe_color_2)
 
@@ -157,6 +146,13 @@ run_raylib_app :: proc(config: ^Config) {
 
 
     for !rl.WindowShouldClose() {
+
+        if rl.IsKeyPressed(.R) {
+            fmt.println("Reset config to defaults")
+            config^ = get_config_defaults()
+            strobe_speed_slider_value = config.strobe_speed
+            tuning_preset_choice = i32(config.tuning_preset)
+        }
 
         pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
 
@@ -233,7 +229,6 @@ run_raylib_app :: proc(config: ^Config) {
 
         // TODO: calculate cents deviation based on rounded freq to make the reading more steady?
         phase_freq_hz, phase_err_cents, no_change := core.run_phase_detection(phase_comparator)
-        strobe_contrast_slider_value := math.log10(config.strobe_contrast)
 
 
         if rl.IsKeyPressed(.TAB) {
@@ -254,7 +249,11 @@ run_raylib_app :: proc(config: ^Config) {
             // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
             draw_strobe_display(&strobe_display, phase_comparator, out_of_range)
 
-            draw_note(target_note, {20, 316}, rl.GetColor(0xFBFBFBFF) if freq_estimation_active else rl.GetColor(0x7D7E8FFF))
+            draw_note(
+                target_note,
+                {20, 316},
+                rl.GetColor(0xFBFBFBFF) if freq_estimation_active else rl.GetColor(0x7D7E8FFF),
+            )
 
             if freq_estimation_active {
                 note_low_state = core.schmitt_trigger_neg(note_low_state, pitch_cents_err, -8, -10)
@@ -323,6 +322,7 @@ run_raylib_app :: proc(config: ^Config) {
                 config.note_detection_mode = note_detection_mode
             }
 
+            strobe_contrast_slider_value := math.log10(config.strobe_contrast)
             gui_contrast_slider({330, 320}, &strobe_contrast_slider_value)
             config.strobe_contrast = linalg.exp10(strobe_contrast_slider_value)
 
@@ -339,7 +339,7 @@ run_raylib_app :: proc(config: ^Config) {
                 audio_devices[:],
                 &audio_device_choice,
                 audio_device_dropdown_active,
-                left_pad=32
+                left_pad = 32,
             )
             // microphone icon
             rl.DrawTexturePro(
@@ -355,11 +355,7 @@ run_raylib_app :: proc(config: ^Config) {
                 tuning_preset_dropdown_active = gui_dropdown(
                     {262, 496},
                     140,
-                    {
-                        "CHROMATIC",
-                        "GUITAR STD",
-                        "UKULELE STD",
-                    },
+                    {"CHROMATIC", "GUITAR STD", "UKULELE STD"},
                     &tuning_preset_choice,
                     tuning_preset_dropdown_active,
                 )
@@ -392,7 +388,6 @@ run_raylib_app :: proc(config: ^Config) {
 
                 set_strobe_colors(&strobe_display, {config.strobe_color_1, config.strobe_color_2})
             }
-
 
 
             // TODO:

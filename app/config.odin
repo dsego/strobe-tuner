@@ -1,9 +1,13 @@
 package app
 
 
+import "base:intrinsics"
+import "base:runtime"
 import "core:encoding/ini"
 import "core:fmt"
 import "core:reflect"
+import "core:strconv"
+
 
 import "../core"
 
@@ -69,52 +73,74 @@ Config :: struct {
     tuning_preset:         TuningPreset,
 }
 
+@(private)
+config_defaults :: Config {
+    apply_attenuation     = true,
+    target_freq_hz        = 110.0,
+    pitch_standard        = 440.0,
+    strobe_count          = 3,
+    pitch_detect_fft_size = 4096,
+    samplerate            = 48_000,
+    strobe_mode           = .HARMONIC_MODE,
+    note_detection_mode   = .AUTO,
+    strobe_speed          = 0.01,
+    speed_multiplier      = 2.0,
+    strobe_contrast       = 1000.0,
+    strobe_display_type   = .CURVED_TRACKS,
+    strobe_color_1        = 0xFF6767FF,
+    strobe_color_2        = 0x663434FF,
+    tuning_preset         = .CHROMATIC,
+}
 
+
+get_config_defaults :: proc() -> Config {
+    return config_defaults
+}
+
+// Load config from the standard OS path, eg ~/Library/Application Support/strobe-tuner/config.ini on MacOS.
 load_config :: proc() -> Config {
-    // Load config from the standard OS path, eg ~/Library/Application Support/strobe-tuner/config.ini on MacOS.
-    // Initiate fields to default values if a setting is not found in the configuration file.
 
-    config := Config{}
+    config := get_config_defaults()
 
     ini_map, ok := load_ini()
     defer if ok do ini.delete_map(ini_map)
+    section := ini_map[""]
 
-    config.apply_attenuation = get_config(ini_map, "apply_attenuation", bool, true)
-    config.target_freq_hz = get_config(ini_map, "target_freq_hz", f32, 110.0)
-    config.pitch_standard = get_config(ini_map, "pitch_standard", f32, 440.0)
-    config.strobe_count = get_config(ini_map, "strobe_count", int, 3)
-    config.pitch_detect_fft_size = get_config(ini_map, "pitch_detect_fft_size", int, 4096)
-    config.samplerate = get_config(ini_map, "samplerate", int, 48_000)
-    config.strobe_mode = get_config(
-        ini_map,
-        "strobe_mode",
-        core.StrobeMode,
-        core.StrobeMode.VERNIER_MODE,
-    )
-    config.note_detection_mode = get_config(
-        ini_map,
-        "note_detection_mode",
-        NoteDetectionMode,
-        NoteDetectionMode.AUTO,
-    )
-    config.strobe_speed = get_config(ini_map, "strobe_speed", f32, 0.01)
-    config.speed_multiplier = get_config(ini_map, "speed_multiplier", f32, 2.0)
-    config.strobe_contrast = get_config(ini_map, "strobe_contrast", f32, 1000.0)
-    config.strobe_display_type = get_config(
-        ini_map,
-        "strobe_display_type",
-        StrobeDisplayType,
-        StrobeDisplayType.CURVED_TRACKS,
-    )
-    config.strobe_color_1 = cast(u32)get_config(ini_map, "strobe_color_1", int, 0xFF6767FF)
-    config.strobe_color_2 = cast(u32)get_config(ini_map, "strobe_color_2", int, 0x663434FF)
+    fields := reflect.struct_fields_zipped(Config)
 
-    config.tuning_preset = get_config(
-        ini_map,
-        "tuning_preset",
-        TuningPreset,
-        TuningPreset.CHROMATIC,
-    )
+    for field in fields {
+        value := reflect.struct_field_value(config, field)
+        ptr := rawptr(uintptr(&config) + field.offset)
+
+        #partial switch v in field.type.variant {
+        case reflect.Type_Info_Named:
+            named := field.type.variant.(reflect.Type_Info_Named)
+            value, ok := reflect.enum_from_name_any(field.type.id, section[field.name])
+            if ok {
+                ptr_int := cast(^int)ptr
+                ptr_int^ = cast(int)value
+            }
+        case reflect.Type_Info_Float:
+            value, ok := strconv.parse_f32(section[field.name])
+            if ok {
+                ptr_f32 := cast(^f32)ptr
+                ptr_f32^ = value
+            }
+        case reflect.Type_Info_Integer:
+            value, ok := strconv.parse_int(section[field.name])
+            if ok {
+                ptr_int := cast(^int)ptr
+                ptr_int^ = value
+            }
+        case reflect.Type_Info_Boolean:
+            value, ok := strconv.parse_bool(section[field.name])
+            if ok {
+                ptr_bool := cast(^bool)ptr
+                ptr_bool^ = value
+            }
+        }
+    }
+
     return config
 }
 
