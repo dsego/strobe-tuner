@@ -87,8 +87,15 @@ config_defaults :: Config {
     speed_multiplier      = 2.0,
     strobe_contrast       = 1000.0,
     strobe_display_type   = .CURVED_TRACKS,
+
+    // red colorway
     strobe_color_1        = 0xFF6767FF,
     strobe_color_2        = 0x663434FF,
+
+    // blueish colorway
+    // strobe_color_1        = 0xB5F2DBFF,
+    // strobe_color_2        = 0x6B3D7DFF,
+
     tuning_preset         = .CHROMATIC,
 }
 

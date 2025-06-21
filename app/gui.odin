@@ -213,6 +213,12 @@ gui_slider :: proc(position: [2]f32, value: ^f32, min: f32, max: f32) {
             active_slider_position = position
             fraction = clamp(mouse_point.x - position.x, 0, width) / width
             value^ = math.lerp(min, max, fraction)
+        } else {
+            wheel := rl.GetMouseWheelMove()
+            if wheel != 0 {
+                fraction = clamp(fraction - wheel * 0.05, 0, 1)
+                value^ = math.lerp(min, max, fraction)
+            }
         }
     }
 
