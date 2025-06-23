@@ -1,9 +1,0 @@
-[submodule "vendor/odin-pa_ringbuffer"]
-	path = vendor/odin-pa_ringbuffer
-	url = git@github.com:dsego/odin-pa_ringbuffer.git
-[submodule "vendor/odin-pffft"]
-	path = vendor/odin-pffft
-	url = git@github.com:dsego/odin-pffft
-[submodule "vendor/odin-portaudio"]
-	path = vendor/odin-portaudio
-	url = git@github.com:jockus/odin-portaudio.git

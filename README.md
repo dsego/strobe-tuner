@@ -5,24 +5,34 @@ A stroboscopic tuner written in Odin.
 
 #### Instructions
 
-1. Clone git repo with submodules
+1. Clone git repo
 
 ```
-git clone --recurse-submodules git@github.com:dsego/strobe-tuner.git
-cd strobe-tuner
+git clone git@github.com:dsego/strobe-tuner.git
 ```
 
-2. Install portaudio (on Mac)
+2. Pull in and compile external dependencies
 ```
-brew install portaudio 
+./build-external.sh
 ```
 
-3. Build pffft & pa ringbuffer and copy over `.a` files to their respective vendor directories.
+This pulls in the following git repositories:
+- https://github.com/jockus/odin-portaudio
+- https://github.com/spatialaudio/portaudio-binaries
+- https://github.com/PortAudio/portaudio
+- https://github.com/dsego/odin-pa_ringbuffer/
+- https://github.com/dsego/odin-pffft
+- https://bitbucket.org/jpommier/pffft/
 
-- `pffft.a` https://github.com/dsego/odin-pffft?tab=readme-ov-file#building-pffft-on-macos
-- `pa_ringbuffer.a` https://github.com/dsego/odin-pa_ringbuffer/?tab=readme-ov-file#build-portaudio-ringbuffer-on-macos
 
-4. Run app
+
+4. Run the app
 ```
-odin run app
+odin run app -extra-linker-flags="-L."
 ```
+
+Or alternatively build the binary
+```
+odin build app -o:speed -extra-linker-flags="-L."
+```
+

@@ -1,16 +1,13 @@
 
 IMMEDIATE:
 
-
 - build script to build binaries on lin/win
-- app menu, about dialog
+- app menu, about dialog - copyright usage for fonts, 3rd party libs, etc
 - icon
 - add screenshot and instructions on github
 - bugfixes
 
 
-
-https://makefiletutorial.com/
 
 
 TBD:

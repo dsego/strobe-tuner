@@ -3,7 +3,7 @@ package core
 import "base:runtime"
 import "core:slice"
 
-import pa_rb "../vendor/odin-pa_ringbuffer"
+import pa_rb "../external/odin-pa_ringbuffer"
 
 
 /* -------------------------------------------------------------------------------------------------

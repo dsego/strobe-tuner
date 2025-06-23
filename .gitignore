@@ -1,4 +1,6 @@
 *.dylib
 *.bin
 *.wav
-./vendor/*
+external/*
+*.o
+.dylib

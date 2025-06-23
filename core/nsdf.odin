@@ -14,7 +14,7 @@ package core
 import "core:math"
 import "core:mem"
 
-import pffft "../vendor/odin-pffft"
+import pffft "../external/odin-pffft"
 
 NSDFConfig :: struct {
     pffft_setup:     rawptr,
