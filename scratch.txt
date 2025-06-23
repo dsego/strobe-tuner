@@ -3,10 +3,11 @@ IMMEDIATE:
 
 
 - build script to build binaries on lin/win
+- app menu, about dialog
 - icon
 - add screenshot and instructions on github
 - bugfixes
-- support colorways (load & save to config)
+
 
 
 https://makefiletutorial.com/

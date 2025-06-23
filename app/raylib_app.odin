@@ -77,10 +77,20 @@ run_raylib_app :: proc(config: ^Config) {
     )
     defer core.destroy_phase_comparator(phase_comparator)
 
+    colorway := vibrant_red
+    switch config.strobe_colorway {
+    case .VIBRANT_RED:
+        colorway = vibrant_red
+    case .MINTY:
+        colorway = minty
+    case .CUSTOM:
+        colorway = {config.strobe_color_1, config.strobe_color_2}
+    }
+
     strobe_display := init_strobe_display(
         {0, 0},
         {488, 560},
-        {config.strobe_color_1, config.strobe_color_2},
+        colorway,
         strobe_bg_color,
         config.strobe_contrast,
         config.strobe_display_type,
@@ -115,7 +125,7 @@ run_raylib_app :: proc(config: ^Config) {
 
     // --- GUI CONTROLS ----------------------------------------------------------------------------
 
-    audio_devices : [dynamic]GuiOption = {}
+    audio_devices: [dynamic]GuiOption = {}
     defer delete(audio_devices)
 
     device_count := audio_device_count()
@@ -273,14 +283,7 @@ run_raylib_app :: proc(config: ^Config) {
             // --- if detected note is outside of measurement scope -> use estimated freq
             // --- if detected note is close to target note -> use phase diff for fine freq display
 
-            rl.DrawTextEx(
-                font_store.medium_32,
-                "Hz",
-                {147, 323},
-                16,
-                1,
-                rl.GetColor(0xFBFBFBFF),
-            )
+            rl.DrawTextEx(font_store.medium_32, "Hz", {147, 323}, 16, 1, rl.GetColor(0xFBFBFBFF))
 
             rl.DrawTextEx(
                 font_store.bold_36,

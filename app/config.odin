@@ -29,6 +29,7 @@ TuningPreset :: enum {
     UKULELE_STD,
 }
 
+
 Config :: struct {
     // Initial target frequency for the strobe
     target_freq_hz:        f32,
@@ -68,6 +69,8 @@ Config :: struct {
     strobe_color_1:        u32 "color",
     strobe_color_2:        u32 "color",
 
+    strobe_colorway:  StrobeColorway,
+
     // attenuate strobe effect when it spins so fast it becomes distracting
     apply_attenuation:     bool,
     tuning_preset:         TuningPreset,
@@ -88,13 +91,11 @@ config_defaults :: Config {
     strobe_contrast       = 1000.0,
     strobe_display_type   = .CURVED_TRACKS,
 
-    // red colorway
-    strobe_color_1        = 0xFF6767FF,
-    strobe_color_2        = 0x663434FF,
+    strobe_colorway       = .VIBRANT_RED,
 
-    // blueish colorway
-    // strobe_color_1        = 0xB5F2DBFF,
-    // strobe_color_2        = 0x6B3D7DFF,
+    // Custom
+    strobe_color_1 = 0x0,
+    strobe_color_2 = 0x0,
 
     tuning_preset         = .CHROMATIC,
 }
