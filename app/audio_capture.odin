@@ -20,18 +20,8 @@ AudioCapture :: struct {
     samplerate:    u32,
 }
 
-
-// TODO: list only input devices
-list_audio_devices :: proc(self: ^AudioCapture) -> [dynamic]string {
-    device_list: [dynamic]string = {}
-    device_count := pa.GetDeviceCount()
-    for i in 0 ..< device_count {
-        info := pa.GetDeviceInfo(i)
-        append(&device_list, string(info.name))
-    }
-    return device_list
-}
-
+audio_device_count :: pa.GetDeviceCount
+audio_device_info :: pa.GetDeviceInfo
 
 switch_audio_device :: proc(self: ^AudioCapture, device_index: i32) {
     err := pa.AbortStream(self.stream)

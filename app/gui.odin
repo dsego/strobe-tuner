@@ -254,10 +254,16 @@ gui_button :: proc(bounds: rl.Rectangle) -> bool {
     return false
 }
 
+
+GuiOption :: struct {
+    id: i32,
+    label: string,
+}
+
 gui_dropdown :: proc(
     position: [2]f32,
     width: f32,
-    options: []string,
+    options: []GuiOption,
     selected_idx: ^i32,
     edit_mode: bool,
     left_pad: f32 = 12,
@@ -300,7 +306,7 @@ gui_dropdown :: proc(
     }
 
     if selected_idx != nil {
-        label := strings.cut(options[selected_idx^], 0, max_text_len)
+        label := strings.cut(options[selected_idx^].label, 0, max_text_len)
         rl.DrawTextEx(
             font_store.medium_28,
             fmt.ctprintf("%s", label),
@@ -408,7 +414,7 @@ gui_dropdown :: proc(
             }
 
             text_pos := rl.Vector2{option_bounds.x + 12, option_bounds.y + 4}
-            label := strings.cut(opt, 0, max_text_len)
+            label := strings.cut(opt.label, 0, max_text_len)
             rl.DrawTextEx(
                 font_store.medium_28,
                 fmt.ctprintf("%s", label),

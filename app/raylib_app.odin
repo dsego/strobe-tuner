@@ -115,12 +115,16 @@ run_raylib_app :: proc(config: ^Config) {
 
     // --- GUI CONTROLS ----------------------------------------------------------------------------
 
-
-    audio_devices := list_audio_devices(audio_capture)
+    audio_devices : [dynamic]GuiOption = {}
     defer delete(audio_devices)
 
-    audio_devices_str := strings.join(audio_devices[:], ";")
-    defer delete(audio_devices_str)
+    device_count := audio_device_count()
+    for i in 0 ..< device_count {
+        info := audio_device_info(i)
+        if info.maxInputChannels > 0 {
+            append(&audio_devices, GuiOption{i, string(info.name)})
+        }
+    }
 
     selected_note_idx := 0
     audio_device_dropdown_active := false
@@ -381,7 +385,7 @@ run_raylib_app :: proc(config: ^Config) {
                 tuning_preset_dropdown_active = gui_dropdown(
                     {262, 496},
                     140,
-                    {"CHROMATIC", "GUITAR STD", "UKULELE STD"},
+                    {{0, "CHROMATIC"}, {1, "GUITAR STD"}, {2, "UKULELE STD"}},
                     &tuning_preset_choice,
                     tuning_preset_dropdown_active,
                 )
