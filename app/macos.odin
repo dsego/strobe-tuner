@@ -18,18 +18,29 @@ package app
 
 import "base:runtime"
 import "base:intrinsics"
+import "core:fmt"
 import NS "core:sys/darwin/Foundation"
+import rl "vendor:raylib"
 
 // https://github.com/odin-lang/examples/blob/master/metal/learn_metal/02-argbuffers-no-sdl/02-argbuffers-no-sdl.odin
 
 
-setup_mac_app :: proc() {
-    app := NS.Application.sharedApplication()
-    defer app->release()
-    app->setActivationPolicy(.Regular) // without this window is not brought to foreground on launch
-    app->finishLaunching()
 
-    create_main_menu(app)
+
+theme_mac_titlebar :: proc(window: rawptr, color: u32) {
+    bg := rl.ColorNormalize(rl.GetColor(color))
+    window := cast(^NS.Window) window
+    window->setBackgroundColor(NS.Color.colorWithSRGBRed(cast(NS.Float) bg.x, cast(NS.Float)bg.y, cast(NS.Float)bg.z, cast(NS.Float)bg.w))
+    window->setTitlebarAppearsTransparent(true)
+    window->setTitleVisibility(.Hidden)
+    // window->setStyleMask(NS.WindowStyleMaskFullSizeContentView)
+}
+
+setup_mac_app :: proc(window: rawptr) {
+    // app := NS.Application.sharedApplication()
+    // defer app->release()
+
+    // create_main_menu(app)
 }
 
 // TODO: custom app menu

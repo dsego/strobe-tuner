@@ -98,10 +98,6 @@ init_strobe_display :: proc(
         frag_shader_data := #load("../shaders/strobe-shader.frag")
         self.strobe_shader = rl.LoadShaderFromMemory(nil, cstring(&frag_shader_data[0]))
     }
-    {
-        // frag_shader_data := #load("../shaders/inner-shadow-shader.frag")
-        // self.inner_shadow_shader = rl.LoadShaderFromMemory(nil, cstring(&frag_shader_data[0]))
-    }
 
     // Get uniform locations
     self.color_a_loc = rl.GetShaderLocation(self.strobe_shader, "color_a")
@@ -117,19 +113,6 @@ init_strobe_display :: proc(
     self.period_count_loc = rl.GetShaderLocation(self.strobe_shader, "period_count")
     self.min_radius_loc = rl.GetShaderLocation(self.strobe_shader, "min_radius")
     self.max_radius_loc = rl.GetShaderLocation(self.strobe_shader, "max_radius")
-
-    // Shadow shader
-    // self.shadow_dimensions_loc = rl.GetShaderLocation(
-    //     self.inner_shadow_shader,
-    //     "shadow_dimensions",
-    // )
-    // shadow_dimensions := [2]f32{f32(self.texture_width), f32(self.texture_height)}
-    // rl.SetShaderValue(
-    //     self.inner_shadow_shader,
-    //     self.shadow_dimensions_loc,
-    //     &shadow_dimensions,
-    //     rl.ShaderUniformDataType.VEC2,
-    // )
     self.display_type = display_type
 
     // Load shadow texture

@@ -30,17 +30,13 @@ import "../core"
 guitar_std_notes: [6]string = {"E2", "A2", "D3", "G3", "B3", "E4"}
 ukulele_std_notes: [4]string = {"G4", "C4", "E4", "A4"}
 window_bg_color: u32 = 0x40414AFF
-strobe_bg_color: u32 = 0x15141BFF
+strobe_bg_color: u32 = 0x15161AFF
 
 
 // Add gui controls to choose strobe colors
 COLOR_CONTROLS :: false
 
 run_raylib_app :: proc(config: ^Config) {
-    // when ODIN_OS == .Darwin {
-    //     setup_mac_app()
-    // }
-
     target_freq_hz: f32 = config.target_freq_hz
     freq_estimation_active := false
 
@@ -61,9 +57,9 @@ run_raylib_app :: proc(config: ^Config) {
     rl.InitWindow(488, 800 if COLOR_CONTROLS else 532, "Strobe Tuner")
     defer rl.CloseWindow()
 
-
-    // Bring the window to front
-    // [NSApp activateIgnoringOtherApps:YES];
+    when ODIN_OS == .Darwin {
+        // theme_mac_titlebar(rl.GetWindowHandle(), strobe_bg_color)
+    }
 
     init_fonts()
     defer destroy_fonts()
@@ -344,7 +340,7 @@ run_raylib_app :: proc(config: ^Config) {
                 config.strobe_contrast,
                 config.strobe_display_type,
             )
-            rl.DrawLineEx({0, 306}, {488, 306}, 2.0, rl.GetColor(0x52535AFF))
+            rl.DrawLineEx({0, 306}, {488, 306}, 1.5, rl.GetColor(0x52535AFF))
 
             strobe_mode, strobe_mode_changed := gui_strobe_mode_toggle(
                 {16, 456},
