@@ -51,15 +51,15 @@ run_raylib_app :: proc(config: ^Config) {
     // Target note for tuning via the strobe effect
     target_note := core.Note{}
 
+    when ODIN_OS == .Darwin {
+        // setup_mac_app()
+        // theme_mac_titlebar(rl.GetWindowHandle(), strobe_bg_color)
+    }
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetConfigFlags({.WINDOW_HIGHDPI})
     rl.InitWindow(488, 800 if COLOR_CONTROLS else 532, "Strobe Tuner")
     defer rl.CloseWindow()
-
-    when ODIN_OS == .Darwin {
-        // theme_mac_titlebar(rl.GetWindowHandle(), strobe_bg_color)
-    }
 
     init_fonts()
     defer destroy_fonts()

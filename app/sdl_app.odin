@@ -1,3 +1,5 @@
+//+build darwin
+
 // Copyright (C) 2025  Davorin Šego
 
 // This program is free software: you can redistribute it and/or modify it
@@ -17,9 +19,9 @@
 package app
 
 
-import NS "core:sys/darwin/Foundation"
-import MTL "vendor:darwin/Metal"
-import CA "vendor:darwin/QuartzCore"
+// import NS "core:sys/darwin/Foundation"
+// import MTL "vendor:darwin/Metal"
+// import CA "vendor:darwin/QuartzCore"
 
 import SDL "vendor:sdl2"
 

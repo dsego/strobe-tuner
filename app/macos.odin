@@ -1,3 +1,5 @@
+//+build darwin
+
 // Copyright (C) 2025  Davorin Šego
 
 // This program is free software: you can redistribute it and/or modify it
@@ -36,9 +38,10 @@ theme_mac_titlebar :: proc(window: rawptr, color: u32) {
     // window->setStyleMask(NS.WindowStyleMaskFullSizeContentView)
 }
 
-setup_mac_app :: proc(window: rawptr) {
-    // app := NS.Application.sharedApplication()
-    // defer app->release()
+setup_mac_app :: proc() {
+    app := NS.Application.sharedApplication()
+    app->setActivationPolicy(NS.ActivationPolicy.Regular)
+    defer app->release()
 
     // create_main_menu(app)
 }
