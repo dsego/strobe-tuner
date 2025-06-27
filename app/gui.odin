@@ -417,7 +417,7 @@ gui_dropdown :: proc(
                 if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
                     edit_mode = false
                     exclusive_control_mode = false
-                    selected_idx^ = i32(i)
+                    selected_idx^ = i32(opt.id)
                 }
             }
 

@@ -46,7 +46,7 @@ switch_audio_device :: proc(self: ^AudioCapture, device_index: i32) {
     self.active_device = device_index
     info := pa.GetDeviceInfo(device_index)
 
-    fmt.println("Switching audio device to: ", info.name)
+    fmt.println("Switching audio device to: ", info.name, device_index)
 
     open_stream_on_active_device(self)
     start_audio_capture(self)

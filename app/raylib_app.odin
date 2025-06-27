@@ -386,6 +386,7 @@ run_raylib_app :: proc(config: ^Config) {
                 audio_device_dropdown_active,
                 left_pad = 32,
             )
+
             // microphone icon
             rl.DrawTexturePro(
                 texture_atlas,
