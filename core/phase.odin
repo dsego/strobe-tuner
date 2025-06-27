@@ -336,13 +336,15 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
 
 
     // Fade out strobe when it spins so rapidly to become distracting
-    // TODO: fix, shouldn't hide bands at 7.8 cents diff, eg 101.5Hz
     if self.apply_attenuation && self.mode == .VERNIER_MODE {
-        // band.attenuation = linalg.smoothstep(
-        //     f32(0.01),
-        //     f32(0.008),
-        //     math.abs(band.phase_diff * band.speed),
-        // )
-        // band.amp *= band.attenuation
+        // TBD: if these need to be tweaked some more
+        band.attenuation = linalg.smoothstep(
+            f32(0.04),
+            f32(0.005),
+            math.abs(band.phase_diff * band.speed),
+        )
+        band.amp *= band.attenuation
     }
 }
+
+
