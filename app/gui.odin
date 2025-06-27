@@ -272,7 +272,7 @@ gui_button :: proc(bounds: rl.Rectangle) -> bool {
 
 
 GuiOption :: struct {
-    id: i32,
+    id:    i32,
     label: string,
 }
 

@@ -84,8 +84,7 @@ Config :: struct {
     // Color scheme for strobe track display, two hex values
     strobe_color_1:        u32 "color",
     strobe_color_2:        u32 "color",
-
-    strobe_colorway:  StrobeColorway,
+    strobe_colorway:       StrobeColorway,
 
     // attenuate strobe effect when it spins so fast it becomes distracting
     apply_attenuation:     bool,
@@ -106,13 +105,11 @@ config_defaults :: Config {
     speed_multiplier      = 2.0,
     strobe_contrast       = 1000.0,
     strobe_display_type   = .CURVED_TRACKS,
-
     strobe_colorway       = .VIBRANT_RED,
 
     // Custom
-    strobe_color_1 = 0x0,
-    strobe_color_2 = 0x0,
-
+    strobe_color_1        = 0x0,
+    strobe_color_2        = 0x0,
     tuning_preset         = .CHROMATIC,
 }
 

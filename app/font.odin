@@ -23,20 +23,20 @@ import rl "vendor:raylib"
 
 FontStore :: struct {
     // regular
-    medium_24:  rl.Font,
-    medium_28:  rl.Font,
-    medium_32:  rl.Font,
-    medium_48:  rl.Font,
-    medium_76:  rl.Font,
-    medium_192: rl.Font,
-    medium_256: rl.Font,
+    medium_24:      rl.Font,
+    medium_28:      rl.Font,
+    medium_32:      rl.Font,
+    medium_48:      rl.Font,
+    medium_76:      rl.Font,
+    medium_192:     rl.Font,
+    medium_256:     rl.Font,
 
     // Note: Inter doesn't support the sharp sign ♯
     noto_medium_96: rl.Font,
 
     // bold
-    bold_32: rl.Font,
-    bold_36: rl.Font,
+    bold_32:        rl.Font,
+    bold_36:        rl.Font,
 }
 
 font_store: FontStore
@@ -142,7 +142,6 @@ init_fonts :: proc() {
         codepoints,
         count,
     )
-
 
 
     // rl.SetTextureFilter(font_store.medium_24.texture, rl.TextureFilter.TRILINEAR)

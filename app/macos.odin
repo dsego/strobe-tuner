@@ -18,8 +18,8 @@
 
 package app
 
-import "base:runtime"
 import "base:intrinsics"
+import "base:runtime"
 import "core:fmt"
 import NS "core:sys/darwin/Foundation"
 import rl "vendor:raylib"
@@ -27,12 +27,17 @@ import rl "vendor:raylib"
 // https://github.com/odin-lang/examples/blob/master/metal/learn_metal/02-argbuffers-no-sdl/02-argbuffers-no-sdl.odin
 
 
-
-
 theme_mac_titlebar :: proc(window: rawptr, color: u32) {
     bg := rl.ColorNormalize(rl.GetColor(color))
-    window := cast(^NS.Window) window
-    window->setBackgroundColor(NS.Color.colorWithSRGBRed(cast(NS.Float) bg.x, cast(NS.Float)bg.y, cast(NS.Float)bg.z, cast(NS.Float)bg.w))
+    window := cast(^NS.Window)window
+    window->setBackgroundColor(
+        NS.Color.colorWithSRGBRed(
+            cast(NS.Float)bg.x,
+            cast(NS.Float)bg.y,
+            cast(NS.Float)bg.z,
+            cast(NS.Float)bg.w,
+        ),
+    )
     window->setTitlebarAppearsTransparent(true)
     window->setTitleVisibility(.Hidden)
     // window->setStyleMask(NS.WindowStyleMaskFullSizeContentView)
@@ -71,16 +76,18 @@ create_main_menu :: proc(app: ^NS.Application) {
 }
 
 
-
 audio_input_dropdown_shown := false
 
-@(objc_class="AudioInputDropdownDelegate")
+@(objc_class = "AudioInputDropdownDelegate")
 AudioInputDropdownDelegate :: struct {
-    using _: NS.MenuDelegate
+    using _: NS.MenuDelegate,
 }
 
-@(objc_type=AudioInputDropdownDelegate, objc_name="menuDidClose")
-AudioInputDropdownDelegate_menuDidClose :: proc "c" (self: ^AudioInputDropdownDelegate, menu: ^NS.Menu) {
+@(objc_type = AudioInputDropdownDelegate, objc_name = "menuDidClose")
+AudioInputDropdownDelegate_menuDidClose :: proc "c" (
+    self: ^AudioInputDropdownDelegate,
+    menu: ^NS.Menu,
+) {
     audio_input_dropdown_shown = false
 }
 
@@ -114,7 +121,7 @@ show_audio_input_dropdown :: proc(x: f32, y: f32) {
     audio_input_dropdown_shown = true
 }
 
-get_window_frame :: proc() -> NS.Rect  {
+get_window_frame :: proc() -> NS.Rect {
     app := NS.Application.sharedApplication()
     defer app->release()
 
