@@ -23,7 +23,7 @@ import rl "vendor:raylib"
 
 import "../core"
 
-shadow_data := #load("../assets/shadow.2x.png")
+shadow_data := #load("../assets/images/shadow.2x.png")
 
 StrobeDisplay :: struct {
     // GL Shader
@@ -167,6 +167,9 @@ draw_strobe_display :: proc(
     case .CURVED_TRACKS:
         curvature_radius = 440.0
         band_height = 66.0
+        if len(phase_info.bands) > 3 {
+            band_height = 50.0
+        }
         period_count = 12.0
     }
 

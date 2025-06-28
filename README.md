@@ -11,12 +11,7 @@ A stroboscopic tuner written in Odin.
 git clone git@github.com:dsego/strobe-tuner.git
 ```
 
-2. Pull in and compile external dependencies
-```
-./build-external.sh
-```
-
-This pulls in the following git repositories:
+2. Pull in and compile external dependencies:
 - https://github.com/jockus/odin-portaudio
 - https://github.com/spatialaudio/portaudio-binaries
 - https://github.com/PortAudio/portaudio
@@ -36,3 +31,9 @@ Or alternatively build the binary
 odin build app -o:speed -extra-linker-flags="-L."
 ```
 
+
+To compile mac icons:
+```
+➜ iconutil -c icns AppIcon.iconset
+➜ mv AppIcon.icns StrobeTuner.app/Contents/Resources
+```

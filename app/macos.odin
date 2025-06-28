@@ -26,7 +26,6 @@ import rl "vendor:raylib"
 
 // https://github.com/odin-lang/examples/blob/master/metal/learn_metal/02-argbuffers-no-sdl/02-argbuffers-no-sdl.odin
 
-
 theme_mac_titlebar :: proc(window: rawptr, color: u32) {
     bg := rl.ColorNormalize(rl.GetColor(color))
     window := cast(^NS.Window)window
@@ -48,10 +47,10 @@ setup_mac_app :: proc() {
     app->setActivationPolicy(NS.ActivationPolicy.Regular)
     defer app->release()
 
-    // create_main_menu(app)
+    create_main_menu(app)
 }
 
-// TODO: custom app menu
+
 create_main_menu :: proc(app: ^NS.Application) {
     // main_menu := NS.Menu.alloc()->init()
     // main_menu->addItem(NS.MenuItem.alloc()->init())

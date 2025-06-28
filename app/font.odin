@@ -43,9 +43,9 @@ font_store: FontStore
 
 
 init_fonts :: proc() {
-    inter_medium := #load("../assets/Inter-Medium.ttf")
-    inter_bold := #load("../assets/Inter-Bold.ttf")
-    noto_sans_mono := #load("../assets/NotoSansMono-Medium.ttf")
+    inter_medium := #load("../assets/fonts/inter/Inter-Medium.ttf")
+    inter_bold := #load("../assets/fonts/inter/Inter-Bold.ttf")
+    noto_sans_mono := #load("../assets/fonts/noto/NotoSansMono-Medium.ttf")
 
     font_atlas: cstring = "ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuwvxyzz♯♭/+-1234567890.:π!▶︎◀︎|"
     count := i32(0)
@@ -142,13 +142,6 @@ init_fonts :: proc() {
         codepoints,
         count,
     )
-
-
-    // rl.SetTextureFilter(font_store.medium_24.texture, rl.TextureFilter.TRILINEAR)
-    // rl.SetTextureFilter(font_store.medium_32.texture, rl.TextureFilter.TRILINEAR)
-    // rl.SetTextureFilter(font_store.medium_48.texture, rl.TextureFilter.TRILINEAR)
-    // rl.SetTextureFilter(font_store.medium_76.texture, rl.TextureFilter.TRILINEAR)
-    // rl.SetTextureFilter(font_store.medium_192.texture, rl.TextureFilter.TRILINEAR)
 }
 
 destroy_fonts :: proc() {

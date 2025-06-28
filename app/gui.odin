@@ -41,10 +41,9 @@ text_color_light := rl.GetColor(0xBDBDBDFF)
 
 
 load_texture_atlas :: proc() {
-    file_data := #load("../assets/atlas.2x.png")
+    file_data := #load("../assets/images/atlas.2x.png")
     image := rl.LoadImageFromMemory(".png", raw_data(file_data), i32(len(file_data)))
     texture_atlas = rl.LoadTextureFromImage(image)
-    // rl.SetTextureFilter(texture_atlas, rl.TextureFilter.BILINEAR)
     rl.UnloadImage(image)
 }
 
