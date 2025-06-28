@@ -1,41 +1,72 @@
-## Strobe Tuner
+# Strobe Tuner
 
-A stroboscopic tuner written in Odin.
+A stroboscopic instrument tuner written in [Odin](https://odin-lang.org/).
 
-Copyright ©️ 2025 Davorin Šego
-Licensed under the GPL v3
-
-<img src="" alt="screenshots/Screenshot%202025-06-28%20at%2018.48.25.png" width="600" height="672" class="shrinkToFit transparent">
+<img src="screenshots/Screenshot 2025-06-28 at 18.48.25.png" width="300" height="336" class="shrinkToFit transparent">
 
 
+### Features
 
-#### Third-Party Resources
-
-[PortAudio](https://portaudio.com/)
-Portable Real-Time Audio Library
-Copyright (c) 1999-2011 Ross Bencina, Phil Burk
-
-[portaudio bindings for odin-lang](https://github.com/jockus/odin-portaudio)
-Copyright (c) 2021, Joakim Hentula
-BSD-2-Clause license
-
-[PFFFT: a pretty fast FFT.](https://bitbucket.org/jpommier/pffft)
-Copyright (c) 2013  Julien Pommier (pommier@modartt.com)
-FFTPACK license
-
-[The Inter typeface family](https://rsms.me/inter/)
-Copyright (c) 2016 The Inter Project Authors
-SIL Open Font License 1.1
-
-[Noto Sans](https://github.com/notofonts)
-Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)
-SIL Open Font License, Version 1.1 .
+- Automatic pitch detection based on NSDF (McLeod Pitch Method).
+- Smooth and responsive strobe display.
+- Manual target note selection.
+- Harmonic mode: shows the partials of the detected note across multiple strobe bands.
+- Vernier mode: shows the same fundamental frequency in each band, but with increasing sensitivity. When the central band is stationary, outer bands may still move.
+- Contrast and strobe sensitivity (speed) sliders.
+- Hertz/Cents display.
 
 
 
-#### Instructions
+### Keyboard shortcuts
+- <kbd>←</kbd><kbd>→</kbd> &nbsp;  left/right arrow to move selected note up or down chromatically.
+- <kbd>↑</kbd><kbd>↓</kbd> &nbsp;  up/down arrow to move selected note up and down by octave.
+- <kbd>tab</kbd> &nbsp;  switch the strobe display type to a full wheel.
 
-1. Clone git repo
+
+
+### License
+
+Copyright ©️ 2025 Davorin Šego <br />
+Licensed under the GPL v3  <br />
+https://www.gnu.org/licenses/gpl-3.0.en.html
+
+
+
+
+### Third-Party Resources
+
+
+- [PortAudio](https://portaudio.com/) <br />
+Portable Real-Time Audio Library <br />
+Copyright (c) 1999-2011 Ross Bencina, Phil Burk <br />
+
+- [portaudio bindings for odin-lang](https://github.com/jockus/odin-portaudio) <br />
+Copyright (c) 2021, Joakim Hentula <br />
+BSD-2-Clause license <br />
+
+- [PFFFT: a pretty fast FFT.](https://bitbucket.org/jpommier/pffft) <br />
+Copyright (c) 2013  Julien Pommier (pommier@modartt.com) <br />
+FFTPACK license <br />
+
+- [The Inter typeface family](https://rsms.me/inter/) <br />
+Copyright (c) 2016 The Inter Project Authors <br />
+SIL Open Font License 1.1 <br />
+
+- [Noto Sans](https://github.com/notofonts) <br />
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic) <br />
+SIL Open Font License, Version 1.1 . <br />
+
+- [Raylib](https://www.raylib.com/) <br />
+Copyright (c) 2013-2025 Ramon Santamaria (@raysan5) <br />
+Zlib license
+
+
+
+
+
+### Build steps
+
+1. Clone the git repo
 
 ```
 git clone git@github.com:dsego/strobe-tuner.git
@@ -48,7 +79,6 @@ git clone git@github.com:dsego/strobe-tuner.git
 - https://github.com/dsego/odin-pa_ringbuffer/
 - https://github.com/dsego/odin-pffft
 - https://bitbucket.org/jpommier/pffft/
-
 
 
 4. Run the app
