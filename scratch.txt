@@ -1,13 +1,3 @@
-
-
-IMMEDIATE:
-
-- app menu, about dialog - copyright usage for fonts, 3rd party libs, etc
-- add screenshot and instructions on github
-- bugfixes
-
-
-
 TBD:
 - How to stabilize the cents and hz display (ewma, median, etc)
     - Apply a low-pass filter or moving average to the estimated frequency from phase difference.
@@ -20,6 +10,3 @@ TBD:
 
 - Show cents deviation as a line graph.
 - Support cent offsets for different notes - load from a text file?
-
-
-

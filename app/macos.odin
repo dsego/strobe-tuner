@@ -70,8 +70,6 @@ create_main_menu :: proc(app: ^NS.Application) {
     // main_menu_view_item->setSubmenu(view_menu)
 
     // app->setMainMenu(main_menu)
-
-
 }
 
 
