@@ -118,7 +118,7 @@ get_config_defaults :: proc() -> Config {
     return config_defaults
 }
 
-// Load config from the standard OS path, eg ~/Library/Application Support/strobe-tuner/config.ini on MacOS.
+// Load config from the standard OS path, eg ~/Library/Application Support/StrobeTuner/config.ini on MacOS.
 load_config :: proc() -> Config {
 
     config := get_config_defaults()
@@ -169,9 +169,8 @@ load_config :: proc() -> Config {
 save_config :: proc(config: Config) {
     ini_map := ini.Map{}
     defer ini.delete_map(ini_map)
-    defer delete(ini_map)
+    section := ini_map[""]
 
-    section: map[string]string = {}
     defer delete(section)
 
     fields := reflect.struct_fields_zipped(Config)
@@ -179,14 +178,14 @@ save_config :: proc(config: Config) {
     for field in fields {
         value := reflect.struct_field_value(config, field)
         if field.tag == "color" {
-            stringified := fmt.aprintf("%#X", value)
+            stringified := fmt.tprintf("%#X", value)
             section[field.name] = stringified
         } else {
-            stringified := fmt.aprintf("%v", value)
+            stringified := fmt.tprintf("%v", value)
             section[field.name] = stringified
         }
     }
 
-    ini_map[""] = section
+    // ini_map[""] = section
     save_ini(ini_map)
 }

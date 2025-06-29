@@ -27,7 +27,7 @@ import "core:slice"
 import "core:strconv"
 
 CONFIG_NAME :: "config.ini"
-APP_NAME :: "strobe-tuner"
+APP_NAME :: "StrobeTuner"
 
 create_app_directory :: proc() -> Maybe(string) {
     dir_path := get_config_directory(APP_NAME)
@@ -41,6 +41,7 @@ create_app_directory :: proc() -> Maybe(string) {
 load_ini :: proc() -> (ini.Map, bool) {
     // Load or create config directory in a standard location based on the OS
     dir_path, dir_ok := create_app_directory().?
+    defer delete(dir_path)
 
     if !dir_ok do return nil, false
 
@@ -67,6 +68,8 @@ load_ini :: proc() -> (ini.Map, bool) {
 
 save_ini :: proc(ini_map: ini.Map) {
     dir_path, dir_ok := create_app_directory().?
+    defer delete(dir_path)
+
     ini_path := filepath.join({dir_path, CONFIG_NAME})
     defer delete(ini_path)
 
@@ -102,14 +105,17 @@ get_config_directory :: proc(app_name: string) -> string {
     when ODIN_OS == .Windows {
         // Use %APPDATA% on Windows
         base_path := os.get_env("APPDATA")
+        defer delete(base_path)
         return filepath.join({base_path, app_name})
     } else when ODIN_OS == .Darwin {
         // macOS: ~/Library/Application Support
         home := os.get_env("HOME")
+        defer delete(home)
         return filepath.join({home, "Library", "Application Support", app_name})
     } else {
         // Linux/Unix: ~/.config or XDG_CONFIG_HOME
         config_home := os.get_env("XDG_CONFIG_HOME")
+        defer delete(config_home)
         if config_home == "" {
             home := os.get_env("HOME")
             config_home = filepath.join({home, ".config"})
