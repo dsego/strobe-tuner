@@ -10,3 +10,4 @@ TBD:
 
 - Show cents deviation as a line graph.
 - Support cent offsets for different notes - load from a text file?
+- Consider porting to SDL3 for android/ios support.

@@ -56,7 +56,7 @@ Config :: struct {
     // how many spinning bands to show
     strobe_count:          int,
 
-    // FFT length for the pitch detector, e.g. 4092 samples
+    // FFT length for the pitch detector, e.g. 4096 samples
     pitch_detect_fft_size: int,
 
     // audio card sampling rate, e.g. 44.100 Hz
@@ -97,7 +97,7 @@ config_defaults :: Config {
     target_freq_hz        = 110.0,
     pitch_standard        = 440.0,
     strobe_count          = 3,
-    pitch_detect_fft_size = 4096,
+    pitch_detect_fft_size = 8192,
     samplerate            = 48_000,
     strobe_mode           = .HARMONIC_MODE,
     note_detection_mode   = .AUTO,

@@ -299,7 +299,7 @@ run_raylib_app :: proc(config: ^Config) {
 
             rl.DrawTextEx(
                 font_store.bold_36,
-                "-" if !freq_estimation_active || out_of_range else fmt.ctprintf("% .1f ", phase_freq_hz),
+                "-" if !freq_estimation_active || out_of_range else fmt.ctprintf("%.1f", pitch_info.detected_freq),
                 {147, 344},
                 18,
                 1,
@@ -315,10 +315,16 @@ run_raylib_app :: proc(config: ^Config) {
                 rl.GetColor(0xFBFBFBFF),
             )
 
+            phase_err_cents_cstr := fmt.ctprintf("%.1f", math.abs(pitch_info.err_cents))
+
+            if phase_err_cents <= 0 || !freq_estimation_active || out_of_range {
+                rl.DrawTextEx(font_store.bold_36, "-", {232, 344}, 18, 1, rl.GetColor(0xFBFBFBFF))
+            }
+
             rl.DrawTextEx(
                 font_store.bold_36,
-                "-" if !freq_estimation_active || out_of_range else fmt.ctprintf("% .1f", phase_err_cents),
-                {232, 344},
+                "" if !freq_estimation_active || out_of_range else phase_err_cents_cstr,
+                {242, 344},
                 18,
                 1,
                 rl.GetColor(0xFBFBFBFF),

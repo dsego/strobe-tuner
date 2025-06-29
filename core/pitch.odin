@@ -35,6 +35,7 @@ PitchInfo :: struct {
     clarity:       f32,
     nsdf_peak:     Vec2,
     rms:           f32,
+    err_cents:     f32,
 }
 
 
@@ -65,6 +66,8 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.rms = calculate_rms(self.samples)
 
     info.detected_note = find_note(info.detected_freq)
+    info.err_cents = cents_deviation(info.detected_freq, info.detected_note.frequency)
+
     return info
 }
 

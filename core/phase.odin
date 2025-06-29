@@ -48,28 +48,29 @@ StrobeMode :: enum {
 
 
 PhaseBand :: struct {
-    hop_size:          int, // number of samples between consecutive DFT windows, affects phase-based frequency tracking
-    freq_hz:           f32,
-    norm_freq:         f32,
-    freq_diff_hz:      f32,
-    estimated_freq_hz: f32,
-    // smoothed_freq_hz:  f32,
+    hop_size:           int, // number of samples between consecutive DFT windows, affects phase-based frequency tracking
+    freq_hz:            f32,
+    norm_freq:          f32,
+    freq_diff_hz:       f32,
+    estimated_freq_hz:  f32,
+    smoothed_freq_hz:   f32,
     // ewma_state:        EwmaState,
-    dft_config:        SingleFreqDFT,
-    time_stretch:      f32,
-    freq_multiplier:   f32, // to get more or less stripes in the pattern
-    phase:             f32, // actual measured phase
-    amp:               f32,
-    phase_diff:        f32, // phase difference between detection frames
-    err_cents:         f32,
-    // smoothed_err_cents:         f32,
-    scaled_phase:      f32, // phase scaled based on desired strobe speed
+    moving_avg:         MovingAvg,
+    dft_config:         SingleFreqDFT,
+    time_stretch:       f32,
+    freq_multiplier:    f32, // to get more or less stripes in the pattern
+    phase:              f32, // actual measured phase
+    amp:                f32,
+    phase_diff:         f32, // phase difference between detection frames
+    err_cents:          f32,
+    smoothed_err_cents: f32,
+    scaled_phase:       f32, // phase scaled based on desired strobe speed
 
     // a number < 1 will slow down the strobe and > 1 will increase the strobe spinning rate
-    speed:             f32,
+    speed:              f32,
 
     // fade out if the spinning is too rapid
-    attenuation:       f32,
+    attenuation:        f32,
 }
 
 
@@ -113,6 +114,7 @@ init_phase_comparator :: proc(
         band.freq_multiplier = 1.0
         band.dft_config = init_dft(MAX_WINDOW_SIZE)
         // band.ewma_state = init_ewma(0.1)
+        // band.moving_avg = init_moving_avg(5)
         append(&self.bands, band)
     }
 
@@ -126,6 +128,7 @@ destroy_phase_comparator :: proc(self: ^PhaseComparator) {
     destroy_audio_capture_node(self)
     delete(self.sample_buffer)
     for &band in self.bands {
+        // destroy_moving_avg(&band.moving_avg)
         destory_dft(&band.dft_config)
     }
     delete(self.bands)
@@ -204,13 +207,14 @@ unwrap_phase :: proc(phase: f32) -> f32 {
 
 
 run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32, bool) {
-    base_band := self.bands[0]
+    base_band := &self.bands[0]
 
     // Need to keep this buffer slice relatively small to keep the display refresh without latency.
     available := audio_capture_read(self, self.sample_buffer[:base_band.dft_config.window_size])
 
     // Skip when there are no new samples, the scaled phase stays the same
     if available <= 0 {
+        // fmt.println(base_band.err_cents)
         return base_band.estimated_freq_hz, base_band.err_cents, true
     }
 
@@ -219,6 +223,10 @@ run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32, bool) {
     for &band, band_idx in self.bands {
         determine_band_phase(self, &band, band_idx)
     }
+
+    // fmt.println(">>", base_band.moving_avg)
+    // fmt.println(">", base_band.estimated_freq_hz, base_band.err_cents)
+
 
     return base_band.estimated_freq_hz, base_band.err_cents, false
 }
@@ -232,6 +240,7 @@ best_dft_window_size :: proc(freq_hz: f32, samplerate: f32, cents_resolution: in
     ratio := libc.exp2(f32(cents_resolution) / 1200.0)
     freq_resolution := freq_hz * (ratio - 1.0)
     win := math.ceil(samplerate / freq_resolution)
+    fmt.println(freq_hz, cents_resolution, win)
     return int(win)
 }
 
@@ -280,7 +289,6 @@ test_best_hop_size :: proc(t: ^testing.T) {
 
 determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx: int) {
     dft: complex64 = complex(0, 0)
-    base_band := self.bands[0]
 
     // Harmonic mode - each band tracks a separate frequency
     // Run a single bin DFT and estimate frequency based on phase drift
@@ -313,8 +321,10 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
         // }
 
         // band.smoothed_freq_hz = ewma_filter(&band.ewma_state, band.estimated_freq_hz)
+        // band.smoothed_err_cents = run_moving_avg(&band.moving_avg, band.err_cents)
 
         // Convert to cents only after smoothing:
+        // band.smoothed_err_cents = cents_deviation(band.smoothed_freq_hz, band.freq_hz)
         // band.smoothed_err_cents = cents_deviation(band.smoothed_freq_hz, band.freq_hz)
 
         band.phase_diff = phase_drift
@@ -329,6 +339,7 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
 
     } else {
         // Vernier mode - only the base band needs to run the DFT, other bands display varying speeds
+        base_band := self.bands[0]
         band.amp = base_band.amp
         band.phase_diff = base_band.phase_diff
         band.scaled_phase = band.scaled_phase - band.phase_diff * band.speed
@@ -346,5 +357,3 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
         band.amp *= band.attenuation
     }
 }
-
-
