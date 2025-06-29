@@ -60,7 +60,7 @@ destroy_pitch_detector :: proc(self: ^PitchDetector) {
 run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> PitchInfo {
     info := PitchInfo{}
 
-    // Target FPS so we only run the FFT at most 20 times per second, instead of hundreds of times
+    // Target FPS so we only run the FFT at so many times per second, instead of hundreds of times
     frames_per_second := 20
 
     available := audio_capture_read(

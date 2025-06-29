@@ -163,7 +163,11 @@ set_phase_comparator_freq :: proc(
 ) {
 
     if base_freq_hz <= MIN_STROBE_FREQ_HZ {
-        fmt.printf("Frequency %.1fHz too low for strobe display, minimum frequency is %.1fHz\n", base_freq_hz, MIN_STROBE_FREQ_HZ)
+        fmt.printf(
+            "Frequency %.1fHz too low for strobe display, minimum frequency is %.1fHz\n",
+            base_freq_hz,
+            MIN_STROBE_FREQ_HZ,
+        )
         return
     }
 

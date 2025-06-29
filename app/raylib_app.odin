@@ -170,6 +170,8 @@ run_raylib_app :: proc(config: ^Config) {
     //                   MAIN LOOP
     // ------------------------------------------------
 
+    // rl.SetTargetFPS(120)
+
 
     for !rl.WindowShouldClose() {
 
@@ -253,8 +255,8 @@ run_raylib_app :: proc(config: ^Config) {
 
         pitch_cents_err := core.cents_deviation(pitch_info.detected_freq, target_note.frequency)
 
-        // TODO: calculate cents deviation based on rounded freq to make the reading more steady?
-        phase_freq_hz, phase_err_cents, no_change := core.run_phase_detection(phase_comparator)
+        // Ignore return values - the NSDF provides a steadier Hz/Cents response
+        core.run_phase_detection(phase_comparator)
 
 
         if rl.IsKeyPressed(.TAB) {
@@ -315,8 +317,8 @@ run_raylib_app :: proc(config: ^Config) {
                 rl.GetColor(0xFBFBFBFF),
             )
 
-            phase_err_cents_cstr := fmt.ctprintf("%.1f", math.abs(pitch_info.err_cents))
-            show_minus_sign := phase_err_cents < 0 && phase_err_cents_cstr != "0.0"
+            err_cents_cstr := fmt.ctprintf("%.1f", math.abs(pitch_info.err_cents))
+            show_minus_sign := pitch_info.err_cents < 0 && err_cents_cstr != "0.0"
 
             if show_minus_sign || !freq_estimation_active || out_of_range {
                 rl.DrawTextEx(font_store.bold_36, "-", {232, 344}, 18, 1, rl.GetColor(0xFBFBFBFF))
@@ -324,7 +326,7 @@ run_raylib_app :: proc(config: ^Config) {
 
             rl.DrawTextEx(
                 font_store.bold_36,
-                "" if !freq_estimation_active || out_of_range else phase_err_cents_cstr,
+                "" if !freq_estimation_active || out_of_range else err_cents_cstr,
                 {242, 344},
                 18,
                 1,
