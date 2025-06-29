@@ -6,7 +6,11 @@
 	<dict>
 		<key>Resources/AppIcon.icns</key>
 		<data>
-		ljANNpPEUqhd1DcoyBWWDxl0TfI=
+		mHUxH1UtXJHIXw7LsvfrtbvQ/20=
+		</data>
+		<key>Resources/Credits.rtf</key>
+		<data>
+		5FttffnsNiAoytJkiWli2pis3PI=
 		</data>
 	</dict>
 	<key>files2</key>
@@ -24,17 +28,24 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			20r5Uw3B1Vy7kFusP7s5cAbrJV+TUtaEEDrzeEG93KM=
+			pb24LN25aZci2lRP5GCTV3n3PZtAkmmmftg2M0nwA1s=
+			</data>
+		</dict>
+		<key>Resources/Credits.rtf</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			JRXsZ51eP47CnnBMJg9C7Wj1/7qWknh9P+g0DhjjqaY=
 			</data>
 		</dict>
 		<key>StrobeTuner.entitlements</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			GRTCc7r/2jDySwQo7jdiarAFNdQ=
+			ytveFAU9G9oaI4iHqlNwen05ZFQ=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"f518cf8f9fb5f54ec19018a983a6132ffa2ba92d" or cdhash H"1914c273baffda30f24b0428ee37626ab00535d4"</string>
+			<string>identifier StrobeTuner and certificate leaf = H"6232ce7511b2d9222b4235cdd33b187d1ad08b60"</string>
 		</dict>
 	</dict>
 	<key>rules</key>
