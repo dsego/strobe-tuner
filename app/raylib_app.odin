@@ -316,8 +316,9 @@ run_raylib_app :: proc(config: ^Config) {
             )
 
             phase_err_cents_cstr := fmt.ctprintf("%.1f", math.abs(pitch_info.err_cents))
+            show_minus_sign := phase_err_cents < 0 && phase_err_cents_cstr != "0.0"
 
-            if phase_err_cents <= 0 || !freq_estimation_active || out_of_range {
+            if show_minus_sign || !freq_estimation_active || out_of_range {
                 rl.DrawTextEx(font_store.bold_36, "-", {232, 344}, 18, 1, rl.GetColor(0xFBFBFBFF))
             }
 

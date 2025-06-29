@@ -240,7 +240,7 @@ best_dft_window_size :: proc(freq_hz: f32, samplerate: f32, cents_resolution: in
     ratio := libc.exp2(f32(cents_resolution) / 1200.0)
     freq_resolution := freq_hz * (ratio - 1.0)
     win := math.ceil(samplerate / freq_resolution)
-    fmt.println(freq_hz, cents_resolution, win)
+    // fmt.println(freq_hz, cents_resolution, win)
     return int(win)
 }
 
