@@ -36,6 +36,7 @@ import "core:math/linalg"
 import "core:testing"
 
 
+MIN_STROBE_FREQ_HZ :: 16.0
 MAX_BANDS :: 8
 MAX_WINDOW_SIZE :: 262_144
 MAX_HOP_SIZE :: 4096
@@ -160,6 +161,12 @@ set_phase_comparator_freq :: proc(
     speed_multiplier: f32,
     mode: StrobeMode,
 ) {
+
+    if base_freq_hz <= MIN_STROBE_FREQ_HZ {
+        fmt.printf("Frequency %.1fHz too low for strobe display, minimum frequency is %.1fHz\n", base_freq_hz, MIN_STROBE_FREQ_HZ)
+        return
+    }
+
     flush_audio_capture_ringbuffer(self)
 
     multiplier: f32 = 1.0
@@ -293,7 +300,7 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
     // Harmonic mode - each band tracks a separate frequency
     // Run a single bin DFT and estimate frequency based on phase drift
     if self.mode == .HARMONIC_MODE || band_idx == 0 {
-        dft = run_single_dft(&band.dft_config, self.sample_buffer)
+        dft = run_single_dft(&band.dft_config, self.sample_buffer[:])
         hop_size := best_hop_size(25, band.freq_hz, self.samplerate)
 
         dft_hop := run_single_dft(&band.dft_config, self.sample_buffer[hop_size:])

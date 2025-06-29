@@ -4,3 +4,4 @@
 external/*
 *.o
 *.a
+app.bin.dSYM/*
