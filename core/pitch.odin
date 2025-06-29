@@ -17,9 +17,9 @@
 package core
 
 
-import "base:runtime"
 import "core:fmt"
 import "core:math"
+import "core:time"
 
 
 PitchDetector :: struct {
@@ -52,14 +52,35 @@ destroy_pitch_detector :: proc(self: ^PitchDetector) {
     delete(self.samples)
 }
 
+// t: time.Time
+// started: bool = false
+// counter: int = 0
 
 // TODO: keep track of previous pitches
 run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> PitchInfo {
     info := PitchInfo{}
-    available := audio_capture_read(self, self.samples)
+
+    // Target FPS so we only run the FFT at most 20 times per second, instead of hundreds of times
+    frames_per_second := 20
+
+    available := audio_capture_read(
+        self,
+        self.samples,
+        i32(self.nsdf.samplerate / frames_per_second),
+    )
 
     // no new audio samples available, skip pitch detection
     if available <= 0 do return prev_info
+
+    // // FIXME: Runs too many time per second, around 270
+    // duration := time.since(t)
+    // counter += 1
+    // if time.duration_seconds(duration) >= 1.0 || started == false {
+    //     started = true
+    //     t = time.now()
+    //     fmt.println(time.now(), "count", counter, available)
+    //     counter = 0
+    // }
 
     info.detected_freq, info.nsdf_peak = nsdf_pitch_detect(&self.nsdf, self.samples)
     info.clarity = info.nsdf_peak.y

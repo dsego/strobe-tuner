@@ -50,10 +50,10 @@ audio_capture_callback :: proc(self: ^AudioCaptureNode, input: []f32) {
 // Fill the buffer with new audio samples.
 // If there are more samples available than the size of the buffer, it will overwrite the complete
 // buffer with new samples. Otherwise it will shift the existing samples.
-audio_capture_read :: proc(self: ^AudioCaptureNode, audio_buffer: []f32) -> i32 {
+audio_capture_read :: proc(self: ^AudioCaptureNode, audio_buffer: []f32, min_available: i32 = 0) -> i32 {
     available := frames_available_in_ringbuffer(&self.ringbuffer)
 
-    if available <= 0 do return 0
+    if available <= min_available do return 0
 
     size := len(audio_buffer)
 
