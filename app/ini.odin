@@ -92,6 +92,7 @@ save_ini :: proc(ini_map: ini.Map) {
         fmt.println("Failed to save config file", ini_path)
         return
     }
+    defer delete(keys)
 
     // Keep order the same in the ini file
     slice.sort(keys)

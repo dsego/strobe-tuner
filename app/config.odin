@@ -19,6 +19,7 @@ package app
 
 import "base:intrinsics"
 import "base:runtime"
+import "core:strings"
 import "core:encoding/ini"
 import "core:fmt"
 import "core:reflect"
@@ -169,23 +170,21 @@ load_config :: proc() -> Config {
 save_config :: proc(config: Config) {
     ini_map := ini.Map{}
     defer ini.delete_map(ini_map)
-    section := ini_map[""]
 
-    defer delete(section)
-
+    section: map[string]string = {}
     fields := reflect.struct_fields_zipped(Config)
 
     for field in fields {
         value := reflect.struct_field_value(config, field)
+        key := strings.clone(field.name)
         if field.tag == "color" {
-            stringified := fmt.tprintf("%#X", value)
-            section[field.name] = stringified
+            section[key] = fmt.aprintf("%#X", value)
         } else {
-            stringified := fmt.tprintf("%v", value)
-            section[field.name] = stringified
+            section[key] = fmt.aprintf("%v", value)
         }
     }
 
-    // ini_map[""] = section
+    ini_map[""] = section
+
     save_ini(ini_map)
 }
