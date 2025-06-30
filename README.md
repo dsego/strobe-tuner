@@ -4,6 +4,9 @@ A stroboscopic instrument tuner written in [Odin](https://odin-lang.org/).
 
 <img src="screenshots/Screenshot 2025-06-28 at 18.48.25.png" width="300" height="336" class="shrinkToFit transparent">
 
+### Download
+
+[Latest release on GitHub](https://github.com/dsego/strobe-tuner/releases)
 
 ### Features
 
