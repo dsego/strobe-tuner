@@ -153,7 +153,9 @@ draw_strobe_display :: proc(
     self: ^StrobeDisplay,
     phase_info: ^core.PhaseComparator,
     out_of_range: bool,
+    config: ^Config,
 ) {
+
     curvature_radius: f32
     band_height: f32
     period_count: f32
@@ -221,14 +223,14 @@ draw_strobe_display :: proc(
         rl.ShaderUniformDataType.FLOAT,
     )
 
+    y := self.position.y
+    if self.display_type == .CURVED_TRACKS {
+        y += 32
+    }
 
     // Draw circular bands from the center outwards, so the lowest frequency is the bottom one
     for &band, band_idx in phase_info.bands {
         order := len(phase_info.bands) - 1 - band_idx
-        y := self.position.y
-        if self.display_type == .CURVED_TRACKS {
-            y += 32
-        }
 
         rect := rl.Rectangle {
             self.position.x,
@@ -309,6 +311,29 @@ draw_strobe_display :: proc(
 
         if phase_info.mode == .VERNIER_MODE {
             period_count *= 2.0
+        }
+    }
+
+    // Draw labels for partials
+    if config.strobe_mode == .HARMONIC_MODE &&
+       self.display_type == .CURVED_TRACKS &&
+       config.partial_labels != .NONE {
+        r := curvature_radius
+
+        for &band, band_idx in phase_info.bands {
+            cos: f32 = 216
+            sin := math.sqrt(r * r - cos * cos)
+            r += band_height
+            y := 850 - sin
+
+            partial_labels, changed := gui_strobe_partial(
+                {self.position.x + 260 + cos, y},
+                config.partial_labels,
+                band,
+            )
+            if changed {
+                config.partial_labels = partial_labels
+            }
         }
     }
 

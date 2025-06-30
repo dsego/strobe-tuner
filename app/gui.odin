@@ -112,6 +112,48 @@ gui_feedback_button :: proc(position: [2]f32) {
     }
 }
 
+gui_strobe_partial :: proc(
+    position: [2]f32,
+    type: PartialLabelType,
+    band: core.PhaseBand,
+) -> (
+    PartialLabelType,
+    bool,
+) {
+
+    text: cstring
+    text_size: rl.Vector2
+    font := font_store.medium_32
+    font_size: f32 = 16
+
+    if type == .FREQUENCY {
+        font = font_store.medium_28
+        text = fmt.ctprintf("%.1fHz", band.freq_hz)
+        font_size = 14
+    } else if type == .NOTE_NAMES {
+        text = fmt.ctprintf(
+            "%v%v%v",
+            band.note.name,
+            "♯" if band.note.is_accidental else "",
+            band.note.octave,
+        )
+    } else {
+        text = fmt.ctprintf("%v×", band.harmonic)
+    }
+
+    text_size = rl.MeasureTextEx(font, text, font_size, 0)
+    bounds: rl.Rectangle = {position.x - text_size.x, position.y, text_size.x, text_size.y}
+
+    rl.DrawTextEx(font, text, {bounds.x, bounds.y}, font_size, 0, rl.GetColor(0x82E2FFFF))
+
+    if gui_button(bounds) {
+        if type == .MULTIPLES do return .FREQUENCY, true
+        else if type == .FREQUENCY do return .NOTE_NAMES, true
+        return .MULTIPLES, true
+    }
+    return type, false
+}
+
 
 gui_note_detection_mode_toggle :: proc(
     position: [2]f32,

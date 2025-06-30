@@ -1,13 +1,8 @@
-TBD:
-- How to stabilize the cents and hz display (ewma, median, etc)
-    - Apply a low-pass filter or moving average to the estimated frequency from phase difference.
-    - “fast attack, slow release” system --- two different DFTs with hop & windows sizes, one for fast tracking, other for slow tracking.
-
+TODO:
 - Button to play the target pitch - useful to quickly know to tune up or down.
     - Sound fonts
         https://files.portaudio.com/docs/v19-doxydocs/paex__sine_8c_source.html
         https://github.com/schellingb/TinySoundFont
-
 - Show cents deviation as a line graph.
 - Support cent offsets for different notes - load from a text file?
 - Consider porting to SDL3 for android/ios support.

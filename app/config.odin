@@ -19,15 +19,22 @@ package app
 
 import "base:intrinsics"
 import "base:runtime"
-import "core:strings"
 import "core:encoding/ini"
 import "core:fmt"
 import "core:reflect"
 import "core:strconv"
+import "core:strings"
 
 
 import "../core"
 
+
+PartialLabelType :: enum {
+    NONE,
+    MULTIPLES,
+    FREQUENCY,
+    NOTE_NAMES,
+}
 
 NoteDetectionMode :: enum {
     AUTO,
@@ -90,6 +97,7 @@ Config :: struct {
     // attenuate strobe effect when it spins so fast it becomes distracting
     apply_attenuation:     bool,
     tuning_preset:         TuningPreset,
+    partial_labels:        PartialLabelType,
 }
 
 @(private)
@@ -112,6 +120,7 @@ config_defaults :: Config {
     strobe_color_1        = 0x0,
     strobe_color_2        = 0x0,
     tuning_preset         = .CHROMATIC,
+    partial_labels        = .MULTIPLES,
 }
 
 

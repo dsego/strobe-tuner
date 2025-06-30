@@ -51,6 +51,8 @@ StrobeMode :: enum {
 PhaseBand :: struct {
     hop_size:           int, // number of samples between consecutive DFT windows, affects phase-based frequency tracking
     freq_hz:            f32,
+    harmonic:           int, // eg 1x for base note, 2x for second harmonic
+    note:               Note,
     norm_freq:          f32,
     freq_diff_hz:       f32,
     estimated_freq_hz:  f32,
@@ -192,12 +194,15 @@ set_phase_comparator_freq :: proc(
 
         if self.mode == .HARMONIC_MODE {
             band.freq_hz = f32(multiplier) * base_freq_hz
+            band.harmonic = int(multiplier)
             band.speed *= multiplier
             multiplier *= 2
         } else if self.mode == .VERNIER_MODE {
+            band.harmonic = 1
             band.freq_hz = base_freq_hz
             speed *= speed_multiplier
         }
+        band.note = find_note(band.freq_hz)
         band.norm_freq = band.freq_hz / self.samplerate
 
         if self.mode == .HARMONIC_MODE || i == 0 {

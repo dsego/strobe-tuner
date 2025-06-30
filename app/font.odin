@@ -47,7 +47,7 @@ init_fonts :: proc() {
     inter_bold := #load("../assets/fonts/inter/Inter-Bold.ttf")
     noto_sans_mono := #load("../assets/fonts/noto/NotoSansMono-Medium.ttf")
 
-    font_atlas: cstring = "ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuwvxyzz♯♭/+-1234567890.:π!▶︎◀︎"
+    font_atlas: cstring = "ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuwvxyzz♯♭/+-1234567890.:π!▶︎◀︎×"
     count := i32(0)
     codepoints := rl.LoadCodepoints(font_atlas, &count)
     defer rl.UnloadCodepoints(codepoints)
