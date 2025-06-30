@@ -8,11 +8,3 @@ TODO:
 - Consider porting to SDL3 for android/ios support.
 
 
-
-
-
-
-
-
-xattr -cr StrobeTuner.app
-codesign --deep --sign "StrobeTuner" ./StrobeTuner.app
