@@ -1,4 +1,4 @@
-# Strobe Tuner
+# SonicStrobe
 
 A stroboscopic instrument tuner written in [Odin](https://odin-lang.org/).
 

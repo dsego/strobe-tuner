@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>StrobeTuner</string>
+	<string>SonicStrobe</string>
 	<key>CFBundleExecutable</key>
 	<string>app.bin</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>StrobeTuner</string>
+	<string>SonicStrobe</string>
 	<key>CFBundleVersion</key>
 	<string>1.0</string>
 	<key>NSMicrophoneUsageDescription</key>

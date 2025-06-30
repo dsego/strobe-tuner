@@ -58,7 +58,7 @@ run_raylib_app :: proc(config: ^Config) {
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetConfigFlags({.WINDOW_HIGHDPI})
-    rl.InitWindow(488, 800 if COLOR_CONTROLS else 532, "Strobe Tuner")
+    rl.InitWindow(488, 800 if COLOR_CONTROLS else 532, APP_NAME)
     defer rl.CloseWindow()
 
     init_fonts()

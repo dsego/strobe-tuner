@@ -12,8 +12,6 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-
 package app
 
 import "base:intrinsics"
@@ -27,7 +25,6 @@ import "core:slice"
 import "core:strconv"
 
 CONFIG_NAME :: "config.ini"
-APP_NAME :: "StrobeTuner"
 
 create_app_directory :: proc() -> Maybe(string) {
     dir_path := get_config_directory(APP_NAME)
