@@ -137,6 +137,7 @@ run_raylib_app :: proc(config: ^Config) {
 
     // --- GUI CONTROLS ----------------------------------------------------------------------------
 
+    audio_device_dropdown_index: int = 0
     audio_devices: [dynamic]GuiOption = {}
     defer delete(audio_devices)
 
@@ -146,20 +147,22 @@ run_raylib_app :: proc(config: ^Config) {
         if info.maxInputChannels > 0 {
             append(&audio_devices, GuiOption{i, string(info.name)})
         }
+        if i == audio_capture.active_device {
+            audio_device_dropdown_index = int(i)
+        }
     }
 
     selected_note_idx := 0
     audio_device_dropdown_active := false
     tuning_preset_dropdown_active := false
 
-    audio_device_choice: i32 = audio_capture.active_device
 
     note_low_state := false
     note_high_state := false
 
 
     strobe_speed_slider_value := config.strobe_speed
-    tuning_preset_choice: i32 = i32(config.tuning_preset)
+    tuning_preset_choice := int(config.tuning_preset)
     color1 := rl.GetColor(config.strobe_color_1)
     color2 := rl.GetColor(config.strobe_color_2)
 
@@ -179,7 +182,7 @@ run_raylib_app :: proc(config: ^Config) {
             fmt.println("Reset config to defaults")
             config^ = get_config_defaults()
             strobe_speed_slider_value = config.strobe_speed
-            tuning_preset_choice = i32(config.tuning_preset)
+            tuning_preset_choice = int(config.tuning_preset)
         }
 
         pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
@@ -339,8 +342,8 @@ run_raylib_app :: proc(config: ^Config) {
 
 
             // Choose new audio input
-            if audio_device_choice != audio_capture.active_device {
-                switch_audio_device(audio_capture, audio_device_choice)
+            if audio_devices[audio_device_dropdown_index].id != audio_capture.active_device {
+                switch_audio_device(audio_capture, audio_devices[audio_device_dropdown_index].id)
                 core.flush_audio_capture_ringbuffer(&pitch_detector)
                 core.flush_audio_capture_ringbuffer(phase_comparator)
             }
@@ -392,7 +395,7 @@ run_raylib_app :: proc(config: ^Config) {
                 {12, 496},
                 240,
                 audio_devices[:],
-                &audio_device_choice,
+                &audio_device_dropdown_index,
                 audio_device_dropdown_active,
                 left_pad = 32,
             )
