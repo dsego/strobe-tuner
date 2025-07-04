@@ -138,15 +138,27 @@ destroy_phase_comparator :: proc(self: ^PhaseComparator) {
     free(self)
 }
 
+// FIXME: this will only work for the existing strobe bands, it won't add any new ones
+// FIXME: need to call set_phase_comparator_freq after updating the intervals
+set_phase_comparator_intervals :: proc(self: ^PhaseComparator, strobe_intervals: []f32) {
+    if self.mode != .HARMONIC_MODE do return
+
+    for interval, i in strobe_intervals {
+        if interval >= 1.0 {
+            band := &self.bands[i]
+            band.interval = interval
+        }
+    }
+}
+
 set_phase_comparator_speed :: proc(self: ^PhaseComparator, base_speed: f32) {
     speed: f32 = base_speed * self.pitch_standard / self.base_freq_hz
 
     for &band, i in self.bands {
-        band.speed = speed
         if self.mode == .VERNIER_MODE {
-            speed *= self.speed_multiplier
+            speed = band.speed * self.speed_multiplier
         } else if self.mode == .HARMONIC_MODE {
-            band.speed *= band.interval
+            band.speed = band.speed * band.interval
         }
     }
 }
@@ -186,13 +198,13 @@ set_phase_comparator_freq :: proc(
 
         band.time_stretch = f32(self.reference_interval)
         band.phase = 0.0
-        band.speed = speed
 
         if self.mode == .HARMONIC_MODE {
             band.freq_hz = band.interval * base_freq_hz
-            band.speed *= band.interval
+            band.speed = speed * band.interval
         } else if self.mode == .VERNIER_MODE {
             band.freq_hz = base_freq_hz
+            band.speed = speed
             speed *= speed_multiplier
         }
         band.note = find_note(band.freq_hz)

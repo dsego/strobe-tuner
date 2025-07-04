@@ -35,6 +35,11 @@ create_app_directory :: proc() -> Maybe(string) {
     return dir_path
 }
 
+get_config_path :: proc () -> string {
+    dir_path := get_config_directory(APP_NAME)
+    return filepath.join({dir_path, CONFIG_NAME})
+}
+
 load_ini :: proc() -> (ini.Map, bool) {
     // Load or create config directory in a standard location based on the OS
     dir_path, dir_ok := create_app_directory().?

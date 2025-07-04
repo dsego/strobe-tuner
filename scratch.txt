@@ -4,7 +4,12 @@ TODO:
         https://files.portaudio.com/docs/v19-doxydocs/paex__sine_8c_source.html
         https://github.com/schellingb/TinySoundFont
 - Show cents deviation as a line graph.
-- Support cent offsets for different notes - load from a text file?
+- Support cent offsets for different notess
 - Consider porting to SDL3 for android/ios support.
+
+
+odin build app -o:speed -extra-linker-flags="-L."
+mv app.bin SonicStrobe.app/Contents/MacOS
+codesign --sign "Apple Development: davorin.sego@gmail.com" --deep  SonicStrobe.app
 
 

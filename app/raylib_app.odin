@@ -22,6 +22,7 @@ import "core:math/linalg"
 import "core:path/filepath"
 import "core:sort"
 import "core:strings"
+import "core:c/libc"
 
 import rl "vendor:raylib"
 
@@ -31,6 +32,13 @@ guitar_std_notes: [6]string = {"E2", "A2", "D3", "G3", "B3", "E4"}
 ukulele_std_notes: [4]string = {"G4", "C4", "E4", "A4"}
 window_bg_color: u32 = 0x40414AFF
 strobe_bg_color: u32 = 0x15161AFF
+
+
+INTERVAL_OPTIONS: [3][MAX_INTERVALS]f32 : {
+    {1, 2, 4, 0, 0, 0, 0, 0},
+    {1, 1.5, 2, 0, 0, 0, 0, 0},
+    {1, 2, 3, 0, 0, 0, 0, 0},
+}
 
 
 // Add gui controls to choose strobe colors
@@ -66,17 +74,6 @@ run_raylib_app :: proc(config: ^Config) {
 
     load_texture_atlas()
     defer unload_texture_atlas()
-
-
-    // GUI styles
-    root_dir := filepath.dir(#file)
-    defer delete(root_dir)
-    raylib_style_path := filepath.join({root_dir, "../assets/style_cyber.rgs"})
-    defer delete(raylib_style_path)
-
-    rl.GuiLoadStyle(cstring(raw_data(raylib_style_path)))
-    rl.GuiSetFont(font_store.medium_32)
-    rl.GuiSetStyle(.DEFAULT, i32(rl.GuiDefaultProperty.TEXT_SIZE), 16)
 
     //  --------------------------------------------------------------------------------------------
 
@@ -165,6 +162,8 @@ run_raylib_app :: proc(config: ^Config) {
     tuning_preset_choice := int(config.tuning_preset)
     color1 := rl.GetColor(config.strobe_color_1)
     color2 := rl.GetColor(config.strobe_color_2)
+
+    interval_options := INTERVAL_OPTIONS
 
     // ---------------------------------------------------------------------------------------------
 
@@ -261,6 +260,16 @@ run_raylib_app :: proc(config: ^Config) {
         // Ignore return values - the NSDF provides a steadier Hz/Cents response
         core.run_phase_detection(phase_comparator)
 
+        // TODO: make this more integrated (eg Cmd+` on MacOS)
+        // TODO: support windows & linux
+        // TODO: add a reload command to read the config
+        if rl.IsKeyPressed(.C) {
+            when ODIN_OS == .Darwin {
+                config_path := get_config_path()
+                defer delete(config_path)
+                libc.system(fmt.ctprintf("open -a TextEdit \"%s\"", config_path))
+            }
+        }
 
         if rl.IsKeyPressed(.TAB) {
             if config.strobe_display_type == .CURVED_TRACKS {
@@ -268,6 +277,21 @@ run_raylib_app :: proc(config: ^Config) {
             } else {
                 config.strobe_display_type = .CURVED_TRACKS
             }
+        }
+
+        if rl.IsKeyPressed(.I) && config.strobe_mode == .HARMONIC_MODE {
+            config.strobe_intervals_index += 1
+            if config.strobe_intervals_index >= len(interval_options) do config.strobe_intervals_index = 0
+            config.strobe_intervals = interval_options[config.strobe_intervals_index]
+            core.set_phase_comparator_intervals(phase_comparator, config.strobe_intervals[:])
+            core.set_phase_comparator_freq(
+                phase_comparator,
+                target_note.frequency,
+                config.pitch_standard,
+                config.strobe_speed,
+                config.speed_multiplier,
+                config.strobe_mode,
+            )
         }
 
         // Draw the GUI controls
