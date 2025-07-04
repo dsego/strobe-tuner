@@ -281,9 +281,9 @@ draw_strobe_display :: proc(
         )
 
         amp := self.contrast * band.amp
-        if out_of_range {
-            // amp = 0.0
-        }
+        // if out_of_range {
+        // amp = 0.0
+        // }
 
         rl.SetShaderValue(self.strobe_shader, self.amp_loc, &amp, rl.ShaderUniformDataType.FLOAT)
 
@@ -317,16 +317,16 @@ draw_strobe_display :: proc(
     if config.strobe_mode == .HARMONIC_MODE &&
        self.display_type == .CURVED_TRACKS &&
        config.partial_labels != .NONE {
-        r := curvature_radius
+        r := min_radius
 
         for &band, band_idx in phase_info.bands {
+            order := len(phase_info.bands) - 1 - band_idx
             cos: f32 = 216
-            sin := math.sqrt(r * r - cos * cos)
             r += band_height
-            y := 850 - sin
+            sin := math.sqrt(r * r - cos * cos)
 
             partial_labels, changed := gui_strobe_partial(
-                {self.position.x + 260 + cos, y},
+                {self.position.x + 260 + cos, y + band_height * (f32(order) + 0.6) + r - sin},
                 config.partial_labels,
                 band,
             )

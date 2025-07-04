@@ -37,6 +37,7 @@ create_app_directory :: proc() -> Maybe(string) {
 
 get_config_path :: proc () -> string {
     dir_path := get_config_directory(APP_NAME)
+    defer delete(dir_path)
     return filepath.join({dir_path, CONFIG_NAME})
 }
 
