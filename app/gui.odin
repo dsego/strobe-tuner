@@ -138,7 +138,7 @@ gui_strobe_partial :: proc(
             band.note.octave,
         )
     } else {
-        text = fmt.ctprintf("%v×", band.harmonic)
+        text = fmt.ctprintf("%v×", band.interval)
     }
 
     text_size = rl.MeasureTextEx(font, text, font_size, 0)

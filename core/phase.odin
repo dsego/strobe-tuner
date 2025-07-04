@@ -51,7 +51,7 @@ StrobeMode :: enum {
 PhaseBand :: struct {
     hop_size:           int, // number of samples between consecutive DFT windows, affects phase-based frequency tracking
     freq_hz:            f32,
-    harmonic:           int, // eg 1x for base note, 2x for second harmonic
+    interval:           f32, // interval ratio, eg 1x for base note, 1.5x for perfect fifth,  2x for octave, etc
     note:               Note,
     norm_freq:          f32,
     freq_diff_hz:       f32,
@@ -61,7 +61,6 @@ PhaseBand :: struct {
     moving_avg:         MovingAvg,
     dft_config:         SingleFreqDFT,
     time_stretch:       f32,
-    freq_multiplier:    f32, // to get more or less stripes in the pattern
     phase:              f32, // actual measured phase
     amp:                f32,
     phase_diff:         f32, // phase difference between detection frames
@@ -96,13 +95,11 @@ PhaseComparator :: struct {
 init_phase_comparator :: proc(
     base_freq_hz: f32,
     samplerate: f32,
-    band_count: int,
+    strobe_intervals: []f32,
     mode: StrobeMode,
     apply_attenuation: bool,
 ) -> ^PhaseComparator {
     self := new(PhaseComparator)
-
-    assert(band_count <= MAX_BANDS)
 
     init_audio_capture_node(self, "phase-tracker")
 
@@ -112,14 +109,17 @@ init_phase_comparator :: proc(
     self.base_freq_hz = base_freq_hz
     self.apply_attenuation = apply_attenuation
 
-    for i in 0 ..< band_count {
-        band := PhaseBand{}
-        band.freq_multiplier = 1.0
-        band.dft_config = init_dft(MAX_WINDOW_SIZE)
-        // band.ewma_state = init_ewma(0.1)
-        // band.moving_avg = init_moving_avg(5)
-        append(&self.bands, band)
+    for interval, i in strobe_intervals {
+        if interval >= 1.0 {
+            band := PhaseBand{}
+            band.interval = interval
+            band.dft_config = init_dft(MAX_WINDOW_SIZE)
+            // band.ewma_state = init_ewma(0.1)
+            // band.moving_avg = init_moving_avg(5)
+            append(&self.bands, band)
+        }
     }
+
 
     self.samplerate = samplerate
 
@@ -141,15 +141,12 @@ destroy_phase_comparator :: proc(self: ^PhaseComparator) {
 set_phase_comparator_speed :: proc(self: ^PhaseComparator, base_speed: f32) {
     speed: f32 = base_speed * self.pitch_standard / self.base_freq_hz
 
-    harmonic_multiplier: f32 = 1.0
-
     for &band, i in self.bands {
         band.speed = speed
         if self.mode == .VERNIER_MODE {
             speed *= self.speed_multiplier
         } else if self.mode == .HARMONIC_MODE {
-            band.speed *= harmonic_multiplier
-            harmonic_multiplier *= 2
+            band.speed *= band.interval
         }
     }
 }
@@ -175,7 +172,6 @@ set_phase_comparator_freq :: proc(
 
     flush_audio_capture_ringbuffer(self)
 
-    multiplier: f32 = 1.0
     self.base_freq_hz = base_freq_hz
     self.mode = mode
     self.pitch_standard = pitch_standard
@@ -193,12 +189,9 @@ set_phase_comparator_freq :: proc(
         band.speed = speed
 
         if self.mode == .HARMONIC_MODE {
-            band.freq_hz = f32(multiplier) * base_freq_hz
-            band.harmonic = int(multiplier)
-            band.speed *= multiplier
-            multiplier *= 2
+            band.freq_hz = band.interval * base_freq_hz
+            band.speed *= band.interval
         } else if self.mode == .VERNIER_MODE {
-            band.harmonic = 1
             band.freq_hz = base_freq_hz
             speed *= speed_multiplier
         }

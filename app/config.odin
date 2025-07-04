@@ -28,6 +28,8 @@ import "core:strings"
 
 import "../core"
 
+MAX_INTERVALS :: 8
+
 
 PartialLabelType :: enum {
     NONE,
@@ -62,7 +64,7 @@ Config :: struct {
     pitch_standard:        f32,
 
     // how many spinning bands to show
-    strobe_count:          int,
+    strobe_intervals:      [MAX_INTERVALS]f32,
 
     // FFT length for the pitch detector, e.g. 4096 samples
     pitch_detect_fft_size: int,
@@ -105,7 +107,7 @@ config_defaults :: Config {
     apply_attenuation     = true,
     target_freq_hz        = 110.0,
     pitch_standard        = 440.0,
-    strobe_count          = 3,
+    strobe_intervals      = {1, 2, 4, 0, 0, 0, 0, 0},
     pitch_detect_fft_size = 8192,
     samplerate            = 48_000,
     strobe_mode           = .HARMONIC_MODE,
@@ -168,6 +170,23 @@ load_config :: proc() -> Config {
             if ok {
                 ptr_bool := cast(^bool)ptr
                 ptr_bool^ = value
+            }
+        case reflect.Type_Info_Array:
+            trimmed := strings.trim(section[field.name], "[] ")
+            if len(trimmed) > 0 {
+                split := strings.split(trimmed, ",")
+                defer delete(split)
+                ptr_array := cast(^[MAX_INTERVALS]f32)ptr
+                l := len(split)
+                for i in 0..<l {
+                    trimmed := strings.trim(split[i], " ")
+                    value, ok := strconv.parse_f32(trimmed)
+                    if ok {
+                        ptr_array^[i] = value
+                    }
+                }
+                // Fill in the rest
+                for i in l..<MAX_INTERVALS do ptr_array^[i] = 0.0
             }
         }
     }

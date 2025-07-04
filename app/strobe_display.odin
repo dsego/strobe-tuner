@@ -54,7 +54,6 @@ StrobeDisplay :: struct {
     max_radius_loc:        i32,
     band_height_loc:       i32,
     err_cents_loc:         i32,
-    freq_multiplier_loc:   i32,
     display_type:          StrobeDisplayType,
 
     // shadow shader uniform locations

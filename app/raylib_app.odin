@@ -78,12 +78,12 @@ run_raylib_app :: proc(config: ^Config) {
     rl.GuiSetFont(font_store.medium_32)
     rl.GuiSetStyle(.DEFAULT, i32(rl.GuiDefaultProperty.TEXT_SIZE), 16)
 
-    //  ------------------
+    //  --------------------------------------------------------------------------------------------
 
     phase_comparator := core.init_phase_comparator(
         target_freq_hz,
         f32(config.samplerate),
-        config.strobe_count,
+        config.strobe_intervals[:],
         config.strobe_mode,
         config.apply_attenuation,
     )
