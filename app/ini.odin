@@ -29,8 +29,15 @@ CONFIG_NAME :: "config.ini"
 create_app_directory :: proc() -> Maybe(string) {
     dir_path := get_config_directory(APP_NAME)
     err := os.make_directory(dir_path)
-    if err != os.ERROR_NONE && err != os.EEXIST {
-        return nil
+    when ODIN_OS == .Darwin {
+        if err != os.ERROR_NONE && err != os.EEXIST {
+            return nil
+        }
+    }
+    else when ODIN_OS == .Windows {
+        if err != os.ERROR_NONE && err != os.ERROR_FILE_EXISTS {
+            return nil
+        }
     }
     return dir_path
 }

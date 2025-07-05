@@ -197,7 +197,7 @@ gui_note_detection_mode_toggle :: proc(
 
 
 gui_contrast_slider :: proc(position: [2]f32, value: ^f32) {
-    gui_slider(position, value, 0.0, 5.0)
+    gui_slider(position, value, 0.0, 7.0)
     // Draw the contrast icon
     rl.DrawTexturePro(
         texture_atlas,

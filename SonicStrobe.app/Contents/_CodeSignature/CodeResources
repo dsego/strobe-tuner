@@ -15,14 +15,14 @@
 	</dict>
 	<key>files2</key>
 	<dict>
-		<key>MacOS/libportaudio.dylib</key>
+		<key>MacOS/libportaudio.2.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			LR2tLx3bU9Ljnw4XpGJRtfZ/GIk=
+			ljbAH87VEKqpxfxtC2qjY31u0M4=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"1444bb2f17e894b6721c4c1e9d84c239d2ffc663" or cdhash H"2d1dad2f1ddb53d2e39f0e17a46251b5f67f1889" or cdhash H"1947cdf69cb52df36f094a514858c1f6df610ea7" or cdhash H"2a4611e319914898164716eefaa3f57d00faf7cf"</string>
+			<string>identifier "libportaudio.2" and anchor apple generic and certificate leaf[subject.CN] = "Apple Development: davorin.sego@gmail.com (YWXY3JQUS8)" and certificate 1[field.1.2.840.113635.100.6.2.1] /* exists */</string>
 		</dict>
 		<key>Resources/AppIcon.icns</key>
 		<dict>

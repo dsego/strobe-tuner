@@ -67,6 +67,7 @@ run_raylib_app :: proc(config: ^Config) {
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetConfigFlags({.WINDOW_HIGHDPI})
     rl.InitWindow(488, 800 if COLOR_CONTROLS else 532, APP_NAME)
+    rl.SetTargetFPS(120)
     defer rl.CloseWindow()
 
     init_fonts()
@@ -172,7 +173,6 @@ run_raylib_app :: proc(config: ^Config) {
     //                   MAIN LOOP
     // ------------------------------------------------
 
-    // rl.SetTargetFPS(120)
 
 
     for !rl.WindowShouldClose() {

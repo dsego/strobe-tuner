@@ -13,3 +13,10 @@ mv app.bin SonicStrobe.app/Contents/MacOS
 codesign --sign "Apple Development: davorin.sego@gmail.com" --deep  SonicStrobe.app
 
 
+
+portaudio
+----------------------------------------
+mkdir build
+cd build
+cmake .. -DBUILD_SHARED_LIBS=ON
+cmake --build . --config Release
