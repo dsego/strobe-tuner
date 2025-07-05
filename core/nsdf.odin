@@ -29,6 +29,7 @@ package core
 
 import "core:math"
 import "core:mem"
+import "base:runtime"
 
 import pffft "../external/odin-pffft"
 
@@ -50,12 +51,12 @@ NSDFConfig :: struct {
 nsdf_init :: proc(fft_size: int, samplerate: int) -> (self: NSDFConfig = {}) {
     self.fft_size = fft_size
     self.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
-    self.fft = make([]complex64, fft_size)
-    self.autocorr = make([]f32, fft_size)
+    self.fft = runtime.make_aligned([]complex64, fft_size, 16)
+    self.autocorr = runtime.make_aligned([]f32, fft_size, 16)
     self.spectrum = make([]f32, fft_size)
     self.nsdf = make([]f32, fft_size / 2)
     self.samplerate = samplerate
-    self.padded_samples = make([]f32, fft_size)
+    self.padded_samples = runtime.make_aligned([]f32, fft_size, 16)
     return
 }
 
@@ -104,7 +105,7 @@ nsdf_process_samples :: proc(self: ^NSDFConfig, samples: []f32) {
     pffft.transform_ordered(
         self.pffft_setup,
         raw_data(self.padded_samples),
-        raw_data(mem.slice_data_cast([]f32, self.fft)),
+        cast(^f32) raw_data(self.fft),
         nil,
         pffft.Direction.FORWARD,
     )
@@ -119,7 +120,7 @@ nsdf_process_samples :: proc(self: ^NSDFConfig, samples: []f32) {
     // inverse FFT to produce auto-correlation
     pffft.transform_ordered(
         self.pffft_setup,
-        raw_data(mem.slice_data_cast([]f32, self.fft)),
+        cast(^f32) raw_data(self.fft),
         raw_data(self.autocorr),
         nil,
         pffft.Direction.BACKWARD,
