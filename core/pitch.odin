@@ -35,6 +35,7 @@ PitchInfo :: struct {
     clarity:       f32,
     nsdf_peak:     Vec2,
     rms:           f32,
+    rms_dbfs:      f32,
     err_cents:     f32,
 }
 
@@ -85,6 +86,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.detected_freq, info.nsdf_peak = nsdf_pitch_detect(&self.nsdf, self.samples)
     info.clarity = info.nsdf_peak.y
     info.rms = calculate_rms(self.samples)
+    info.rms_dbfs = calculate_dbfs(info.rms)
 
     info.detected_note = find_note(info.detected_freq)
     info.err_cents = cents_deviation(info.detected_freq, info.detected_note.frequency)
@@ -99,13 +101,16 @@ calculate_rms :: proc(samples: []f32) -> f32 {
     return math.sqrt(square_sum / f32(len(samples)))
 }
 
-// compare RMS based on dBFS ?
-// TODO: define thresholds in config
-is_strong_pitch :: proc(pitch_info: PitchInfo) -> bool {
-    return pitch_info.clarity > 0.95 && pitch_info.rms > 0.03
+calculate_dbfs :: proc(rms: f32) -> f32 {
+    value_dBFS := 20.0 * math.log10(rms * math.sqrt(f32(2.0)))
+    return value_dBFS
 }
 
-// TODO: define thresholds in config
-is_weak_pitch :: proc(pitch_info: PitchInfo) -> bool {
-    return pitch_info.clarity < 0.9 || pitch_info.rms < 0.001
+// compare RMS based on dBFS ?
+is_strong_pitch :: proc(pitch_info: PitchInfo, clarity: f32, rms: f32) -> bool {
+    return pitch_info.clarity > clarity && pitch_info.rms > rms
+}
+
+is_weak_pitch :: proc(pitch_info: PitchInfo, clarity: f32, rms: f32) -> bool {
+    return pitch_info.clarity < clarity || pitch_info.rms < rms
 }

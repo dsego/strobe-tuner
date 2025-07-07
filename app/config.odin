@@ -58,73 +58,83 @@ TuningPreset :: enum {
 
 Config :: struct {
     // Initial target frequency for the strobe
-    target_freq_hz:         f32,
+    target_freq_hz:               f32,
 
     // eg A 440Hz
-    pitch_standard:         f32,
+    pitch_standard:               f32,
 
     // how many spinning bands to show
-    strobe_intervals:       [MAX_INTERVALS]f32,
-    strobe_intervals_index: int,
+    strobe_intervals:             [MAX_INTERVALS]f32,
+    strobe_intervals_index:       int,
 
     // FFT length for the pitch detector, e.g. 4096 samples
-    pitch_detect_fft_size:  int,
+    pitch_detect_fft_size:        int,
 
     // audio card sampling rate, e.g. 44.100 Hz
-    samplerate:             int,
+    samplerate:                   int,
 
     // harmonic to track multiple frequencies or "vernier" to track one pitch at different sensitivities
-    strobe_mode:            core.StrobeMode,
+    strobe_mode:                  core.StrobeMode,
 
     // the sensitivity or speed of the base strobe band,
     // i.e. how fast should the spinning effect be in response to the phase difference
-    strobe_speed:           f32,
+    strobe_speed:                 f32,
 
     // if multiple strobe bands, this sensitivity multiplier will be applied to subsequent spinning bands
-    speed_multiplier:       f32,
+    speed_multiplier:             f32,
 
     // contrast or gain of the strobe wheel, higher contrast will amplify the signal to make the stripes more prominent
-    strobe_contrast:        f32,
+    strobe_contrast:              f32,
 
     // auto detection vs manual selection of note to track
-    note_detection_mode:    NoteDetectionMode,
+    note_detection_mode:          NoteDetectionMode,
 
     // How to render the strobe effect
-    strobe_display_type:    StrobeDisplayType,
+    strobe_display_type:          StrobeDisplayType,
 
     // Color scheme for strobe track display, two hex values
-    strobe_color_1:         u32 "color",
-    strobe_color_2:         u32 "color",
-    strobe_colorway:        StrobeColorway,
+    strobe_color_1:               u32 "color",
+    strobe_color_2:               u32 "color",
+    strobe_colorway:              StrobeColorway,
 
     // attenuate strobe effect when it spins so fast it becomes distracting
-    apply_attenuation:      bool,
-    tuning_preset:          TuningPreset,
-    partial_labels:         PartialLabelType,
+    apply_attenuation:            bool,
+    tuning_preset:                TuningPreset,
+    partial_labels:               PartialLabelType,
+    pitch_detection_clarity_low:  f32,
+    pitch_detection_rms_low:      f32,
+    pitch_detection_clarity_high: f32,
+    pitch_detection_rms_high:     f32,
 }
 
 @(private)
 config_defaults :: Config {
-    apply_attenuation      = true,
-    target_freq_hz         = 110.0,
-    pitch_standard         = 440.0,
-    strobe_intervals       = {1, 2, 4, 0, 0, 0, 0, 0},
-    strobe_intervals_index = 0,
-    pitch_detect_fft_size  = 8192,
-    samplerate             = 48_000,
-    strobe_mode            = .HARMONIC_MODE,
-    note_detection_mode    = .AUTO,
-    strobe_speed           = 0.01,
-    speed_multiplier       = 2.0,
-    strobe_contrast        = 1000.0,
-    strobe_display_type    = .CURVED_TRACKS,
-    strobe_colorway        = .VIBRANT_RED,
+    apply_attenuation            = true,
+    target_freq_hz               = 110.0,
+    pitch_standard               = 440.0,
+    strobe_intervals             = {1, 2, 4, 0, 0, 0, 0, 0},
+    strobe_intervals_index       = 0,
+    pitch_detect_fft_size        = 8192,
+    samplerate                   = 48_000,
+    strobe_mode                  = .HARMONIC_MODE,
+    note_detection_mode          = .AUTO,
+    strobe_speed                 = 0.025,
+    speed_multiplier             = 2.0,
+    strobe_contrast              = 1000.0,
+    strobe_display_type          = .CURVED_TRACKS,
+    strobe_colorway              = .VIBRANT_RED,
 
-    // Custom
-    strobe_color_1         = 0x0,
-    strobe_color_2         = 0x0,
-    tuning_preset          = .CHROMATIC,
-    partial_labels         = .MULTIPLES,
+    // Custom colors
+    strobe_color_1               = 0x0,
+    strobe_color_2               = 0x0,
+
+    //
+    tuning_preset                = .CHROMATIC,
+    partial_labels               = .MULTIPLES,
+    pitch_detection_clarity_low  = 0.9,
+    pitch_detection_clarity_high = 0.95,
+    pitch_detection_rms_low      = 0.001,
+    pitch_detection_rms_high     = 0.03,
 }
 
 

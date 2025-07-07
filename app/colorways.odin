@@ -26,3 +26,16 @@ StrobeColorway :: enum {
 minty: [2]u32 : {0xB5F2DBFF, 0x6B3D7DFF}
 
 vibrant_red: [2]u32 : {0xFF6767FF, 0x6B4949FF}
+
+
+get_strobe_colors :: proc(config: ^Config) -> [2]u32 {
+    switch config.strobe_colorway {
+    case .VIBRANT_RED:
+        return vibrant_red
+    case .MINTY:
+        return minty
+    case .CUSTOM:
+        return {config.strobe_color_1, config.strobe_color_2}
+    }
+    return vibrant_red
+}

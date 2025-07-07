@@ -16,13 +16,13 @@
 
 package app
 
+import "core:c/libc"
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 import "core:path/filepath"
 import "core:sort"
 import "core:strings"
-import "core:c/libc"
 
 import rl "vendor:raylib"
 
@@ -87,20 +87,11 @@ run_raylib_app :: proc(config: ^Config) {
     )
     defer core.destroy_phase_comparator(phase_comparator)
 
-    colorway := vibrant_red
-    switch config.strobe_colorway {
-    case .VIBRANT_RED:
-        colorway = vibrant_red
-    case .MINTY:
-        colorway = minty
-    case .CUSTOM:
-        colorway = {config.strobe_color_1, config.strobe_color_2}
-    }
 
     strobe_display := init_strobe_display(
         {0, 0},
         {488, 560},
-        colorway,
+        get_strobe_colors(config),
         strobe_bg_color,
         config.strobe_contrast,
         config.strobe_display_type,
@@ -173,21 +164,62 @@ run_raylib_app :: proc(config: ^Config) {
     //                   MAIN LOOP
     // ------------------------------------------------
 
+    config_changed := false
 
 
     for !rl.WindowShouldClose() {
 
         if rl.IsKeyPressed(.R) {
+            config_changed = true
             fmt.println("Reset config to defaults")
             config^ = get_config_defaults()
+        }
+
+        super_key_down := rl.IsKeyDown(.LEFT_SUPER) || rl.IsKeyDown(.RIGHT_SUPER)
+        pref_key_combo := super_key_down && rl.IsKeyPressed(.COMMA)
+        if pref_key_combo {
+            shift_key_down := rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)
+
+            // [Cmd + Shift + ,] - Reload config
+            if shift_key_down {
+                config^ = load_config()
+                config_changed = true
+
+                // [Cmd + ,] - Open config editor
+            } else {
+                // TODO: support windows & linux
+                when ODIN_OS == .Darwin {
+                    config_path := get_config_path()
+                    defer delete(config_path)
+                    libc.system(fmt.ctprintf("open -a TextEdit \"%s\"", config_path))
+                }
+            }
+        }
+
+        if config_changed {
             strobe_speed_slider_value = config.strobe_speed
             tuning_preset_choice = int(config.tuning_preset)
+            set_strobe_colors(&strobe_display, get_strobe_colors(config))
+            core.set_phase_comparator_intervals(phase_comparator, config.strobe_intervals[:])
+            core.set_phase_comparator_freq(
+                phase_comparator,
+                target_note.frequency,
+                config.pitch_standard,
+                config.strobe_speed,
+                config.speed_multiplier,
+                config.strobe_mode,
+            )
+            config_changed = false // !!!!
         }
 
         pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
 
         // Keep previous measurement if there is no detected note
-        if core.is_strong_pitch(pitch_info) {
+        if core.is_strong_pitch(
+            pitch_info,
+            config.pitch_detection_clarity_high,
+            config.pitch_detection_rms_high,
+        ) {
             if detected_note.cents != pitch_info.detected_note.cents {
                 detected_note = pitch_info.detected_note
                 if config.note_detection_mode == .AUTO {
@@ -205,7 +237,11 @@ run_raylib_app :: proc(config: ^Config) {
             freq_estimation_active = true
         }
 
-        if core.is_weak_pitch(pitch_info) {
+        if core.is_weak_pitch(
+            pitch_info,
+            config.pitch_detection_clarity_low,
+            config.pitch_detection_rms_low,
+        ) {
             freq_estimation_active = false
         }
 
@@ -260,16 +296,6 @@ run_raylib_app :: proc(config: ^Config) {
         // Ignore return values - the NSDF provides a steadier Hz/Cents response
         core.run_phase_detection(phase_comparator)
 
-        // TODO: make this more integrated (eg Cmd+` on MacOS)
-        // TODO: support windows & linux
-        // TODO: add a reload command to read the config
-        if rl.IsKeyPressed(.C) {
-            when ODIN_OS == .Darwin {
-                config_path := get_config_path()
-                defer delete(config_path)
-                libc.system(fmt.ctprintf("open -a TextEdit \"%s\"", config_path))
-            }
-        }
 
         if rl.IsKeyPressed(.TAB) {
             if config.strobe_display_type == .CURVED_TRACKS {
@@ -377,7 +403,7 @@ run_raylib_app :: proc(config: ^Config) {
                 config.strobe_contrast,
                 config.strobe_display_type,
             )
-            rl.DrawLineEx({0, 306}, {488, 306}, 1.5, rl.GetColor(0x52535AFF))
+            // rl.DrawLineEx({0, 306}, {488, 306}, 1.5, rl.GetColor(0x52535AFF))
 
             strobe_mode, strobe_mode_changed := gui_strobe_mode_toggle(
                 {16, 456},
@@ -474,6 +500,26 @@ run_raylib_app :: proc(config: ^Config) {
                 set_strobe_colors(&strobe_display, {config.strobe_color_1, config.strobe_color_2})
             }
 
+
+            // Draw input level
+            // rl.DrawRectangleV({300, 500}, {100, 3}, rl.BLACK)
+            rl.DrawRectangleV({44, 519}, {60 + pitch_info.rms_dbfs, 1}, rl.GetColor(0x82E2FFFF))
+
+            // rl.DrawTextEx(
+            //     font_store.medium_32,
+            //     fmt.ctprintf("%-.1fdBFS", pitch_info.rms_dbfs),
+            //     {300, 480},
+            //     16,
+            //     0,
+            //     rl.LIGHTGRAY,
+            // )
+
+
+            // if pitch_info.rms_dbfs >= 0 do rl.DrawRectangleV({300, 500}, {10, 10}, rl.RED)
+            // else if pitch_info.rms_dbfs >= -20 do rl.DrawRectangleV({300, 500}, {10, 10}, rl.ORANGE)
+            // else if pitch_info.rms_dbfs >= -40 do rl.DrawRectangleV({300, 500}, {10, 10}, rl.YELLOW)
+            // else if pitch_info.rms_dbfs >= -60 do rl.DrawRectangleV({300, 500}, {10, 10}, rl.GREEN)
+            // else do rl.DrawRectangleV({300, 500}, {10, 10}, rl.BLACK)
 
             // TODO:
             // pitch standard - 440hz - number spinner

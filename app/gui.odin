@@ -506,7 +506,18 @@ draw_note :: proc(note: core.Note, pos: [2]f32, color: rl.Color, hide_accidental
         0,
         color,
     )
+
+    // Frequency
+    // rl.DrawTextEx(
+    //     font_store.medium_32,
+    //     fmt.ctprintf("%.1f", note.frequency),
+    //     {pos.x + 112, pos.y + 90},
+    //     16,
+    //     0,
+    //     rl.GetColor(0x7D7E8FFF),
+    // )
 }
+
 
 // TODO: show cents deviation as a graph
 
