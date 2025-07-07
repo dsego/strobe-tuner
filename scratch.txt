@@ -13,6 +13,11 @@ mv app.bin SonicStrobe.app/Contents/MacOS
 codesign --sign "Apple Development: davorin.sego@gmail.com" --deep  SonicStrobe.app
 
 
+Mac Icon
+➜ iconutil -c icns AppIcon.iconset
+➜ mv AppIcon.icns StrobeTuner.app/Contents/Resources
+
+
 
 portaudio
 ----------------------------------------
