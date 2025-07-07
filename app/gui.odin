@@ -329,7 +329,7 @@ gui_dropdown :: proc(
     btn_bounds := rl.Rectangle{position.x, position.y, width, 24}
 
     // TODO: make it either a prop or depend on actual width
-    max_text_len := 27
+    max_text_len := 25
 
     // Draw the button
     {
