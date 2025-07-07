@@ -133,8 +133,8 @@ config_defaults :: Config {
     partial_labels               = .MULTIPLES,
     pitch_detection_clarity_low  = 0.9,
     pitch_detection_clarity_high = 0.95,
-    pitch_detection_rms_low      = 0.001,
-    pitch_detection_rms_high     = 0.03,
+    pitch_detection_rms_low      = 0.001, // -60dB
+    pitch_detection_rms_high     = 0.01,  // -40dB
 }
 
 

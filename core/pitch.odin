@@ -89,6 +89,7 @@ calculate_rms :: proc(samples: []f32) -> f32 {
 }
 
 calculate_dbfs :: proc(rms: f32) -> f32 {
+    // The reason for the sqrt(2) is so the dBFS value of a full-scale sine wave equals 0
     value_dBFS := 20.0 * math.log10(rms * math.sqrt(f32(2.0)))
     return value_dBFS
 }
