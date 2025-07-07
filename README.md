@@ -77,7 +77,6 @@ git clone git@github.com:dsego/strobe-tuner.git
 
 2. Pull in and compile external dependencies:
 - https://github.com/jockus/odin-portaudio
-- https://github.com/spatialaudio/portaudio-binaries
 - https://github.com/PortAudio/portaudio
 - https://github.com/dsego/odin-pa_ringbuffer/
 - https://github.com/dsego/odin-pffft
