@@ -7,3 +7,4 @@ external/*
 *.a
 app.bin.dSYM/*
 *.zip
+*.so
