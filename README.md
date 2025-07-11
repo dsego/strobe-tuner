@@ -65,9 +65,9 @@ Zlib license
 
 
 
-### Developing
+### Development
 
-Install the just command runner (https://github.com/casey/just) to run the various dev commands.
+Install the `just` command runner (https://github.com/casey/just) to run the various dev commands.
 
 ```sh
 
