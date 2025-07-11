@@ -15,15 +15,6 @@
 	</dict>
 	<key>files2</key>
 	<dict>
-		<key>MacOS/libportaudio.2.dylib</key>
-		<dict>
-			<key>cdhash</key>
-			<data>
-			ljbAH87VEKqpxfxtC2qjY31u0M4=
-			</data>
-			<key>requirement</key>
-			<string>identifier "libportaudio.2" and anchor apple generic and certificate leaf[subject.CN] = "Apple Development: davorin.sego@gmail.com (YWXY3JQUS8)" and certificate 1[field.1.2.840.113635.100.6.2.1] /* exists */</string>
-		</dict>
 		<key>Resources/AppIcon.icns</key>
 		<dict>
 			<key>hash2</key>

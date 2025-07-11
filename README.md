@@ -65,30 +65,26 @@ Zlib license
 
 
 
+### Developing
 
+Install the just command runner (https://github.com/casey/just) to run the various dev commands.
 
-### Build steps
+```sh
 
-1. Clone the git repo
+# Clone this source code repository
+git clone https://github.com/dsego/strobe-tuner/
 
-```
-git clone git@github.com:dsego/strobe-tuner.git
-```
+# Change working directory
+cd strobe-tuner
 
-2. Pull in and compile external dependencies:
-- https://github.com/jockus/odin-portaudio
-- https://github.com/PortAudio/portaudio
-- https://github.com/dsego/odin-pa_ringbuffer/
-- https://github.com/dsego/odin-pffft
-- https://bitbucket.org/jpommier/pffft/
+# Install necessary dependencies into the /external sub-directory
+just install-deps
 
+# Build deps
+just build-pffft
+just build-portaudio
+just build-pa_ringubffer
 
-4. Run the app
-```
-odin run app -extra-linker-flags="-L."
-```
-
-Or alternatively build the binary
-```
-odin build app -o:speed -extra-linker-flags="-L."
+# Compile & run the app code
+just dev
 ```

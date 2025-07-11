@@ -2,9 +2,15 @@
 *.dll
 *.bin
 *.wav
-external/*
 *.o
 *.a
 app.bin.dSYM/*
 *.zip
 *.so
+
+
+# Ignore everything in external/
+external/*
+
+# But do not ignore .gitkeep
+!external/.gitkeep

@@ -17,24 +17,3 @@ Mac Icon
 ➜ iconutil -c icns AppIcon.iconset
 ➜ mv AppIcon.icns StrobeTuner.app/Contents/Resources
 
-
-
-portaudio
-----------------------------------------
-mkdir build
-cd build
-cmake .. -DBUILD_SHARED_LIBS=ON
-cmake --build . --config Release
-
-
-
-portaudio on windows
------------------------------------
-mkdir build
-cd build
-cmake .. -G "Visual Studio 17 2022"  -DBUILD_SHARED_LIBS=ON
-cmake --build . --config Release
-
-
-Run on Win 11
-odin run app --extra-linker-flags="/FORCE:MULTIPLE"
