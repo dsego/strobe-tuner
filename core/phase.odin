@@ -73,6 +73,8 @@ PhaseBand :: struct {
 
     // fade out if the spinning is too rapid
     attenuation:        f32,
+
+    auto_gain_active:   bool,
 }
 
 

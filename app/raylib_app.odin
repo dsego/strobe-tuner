@@ -49,6 +49,7 @@ run_raylib_app :: proc(config: ^Config) {
     freq_estimation_active := false
 
     pitch_info := core.PitchInfo{}
+    last_good_pitch_info := core.PitchInfo{}
 
     // Note detected by the auto-correlation method
     // FIXME: assigning a dummy cents value for undefined note
@@ -99,7 +100,14 @@ run_raylib_app :: proc(config: ^Config) {
     defer destroy_strobe_display(&strobe_display)
 
 
-    pitch_detector := core.init_pitch_detector(config.samplerate, config.pitch_detect_fft_size)
+    pitch_detector := core.init_pitch_detector(
+        config.samplerate,
+        config.pitch_detect_fft_size,
+        config.pitch_detection_clarity_high,
+        config.pitch_detection_rms_high,
+        config.pitch_detection_clarity_low,
+        config.pitch_detection_rms_low,
+    )
     defer core.destroy_pitch_detector(&pitch_detector)
 
 
@@ -156,6 +164,7 @@ run_raylib_app :: proc(config: ^Config) {
     color2 := rl.GetColor(config.strobe_color_2)
 
     interval_options := INTERVAL_OPTIONS
+    config_changed := false
 
     // ---------------------------------------------------------------------------------------------
 
@@ -163,8 +172,6 @@ run_raylib_app :: proc(config: ^Config) {
     // ------------------------------------------------
     //                   MAIN LOOP
     // ------------------------------------------------
-
-    config_changed := false
 
 
     for !rl.WindowShouldClose() {
@@ -215,11 +222,8 @@ run_raylib_app :: proc(config: ^Config) {
         pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
 
         // Keep previous measurement if there is no detected note
-        if core.is_strong_pitch(
-            pitch_info,
-            config.pitch_detection_clarity_high,
-            config.pitch_detection_rms_high,
-        ) {
+        if pitch_info.is_strong_pitch {
+            last_good_pitch_info = pitch_info
             if detected_note.cents != pitch_info.detected_note.cents {
                 detected_note = pitch_info.detected_note
                 if config.note_detection_mode == .AUTO {
@@ -237,11 +241,7 @@ run_raylib_app :: proc(config: ^Config) {
             freq_estimation_active = true
         }
 
-        if core.is_weak_pitch(
-            pitch_info,
-            config.pitch_detection_clarity_low,
-            config.pitch_detection_rms_low,
-        ) {
+        if pitch_info.is_weak_pitch {
             freq_estimation_active = false
         }
 
@@ -347,15 +347,21 @@ run_raylib_app :: proc(config: ^Config) {
                 rl.GetColor(0xFBFBFBFF) if freq_estimation_active else rl.GetColor(0x7D7E8FFF),
             )
 
-            // TODO:
-            // --- if detected note is outside of measurement scope -> use estimated freq
-            // --- if detected note is close to target note -> use phase diff for fine freq display
-
             rl.DrawTextEx(font_store.medium_32, "Hz", {147, 323}, 16, 1, rl.GetColor(0xFBFBFBFF))
+
+            hz := pitch_info.detected_freq
+            cents := pitch_info.err_cents
+
+            if !freq_estimation_active && last_good_pitch_info.measured {
+                hz = last_good_pitch_info.detected_freq
+                cents = last_good_pitch_info.err_cents
+            }
+
+            show_placeholder := !freq_estimation_active || out_of_range
 
             rl.DrawTextEx(
                 font_store.bold_36,
-                "-" if !freq_estimation_active || out_of_range else fmt.ctprintf("%.1f", pitch_info.detected_freq),
+                "-" if show_placeholder else fmt.ctprintf("%.1f", hz),
                 {147, 344},
                 18,
                 1,
@@ -371,8 +377,8 @@ run_raylib_app :: proc(config: ^Config) {
                 rl.GetColor(0xFBFBFBFF),
             )
 
-            err_cents_cstr := fmt.ctprintf("%.1f", math.abs(pitch_info.err_cents))
-            show_minus_sign := pitch_info.err_cents < 0 && err_cents_cstr != "0.0"
+            cents_str := fmt.ctprintf("%.1f", math.abs(cents))
+            show_minus_sign := cents < 0 && cents_str != "0.0"
 
             if show_minus_sign || !freq_estimation_active || out_of_range {
                 rl.DrawTextEx(font_store.bold_36, "-", {232, 344}, 18, 1, rl.GetColor(0xFBFBFBFF))
@@ -380,7 +386,7 @@ run_raylib_app :: proc(config: ^Config) {
 
             rl.DrawTextEx(
                 font_store.bold_36,
-                "" if !freq_estimation_active || out_of_range else err_cents_cstr,
+                "" if show_placeholder else cents_str,
                 {242, 344},
                 18,
                 1,

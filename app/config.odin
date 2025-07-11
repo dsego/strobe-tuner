@@ -105,6 +105,10 @@ Config :: struct {
     pitch_detection_rms_low:      f32,
     pitch_detection_clarity_high: f32,
     pitch_detection_rms_high:     f32,
+    auto_gain_control:            bool,
+    max_auto_gain:                f32,
+    auto_gain_threshold_low:      f32,
+    auto_gain_threshold_heigh:    f32,
 }
 
 @(private)
@@ -133,8 +137,12 @@ config_defaults :: Config {
     partial_labels               = .MULTIPLES,
     pitch_detection_clarity_low  = 0.9,
     pitch_detection_clarity_high = 0.95,
-    pitch_detection_rms_low      = 0.001, // -60dB
-    pitch_detection_rms_high     = 0.01,  // -40dB
+    pitch_detection_rms_low      = 0.005,
+    pitch_detection_rms_high     = 0.02,
+    auto_gain_control            = false,
+    max_auto_gain                = 10.0,
+    auto_gain_threshold_low      = 0.001,
+    auto_gain_threshold_heigh    = 0.01,
 }
 
 

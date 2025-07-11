@@ -23,26 +23,46 @@ import "core:time"
 
 
 PitchDetector :: struct {
-    using node: AudioCaptureNode,
-    nsdf:       NSDFConfig,
-    samples:    []f32,
+    using node:   AudioCaptureNode,
+    nsdf:         NSDFConfig,
+    samples:      []f32,
+    clarity_high: f32,
+    rms_high:     f32,
+    clarity_low:  f32,
+    rms_low:      f32,
 }
 
 
 PitchInfo :: struct {
-    detected_freq: f32,
-    detected_note: Note,
-    clarity:       f32,
-    nsdf_peak:     Vec2,
-    rms:           f32,
-    rms_dbfs:      f32,
-    err_cents:     f32,
+    measured:        bool,
+    detected_freq:   f32,
+    detected_note:   Note,
+    clarity:         f32,
+    nsdf_peak:       Vec2,
+    rms:             f32,
+    rms_dbfs:        f32,
+    err_cents:       f32,
+    is_strong_pitch: bool,
+    is_weak_pitch:   bool,
 }
 
 
-init_pitch_detector :: proc(samplerate: int, fft_size: int) -> (self: PitchDetector) {
+init_pitch_detector :: proc(
+    samplerate: int,
+    fft_size: int,
+    clarity_high: f32,
+    rms_high: f32,
+    clarity_low: f32,
+    rms_low: f32,
+) -> (
+    self: PitchDetector,
+) {
     self.samples = make([]f32, fft_size / 2)
     self.nsdf = nsdf_init(fft_size, samplerate)
+    self.clarity_high = clarity_high
+    self.rms_high = rms_high
+    self.clarity_low = clarity_low
+    self.rms_low = rms_low
     init_audio_capture_node(&self, "pitch")
     return
 }
@@ -70,6 +90,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     // no new audio samples available, skip pitch detection
     if available <= 0 do return prev_info
 
+    info.measured = true
     info.detected_freq, info.nsdf_peak = nsdf_pitch_detect(&self.nsdf, self.samples)
     info.clarity = info.nsdf_peak.y
     info.rms = calculate_rms(self.samples)
@@ -77,6 +98,9 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
 
     info.detected_note = find_note(info.detected_freq)
     info.err_cents = cents_deviation(info.detected_freq, info.detected_note.frequency)
+
+    info.is_strong_pitch = info.clarity > self.clarity_high && info.rms > self.rms_high
+    info.is_weak_pitch = info.clarity < self.clarity_low || info.rms < self.rms_low
 
     return info
 }
@@ -92,13 +116,4 @@ calculate_dbfs :: proc(rms: f32) -> f32 {
     // The reason for the sqrt(2) is so the dBFS value of a full-scale sine wave equals 0
     value_dBFS := 20.0 * math.log10(rms * math.sqrt(f32(2.0)))
     return value_dBFS
-}
-
-// compare RMS based on dBFS ?
-is_strong_pitch :: proc(pitch_info: PitchInfo, clarity: f32, rms: f32) -> bool {
-    return pitch_info.clarity > clarity && pitch_info.rms > rms
-}
-
-is_weak_pitch :: proc(pitch_info: PitchInfo, clarity: f32, rms: f32) -> bool {
-    return pitch_info.clarity < clarity || pitch_info.rms < rms
 }

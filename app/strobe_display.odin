@@ -78,7 +78,6 @@ init_strobe_display :: proc(
     self.background = rl.GetColor(background)
     self.contrast = contrast
 
-
     // We need this to draw the fragment shader
     texture_image := rl.GenImageColor(
         self.texture_width,
@@ -281,6 +280,20 @@ draw_strobe_display :: proc(
         )
 
         amp := self.contrast * band.amp
+
+        if config.auto_gain_control && band.attenuation <= 0.0 {
+            band.auto_gain_active = core.schmitt_trigger(
+                band.auto_gain_active,
+                band.amp,
+                config.auto_gain_threshold_low,
+                config.auto_gain_threshold_heigh,
+            )
+            if band.auto_gain_active {
+                auto_gain := math.min(1.0 / band.amp, config.max_auto_gain)
+                amp *= auto_gain
+            }
+        }
+
         // if out_of_range {
         // amp = 0.0
         // }

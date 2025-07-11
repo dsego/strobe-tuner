@@ -23,7 +23,7 @@ main :: proc() {
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
     defer rl.CloseWindow()
 
-    font := rl.LoadFontEx("../assets/NotoSansMono-Medium.ttf", 64, nil, 0)
+    font := rl.LoadFontEx("../assets/fonts/noto/NotoSansMono-Medium.ttf", 64, nil, 0)
     defer rl.UnloadFont(font)
 
 
