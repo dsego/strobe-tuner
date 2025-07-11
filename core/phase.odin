@@ -32,7 +32,6 @@ import "core:c/libc"
 import "core:fmt"
 import "core:math"
 import "core:math/cmplx"
-import "core:math/linalg"
 import "core:testing"
 
 
@@ -71,9 +70,6 @@ PhaseBand :: struct {
     // a number < 1 will slow down the strobe and > 1 will increase the strobe spinning rate
     speed:              f32,
 
-    // fade out if the spinning is too rapid
-    attenuation:        f32,
-
     auto_gain_active:   bool,
 }
 
@@ -90,7 +86,6 @@ PhaseComparator :: struct {
     samplerate:         f32,
     mode:               StrobeMode,
     available:          int,
-    apply_attenuation:  bool,
 }
 
 
@@ -99,7 +94,6 @@ init_phase_comparator :: proc(
     samplerate: f32,
     strobe_intervals: []f32,
     mode: StrobeMode,
-    apply_attenuation: bool,
 ) -> ^PhaseComparator {
     self := new(PhaseComparator)
 
@@ -109,7 +103,6 @@ init_phase_comparator :: proc(
 
     self.mode = mode
     self.base_freq_hz = base_freq_hz
-    self.apply_attenuation = apply_attenuation
 
     for interval, i in strobe_intervals {
         if interval >= 1.0 {
@@ -197,7 +190,6 @@ set_phase_comparator_freq :: proc(
 
     for &band, i in self.bands {
         // reset_ewma(&band.ewma_state)
-
         band.time_stretch = f32(self.reference_interval)
         band.phase = 0.0
 
@@ -366,17 +358,5 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
         band.amp = base_band.amp
         band.phase_diff = base_band.phase_diff
         band.scaled_phase = band.scaled_phase - band.phase_diff * band.speed
-    }
-
-
-    // Fade out strobe when it spins so rapidly to become distracting
-    if self.apply_attenuation && self.mode == .VERNIER_MODE {
-        // TBD: if these need to be tweaked some more
-        band.attenuation = linalg.smoothstep(
-            f32(0.04),
-            f32(0.005),
-            math.abs(band.phase_diff * band.speed),
-        )
-        band.amp *= band.attenuation
     }
 }

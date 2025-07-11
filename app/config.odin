@@ -107,8 +107,9 @@ Config :: struct {
     pitch_detection_rms_high:     f32,
     auto_gain_control:            bool,
     max_auto_gain:                f32,
-    auto_gain_threshold_low:      f32,
-    auto_gain_threshold_heigh:    f32,
+    auto_gain_threshold_low_0:    f32,
+    auto_gain_threshold_low_1:    f32,
+    auto_gain_threshold_high:     f32,
 }
 
 @(private)
@@ -140,9 +141,10 @@ config_defaults :: Config {
     pitch_detection_rms_low      = 0.005,
     pitch_detection_rms_high     = 0.02,
     auto_gain_control            = false,
-    max_auto_gain                = 10.0,
-    auto_gain_threshold_low      = 0.001,
-    auto_gain_threshold_heigh    = 0.01,
+    max_auto_gain                = 1000.0,
+    auto_gain_threshold_low_0    = 0.0005,
+    auto_gain_threshold_low_1    = 0.001,
+    auto_gain_threshold_high     = 0.005,
 }
 
 

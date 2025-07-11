@@ -18,6 +18,7 @@ package app
 
 import "core:fmt"
 import "core:math"
+import "core:math/linalg"
 import "core:path/filepath"
 import rl "vendor:raylib"
 
@@ -280,15 +281,34 @@ draw_strobe_display :: proc(
         )
 
         amp := self.contrast * band.amp
+        attenuation: f32 = 0.0
 
-        if config.auto_gain_control && band.attenuation <= 0.0 {
+        // fade out if the spinning is too rapid
+        if config.apply_attenuation && config.strobe_mode == .VERNIER_MODE {
+            // TBD: if these need to be tweaked some more
+            attenuation = linalg.smoothstep(
+                f32(0.04),
+                f32(0.005),
+                math.abs(band.phase_diff * band.speed),
+            )
+            amp *= attenuation
+        }
+
+        if config.auto_gain_control {
             band.auto_gain_active = core.schmitt_trigger(
                 band.auto_gain_active,
                 band.amp,
-                config.auto_gain_threshold_low,
-                config.auto_gain_threshold_heigh,
+                config.auto_gain_threshold_low_0,
+                config.auto_gain_threshold_high,
             )
             if band.auto_gain_active {
+                // smoothen out the AGC response
+                // smoothing := linalg.smoothstep(
+                //     config.auto_gain_threshold_low_0,
+                //     config.auto_gain_threshold_low_1,
+                //     band.amp,
+                // )
+                // auto_gain := smoothing * math.min(1.0 / band.amp, config.max_auto_gain)
                 auto_gain := math.min(1.0 / band.amp, config.max_auto_gain)
                 amp *= auto_gain
             }

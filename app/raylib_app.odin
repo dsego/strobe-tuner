@@ -84,7 +84,6 @@ run_raylib_app :: proc(config: ^Config) {
         f32(config.samplerate),
         config.strobe_intervals[:],
         config.strobe_mode,
-        config.apply_attenuation,
     )
     defer core.destroy_phase_comparator(phase_comparator)
 
@@ -180,6 +179,11 @@ run_raylib_app :: proc(config: ^Config) {
             config_changed = true
             fmt.println("Reset config to defaults")
             config^ = get_config_defaults()
+        }
+
+        if rl.IsKeyPressed(.A) {
+            config.auto_gain_control = !config.auto_gain_control
+            fmt.println("Auto gain control:", config.auto_gain_control ? "ON" : "OFF")
         }
 
         super_key_down := rl.IsKeyDown(.LEFT_SUPER) || rl.IsKeyDown(.RIGHT_SUPER)
