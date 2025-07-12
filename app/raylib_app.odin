@@ -334,6 +334,11 @@ run_raylib_app :: proc(config: ^Config) {
             // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
             draw_strobe_display(&strobe_display, phase_comparator, out_of_range, config)
 
+            agc, agc_changed := gui_agc_toggle({445, 50}, config.auto_gain_control)
+            if agc_changed {
+                config.auto_gain_control = agc
+            }
+
             if freq_estimation_active {
                 note_low_state = core.schmitt_trigger_neg(note_low_state, pitch_cents_err, -8, -10)
                 note_high_state = core.schmitt_trigger(note_high_state, pitch_cents_err, 8, 10)

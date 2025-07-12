@@ -155,6 +155,27 @@ gui_strobe_partial :: proc(
 }
 
 
+gui_agc_toggle :: proc(position: [2]f32, agc_on: bool) -> (bool, bool) {
+    bounds := rl.Rectangle{position.x, position.y, 35, 14}
+    bg_color := rl.GetColor(0x82E2FFFF) if agc_on else rl.GetColor(window_bg_color)
+
+    rl.DrawRectangleRounded(bounds, 0.5, 6, bg_color)
+    rl.DrawTextEx(
+        font_store.medium_28,
+        "AGC",
+        {position.x + 5, position.y},
+        14,
+        0,
+        rl.GetColor(strobe_bg_color),
+    )
+
+    if gui_button(bounds) {
+        return !agc_on, true
+    }
+
+    return agc_on, false
+}
+
 gui_note_detection_mode_toggle :: proc(
     position: [2]f32,
     active_detection_mode: NoteDetectionMode,
