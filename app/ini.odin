@@ -28,17 +28,12 @@ CONFIG_NAME :: "config.ini"
 
 create_app_directory :: proc() -> Maybe(string) {
     dir_path := get_config_directory(APP_NAME)
+
+    if os.exists(dir_path) do return dir_path
+
     err := os.make_directory(dir_path)
-    when ODIN_OS == .Darwin {
-        if err != os.ERROR_NONE && err != os.EEXIST {
-            return nil
-        }
-    }
-    else when ODIN_OS == .Windows {
-        if err != os.ERROR_NONE && err != os.ERROR_FILE_EXISTS {
-            return nil
-        }
-    }
+    if err != os.ERROR_NONE do return nil
+
     return dir_path
 }
 
@@ -52,6 +47,8 @@ load_ini :: proc() -> (ini.Map, bool) {
     // Load or create config directory in a standard location based on the OS
     dir_path, dir_ok := create_app_directory().?
     defer delete(dir_path)
+
+    fmt.println(dir_path, dir_ok)
 
     if !dir_ok do return nil, false
 
