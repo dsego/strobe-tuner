@@ -1,10 +1,17 @@
 # use with https://github.com/casey/just
 
+# Cross platform shebang
+shebang := if os() == "windows" {
+  "powershell.exe"
+} else {
+  "/usr/bin/env sh"
+}
+
 default:
   @just --list
 
 install-deps:
-  #!/usr/bin/env bash
+  #!{{shebang}}
   cd external
   git clone https://github.com/jockus/odin-portaudio/
   git clone https://github.com/PortAudio/portaudio/
@@ -13,14 +20,14 @@ install-deps:
   git clone https://bitbucket.org/jpommier/pffft/
 
 build-pffft:
-  #!/usr/bin/env bash
+  #!{{shebang}}
   cd external/pffft
   clang pffft.c pffft.h -c -O2 -Os -fPIC
   ar rcs pffft.a pffft.o
   cp pffft.a ../odin-pffft/
 
 build-pa_ringubffer:
-  #!/usr/bin/env bash
+  #!{{shebang}}
   cd external/portaudio/src/common
   clang pa_ringbuffer.c pa_ringbuffer.h -c -O2 -Os -fPIC
   ar rcs pa_ringbuffer.a pa_ringbuffer.o
@@ -28,7 +35,7 @@ build-pa_ringubffer:
 
 
 build-portaudio:
-  #!/usr/bin/env bash
+  #!{{shebang}}
   cd external/portaudio
   mkdir build
   cd build
