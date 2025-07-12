@@ -1,4 +1,4 @@
-//+build darwin
+#+build darwin
 
 // Copyright (C) 2025  Davorin Šego
 
