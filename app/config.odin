@@ -102,14 +102,12 @@ Config :: struct {
     tuning_preset:                TuningPreset,
     partial_labels:               PartialLabelType,
     pitch_detection_clarity_low:  f32,
-    pitch_detection_rms_low:      f32,
     pitch_detection_clarity_high: f32,
-    pitch_detection_rms_high:     f32,
+    noise_floor_snr_db_threshold: f32,
+    pitch_detection_min_snr_db:   f32,
     auto_gain_control:            bool,
+    auto_gain_min_snr_db:         f32,
     max_auto_gain:                f32,
-    auto_gain_threshold_low_0:    f32,
-    auto_gain_threshold_low_1:    f32,
-    auto_gain_threshold_high:     f32,
 }
 
 @(private)
@@ -138,13 +136,11 @@ config_defaults :: Config {
     partial_labels               = .MULTIPLES,
     pitch_detection_clarity_low  = 0.9,
     pitch_detection_clarity_high = 0.95,
-    pitch_detection_rms_low      = 0.001,
-    pitch_detection_rms_high     = 0.01,
+    noise_floor_snr_db_threshold = 10, // to determine if it’s safe to update the noise floor
+    pitch_detection_min_snr_db   = 15, // dB
     auto_gain_control            = false,
+    auto_gain_min_snr_db         = 15, // dB
     max_auto_gain                = 1000.0,
-    auto_gain_threshold_low_0    = 0.0005,
-    auto_gain_threshold_low_1    = 0.001,
-    auto_gain_threshold_high     = 0.005,
 }
 
 

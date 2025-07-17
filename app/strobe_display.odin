@@ -295,23 +295,23 @@ draw_strobe_display :: proc(
         }
 
         if config.auto_gain_control {
-            band.auto_gain_active = core.schmitt_trigger(
-                band.auto_gain_active,
-                band.amp,
-                config.auto_gain_threshold_low_0,
-                config.auto_gain_threshold_high,
-            )
-            if band.auto_gain_active {
-                // smoothen out the AGC response
-                // smoothing := linalg.smoothstep(
-                //     config.auto_gain_threshold_low_0,
-                //     config.auto_gain_threshold_low_1,
-                //     band.amp,
-                // )
-                // auto_gain := smoothing * math.min(1.0 / band.amp, config.max_auto_gain)
-                auto_gain := math.min(1.0 / band.amp, config.max_auto_gain)
-                amp *= auto_gain
-            }
+            // band.auto_gain_active = core.schmitt_trigger(
+            //     band.auto_gain_active,
+            //     band.amp,
+            //     config.auto_gain_threshold_low_0,
+            //     config.auto_gain_threshold_high,
+            // )
+            // if band.auto_gain_active {
+            //     // smoothen out the AGC response
+            //     // smoothing := linalg.smoothstep(
+            //     //     config.auto_gain_threshold_low_0,
+            //     //     config.auto_gain_threshold_low_1,
+            //     //     band.amp,
+            //     // )
+            //     // auto_gain := smoothing * math.min(1.0 / band.amp, config.max_auto_gain)
+            //     auto_gain := clamp(1.0 / band.amp, 0, config.max_auto_gain)
+            //     amp *= auto_gain
+            // }
         }
 
         // if out_of_range {

@@ -99,13 +99,14 @@ run_raylib_app :: proc(config: ^Config) {
     defer destroy_strobe_display(&strobe_display)
 
 
+    // TODO: update pitch detector when config changes
     pitch_detector := core.init_pitch_detector(
         config.samplerate,
         config.pitch_detect_fft_size,
         config.pitch_detection_clarity_high,
-        config.pitch_detection_rms_high,
         config.pitch_detection_clarity_low,
-        config.pitch_detection_rms_low,
+        config.pitch_detection_min_snr_db,
+        config.noise_floor_snr_db_threshold,
     )
     defer core.destroy_pitch_detector(&pitch_detector)
 
@@ -357,6 +358,7 @@ run_raylib_app :: proc(config: ^Config) {
             )
 
             rl.DrawTextEx(font_store.medium_32, "Hz", {147, 323}, 16, 1, rl.GetColor(0xFBFBFBFF))
+            // rl.DrawTextEx(font_store.medium_32, fmt.ctprintf("%.1f", pitch_info.snr_db), {247, 423}, 16, 1, rl.GetColor(0xFBFBFBFF))
 
             hz := pitch_info.detected_freq
             cents := pitch_info.err_cents
