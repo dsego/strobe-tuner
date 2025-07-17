@@ -106,8 +106,10 @@ Config :: struct {
     noise_floor_snr_db_threshold: f32,
     pitch_detection_min_snr_db:   f32,
     auto_gain_control:            bool,
-    auto_gain_min_snr_db:         f32,
+    auto_gain_snr_db_low:         f32,
+    auto_gain_snr_db_high:        f32,
     max_auto_gain:                f32,
+    gain_release_coefficient:     f32,
 }
 
 @(private)
@@ -139,8 +141,10 @@ config_defaults :: Config {
     noise_floor_snr_db_threshold = 10, // to determine if it’s safe to update the noise floor
     pitch_detection_min_snr_db   = 15, // dB
     auto_gain_control            = false,
-    auto_gain_min_snr_db         = 15, // dB
+    auto_gain_snr_db_low         = 20, // dB
+    auto_gain_snr_db_high        = 50, // dB
     max_auto_gain                = 1000.0,
+    gain_release_coefficient     = 0.1,
 }
 
 

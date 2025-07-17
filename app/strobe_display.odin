@@ -59,6 +59,8 @@ StrobeDisplay :: struct {
 
     // shadow shader uniform locations
     shadow_dimensions_loc: i32,
+    auto_gain_active:      [core.MAX_BANDS]bool,
+    auto_gain:             [core.MAX_BANDS]f32,
 }
 
 
@@ -72,6 +74,9 @@ init_strobe_display :: proc(
 ) -> (
     self: StrobeDisplay,
 ) {
+    for i in 0..<len(self.auto_gain) {
+        self.auto_gain[i] = 1.0
+    }
     self.texture_width = i32(size.x)
     self.texture_height = i32(size.y)
     self.position = position
@@ -294,29 +299,29 @@ draw_strobe_display :: proc(
             amp *= attenuation
         }
 
+
         if config.auto_gain_control {
-            // band.auto_gain_active = core.schmitt_trigger(
-            //     band.auto_gain_active,
-            //     band.amp,
-            //     config.auto_gain_threshold_low_0,
-            //     config.auto_gain_threshold_high,
-            // )
-            // if band.auto_gain_active {
-            //     // smoothen out the AGC response
-            //     // smoothing := linalg.smoothstep(
-            //     //     config.auto_gain_threshold_low_0,
-            //     //     config.auto_gain_threshold_low_1,
-            //     //     band.amp,
-            //     // )
-            //     // auto_gain := smoothing * math.min(1.0 / band.amp, config.max_auto_gain)
-            //     auto_gain := clamp(1.0 / band.amp, 0, config.max_auto_gain)
-            //     amp *= auto_gain
-            // }
+            self.auto_gain_active[band_idx] = core.schmitt_trigger(
+                self.auto_gain_active[band_idx],
+                band.snr_db,
+                config.auto_gain_snr_db_low,
+                config.auto_gain_snr_db_high,
+            )
+            if self.auto_gain_active[band_idx] {
+                self.auto_gain = clamp(1.0 / band.amp, 0, config.max_auto_gain)
+            } else {
+                // Slowly release gain with exponential decay
+                self.auto_gain += config.gain_release_coefficient * (1.0 - self.auto_gain)
+            }
+            amp *= self.auto_gain[band_idx]
         }
 
         // if out_of_range {
         // amp = 0.0
         // }
+
+        // limit max amp to avoid jagged edges in the strobe display
+        amp = clamp(amp, 0.0, 50.0)
 
         rl.SetShaderValue(self.strobe_shader, self.amp_loc, &amp, rl.ShaderUniformDataType.FLOAT)
 

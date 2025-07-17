@@ -110,10 +110,11 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.detected_freq, info.nsdf_peak = nsdf_pitch_detect(&self.nsdf, self.samples)
     info.clarity = info.nsdf_peak.y
     info.rms = calculate_rms(self.samples)
-    info.rms_dbfs = calculate_dbfs(info.rms)
+    info.rms_dbfs = dbfs(info.rms)
 
     // current SNR
-    self.snr_db = 20.0 * math.log10(info.rms / self.noise_floor)
+    EPS :: 1e-8 // avoid divide by zero
+    self.snr_db = 20.0 * math.log10((info.rms + EPS) / (self.noise_floor + EPS))
     info.snr_db = self.snr_db
 
     update_noise_floor(self, info.rms)
@@ -169,9 +170,6 @@ calculate_rms :: proc(samples: []f32) -> f32 {
     return math.sqrt(square_sum / f32(len(samples)))
 }
 
-@(private)
-calculate_dbfs :: proc(rms: f32) -> f32 {
-    // The reason for the sqrt(2) is so the dBFS value of a full-scale sine wave equals 0
-    value_dBFS := 20.0 * math.log10(rms * math.sqrt(f32(2.0)))
-    return value_dBFS
+dbfs :: proc (signal: $T) -> T {
+    return 20.0 * math.log10(signal * math.sqrt(cast(T) 2.0))
 }

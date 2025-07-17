@@ -48,29 +48,30 @@ StrobeMode :: enum {
 
 
 PhaseBand :: struct {
-    hop_size:           int, // number of samples between consecutive DFT windows, affects phase-based frequency tracking
-    freq_hz:            f32,
-    interval:           f32, // interval ratio, eg 1x for base note, 1.5x for perfect fifth,  2x for octave, etc
-    note:               Note,
-    norm_freq:          f32,
-    freq_diff_hz:       f32,
-    estimated_freq_hz:  f32,
-    smoothed_freq_hz:   f32,
+    hop_size:                     int, // number of samples between consecutive DFT windows, affects phase-based frequency tracking
+    freq_hz:                      f32,
+    interval:                     f32, // interval ratio, eg 1x for base note, 1.5x for perfect fifth,  2x for octave, etc
+    note:                         Note,
+    norm_freq:                    f32,
+    freq_diff_hz:                 f32,
+    estimated_freq_hz:            f32,
+    smoothed_freq_hz:             f32,
     // ewma_state:        EwmaState,
-    moving_avg:         MovingAvg,
-    dft_config:         SingleFreqDFT,
-    time_stretch:       f32,
-    phase:              f32, // actual measured phase
-    amp:                f32,
-    phase_diff:         f32, // phase difference between detection frames
-    err_cents:          f32,
-    smoothed_err_cents: f32,
-    scaled_phase:       f32, // phase scaled based on desired strobe speed
+    moving_avg:                   MovingAvg,
+    dft_config:                   SingleFreqDFT,
+    time_stretch:                 f32,
+    phase:                        f32, // actual measured phase
+    amp:                          f32,
+    phase_diff:                   f32, // phase difference between detection frames
+    err_cents:                    f32,
+    smoothed_err_cents:           f32,
+    scaled_phase:                 f32, // phase scaled based on desired strobe speed
 
     // a number < 1 will slow down the strobe and > 1 will increase the strobe spinning rate
-    speed:              f32,
-
-    auto_gain_active:   bool,
+    speed:                        f32,
+    snr_db:                       f32,
+    noise_floor:                  f32,
+    noise_floor_snr_db_threshold: f32,
 }
 
 
@@ -94,6 +95,7 @@ init_phase_comparator :: proc(
     samplerate: f32,
     strobe_intervals: []f32,
     mode: StrobeMode,
+    noise_floor_snr_db_threshold: f32,
 ) -> ^PhaseComparator {
     self := new(PhaseComparator)
 
@@ -109,8 +111,11 @@ init_phase_comparator :: proc(
             band := PhaseBand{}
             band.interval = interval
             band.dft_config = init_dft(MAX_WINDOW_SIZE)
+            band.noise_floor = 10e-6
+            band.noise_floor_snr_db_threshold = noise_floor_snr_db_threshold
             // band.ewma_state = init_ewma(0.1)
             // band.moving_avg = init_moving_avg(5)
+
             append(&self.bands, band)
         }
     }
@@ -192,6 +197,7 @@ set_phase_comparator_freq :: proc(
         // reset_ewma(&band.ewma_state)
         band.time_stretch = f32(self.reference_interval)
         band.phase = 0.0
+        band.noise_floor = 10e-6
 
         if self.mode == .HARMONIC_MODE {
             band.freq_hz = band.interval * base_freq_hz
@@ -210,7 +216,6 @@ set_phase_comparator_freq :: proc(
         }
     }
 }
-
 
 // Handle the jump from 2π to 0 or 0 to 2π (both rotation directions)
 unwrap_phase :: proc(phase: f32) -> f32 {
@@ -237,6 +242,7 @@ run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32, bool) {
 
     for &band, band_idx in self.bands {
         determine_band_phase(self, &band, band_idx)
+        update_band_noise_floor(self, &band, band_idx)
     }
 
     // fmt.println(">>", base_band.moving_avg)
@@ -346,17 +352,43 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
 
         // Scale down by factor
         band.scaled_phase = band.scaled_phase - band.phase_diff * band.speed
-
-        amp := magnitude(dft)
-
-        // limit max amp to avoid jagged edges in the strobe display
-        band.amp = clamp(amp, 0.0, 50.0)
-
+        band.amp = magnitude(dft)
     } else {
         // Vernier mode - only the base band needs to run the DFT, other bands display varying speeds
         base_band := self.bands[0]
         band.amp = base_band.amp
         band.phase_diff = base_band.phase_diff
         band.scaled_phase = band.scaled_phase - band.phase_diff * band.speed
+    }
+}
+
+
+@(private)
+// Keep an up-to-date estimate of background noise (i.e. when no note is playing)
+update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx: int) {
+    if self.mode == .HARMONIC_MODE || band_idx == 0 {
+        // Avoid the noise floor dropping to zero (-120 dB)
+        MIN_FLOOR :: 1e-6
+
+        if band.amp >= MIN_FLOOR {
+            // current SNR
+            EPS :: 1e-8 // to avoid divide by zero
+            band.snr_db = 20.0 * math.log10((band.amp + EPS) / (band.noise_floor + EPS))
+
+            // Pause updating when signal is loud, based on an SNR threshold
+            if band.snr_db < band.noise_floor_snr_db_threshold {
+                if band.amp < band.noise_floor {
+                    band.noise_floor = band.amp
+                } else {
+                    alpha: f32 = 0.01
+                    band.noise_floor += alpha * (band.amp - band.noise_floor)
+                }
+            }
+        }
+    } else {
+        // Vernier mode - only the base band needs to calculate the noise floor
+        base_band := self.bands[0]
+        band.noise_floor = base_band.noise_floor
+        band.snr_db = base_band.snr_db
     }
 }

@@ -84,6 +84,7 @@ run_raylib_app :: proc(config: ^Config) {
         f32(config.samplerate),
         config.strobe_intervals[:],
         config.strobe_mode,
+        config.noise_floor_snr_db_threshold,
     )
     defer core.destroy_phase_comparator(phase_comparator)
 
@@ -358,7 +359,6 @@ run_raylib_app :: proc(config: ^Config) {
             )
 
             rl.DrawTextEx(font_store.medium_32, "Hz", {147, 323}, 16, 1, rl.GetColor(0xFBFBFBFF))
-            // rl.DrawTextEx(font_store.medium_32, fmt.ctprintf("%.1f", pitch_info.snr_db), {247, 423}, 16, 1, rl.GetColor(0xFBFBFBFF))
 
             hz := pitch_info.detected_freq
             cents := pitch_info.err_cents
@@ -479,7 +479,7 @@ run_raylib_app :: proc(config: ^Config) {
 
             if config.note_detection_mode != .AUTO {
                 tuning_preset_dropdown_active = gui_dropdown(
-                    {262, 496},
+                    {278, 456},
                     140,
                     {{0, "CHROMATIC"}, {1, "GUITAR STD"}, {2, "UKULELE STD"}},
                     &tuning_preset_choice,
@@ -519,8 +519,41 @@ run_raylib_app :: proc(config: ^Config) {
 
 
             // Draw input level
-            // rl.DrawRectangleV({300, 500}, {100, 3}, rl.BLACK)
-            rl.DrawRectangleV({44, 519}, {60 + pitch_info.rms_dbfs, 1}, rl.GetColor(0x82E2FFFF))
+            {
+                rl.DrawRectangleV({264, 507}, {60, 3}, rl.BLACK)
+                rl.DrawRectangleV(
+                    {264, 507},
+                    {60 + clamp(pitch_info.rms_dbfs, -60, 0), 3},
+                    rl.GetColor(0x82E2FFFF),
+                )
+            }
+
+            when ODIN_DEBUG {
+                rl.DrawTextEx(
+                    font_store.medium_32,
+                    fmt.ctprintf("SNR %.1f", pitch_info.snr_db),
+                    {250, 400},
+                    16,
+                    0,
+                    rl.GetColor(0xFBFBFBFF),
+                )
+                rl.DrawTextEx(
+                    font_store.medium_32,
+                    fmt.ctprintf("Band SNR %.1f", phase_comparator.bands[0].snr_db),
+                    {250, 430},
+                    16,
+                    0,
+                    rl.GetColor(0xFBFBFBFF),
+                )
+
+                for band in phase_comparator.bands {
+                    level := core.dbfs(band.amp)
+                    floor_level := core.dbfs(band.noise_floor)
+                    // rl.DrawRectangleV({400, 400}, {2, 10}, rl.ORANGE)
+                    rl.DrawRectangleV({400, 400}, {100 + level, 2}, rl.ORANGE)
+                    rl.DrawRectangleV({400, 420}, {100 + floor_level, 2}, rl.PURPLE)
+                }
+            }
 
             // rl.DrawTextEx(
             //     font_store.medium_32,
