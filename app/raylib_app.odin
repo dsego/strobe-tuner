@@ -336,7 +336,7 @@ run_raylib_app :: proc(config: ^Config) {
             // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
             draw_strobe_display(&strobe_display, phase_comparator, out_of_range, config)
 
-            agc, agc_changed := gui_agc_toggle({445, 50}, config.auto_gain_control)
+            agc, agc_changed := gui_agc_toggle({445, 50}, config.auto_gain_control, strobe_display.auto_gain_active[0])
             if agc_changed {
                 config.auto_gain_control = agc
             }
@@ -549,9 +549,10 @@ run_raylib_app :: proc(config: ^Config) {
                 for band in phase_comparator.bands {
                     level := core.dbfs(band.amp)
                     floor_level := core.dbfs(band.noise_floor)
+                    // fmt.println(floor_level)
                     // rl.DrawRectangleV({400, 400}, {2, 10}, rl.ORANGE)
-                    rl.DrawRectangleV({400, 400}, {100 + level, 2}, rl.ORANGE)
-                    rl.DrawRectangleV({400, 420}, {100 + floor_level, 2}, rl.PURPLE)
+                    rl.DrawRectangleV({400, 400}, {120 + level, 2}, rl.ORANGE)
+                    rl.DrawRectangleV({400, 420}, {120 + floor_level, 2}, rl.PURPLE)
                 }
             }
 

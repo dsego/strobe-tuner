@@ -155,11 +155,19 @@ gui_strobe_partial :: proc(
 }
 
 
-gui_agc_toggle :: proc(position: [2]f32, agc_on: bool) -> (bool, bool) {
+gui_agc_toggle :: proc(position: [2]f32, agc_on: bool, state_active: bool) -> (bool, bool) {
     bounds := rl.Rectangle{position.x, position.y, 35, 14}
-    bg_color := rl.GetColor(0x82E2FFFF) if agc_on else rl.GetColor(window_bg_color)
+    button_color := rl.GetColor(window_bg_color)
 
-    rl.DrawRectangleRounded(bounds, 0.5, 6, bg_color)
+    if agc_on {
+        if state_active {
+            button_color = rl.GetColor(0xF694FFFF)
+        } else {
+            button_color = rl.GetColor(0x82E2FFFF)
+        }
+    }
+
+    rl.DrawRectangleRounded(bounds, 0.5, 6, button_color)
     rl.DrawTextEx(
         font_store.medium_28,
         "AGC",

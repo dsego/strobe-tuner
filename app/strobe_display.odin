@@ -316,10 +316,6 @@ draw_strobe_display :: proc(
             amp *= self.auto_gain[band_idx]
         }
 
-        // if out_of_range {
-        // amp = 0.0
-        // }
-
         // limit max amp to avoid jagged edges in the strobe display
         amp = clamp(amp, 0.0, 50.0)
 
