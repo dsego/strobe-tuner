@@ -110,6 +110,7 @@ Config :: struct {
     auto_gain_snr_db_high:        f32,
     max_auto_gain:                f32,
     gain_release_coefficient:     f32,
+    rms_quiet_threshold:          f32,
 }
 
 @(private)
@@ -136,15 +137,16 @@ config_defaults :: Config {
     //
     tuning_preset                = .CHROMATIC,
     partial_labels               = .MULTIPLES,
-    pitch_detection_clarity_low  = 0.9,
-    pitch_detection_clarity_high = 0.95,
+    pitch_detection_clarity_low  = 0.7,
+    pitch_detection_clarity_high = 0.8,
     noise_floor_snr_db_threshold = 10, // to determine if it’s safe to update the noise floor
-    pitch_detection_min_snr_db   = 15, // dB
+    pitch_detection_min_snr_db   = 10, // dB
     auto_gain_control            = false,
     auto_gain_snr_db_low         = 30, // dB
     auto_gain_snr_db_high        = 50, // dB
     max_auto_gain                = 1000.0,
     gain_release_coefficient     = 0.1,
+    rms_quiet_threshold          = 0.01, // -40dBFS
 }
 
 

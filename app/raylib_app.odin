@@ -108,6 +108,7 @@ run_raylib_app :: proc(config: ^Config) {
         config.pitch_detection_clarity_low,
         config.pitch_detection_min_snr_db,
         config.noise_floor_snr_db_threshold,
+        config.rms_quiet_threshold,
     )
     defer core.destroy_pitch_detector(&pitch_detector)
 
@@ -336,7 +337,11 @@ run_raylib_app :: proc(config: ^Config) {
             // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???
             draw_strobe_display(&strobe_display, phase_comparator, out_of_range, config)
 
-            agc, agc_changed := gui_agc_toggle({445, 50}, config.auto_gain_control, strobe_display.auto_gain_active[0])
+            agc, agc_changed := gui_agc_toggle(
+                {445, 50},
+                config.auto_gain_control,
+                strobe_display.auto_gain_active[0],
+            )
             if agc_changed {
                 config.auto_gain_control = agc
             }
@@ -357,6 +362,17 @@ run_raylib_app :: proc(config: ^Config) {
                 {16, 303},
                 rl.GetColor(0xFBFBFBFF) if freq_estimation_active else rl.GetColor(0x7D7E8FFF),
             )
+
+            when ODIN_DEBUG {
+                rl.DrawTextEx(
+                    font_store.medium_32,
+                    fmt.ctprintf("Clarity %.3f", pitch_info.clarity),
+                    {24, 420},
+                    16,
+                    0.5,
+                    rl.GetColor(0xFBFBFBFF),
+                )
+            }
 
             rl.DrawTextEx(font_store.medium_32, "Hz", {147, 323}, 16, 1, rl.GetColor(0xFBFBFBFF))
 
@@ -412,6 +428,7 @@ run_raylib_app :: proc(config: ^Config) {
             if audio_devices[audio_device_dropdown_index].id != audio_capture.active_device {
                 switch_audio_device(audio_capture, audio_devices[audio_device_dropdown_index].id)
                 core.flush_audio_capture_ringbuffer(&pitch_detector)
+                core.reset_noise_floor(&pitch_detector)
                 core.flush_audio_capture_ringbuffer(phase_comparator)
             }
 
@@ -520,23 +537,49 @@ run_raylib_app :: proc(config: ^Config) {
 
             // Draw input level
             {
-                rl.DrawRectangleV({264, 507}, {60, 3}, rl.BLACK)
+                rl.DrawRectangleV({264, 507}, {60, 3}, rl.GetColor(strobe_bg_color))
                 rl.DrawRectangleV(
                     {264, 507},
                     {60 + clamp(pitch_info.rms_dbfs, -60, 0), 3},
                     rl.GetColor(0x82E2FFFF),
                 )
+
+                when ODIN_DEBUG {
+                    floor_level := core.dbfs(pitch_info.noise_floor)
+                    rl.DrawRectangleV({264, 511}, {60, 3}, rl.GetColor(strobe_bg_color))
+                    rl.DrawRectangleV({264, 511}, {60 + floor_level, 3}, rl.PURPLE)
+
+                    rl.DrawTextEx(
+                        font_store.medium_24,
+                        fmt.ctprintf("RMS %.1f", pitch_info.rms_dbfs),
+                        {380, 460},
+                        12,
+                        0,
+                        rl.GetColor(0xFBFBFBFF),
+                    )
+
+                    rl.DrawTextEx(
+                        font_store.medium_24,
+                        fmt.ctprintf("NF %.1f", floor_level),
+                        {380, 480},
+                        12,
+                        0,
+                        rl.GetColor(0xFBFBFBFF),
+                    )
+
+                    rl.DrawTextEx(
+                        font_store.medium_24,
+                        fmt.ctprintf("SNR %.1f", pitch_info.snr_db),
+                        {380, 501},
+                        12,
+                        0,
+                        rl.GetColor(0xFBFBFBFF),
+                    )
+                }
             }
 
             when ODIN_DEBUG {
-                rl.DrawTextEx(
-                    font_store.medium_32,
-                    fmt.ctprintf("SNR %.1f", pitch_info.snr_db),
-                    {250, 400},
-                    16,
-                    0,
-                    rl.GetColor(0xFBFBFBFF),
-                )
+
                 rl.DrawTextEx(
                     font_store.medium_32,
                     fmt.ctprintf("Band SNR %.1f", phase_comparator.bands[0].snr_db),

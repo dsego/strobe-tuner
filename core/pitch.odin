@@ -22,18 +22,23 @@ import "core:math"
 import "core:time"
 
 
+MIN_RMS_TRACKABLE :: 1e-6
+MIN_NOISE_FLOOR :: 1e-6
+MIN_DETECT_FREQ :: 27.5
+
+
 PitchDetector :: struct {
     using node:                   AudioCaptureNode,
     nsdf:                         NSDFConfig,
     samples:                      []f32,
     clarity_high:                 f32,
     clarity_low:                  f32,
-    rms_history:                  [20]f32,
-    rms_history_idx:              int,
     noise_floor:                  f32,
     min_snr_db:                   f32,
     snr_db:                       f32,
     noise_floor_snr_db_threshold: f32,
+    rms_quiet_threshold:          f32,
+    last_quiet_time:              time.Tick,
 }
 
 
@@ -49,6 +54,7 @@ PitchInfo :: struct {
     is_strong_pitch: bool,
     is_weak_pitch:   bool,
     snr_db:          f32,
+    noise_floor:     f32,
 }
 
 
@@ -59,6 +65,7 @@ init_pitch_detector :: proc(
     clarity_low: f32,
     min_snr_db: f32,
     noise_floor_snr_db_threshold: f32,
+    rms_quiet_threshold: f32,
 ) -> (
     self: PitchDetector,
 ) {
@@ -67,16 +74,17 @@ init_pitch_detector :: proc(
     self.clarity_high = clarity_high
     self.clarity_low = clarity_low
     self.min_snr_db = min_snr_db
-    self.noise_floor = 0.01 // initialize to a realistic value to get first SNR
     self.noise_floor_snr_db_threshold = noise_floor_snr_db_threshold
+    self.rms_quiet_threshold = rms_quiet_threshold
+    self.last_quiet_time = time.tick_now()
 
-    // Initialize to sentinel values (real RMS values won't be negative)
-    for i in 0 ..< len(self.rms_history) {
-        self.rms_history[i] = -1.0
-    }
-
+    reset_noise_floor(&self)
     init_audio_capture_node(&self, "pitch")
     return
+}
+
+reset_noise_floor :: proc(self: ^PitchDetector) {
+    self.noise_floor = 0.01 // initialize to a realistic value to get first SNR
 }
 
 destroy_pitch_detector :: proc(self: ^PitchDetector) {
@@ -109,21 +117,27 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.measured = true
     info.detected_freq, info.nsdf_peak = nsdf_pitch_detect(&self.nsdf, self.samples)
     info.clarity = info.nsdf_peak.y
-    info.rms = calculate_rms(self.samples)
+    info.rms = math.max(calculate_rms(self.samples), MIN_RMS_TRACKABLE)
     info.rms_dbfs = dbfs(info.rms)
 
     // current SNR
-    EPS :: 1e-8 // avoid divide by zero
-    self.snr_db = 20.0 * math.log10((info.rms + EPS) / (self.noise_floor + EPS))
+    self.snr_db = 20.0 * math.log10(info.rms / self.noise_floor)
     info.snr_db = self.snr_db
 
     update_noise_floor(self, info.rms)
+    info.noise_floor = self.noise_floor
 
     info.detected_note = find_note(info.detected_freq)
     info.err_cents = cents_deviation(info.detected_freq, info.detected_note.frequency)
 
-    info.is_strong_pitch = info.clarity > self.clarity_high && info.snr_db > self.min_snr_db
-    info.is_weak_pitch = info.clarity < self.clarity_low || info.snr_db < self.min_snr_db
+    info.is_strong_pitch =
+        info.detected_freq > MIN_DETECT_FREQ &&
+        info.clarity > self.clarity_high &&
+        info.snr_db > self.min_snr_db
+    info.is_weak_pitch =
+        info.detected_freq < MIN_DETECT_FREQ ||
+        info.clarity < self.clarity_low ||
+        info.snr_db < self.min_snr_db
 
     return info
 }
@@ -132,34 +146,29 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
 @(private)
 // Keep an up-to-date estimate of background noise (i.e. when no note is playing)
 update_noise_floor :: proc(self: ^PitchDetector, rms: f32) {
+    since_last_quiet := time.tick_since(self.last_quiet_time)
 
-    // Update RMS history
-    self.rms_history[self.rms_history_idx] = rms
-    self.rms_history_idx += 1
-    if self.rms_history_idx >= len(self.rms_history) {
-        self.rms_history_idx = 0
-    }
+    // If the overall RMS is very low (i.e., quiet scene), assume it's just background noise and allow updating
+    quiet_rms := rms < self.rms_quiet_threshold
 
     // Pause updating when signal is loud, based on an SNR threshold
-    if self.snr_db >= self.noise_floor_snr_db_threshold do return
+    low_snr := self.snr_db < self.noise_floor_snr_db_threshold
 
-    min_rms: f32 = rms
+    // time-based decay
+    time_based_decay := time.duration_milliseconds(since_last_quiet) > 3000
 
-    // Find minimum RMS
-    for val in self.rms_history {
-        if val > -1.0 && val < min_rms {
-            min_rms = val
+    if quiet_rms || low_snr || time_based_decay {
+        self.last_quiet_time = time.tick_now()
+
+        // Set noise floor based on minimum RMS over X windows
+        if rms < self.noise_floor {
+            // Fast update downward, but reject near-zero values to avoid getting stuck at its lowest value
+            self.noise_floor = math.max(rms, MIN_NOISE_FLOOR)
+        } else {
+            // Slow upward adaptation to avoid overreaction
+            ALPHA: f32 : 0.01
+            self.noise_floor += ALPHA * (rms - self.noise_floor)
         }
-    }
-
-    // Set noise floor based on minimum RMS over X windows
-    if min_rms < self.noise_floor {
-        // Fast update downward
-        self.noise_floor = min_rms
-    } else {
-        // Slow upward adaptation to avoid overreaction
-        alpha: f32 = 0.1
-        self.noise_floor += alpha * (min_rms - self.noise_floor)
     }
 }
 
@@ -170,6 +179,6 @@ calculate_rms :: proc(samples: []f32) -> f32 {
     return math.sqrt(square_sum / f32(len(samples)))
 }
 
-dbfs :: proc (signal: $T) -> T {
-    return 20.0 * math.log10(signal * math.sqrt(cast(T) 2.0))
+dbfs :: proc(signal: $T) -> T {
+    return 20.0 * math.log10(signal * math.sqrt(cast(T)2.0))
 }
