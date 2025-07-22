@@ -22,8 +22,6 @@ import "core:math"
 import "core:time"
 
 
-MIN_RMS_TRACKABLE :: 1e-6
-MIN_NOISE_FLOOR :: 1e-6
 MIN_DETECT_FREQ :: 27.5
 
 
@@ -124,9 +122,16 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     self.snr_db = 20.0 * math.log10(info.rms / self.noise_floor)
     info.snr_db = self.snr_db
 
-    update_noise_floor(self, info.rms)
-    info.noise_floor = self.noise_floor
+    update_noise_floor(
+        &self.noise_floor,
+        &self.last_quiet_time,
+        info.rms,
+        self.rms_quiet_threshold,
+        self.noise_floor_snr_db_threshold,
+        2000,
+    )
 
+    info.noise_floor = self.noise_floor
     info.detected_note = find_note(info.detected_freq)
     info.err_cents = cents_deviation(info.detected_freq, info.detected_note.frequency)
 
@@ -140,36 +145,6 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
         info.snr_db < self.min_snr_db
 
     return info
-}
-
-
-@(private)
-// Keep an up-to-date estimate of background noise (i.e. when no note is playing)
-update_noise_floor :: proc(self: ^PitchDetector, rms: f32) {
-    since_last_quiet := time.tick_since(self.last_quiet_time)
-
-    // If the overall RMS is very low (i.e., quiet scene), assume it's just background noise and allow updating
-    quiet_rms := rms < self.rms_quiet_threshold
-
-    // Pause updating when signal is loud, based on an SNR threshold
-    low_snr := self.snr_db < self.noise_floor_snr_db_threshold
-
-    // time-based decay
-    time_based_decay := time.duration_milliseconds(since_last_quiet) > 3000
-
-    if quiet_rms || low_snr || time_based_decay {
-        self.last_quiet_time = time.tick_now()
-
-        // Set noise floor based on minimum RMS over X windows
-        if rms < self.noise_floor {
-            // Fast update downward, but reject near-zero values to avoid getting stuck at its lowest value
-            self.noise_floor = math.max(rms, MIN_NOISE_FLOOR)
-        } else {
-            // Slow upward adaptation to avoid overreaction
-            ALPHA: f32 : 0.01
-            self.noise_floor += ALPHA * (rms - self.noise_floor)
-        }
-    }
 }
 
 @(private)
