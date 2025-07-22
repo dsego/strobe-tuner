@@ -352,7 +352,7 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx:
 
         // Scale down by factor
         band.scaled_phase = band.scaled_phase - band.phase_diff * band.speed
-        band.amp = magnitude(dft)
+        band.amp = abs(dft)
     } else {
         // Vernier mode - only the base band needs to run the DFT, other bands display varying speeds
         base_band := self.bands[0]
@@ -380,8 +380,8 @@ update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_i
                 if band.amp < band.noise_floor {
                     band.noise_floor = band.amp
                 } else {
-                    alpha: f32 = 0.01
-                    band.noise_floor += alpha * (band.amp - band.noise_floor)
+                    ALPHA: f32 : 0.01
+                    band.noise_floor += ALPHA * (band.amp - band.noise_floor)
                 }
             }
         }

@@ -142,8 +142,8 @@ config_defaults :: Config {
     noise_floor_snr_db_threshold = 10, // to determine if it’s safe to update the noise floor
     pitch_detection_min_snr_db   = 10, // dB
     auto_gain_control            = false,
-    auto_gain_snr_db_low         = 30, // dB
-    auto_gain_snr_db_high        = 50, // dB
+    auto_gain_snr_db_low         = 40, // dB
+    auto_gain_snr_db_high        = 60, // dB
     max_auto_gain                = 1000.0,
     gain_release_coefficient     = 0.1,
     rms_quiet_threshold          = 0.01, // -40dBFS

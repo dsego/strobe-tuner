@@ -16,7 +16,6 @@
 
 package core
 
-import "core:fmt"
 import "core:math"
 import "core:time"
 

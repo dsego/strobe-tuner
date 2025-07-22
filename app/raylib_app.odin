@@ -581,22 +581,31 @@ run_raylib_app :: proc(config: ^Config) {
             when ODIN_DEBUG {
 
                 rl.DrawTextEx(
-                    font_store.medium_32,
+                    font_store.medium_24,
                     fmt.ctprintf("Band SNR %.1f", phase_comparator.bands[0].snr_db),
-                    {250, 430},
-                    16,
+                    {250, 400},
+                    12,
                     0,
                     rl.GetColor(0xFBFBFBFF),
                 )
 
-                for band in phase_comparator.bands {
-                    level := core.dbfs(band.amp)
-                    floor_level := core.dbfs(band.noise_floor)
-                    // fmt.println(floor_level)
-                    // rl.DrawRectangleV({400, 400}, {2, 10}, rl.ORANGE)
-                    rl.DrawRectangleV({400, 400}, {120 + level, 2}, rl.ORANGE)
-                    rl.DrawRectangleV({400, 420}, {120 + floor_level, 2}, rl.PURPLE)
-                }
+                rl.DrawTextEx(
+                    font_store.medium_24,
+                    fmt.ctprintf("Band NF %.1f", core.dbfs(phase_comparator.bands[0].noise_floor)),
+                    {250, 415},
+                    12,
+                    0,
+                    rl.GetColor(0xFBFBFBFF),
+                )
+
+                // for band in phase_comparator.bands {
+                //     level := core.dbfs(band.amp)
+                //     floor_level := core.dbfs(band.noise_floor)
+                //     // fmt.println(floor_level)
+                //     // rl.DrawRectangleV({400, 400}, {2, 10}, rl.ORANGE)
+                //     rl.DrawRectangleV({400, 400}, {120 + level, 2}, rl.ORANGE)
+                //     rl.DrawRectangleV({400, 420}, {120 + floor_level, 2}, rl.PURPLE)
+                // }
             }
 
             // rl.DrawTextEx(

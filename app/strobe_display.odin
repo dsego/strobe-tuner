@@ -299,20 +299,20 @@ draw_strobe_display :: proc(
             amp *= attenuation
         }
 
+        self.auto_gain_active[band_idx] = core.schmitt_trigger(
+            self.auto_gain_active[band_idx],
+            band.snr_db,
+            config.auto_gain_snr_db_low,
+            config.auto_gain_snr_db_high,
+        )
+        if self.auto_gain_active[band_idx] {
+            self.auto_gain[band_idx] = clamp(1.0 / band.amp, 0, config.max_auto_gain)
+        } else {
+            // Slowly release gain with exponential decay
+            self.auto_gain[band_idx] += config.gain_release_coefficient * (1.0 - self.auto_gain[band_idx])
+        }
 
         if config.auto_gain_control {
-            self.auto_gain_active[band_idx] = core.schmitt_trigger(
-                self.auto_gain_active[band_idx],
-                band.snr_db,
-                config.auto_gain_snr_db_low,
-                config.auto_gain_snr_db_high,
-            )
-            if self.auto_gain_active[band_idx] {
-                self.auto_gain = clamp(1.0 / band.amp, 0, config.max_auto_gain)
-            } else {
-                // Slowly release gain with exponential decay
-                self.auto_gain += config.gain_release_coefficient * (1.0 - self.auto_gain)
-            }
             amp *= self.auto_gain[band_idx]
         }
 
