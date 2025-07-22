@@ -286,18 +286,6 @@ draw_strobe_display :: proc(
         )
 
         amp := self.contrast * band.amp
-        attenuation: f32 = 0.0
-
-        // fade out if the spinning is too rapid
-        if config.apply_attenuation && config.strobe_mode == .VERNIER_MODE {
-            // TBD: if these need to be tweaked some more
-            attenuation = linalg.smoothstep(
-                f32(0.04),
-                f32(0.005),
-                math.abs(band.phase_diff * band.speed),
-            )
-            amp *= attenuation
-        }
 
         self.auto_gain_active[band_idx] = core.schmitt_trigger(
             self.auto_gain_active[band_idx],
@@ -318,6 +306,19 @@ draw_strobe_display :: proc(
 
         // limit max amp to avoid jagged edges in the strobe display
         amp = clamp(amp, 0.0, 50.0)
+
+        attenuation: f32 = 0.0
+
+        // fade out if the spinning is too rapid
+        if config.apply_attenuation && config.strobe_mode == .VERNIER_MODE {
+            // TBD: if these need to be tweaked some more
+            attenuation = linalg.smoothstep(
+                f32(0.04),
+                f32(0.005),
+                math.abs(band.phase_diff * band.speed),
+            )
+            amp *= attenuation
+        }
 
         rl.SetShaderValue(self.strobe_shader, self.amp_loc, &amp, rl.ShaderUniformDataType.FLOAT)
 
