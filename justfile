@@ -71,7 +71,9 @@ dev:
 build:
     odin build app -o:speed  -extra-linker-flags="-L. -framework AudioToolbox -framework CoreAudio"
 
-
 # Run on Win 11
 dev-win:
-    odin run app --extra-linker-flags="/FORCE:MULTIPLE"
+    odin run app -debug --extra-linker-flags="/FORCE:MULTIPLE"
+
+build-win:
+    odin build app -o:speed --extra-linker-flags="/FORCE:MULTIPLE"
