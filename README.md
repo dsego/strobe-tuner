@@ -11,7 +11,7 @@ A stroboscopic instrument tuner written in [Odin](https://odin-lang.org/).
 ### Features
 
 - Automatic pitch detection based on NSDF (McLeod Pitch Method).
-- Smooth and responsive strobe display.
+- Smooth and responsive strobe display with adaptive auto-gain for consistent visual feedback across signal levels.
 - Manual target note selection.
 - Harmonic mode: shows the partials of the detected note across multiple strobe bands.
 - Vernier mode: shows the same fundamental frequency in each band, but with increasing sensitivity. When the central band is stationary, outer bands may still move.
