@@ -105,9 +105,14 @@ gui_feedback_button :: proc(position: [2]f32) {
     )
 
     if gui_button({position.x, position.y, 16, 16}) {
-        // TODO: support windows & linux
         when ODIN_OS == .Darwin {
             libc.system(cstring("open https://github.com/dsego/strobe-tuner"))
+        } else when ODIN_OS == .Windows {
+            libc.system(cstring("start https://github.com/dsego/strobe-tuner"))
+        } else when ODIN_OS == .Linux {
+            libc.system(cstring("xdg-open https://github.com/dsego/strobe-tuner"))
+        } else {
+            fmt.println("Could not open github web page.")
         }
     }
 }
