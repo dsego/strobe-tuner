@@ -7,6 +7,8 @@
 app.bin.dSYM/*
 *.zip
 *.so
+*.res
+*.exe
 
 
 # Ignore everything in external/

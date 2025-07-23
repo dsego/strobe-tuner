@@ -76,4 +76,5 @@ dev-win:
     odin run app -debug --extra-linker-flags="/FORCE:MULTIPLE"
 
 build-win:
-    odin build app -o:speed --extra-linker-flags="/FORCE:MULTIPLE"
+    rc app.rc
+    odin build app -o:speed --extra-linker-flags="/FORCE:MULTIPLE app.res" -subsystem:windows
