@@ -1,11 +1,3 @@
-TODO:
-- Button to play the target pitch - useful to quickly know to tune up or down.
-    - Sound fonts
-        https://files.portaudio.com/docs/v19-doxydocs/paex__sine_8c_source.html
-        https://github.com/schellingb/TinySoundFont
-- Show cents deviation as a line graph.
-- Support cent offsets for different notess
-- Consider porting to SDL3 for android/ios support.
 
 
 odin build app -o:speed -extra-linker-flags="-L."
