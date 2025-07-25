@@ -46,6 +46,7 @@ COLOR_CONTROLS :: false
 
 run_raylib_app :: proc(config: ^Config) {
     target_freq_hz: f32 = config.target_freq_hz
+
     freq_estimation_active := false
 
     pitch_info := core.PitchInfo{}
@@ -59,6 +60,9 @@ run_raylib_app :: proc(config: ^Config) {
 
     // Target note for tuning via the strobe effect
     target_note := core.Note{}
+
+    // Save target note to config when exiting the app
+    defer config.target_freq_hz = target_note.frequency
 
     when ODIN_OS == .Darwin {
         // setup_mac_app()
