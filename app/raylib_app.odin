@@ -168,6 +168,7 @@ run_raylib_app :: proc(config: ^Config) {
     interval_options := INTERVAL_OPTIONS
     config_changed := false
 
+
     // ---------------------------------------------------------------------------------------------
 
 
@@ -182,11 +183,6 @@ run_raylib_app :: proc(config: ^Config) {
             config_changed = true
             fmt.println("Reset config to defaults")
             config^ = get_config_defaults()
-        }
-
-        if rl.IsKeyPressed(.A) {
-            config.auto_gain_control = !config.auto_gain_control
-            fmt.println("Auto gain control:", config.auto_gain_control ? "ON" : "OFF")
         }
 
         super_key_down := rl.IsKeyDown(.LEFT_SUPER) || rl.IsKeyDown(.RIGHT_SUPER)
@@ -225,6 +221,12 @@ run_raylib_app :: proc(config: ^Config) {
             )
             config_changed = false // !!!!
         }
+
+
+
+        tuning_notes: []string
+        if config.tuning_preset == .UKULELE_STD do tuning_notes = ukulele_std_notes[:]
+        if config.tuning_preset == .GUITAR_STD do tuning_notes = guitar_std_notes[:]
 
         pitch_info = core.run_pitch_detection(&pitch_detector, pitch_info)
 
@@ -267,20 +269,20 @@ run_raylib_app :: proc(config: ^Config) {
                     target_note = core.next_chromatic_note(target_note)
                 }
             } else {
-                tuning_notes: []string = {}
-                length := 0
-
-                if config.tuning_preset == .UKULELE_STD do tuning_notes = ukulele_std_notes[:]
-                if config.tuning_preset == .GUITAR_STD do tuning_notes = guitar_std_notes[:]
-
+                is_pressed := false
                 if rl.IsKeyPressed(.LEFT) {
                     selected_note_idx -= 1
+                    is_pressed = true
                 } else if rl.IsKeyPressed(.RIGHT) {
                     selected_note_idx += 1
+                    is_pressed = true
                 }
-                selected_note_idx = selected_note_idx %% len(tuning_notes)
-                selected_note := tuning_notes[selected_note_idx]
-                target_note, ok = core.new_note(selected_note)
+
+                if is_pressed {
+                    selected_note_idx = selected_note_idx %% len(tuning_notes)
+                    selected_note := tuning_notes[selected_note_idx]
+                    target_note, ok = core.new_note(selected_note)
+                }
             }
 
             if prev_target_note != target_note {
@@ -460,8 +462,25 @@ run_raylib_app :: proc(config: ^Config) {
                 {148, 456},
                 config.note_detection_mode,
             )
+
+            if !note_detection_mode_changed && rl.IsKeyPressed(.SPACE) {
+                note_detection_mode = .MANUAL if note_detection_mode == .AUTO else .AUTO
+                note_detection_mode_changed = true
+            }
+
             if note_detection_mode_changed {
                 config.note_detection_mode = note_detection_mode
+
+                // Select the note based on auto-detected note
+                if note_detection_mode == .MANUAL {
+                    for note_label, i in tuning_notes {
+                        opt_note, ok := core.new_note(note_label)
+                        if ok && opt_note.cents == target_note.cents {
+                            selected_note_idx = i
+                            break
+                        }
+                    }
+                }
             }
 
             strobe_contrast_slider_value := math.log10(config.strobe_contrast)
@@ -552,7 +571,7 @@ run_raylib_app :: proc(config: ^Config) {
                     rl.DrawTextEx(
                         font_store.medium_24,
                         fmt.ctprintf("RMS %.1f", pitch_info.rms_dbfs),
-                        {380, 460},
+                        {380, 400},
                         12,
                         0,
                         rl.GetColor(0xFBFBFBFF),
@@ -561,7 +580,7 @@ run_raylib_app :: proc(config: ^Config) {
                     rl.DrawTextEx(
                         font_store.medium_24,
                         fmt.ctprintf("NF %.1f", floor_level),
-                        {380, 480},
+                        {380, 415},
                         12,
                         0,
                         rl.GetColor(0xFBFBFBFF),
@@ -570,7 +589,7 @@ run_raylib_app :: proc(config: ^Config) {
                     rl.DrawTextEx(
                         font_store.medium_24,
                         fmt.ctprintf("SNR %.1f", pitch_info.snr_db),
-                        {380, 501},
+                        {380, 430},
                         12,
                         0,
                         rl.GetColor(0xFBFBFBFF),
