@@ -11,7 +11,7 @@
 	<key>CFBundleIdentifier</key>
 	<string>SonicStrobe</string>
 	<key>CFBundleVersion</key>
-	<string>1.1</string>
+	<string>1.2</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app needs microphone access to function correctly.</string>
 	<key>NSPrincipalClass</key>
