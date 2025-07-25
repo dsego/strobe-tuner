@@ -57,7 +57,7 @@ PhaseBand :: struct {
     estimated_freq_hz:            f32,
     smoothed_freq_hz:             f32,
     // ewma_state:        EwmaState,
-    moving_avg:                   MovingAvg,
+    // moving_avg:                   MovingAvg,
     dft_config:                   SingleFreqDFT,
     time_stretch:                 f32,
     phase:                        f32, // actual measured phase
