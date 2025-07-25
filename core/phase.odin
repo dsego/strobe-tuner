@@ -152,13 +152,16 @@ set_phase_comparator_intervals :: proc(self: ^PhaseComparator, strobe_intervals:
 }
 
 set_phase_comparator_speed :: proc(self: ^PhaseComparator, base_speed: f32) {
-    speed: f32 = base_speed * self.pitch_standard / self.base_freq_hz
+    speed: f32 = base_speed
 
-    for &band, i in self.bands {
-        if self.mode == .VERNIER_MODE {
-            speed = band.speed * self.speed_multiplier
-        } else if self.mode == .HARMONIC_MODE {
-            band.speed = band.speed * band.interval
+    if self.mode == .VERNIER_MODE {
+        for &band in self.bands {
+            band.speed = speed
+            speed *= self.speed_multiplier
+        }
+    } else if self.mode == .HARMONIC_MODE {
+        for &band in self.bands {
+            band.speed = speed * band.interval
         }
     }
 }
@@ -190,7 +193,7 @@ set_phase_comparator_freq :: proc(
     self.speed_multiplier = speed_multiplier
     self.reference_interval = f64(self.samplerate / base_freq_hz)
 
-    speed: f32 = base_speed * pitch_standard / base_freq_hz
+    speed: f32 = base_speed
 
 
     for &band, i in self.bands {
