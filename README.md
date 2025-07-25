@@ -24,6 +24,7 @@ A stroboscopic instrument tuner written in [Odin](https://odin-lang.org/).
 - <kbd>←</kbd><kbd>→</kbd> &nbsp;  left/right arrow to move selected note up or down chromatically.
 - <kbd>↑</kbd><kbd>↓</kbd> &nbsp;  up/down arrow to move selected note up and down by octave.
 - <kbd>tab</kbd> &nbsp;  switch the strobe display type to a full wheel.
+- <kbd>space</kbd> &nbsp; switch note detection modes between auto & manual.
 
 
 
