@@ -115,7 +115,7 @@ The single-bin DFT also serves as a narrowband filter, providing a clean strobe 
 
 #### Alternative approaches I have tried
 
-- Time-aligned windowing with resampling - emulates a classic untriggered oscilloscope synced to the signal’s period. This approach required resampling and IIR bandpass filtering for each strobe band. The visual resolution was tied to the number of samples per cycle, fewer samples per period resulted in blocky motion. The visual sensitivity couldn’t be adjusted.
+- Time-aligned windowing with resampling - emulates a classic untriggered oscilloscope synced to the signal’s period. This approach required resampling and IIR bandpass filtering for each strobe band. The visual resolution was tied to the number of samples per cycle, fewer samples per period resulted in blocky motion. The visual sensitivity couldn’t be adjusted. A strong bandpass filter introduced latency, but without it the harmonics would bleed into the strobe pattern.
 
 - Time-aligned windowing with sub-sample frame counter - instead of resampling, this approach maintains alignment by advancing a fractional counter and rounding the number of samples per frame up or down. Still requires a bandpass filter and interpolation at display or window boundaries.
 
