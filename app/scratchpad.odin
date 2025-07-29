@@ -198,23 +198,30 @@ draw_freq_plot :: proc(rect: rl.Rectangle, nsdf: ^core.NSDFConfig, font: rl.Font
            i < len(peak_candidates) - 1 &&
            peak_candidates[i].magnitude > peak_candidates[i - 1].magnitude * min_prominence &&
            peak_candidates[i].magnitude > peak_candidates[i + 1].magnitude * min_prominence &&
-           peak_candidates[i].magnitude > 10
-           {
+           peak_candidates[i].magnitude > 10 {
             peaks[k] = peak_candidates[i]
             k += 1
         }
     }
+    found := k
 
     rl.DrawLineStrip(raw_data(points[:]), i32(len(points)), rl.PINK)
 
-    for p in peaks {
+    for i in 0 ..< found {
         rl.DrawLineEx(
-            {p.position.x, p.position.y},
-            {p.position.x, rect.y + rect.height},
+            {peaks[i].position.x, peaks[i].position.y},
+            {peaks[i].position.x, rect.y + rect.height},
             0.5,
             rl.LIGHTGRAY,
         )
-        rl.DrawCircleV({p.position.x, p.position.y}, 3.0, rl.GOLD)
-        rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", p.frequency), {p.position.x, p.position.y - 20}, 12, 0, rl.GOLD)
+        rl.DrawCircleV({peaks[i].position.x, peaks[i].position.y}, 3.0, rl.GOLD)
+        rl.DrawTextEx(
+            font,
+            fmt.ctprintf("%.1fHz", peaks[i].frequency),
+            {peaks[i].position.x, peaks[i].position.y - 20},
+            12,
+            0,
+            rl.GOLD,
+        )
     }
 }
