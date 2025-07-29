@@ -338,3 +338,7 @@ octave_up :: proc(note: Note) -> Note {
 cents_deviation :: proc(freq_1_hz: f32, freq_2_hz: f32) -> f32 {
     return freq_to_cents(freq_1_hz, freq_2_hz)
 }
+
+octave_apart :: proc(a: Note, b: Note) -> bool {
+    return math.abs(a.cents - b.cents) == 1200
+}

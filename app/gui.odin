@@ -38,7 +38,6 @@ text_color_dark := rl.GetColor(0x15141BFF)
 text_color_light := rl.GetColor(0xBDBDBDFF)
 
 
-
 load_texture_atlas :: proc() {
     file_data := #load("../assets/images/atlas.2x.png")
     image := rl.LoadImageFromMemory(".png", raw_data(file_data), i32(len(file_data)))
@@ -520,7 +519,6 @@ gui_dropdown :: proc(
 }
 
 
-
 draw_note :: proc(note: core.Note, pos: [2]f32, freq_estimation_active: bool) {
     if note.frequency == 0 do return
 
@@ -548,14 +546,19 @@ draw_note :: proc(note: core.Note, pos: [2]f32, freq_estimation_active: bool) {
     )
 }
 
-draw_measurements :: proc (pitch: core.PitchInfo, last_good_pitch: core.PitchInfo, freq_estimation_active: bool, out_of_range: bool) {
+draw_measurements :: proc(
+    pitch: core.PitchInfo,
+    last_good_pitch: core.PitchInfo,
+    freq_estimation_active: bool,
+    out_of_range: bool,
+) {
     show_last := false
     hz := pitch.detected_freq
     cents := pitch.err_cents
     show_placeholder := false
 
     if !freq_estimation_active || out_of_range {
-        if last_good_pitch.measured  {
+        if last_good_pitch.measured {
             hz = last_good_pitch.detected_freq
             cents = last_good_pitch.err_cents
         } else {
@@ -581,14 +584,7 @@ draw_measurements :: proc (pitch: core.PitchInfo, last_good_pitch: core.PitchInf
         color,
     )
 
-    rl.DrawTextEx(
-        font_store.medium_32,
-        "Cents",
-        {232, 323},
-        16,
-        1,
-        light_color,
-    )
+    rl.DrawTextEx(font_store.medium_32, "Cents", {232, 323}, 16, 1, light_color)
 
     cents_str := fmt.ctprintf("%.1f", math.abs(cents))
     show_minus_sign := cents < 0 && cents_str != "0.0"
@@ -597,14 +593,7 @@ draw_measurements :: proc (pitch: core.PitchInfo, last_good_pitch: core.PitchInf
         rl.DrawTextEx(font, "-", {232, 344}, 18, 1, color)
     }
 
-    rl.DrawTextEx(
-        font,
-        "" if show_placeholder else cents_str,
-        {242, 344},
-        18,
-        1,
-        color,
-    )
+    rl.DrawTextEx(font, "" if show_placeholder else cents_str, {242, 344}, 18, 1, color)
 
 }
 
@@ -646,4 +635,3 @@ draw_measurements :: proc (pitch: core.PitchInfo, last_good_pitch: core.PitchInf
 
 //     rl.DrawLineV({rect.x, y}, {rect.x + rect.width, y}, rl.LIGHTGRAY)
 // }
-

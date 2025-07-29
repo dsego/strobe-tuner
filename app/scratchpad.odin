@@ -22,9 +22,10 @@ import rl "vendor:raylib"
 draw_nsdf :: proc(rect: rl.Rectangle, nsdf: ^core.NSDFConfig, peak: core.Vec2, font: rl.Font) {
     points: [4096]rl.Vector2 = {}
 
+
     start := 0 // enables me to move the start to zoom into a portion of the graph
     // end := len(nsdf.nsdf)
-    end := 1000
+    end := 1500
     len := end - start
 
     // stretch samples to fit the box width

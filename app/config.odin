@@ -96,6 +96,7 @@ Config :: struct {
     strobe_color_1:               u32 "color",
     strobe_color_2:               u32 "color",
     strobe_colorway:              StrobeColorway,
+    prevent_strobe_octave_jumps:  bool,
 
     // attenuate strobe effect when it spins so fast it becomes distracting
     apply_attenuation:            bool,
@@ -129,6 +130,7 @@ config_defaults :: Config {
     strobe_contrast              = 1000.0,
     strobe_display_type          = .CURVED_TRACKS,
     strobe_colorway              = .VIBRANT_RED,
+    prevent_strobe_octave_jumps  = true,
 
     // Custom colors
     strobe_color_1               = 0x0,

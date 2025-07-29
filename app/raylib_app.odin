@@ -71,7 +71,7 @@ run_raylib_app :: proc(config: ^Config) {
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetConfigFlags({.WINDOW_HIGHDPI})
-    rl.InitWindow(1024 when ODIN_DEBUG else 488, 800 if COLOR_CONTROLS else 532, APP_NAME)
+    rl.InitWindow(1200 when ODIN_DEBUG else 488, 800 if COLOR_CONTROLS else 532, APP_NAME)
     rl.SetTargetFPS(120)
     defer rl.CloseWindow()
 
@@ -237,17 +237,25 @@ run_raylib_app :: proc(config: ^Config) {
         if pitch_info.is_strong_pitch {
             last_good_pitch_info = pitch_info
             if detected_note.cents != pitch_info.detected_note.cents {
+                is_octave := core.octave_apart(detected_note, pitch_info.detected_note)
                 detected_note = pitch_info.detected_note
-                if config.note_detection_mode == .AUTO {
-                    target_note = detected_note
-                    core.set_phase_comparator_freq(
-                        phase_comparator,
-                        target_note.frequency,
-                        config.pitch_standard,
-                        config.strobe_speed,
-                        config.speed_multiplier,
-                        config.strobe_mode,
-                    )
+                target_note = detected_note
+
+                // Keep the same strobe target, this is useful for some strings on guitars/basses
+                // where note rings out as a harmonic.
+                if config.prevent_strobe_octave_jumps && is_octave {
+                    // DO NOTHING
+                } else {
+                    if config.note_detection_mode == .AUTO {
+                        core.set_phase_comparator_freq(
+                            phase_comparator,
+                            target_note.frequency,
+                            config.pitch_standard,
+                            config.strobe_speed,
+                            config.speed_multiplier,
+                            config.strobe_mode,
+                        )
+                    }
                 }
             }
             freq_estimation_active = true
@@ -362,11 +370,7 @@ run_raylib_app :: proc(config: ^Config) {
 
             // -------------------------------------------------------------------------------------
 
-            draw_note(
-                target_note,
-                {16, 303},
-                freq_estimation_active,
-            )
+            draw_note(target_note, {16, 303}, freq_estimation_active)
 
             draw_measurements(
                 pitch_info,
@@ -603,7 +607,7 @@ run_raylib_app :: proc(config: ^Config) {
                 }
 
                 draw_nsdf(
-                    rl.Rectangle{520, 40, 480, 200},
+                    rl.Rectangle{520, 40, 660, 200},
                     &pitch_detector.nsdf,
                     pitch_info.nsdf_peak,
                     font_store.medium_24,
