@@ -140,7 +140,7 @@ config_defaults :: Config {
     pitch_detection_clarity_low  = 0.9,
     pitch_detection_clarity_high = 0.98,
     noise_floor_snr_db_threshold = 10, // to determine if it’s safe to update the noise floor
-    pitch_detection_min_snr_db   = 1, // dB
+    pitch_detection_min_snr_db   = 2, // dB
     auto_gain_control            = false,
     auto_gain_snr_db_low         = 30, // dB
     auto_gain_snr_db_high        = 50, // dB

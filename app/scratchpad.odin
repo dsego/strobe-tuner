@@ -59,7 +59,7 @@ draw_nsdf :: proc(rect: rl.Rectangle, nsdf: ^core.NSDFConfig, peak: core.Vec2, f
         }
         rl.DrawTextEx(
             font,
-            fmt.ctprintf("%.1fHz", f32(nsdf.samplerate) / peak.x),
+            fmt.ctprintf("%.2fHz", f32(nsdf.samplerate) / peak.x),
             {cx, ruler_label_y},
             12,
             0,
@@ -74,8 +74,6 @@ draw_nsdf :: proc(rect: rl.Rectangle, nsdf: ^core.NSDFConfig, peak: core.Vec2, f
         rl.DrawLineEx({cx - 7.0, cy}, {cx + 7.0, cy}, 2.0, color)
         rl.DrawLineEx({cx, cy - 7.0}, {cx, cy + 7.0}, 2.0, color)
     }
-
-    // rl.DrawTextEx(font, fmt.ctprintf("%.2f", nsdf.nsdf[0]), {rect.x, rect.y}, 12, 0, rl.BLUE)
 }
 
 

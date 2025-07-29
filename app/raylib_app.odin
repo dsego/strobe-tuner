@@ -365,53 +365,14 @@ run_raylib_app :: proc(config: ^Config) {
             draw_note(
                 target_note,
                 {16, 303},
-                rl.GetColor(0xFBFBFBFF) if freq_estimation_active else rl.GetColor(0x7D7E8FFF),
+                freq_estimation_active,
             )
 
-            rl.DrawTextEx(font_store.medium_32, "Hz", {147, 323}, 16, 1, rl.GetColor(0xFBFBFBFF))
-
-            hz := pitch_info.detected_freq
-            cents := pitch_info.err_cents
-
-            if !freq_estimation_active && last_good_pitch_info.measured {
-                hz = last_good_pitch_info.detected_freq
-                cents = last_good_pitch_info.err_cents
-            }
-
-            show_placeholder := !freq_estimation_active || out_of_range
-
-            rl.DrawTextEx(
-                font_store.bold_36,
-                "-" if show_placeholder else fmt.ctprintf("%.1f", hz),
-                {147, 344},
-                18,
-                1,
-                rl.GetColor(0xFBFBFBFF),
-            )
-
-            rl.DrawTextEx(
-                font_store.medium_32,
-                "Cents",
-                {232, 323},
-                16,
-                1,
-                rl.GetColor(0xFBFBFBFF),
-            )
-
-            cents_str := fmt.ctprintf("%.1f", math.abs(cents))
-            show_minus_sign := cents < 0 && cents_str != "0.0"
-
-            if show_minus_sign || !freq_estimation_active || out_of_range {
-                rl.DrawTextEx(font_store.bold_36, "-", {232, 344}, 18, 1, rl.GetColor(0xFBFBFBFF))
-            }
-
-            rl.DrawTextEx(
-                font_store.bold_36,
-                "" if show_placeholder else cents_str,
-                {242, 344},
-                18,
-                1,
-                rl.GetColor(0xFBFBFBFF),
+            draw_measurements(
+                pitch_info,
+                last_good_pitch_info,
+                freq_estimation_active,
+                out_of_range,
             )
 
 

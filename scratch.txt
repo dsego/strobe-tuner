@@ -1,5 +1,16 @@
 
 
+
+
+
+------
+
+zero crossing for precise freq estimate???
+debug console -  show nsdf with crosses, show zero crossing, show fft graph with line on the strongest freq
+
+
+----
+
 odin build app -o:speed -extra-linker-flags="-L."
 mv app.bin SonicStrobe.app/Contents/MacOS
 codesign --sign "Apple Development: davorin.sego@gmail.com" --deep  SonicStrobe.app

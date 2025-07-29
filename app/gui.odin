@@ -37,7 +37,6 @@ exclusive_control_mode := false
 text_color_dark := rl.GetColor(0x15141BFF)
 text_color_light := rl.GetColor(0xBDBDBDFF)
 
-// gui_disabled_state := false
 
 
 load_texture_atlas :: proc() {
@@ -520,14 +519,21 @@ gui_dropdown :: proc(
     return edit_mode
 }
 
-draw_note :: proc(note: core.Note, pos: [2]f32, color: rl.Color, hide_accidental: bool = false) {
+
+
+draw_note :: proc(note: core.Note, pos: [2]f32, freq_estimation_active: bool) {
     if note.frequency == 0 do return
+
+    light_color := rl.GetColor(0xFBFBFBFF)
+    muted_color := rl.GetColor(0x7D7E8FFF)
+
+    color := light_color if freq_estimation_active else muted_color
 
     // Note name
     rl.DrawTextEx(font_store.medium_256, fmt.ctprintf("%v", note.name), pos, 128, 0, color)
 
     // Sharp sign
-    if note.is_accidental && !hide_accidental {
+    if note.is_accidental {
         rl.DrawTextEx(font_store.noto_medium_96, "♯", {pos.x + 76, pos.y + 12}, 48, 0, color)
     }
 
@@ -540,16 +546,66 @@ draw_note :: proc(note: core.Note, pos: [2]f32, color: rl.Color, hide_accidental
         0,
         color,
     )
+}
 
-    // Frequency
-    // rl.DrawTextEx(
-    //     font_store.medium_32,
-    //     fmt.ctprintf("%.1f", note.frequency),
-    //     {pos.x + 112, pos.y + 90},
-    //     16,
-    //     0,
-    //     rl.GetColor(0x7D7E8FFF),
-    // )
+draw_measurements :: proc (pitch: core.PitchInfo, last_good_pitch: core.PitchInfo, freq_estimation_active: bool, out_of_range: bool) {
+    show_last := false
+    hz := pitch.detected_freq
+    cents := pitch.err_cents
+    show_placeholder := false
+
+    if !freq_estimation_active || out_of_range {
+        if last_good_pitch.measured  {
+            hz = last_good_pitch.detected_freq
+            cents = last_good_pitch.err_cents
+        } else {
+            show_placeholder = true
+        }
+    }
+
+    // TODO: define a palette somewhere
+    light_color := rl.GetColor(0xFBFBFBFF)
+    muted_color := rl.GetColor(0x7D7E8FFF)
+
+    color := light_color if freq_estimation_active else muted_color
+    font := font_store.bold_36 if freq_estimation_active else font_store.medium_32
+
+    rl.DrawTextEx(font_store.medium_32, "Hz", {147, 323}, 16, 1, light_color)
+
+    rl.DrawTextEx(
+        font,
+        "-" if show_placeholder else fmt.ctprintf("%.1f", hz),
+        {147, 344},
+        18,
+        1,
+        color,
+    )
+
+    rl.DrawTextEx(
+        font_store.medium_32,
+        "Cents",
+        {232, 323},
+        16,
+        1,
+        light_color,
+    )
+
+    cents_str := fmt.ctprintf("%.1f", math.abs(cents))
+    show_minus_sign := cents < 0 && cents_str != "0.0"
+
+    if show_minus_sign || show_placeholder {
+        rl.DrawTextEx(font, "-", {232, 344}, 18, 1, color)
+    }
+
+    rl.DrawTextEx(
+        font,
+        "" if show_placeholder else cents_str,
+        {242, 344},
+        18,
+        1,
+        color,
+    )
+
 }
 
 
