@@ -243,7 +243,7 @@ run_raylib_app :: proc(config: ^Config) {
 
                 // Keep the same strobe target, this is useful for some strings on guitars/basses
                 // where note rings out as a harmonic.
-                if config.prevent_strobe_octave_jumps && is_octave {
+                if config.prevent_strobe_octave_jumps && is_octave && freq_estimation_active {
                     // DO NOTHING
                 } else {
                     if config.note_detection_mode == .AUTO {
