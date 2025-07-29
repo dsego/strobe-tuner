@@ -1,10 +1,5 @@
 
 
-
-
-
-------
-
 zero crossing for precise freq estimate???
 debug console -  show nsdf with crosses, show zero crossing, show fft graph with line on the strongest freq
 

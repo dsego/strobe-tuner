@@ -17,6 +17,7 @@ package app
 
 import "../core"
 import "core:fmt"
+import "core:math"
 import rl "vendor:raylib"
 
 draw_nsdf :: proc(rect: rl.Rectangle, nsdf: ^core.NSDFConfig, peak: core.Vec2, font: rl.Font) {
@@ -50,6 +51,8 @@ draw_nsdf :: proc(rect: rl.Rectangle, nsdf: ^core.NSDFConfig, peak: core.Vec2, f
 
         cx := rect.x + rel_lag * f32(rect.width) / f32(len - 1)
         cy := rect.y + (rect.height / 2.0) - val * (rect.height / 2.0)
+
+        if cx > rect.x + rect.width do break
 
         // Vertical ruler
         rl.DrawLineEx({cx, cy}, {cx, rect.y + rect.height}, 0.5, rl.LIGHTGRAY)
@@ -113,4 +116,105 @@ draw_time_plot :: proc(rect: rl.Rectangle, len_samples: int, div_samples: int, f
         0.5,
         rl.LIGHTGRAY,
     )
+}
+
+FreqPeak :: struct {
+    position:  rl.Vector2,
+    magnitude: f32,
+    frequency: f32,
+}
+
+draw_freq_plot :: proc(rect: rl.Rectangle, nsdf: ^core.NSDFConfig, font: rl.Font) {
+    points: [256]rl.Vector2 = {}
+    peak_candidates: [256]FreqPeak = {}
+    peaks: [256]FreqPeak = {}
+
+    // stretch samples to fit the box width
+    px_per_sample := f32(rect.width) / f32(len(points) - 1)
+
+    x := rect.x
+    gain: f32 = 1.0 / f32(nsdf.fft_size)
+
+    rl.DrawTextEx(font, "0dB", {rect.x, rect.y - 16}, 12, 0, rl.LIGHTGRAY)
+    rl.DrawTextEx(font, "-100dB", {rect.x, rect.y + rect.height + 8}, 12, 0, rl.LIGHTGRAY)
+
+    rl.DrawLineEx({rect.x, rect.y}, {rect.x + rect.width, rect.y}, 0.5, rl.LIGHTGRAY)
+    rl.DrawLineEx(
+        {rect.x, rect.y + rect.height / 2},
+        {rect.x + rect.width, rect.y + rect.height / 2},
+        0.5,
+        rl.LIGHTGRAY,
+    )
+    rl.DrawLineEx(
+        {rect.x, rect.y + rect.height},
+        {rect.x + rect.width, rect.y + rect.height},
+        0.5,
+        rl.LIGHTGRAY,
+    )
+    rl.DrawLineEx({rect.x, rect.y}, {rect.x, rect.y + rect.height}, 0.5, rl.LIGHTGRAY)
+
+    for i in 0 ..< len(points) {
+        normalized_magnitude := abs(nsdf.fft[i]) / f32(nsdf.fft_size)
+        db_val := 20 * math.log10(normalized_magnitude)
+        db_min :: f32(-100.0)
+        db_max :: f32(0.0)
+
+        scaled := (db_val - db_min) / (db_max - db_min)
+        scaled = clamp(scaled, 0, 1)
+
+        y := rect.y + rect.height - scaled * rect.height
+        points[i] = {x, y}
+        x += px_per_sample
+
+
+    }
+    // first pass
+    j := 0
+
+    for i in 0 ..< len(points) {
+        if i > 0 &&
+           i < len(points) - 1 &&
+           abs(nsdf.fft[i]) > abs(nsdf.fft[i - 1]) &&
+           abs(nsdf.fft[i]) > abs(nsdf.fft[i + 1]) {
+            delta, magnitude := core.parabolic(
+                abs(nsdf.fft[i - 1]),
+                abs(nsdf.fft[i]),
+                abs(nsdf.fft[i + 1]),
+            )
+            peak_candidates[j] = {
+                {points[i].x, points[i].y},
+                magnitude,
+                (f32(i) + delta) * f32(nsdf.samplerate) / f32(nsdf.fft_size),
+            }
+            j += 1
+        }
+    }
+
+    // second pass to remove the jaggedness
+    min_prominence: f32 = 1.4125 // 3dB
+    k := 0
+    for i in 0 ..< len(peak_candidates) {
+        if i > 0 &&
+           i < len(peak_candidates) - 1 &&
+           peak_candidates[i].magnitude > peak_candidates[i - 1].magnitude * min_prominence &&
+           peak_candidates[i].magnitude > peak_candidates[i + 1].magnitude * min_prominence &&
+           peak_candidates[i].magnitude > 10
+           {
+            peaks[k] = peak_candidates[i]
+            k += 1
+        }
+    }
+
+    rl.DrawLineStrip(raw_data(points[:]), i32(len(points)), rl.PINK)
+
+    for p in peaks {
+        rl.DrawLineEx(
+            {p.position.x, p.position.y},
+            {p.position.x, rect.y + rect.height},
+            0.5,
+            rl.LIGHTGRAY,
+        )
+        rl.DrawCircleV({p.position.x, p.position.y}, 3.0, rl.GOLD)
+        rl.DrawTextEx(font, fmt.ctprintf("%.1fHz", p.frequency), {p.position.x, p.position.y - 20}, 12, 0, rl.GOLD)
+    }
 }

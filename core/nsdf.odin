@@ -27,9 +27,9 @@
 
 package core
 
+import "base:runtime"
 import "core:math"
 import "core:mem"
-import "base:runtime"
 
 import pffft "../external/odin-pffft"
 
@@ -105,7 +105,7 @@ nsdf_process_samples :: proc(self: ^NSDFConfig, samples: []f32) {
     pffft.transform_ordered(
         self.pffft_setup,
         raw_data(self.padded_samples),
-        cast(^f32) raw_data(self.fft),
+        cast(^f32)raw_data(self.fft),
         nil,
         pffft.Direction.FORWARD,
     )
@@ -120,7 +120,7 @@ nsdf_process_samples :: proc(self: ^NSDFConfig, samples: []f32) {
     // inverse FFT to produce auto-correlation
     pffft.transform_ordered(
         self.pffft_setup,
-        cast(^f32) raw_data(self.fft),
+        cast(^f32)raw_data(self.fft),
         raw_data(self.autocorr),
         nil,
         pffft.Direction.BACKWARD,

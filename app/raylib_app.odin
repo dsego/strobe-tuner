@@ -603,13 +603,18 @@ run_raylib_app :: proc(config: ^Config) {
                         0,
                         rl.PURPLE,
                     )
-
                 }
 
                 draw_nsdf(
                     rl.Rectangle{520, 40, 660, 200},
                     &pitch_detector.nsdf,
                     pitch_info.nsdf_peak,
+                    font_store.medium_24,
+                )
+
+                draw_freq_plot(
+                    rl.Rectangle{520, 300, 660, 200},
+                    &pitch_detector.nsdf,
                     font_store.medium_24,
                 )
             }
