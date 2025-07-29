@@ -2,7 +2,7 @@ package pitch
 
 import "core:fmt"
 import "core:os"
-import "core:runtime"
+import "base:runtime"
 import "core:strings"
 
 import rl "vendor:raylib"
@@ -27,7 +27,6 @@ init :: proc() {
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Pitch")
     rl.SetTargetFPS(60)
     rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .MSAA_4X_HINT})
-    ctx.font = rl.LoadFontEx("./media/JetBrainsMono-Regular.ttf", 64, nil, 0)
 }
 
 cleanup :: proc() {
@@ -39,7 +38,8 @@ main :: proc() {
     init()
     defer cleanup()
 
-    font := rl.LoadFontEx("../assets/NotoSansMono-Medium.ttf", 64, nil, 0)
+    font := rl.LoadFontEx("media/JetBrainsMono-Regular.ttf", 64, nil, 0)
+    ctx.font = font
     defer rl.UnloadFont(font)
 
     // path: cstring = "./media/ukulele_A4.wav"
@@ -103,7 +103,7 @@ main :: proc() {
         helpers.draw_time_plot(rect2, len(pitch_config.autocorrelation), 9.0, SAMPLERATE, ctx.font)
         helpers.draw_samples(rect2, pitch_config.autocorrelation, rl.GOLD, gain)
 
-        rl.DrawTextEx(font, fmt.cprintf("%.1f Hz", freq), {20, 550}, 32, 0, rl.GRAY)
+        rl.DrawTextEx(font, fmt.ctprintf("%.1f Hz", freq), {20, 550}, 32, 0, rl.GRAY)
 
         // Mark lag position with a cross
         cx := rect2.x + lag * f32(rect.width) / f32(len(samples) - 1)

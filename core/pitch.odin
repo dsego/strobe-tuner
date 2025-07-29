@@ -136,9 +136,10 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.err_cents = cents_deviation(info.detected_freq, info.detected_note.frequency)
 
     info.is_strong_pitch =
-        info.detected_freq > MIN_DETECT_FREQ &&
-        info.clarity > self.clarity_high &&
-        info.snr_db > self.min_snr_db
+        info.detected_freq >= MIN_DETECT_FREQ &&
+        info.clarity >= self.clarity_high &&
+        info.snr_db >= self.min_snr_db
+
     info.is_weak_pitch =
         info.detected_freq < MIN_DETECT_FREQ ||
         info.clarity < self.clarity_low ||

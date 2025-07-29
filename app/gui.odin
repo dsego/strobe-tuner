@@ -590,3 +590,4 @@ draw_note :: proc(note: core.Note, pos: [2]f32, color: rl.Color, hide_accidental
 
 //     rl.DrawLineV({rect.x, y}, {rect.x + rect.width, y}, rl.LIGHTGRAY)
 // }
+

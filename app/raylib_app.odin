@@ -71,7 +71,7 @@ run_raylib_app :: proc(config: ^Config) {
 
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetConfigFlags({.WINDOW_HIGHDPI})
-    rl.InitWindow(488, 800 if COLOR_CONTROLS else 532, APP_NAME)
+    rl.InitWindow(1024 when ODIN_DEBUG else 488, 800 if COLOR_CONTROLS else 532, APP_NAME)
     rl.SetTargetFPS(120)
     defer rl.CloseWindow()
 
@@ -227,7 +227,6 @@ run_raylib_app :: proc(config: ^Config) {
         }
 
 
-
         tuning_notes: []string
         if config.tuning_preset == .UKULELE_STD do tuning_notes = ukulele_std_notes[:]
         if config.tuning_preset == .GUITAR_STD do tuning_notes = guitar_std_notes[:]
@@ -368,17 +367,6 @@ run_raylib_app :: proc(config: ^Config) {
                 {16, 303},
                 rl.GetColor(0xFBFBFBFF) if freq_estimation_active else rl.GetColor(0x7D7E8FFF),
             )
-
-            when ODIN_DEBUG {
-                rl.DrawTextEx(
-                    font_store.medium_32,
-                    fmt.ctprintf("Clarity %.3f", pitch_info.clarity),
-                    {24, 420},
-                    16,
-                    0.5,
-                    rl.GetColor(0xFBFBFBFF),
-                )
-            }
 
             rl.DrawTextEx(font_store.medium_32, "Hz", {147, 323}, 16, 1, rl.GetColor(0xFBFBFBFF))
 
@@ -621,35 +609,45 @@ run_raylib_app :: proc(config: ^Config) {
                     rl.GetColor(0xFBFBFBFF),
                 )
 
-                // for band in phase_comparator.bands {
-                //     level := core.dbfs(band.amp)
-                //     floor_level := core.dbfs(band.noise_floor)
-                //     // fmt.println(floor_level)
-                //     // rl.DrawRectangleV({400, 400}, {2, 10}, rl.ORANGE)
-                //     rl.DrawRectangleV({400, 400}, {120 + level, 2}, rl.ORANGE)
-                //     rl.DrawRectangleV({400, 420}, {120 + floor_level, 2}, rl.PURPLE)
-                // }
+
+                rl.DrawTextEx(
+                    font_store.medium_32,
+                    fmt.ctprintf("Clarity %.3f", pitch_info.clarity),
+                    {500, 10},
+                    16,
+                    0,
+                    rl.GetColor(0xFBFBFBFF),
+                )
+                if pitch_info.is_strong_pitch {
+                    rl.DrawTextEx(
+                        font_store.medium_32,
+                        fmt.ctprintf("strong"),
+                        {600, 10},
+                        16,
+                        0,
+                        rl.ORANGE,
+                    )
+
+                }
+                if pitch_info.is_weak_pitch {
+                    rl.DrawTextEx(
+                        font_store.medium_32,
+                        fmt.ctprintf("weak"),
+                        {600, 10},
+                        16,
+                        0,
+                        rl.PURPLE,
+                    )
+
+                }
+
+                draw_nsdf(
+                    rl.Rectangle{520, 40, 480, 200},
+                    &pitch_detector.nsdf,
+                    pitch_info.nsdf_peak,
+                    font_store.medium_24,
+                )
             }
-
-            // rl.DrawTextEx(
-            //     font_store.medium_32,
-            //     fmt.ctprintf("%-.1fdBFS", pitch_info.rms_dbfs),
-            //     {300, 480},
-            //     16,
-            //     0,
-            //     rl.LIGHTGRAY,
-            // )
-
-
-            // if pitch_info.rms_dbfs >= 0 do rl.DrawRectangleV({300, 500}, {10, 10}, rl.RED)
-            // else if pitch_info.rms_dbfs >= -20 do rl.DrawRectangleV({300, 500}, {10, 10}, rl.ORANGE)
-            // else if pitch_info.rms_dbfs >= -40 do rl.DrawRectangleV({300, 500}, {10, 10}, rl.YELLOW)
-            // else if pitch_info.rms_dbfs >= -60 do rl.DrawRectangleV({300, 500}, {10, 10}, rl.GREEN)
-            // else do rl.DrawRectangleV({300, 500}, {10, 10}, rl.BLACK)
-
-            // TODO:
-            // pitch standard - 440hz - number spinner
-            // color theme dropdown
         }
     }
 }

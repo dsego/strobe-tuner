@@ -2,7 +2,7 @@ package pitch
 import "core:mem"
 import "core:fmt"
 
-import "../../pffft"
+import pffft "../../external/odin-pffft"
 
 // -------------------------------------------------------------------------------------------------
 //  Pitch detection based on auto-correlation
