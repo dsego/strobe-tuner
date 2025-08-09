@@ -41,14 +41,20 @@ set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32, window_size: int) {
     self.norm_freq = norm_freq
     w := math.TAU * norm_freq
 
+    rot_step := complex(math.cos(w), -math.sin(w))
+    phase: complex64 = complex(1.0, 0.0)
+
     // Recalculate windowed twiddles for fast lookup
     for i in 0 ..< self.window_size {
-        rotation := w * f32(i)
-
         // exp(-j*2π*k*i/N)
+
+        // This can further be optimized with incremental Blackman logic to
+        //  save on cos/sin calls.
         blackmann := blackmann_window(f32(i), f32(window_size))
-        self.twiddles[i] =
-            complex(blackmann, 0.0) * complex(math.cos(rotation), -math.sin(rotation))
+
+        self.twiddles[i] = complex(blackmann, 0.0) * phase
+        phase *= rot_step
+
     }
 }
 
@@ -66,7 +72,9 @@ run_single_dft :: proc(self: ^SingleFreqDFT, samples: []f32) -> complex64 {
         self.dft += complex(samples[i], 0) * self.twiddles[i]
     }
 
-    return self.dft / complex(f32(self.window_size), 0.0)
+    self.dft /= complex(f32(self.window_size), 0.0)
+
+    return self.dft
 }
 
 

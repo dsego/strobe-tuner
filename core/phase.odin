@@ -59,6 +59,7 @@ PhaseBand :: struct {
     // ewma_state:        EwmaState,
     // moving_avg:                   MovingAvg,
     dft_config:                   SingleFreqDFT,
+    intp_dft_config:              IntpSingleFreqDFT,
     time_stretch:                 f32,
     phase:                        f32, // actual measured phase
     amp:                          f32,
@@ -111,6 +112,7 @@ init_phase_comparator :: proc(
             band := PhaseBand{}
             band.interval = interval
             band.dft_config = init_dft(MAX_WINDOW_SIZE)
+            band.intp_dft_config = init_intp_dft(MAX_WINDOW_SIZE)
             band.noise_floor = 10e-6
             band.noise_floor_snr_db_threshold = noise_floor_snr_db_threshold
             // band.ewma_state = init_ewma(0.1)
@@ -133,6 +135,7 @@ destroy_phase_comparator :: proc(self: ^PhaseComparator) {
     for &band in self.bands {
         // destroy_moving_avg(&band.moving_avg)
         destory_dft(&band.dft_config)
+        destory_intp_dft(&band.intp_dft_config)
     }
     delete(self.bands)
     free(self)
@@ -216,6 +219,7 @@ set_phase_comparator_freq :: proc(
         if self.mode == .HARMONIC_MODE || i == 0 {
             window_size := best_dft_window_size(band.freq_hz, self.samplerate, 25)
             set_dft_freq(&band.dft_config, band.norm_freq, window_size)
+            set_intp_dft_freq(&band.intp_dft_config, window_size, band.freq_hz, self.samplerate, 5)
         }
     }
 }
@@ -229,7 +233,7 @@ unwrap_phase :: proc(phase: f32) -> f32 {
 }
 
 
-run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32, bool) {
+run_phase_detection :: proc(self: ^PhaseComparator, use_phase_average: bool) -> (f32, f32, bool) {
     base_band := &self.bands[0]
 
     // Need to keep this buffer slice relatively small to keep the display refresh without latency.
@@ -238,13 +242,13 @@ run_phase_detection :: proc(self: ^PhaseComparator) -> (f32, f32, bool) {
     // Skip when there are no new samples, the scaled phase stays the same
     if available <= 0 {
         // fmt.println(base_band.err_cents)
-        return base_band.estimated_freq_hz, base_band.err_cents, true
+        return base_band.estimated_freq_hz, base_band.err_cents, true // no change
     }
 
     self.available = int(available)
 
     for &band, band_idx in self.bands {
-        determine_band_phase(self, &band, band_idx)
+        determine_band_phase(self, &band, band_idx, use_phase_average)
         update_band_noise_floor(self, &band, band_idx)
     }
 
@@ -311,19 +315,33 @@ test_best_hop_size :: proc(t: ^testing.T) {
 }
 
 
-determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx: int) {
+determine_band_phase :: proc(
+    self: ^PhaseComparator,
+    band: ^PhaseBand,
+    band_idx: int,
+    use_phase_average: bool,
+) {
     dft: complex64 = complex(0, 0)
 
     // Harmonic mode - each band tracks a separate frequency
     // Run a single bin DFT and estimate frequency based on phase drift
     if self.mode == .HARMONIC_MODE || band_idx == 0 {
-        dft = run_single_dft(&band.dft_config, self.sample_buffer[:])
+
         hop_size := best_hop_size(25, band.freq_hz, self.samplerate)
+        phase_delta: f32 = 0.0
 
-        dft_hop := run_single_dft(&band.dft_config, self.sample_buffer[hop_size:])
+        // measure phase difference
+        if use_phase_average {
+            dft = run_intp_dft(&band.intp_dft_config, self.sample_buffer[:])
+            dft_hop := run_intp_dft(&band.intp_dft_config, self.sample_buffer[hop_size:])
+            phase_delta = cmplx.phase(dft_hop) - cmplx.phase(dft)
 
-        // measured phase difference
-        phase_delta := cmplx.phase(dft_hop) - cmplx.phase(dft)
+        } else {
+            dft = run_single_dft(&band.dft_config, self.sample_buffer[:])
+            dft_hop := run_single_dft(&band.dft_config, self.sample_buffer[hop_size:])
+            phase_delta = cmplx.phase(dft_hop) - cmplx.phase(dft)
+        }
+
         phase_delta = unwrap_phase(phase_delta)
 
         // how much the phase of a bin should rotate over HOP samples for a signal at frequency f

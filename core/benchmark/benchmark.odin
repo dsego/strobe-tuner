@@ -21,7 +21,7 @@ import "core:fmt"
 import "core:math/rand"
 
 import ".."
-import "../../pffft"
+import pffft "../../external/odin-pffft"
 
 SIZE :: 8192
 ITERATIONS :: 1000
@@ -64,7 +64,7 @@ main :: proc() {
     {
         dft := core.init_dft(SIZE)
         samples: [SIZE]f32
-        core.set_dft_freq(&dft, 110.0/48_000.0)
+        core.set_dft_freq(&dft, 110.0/48_000.0, SIZE)
 
         for i in 0..<SIZE do samples[i] = f32(1)
 

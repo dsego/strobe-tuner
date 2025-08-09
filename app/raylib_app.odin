@@ -189,6 +189,10 @@ run_raylib_app :: proc(config: ^Config) {
             config^ = get_config_defaults()
         }
 
+        if rl.IsKeyPressed(.X) {
+            config.use_phase_average = !config.use_phase_average
+        }
+
         super_key_down := rl.IsKeyDown(.LEFT_SUPER) || rl.IsKeyDown(.RIGHT_SUPER)
         pref_key_combo := super_key_down && rl.IsKeyPressed(.COMMA)
         if pref_key_combo {
@@ -314,7 +318,7 @@ run_raylib_app :: proc(config: ^Config) {
         pitch_cents_err := core.cents_deviation(pitch_info.detected_freq, target_note.frequency)
 
         // Ignore return values - the NSDF provides a steadier Hz/Cents response
-        core.run_phase_detection(phase_comparator)
+        core.run_phase_detection(phase_comparator, config.use_phase_average)
 
 
         if rl.IsKeyPressed(.TAB) {
@@ -355,6 +359,7 @@ run_raylib_app :: proc(config: ^Config) {
                 config.auto_gain_control,
                 strobe_display.auto_gain_active[0],
             )
+
             if agc_changed {
                 config.auto_gain_control = agc
             }

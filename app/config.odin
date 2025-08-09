@@ -92,7 +92,7 @@ Config :: struct {
     // How to render the strobe effect
     strobe_display_type:          StrobeDisplayType,
 
-    // Color scheme for strobe track display, two hex values
+    // color scheme for strobe track display, two hex values
     strobe_color_1:               u32 "color",
     strobe_color_2:               u32 "color",
     strobe_colorway:              StrobeColorway,
@@ -101,17 +101,29 @@ Config :: struct {
     // attenuate strobe effect when it spins so fast it becomes distracting
     apply_attenuation:            bool,
     tuning_preset:                TuningPreset,
+
+    // show different type of partial labels, eg partial number 1x, note name A2, or frequency 110Hz
     partial_labels:               PartialLabelType,
+
+    // pitch detection settings
     pitch_detection_clarity_low:  f32,
     pitch_detection_clarity_high: f32,
     noise_floor_snr_db_threshold: f32,
     pitch_detection_min_snr_db:   f32,
+
+    // AGC settings
     auto_gain_control:            bool,
     auto_gain_snr_db_low:         f32,
     auto_gain_snr_db_high:        f32,
     max_auto_gain:                f32,
     gain_release_coefficient:     f32,
     rms_quiet_threshold:          f32,
+
+    // Average 3 DFTs to get more stable phase/mag tracking
+    use_phase_average:            bool,
+
+    // Show cents offset for each strobe band
+    show_band_cents:              bool,
 }
 
 @(private)
@@ -149,6 +161,8 @@ config_defaults :: Config {
     max_auto_gain                = 1000.0,
     gain_release_coefficient     = 0.1,
     rms_quiet_threshold          = 0.01, // -40dBFS
+    use_phase_average            = true,
+    show_band_cents              = false,
 }
 
 

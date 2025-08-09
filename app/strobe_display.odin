@@ -74,7 +74,7 @@ init_strobe_display :: proc(
 ) -> (
     self: StrobeDisplay,
 ) {
-    for i in 0..<len(self.auto_gain) {
+    for i in 0 ..< len(self.auto_gain) {
         self.auto_gain[i] = 1.0
     }
     self.texture_width = i32(size.x)
@@ -297,7 +297,8 @@ draw_strobe_display :: proc(
             self.auto_gain[band_idx] = clamp(1.0 / band.amp, 0, config.max_auto_gain)
         } else {
             // Slowly release gain with exponential decay
-            self.auto_gain[band_idx] += config.gain_release_coefficient * (1.0 - self.auto_gain[band_idx])
+            self.auto_gain[band_idx] +=
+                config.gain_release_coefficient * (1.0 - self.auto_gain[band_idx])
         }
 
         if config.auto_gain_control {
@@ -360,6 +361,19 @@ draw_strobe_display :: proc(
             r += band_height
             sin := math.sqrt(r * r - cos * cos)
 
+            if config.show_band_cents {
+                // Cents offset
+                rl.DrawTextEx(
+                    font_store.medium_32,
+                    fmt.ctprintf("%.4f", band.err_cents),
+                    {self.position.x + 16, y + band_height * (f32(order) + 0.6) + r - sin},
+                    16,
+                    0,
+                    rl.GetColor(0x82E2FFFF),
+                )
+            }
+
+            // Partial order, e.g. 1x, 2x, etc
             partial_labels, changed := gui_strobe_partial(
                 {self.position.x + 260 + cos, y + band_height * (f32(order) + 0.6) + r - sin},
                 config.partial_labels,
