@@ -19,7 +19,7 @@
 
     Pitch detection based on NSDF (McLeod Pitch Method)
 
-    http://riogrande.cs.tcu.edu/1516Ribbit/resources/A_Smarter_Way_to_Find_Pitch.pdf
+    https://www.researchgate.net/publication/230554927_A_smarter_way_to_find_pitch
 
 
 ------------------------------------------------------------------------------------------------- */
