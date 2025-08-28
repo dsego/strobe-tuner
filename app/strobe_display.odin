@@ -55,6 +55,7 @@ StrobeDisplay :: struct {
     max_radius_loc:        i32,
     band_height_loc:       i32,
     err_cents_loc:         i32,
+    strobe_blur_loc:       i32,
     display_type:          StrobeDisplayType,
 
     // shadow shader uniform locations
@@ -117,6 +118,7 @@ init_strobe_display :: proc(
     self.period_count_loc = rl.GetShaderLocation(self.strobe_shader, "period_count")
     self.min_radius_loc = rl.GetShaderLocation(self.strobe_shader, "min_radius")
     self.max_radius_loc = rl.GetShaderLocation(self.strobe_shader, "max_radius")
+    self.strobe_blur_loc = rl.GetShaderLocation(self.strobe_shader, "strobe_blur")
     self.display_type = display_type
 
     // Load shadow texture
@@ -189,6 +191,13 @@ draw_strobe_display :: proc(
         self.band_height_loc,
         &band_height,
         rl.ShaderUniformDataType.FLOAT,
+    )
+    strobe_blur := int(config.strobe_blur)
+    rl.SetShaderValue(
+        self.strobe_shader,
+        self.strobe_blur_loc,
+        &strobe_blur,
+        rl.ShaderUniformDataType.INT,
     )
 
     n_color_a := rl.ColorNormalize(self.colors.x)

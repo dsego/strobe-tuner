@@ -28,6 +28,7 @@ const float TAU = radians(360);
 // Uniforms
 uniform vec4 bounding_rect;
 uniform float curvature_radius;
+uniform int strobe_blur;
 uniform vec3 color_a;
 uniform vec3 color_b;
 
@@ -48,12 +49,21 @@ float generate_signal(
     float amplitude,
     float time,
     float time_stretch,
-    float period_count
+    float period_count,
+    bool strobe_blur
 ) {
     time = time * time_stretch;
-    float value = amplitude * sin(period_count * (freq * TAU * time + phase));
 
-    // convert from range [-1, 1] to [0, 1]
+    float value = 0.0;
+    float sinewave = sin(period_count * (freq * TAU * time + phase));
+
+    if (strobe_blur) {
+        value = amplitude * sinewave;
+    } else {
+        value = amplitude * sign(sinewave);
+    }
+
+    // convert from range -1..1 to 0..1
     value = 0.5 * value + 0.5;
     value = max(min(value, 1.0), 0.0);
 
@@ -118,9 +128,9 @@ void main()
         amp,
         time,
         time_stretch,
-        period_count
+        period_count,
+        strobe_blur > 0
     );
-
 
     // Blend colors
     vec3 rgb = mix(color_a, color_b, signal_value);
