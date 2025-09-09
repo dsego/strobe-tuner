@@ -1,8 +1,13 @@
+<div align="center">
+  
 # SonicStrobe
 
-A stroboscopic instrument tuner written in [Odin](https://odin-lang.org/).
+A simple stroboscopic instrument tuner.
 
 <img src="screenshots/Screenshot 2025-06-28 at 18.48.25.png" width="300" height="336" class="shrinkToFit transparent">
+
+</div>
+
 
 ### Download
 
