@@ -181,10 +181,10 @@ draw_strobe_display :: proc(
         period_count = 12.0
     }
 
-    rl.BeginScissorMode(0, 0, 488, 306)
+    rl.BeginScissorMode(0, 0, STROBE_WIDTH, STROBE_HEIGHT)
     defer rl.EndScissorMode()
 
-    rl.DrawRectangleV(self.position, {f32(self.texture_width), 306.0}, self.background)
+    rl.DrawRectangleV(self.position, {f32(self.texture_width), STROBE_HEIGHT}, self.background)
 
     rl.SetShaderValue(
         self.strobe_shader,
@@ -254,8 +254,6 @@ draw_strobe_display :: proc(
 
         bounding_rect := [4]f32{rect.x, rect.y, rect.width, rect.height}
 
-        // rl.DrawRectangleLinesEx(rect, 1.0, rl.ORANGE)
-
         // Note, for concentric circles the radius needs to expand as the bands move from the bottom up
         rl.SetShaderValue(
             self.strobe_shader,
@@ -289,7 +287,6 @@ draw_strobe_display :: proc(
         rl.SetShaderValue(
             self.strobe_shader,
             self.phase_loc,
-            // &band.dummy_phase if out_of_range else &band.scaled_phase,
             &band.scaled_phase,
             rl.ShaderUniformDataType.FLOAT,
         )
@@ -397,16 +394,10 @@ draw_strobe_display :: proc(
     rl.DrawTexturePro(
         self.shadow_tex,
         rl.Rectangle{0, 0, f32(self.shadow_tex.width), f32(self.shadow_tex.height)},
-        rl.Rectangle{0, -20, 488, 328},
+        rl.Rectangle{0, -20, STROBE_WIDTH, STROBE_HEIGHT + 22},
         rl.Vector2{0, 0},
         0,
         rl.WHITE,
     )
 
-    // rl.DrawTexture(self.shadow_tex, rl.Vector2{0, 0}, 0, 0.5, rl.WHITE)
-    // rl.DrawRectangleLinesEx({0, 0, 488, 308}, 1, rl.ORANGE)
-
-    // rl.BeginShaderMode(self.inner_shadow_shader)
-    // rl.DrawTextureV(self.texture, {self.position.x, self.position.y}, rl.WHITE)
-    // rl.EndShaderMode()
 }

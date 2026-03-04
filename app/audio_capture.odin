@@ -43,6 +43,11 @@ switch_audio_device :: proc(self: ^AudioCapture, device_index: i32) {
     err := pa.AbortStream(self.stream)
     if check(err) do return
 
+    // Flush ring buffers to discard stale samples from the previous device
+    for node in self.nodes {
+        core.flush_audio_capture_ringbuffer(node)
+    }
+
     self.active_device = device_index
     info := pa.GetDeviceInfo(device_index)
 
@@ -158,6 +163,10 @@ stream_callback :: proc "c" (
     userData: rawptr,
 ) -> int {
     context = runtime.default_context()
+
+    if statusFlags & pa.InputOverflow != 0 {
+        fmt.println("PortAudio: input overflow detected (samples were dropped)")
+    }
 
     input_slice: []f32 = slice.from_ptr(cast([^]f32)input, int(frameCount))
 

@@ -55,9 +55,6 @@ PhaseBand :: struct {
     norm_freq:                    f32,
     freq_diff_hz:                 f32,
     estimated_freq_hz:            f32,
-    smoothed_freq_hz:             f32,
-    // ewma_state:        EwmaState,
-    // moving_avg:                   MovingAvg,
     dft_config:                   SingleFreqDFT,
     intp_dft_config:              IntpSingleFreqDFT,
     time_stretch:                 f32,
@@ -65,7 +62,6 @@ PhaseBand :: struct {
     amp:                          f32,
     phase_diff:                   f32, // phase difference between detection frames
     err_cents:                    f32,
-    smoothed_err_cents:           f32,
     scaled_phase:                 f32, // phase scaled based on desired strobe speed
 
     // a number < 1 will slow down the strobe and > 1 will increase the strobe spinning rate
@@ -115,8 +111,6 @@ init_phase_comparator :: proc(
             band.intp_dft_config = init_intp_dft(MAX_WINDOW_SIZE)
             band.noise_floor = 10e-6
             band.noise_floor_snr_db_threshold = noise_floor_snr_db_threshold
-            // band.ewma_state = init_ewma(0.1)
-            // band.moving_avg = init_moving_avg(5)
 
             append(&self.bands, band)
         }
@@ -133,7 +127,6 @@ destroy_phase_comparator :: proc(self: ^PhaseComparator) {
     destroy_audio_capture_node(self)
     delete(self.sample_buffer)
     for &band in self.bands {
-        // destroy_moving_avg(&band.moving_avg)
         destory_dft(&band.dft_config)
         destory_intp_dft(&band.intp_dft_config)
     }
@@ -200,7 +193,6 @@ set_phase_comparator_freq :: proc(
 
 
     for &band, i in self.bands {
-        // reset_ewma(&band.ewma_state)
         band.time_stretch = f32(self.reference_interval)
         band.phase = 0.0
         band.noise_floor = 10e-6
@@ -217,6 +209,7 @@ set_phase_comparator_freq :: proc(
         band.norm_freq = band.freq_hz / self.samplerate
 
         if self.mode == .HARMONIC_MODE || i == 0 {
+            band.hop_size = best_hop_size(25, band.freq_hz, self.samplerate)
             window_size := best_dft_window_size(band.freq_hz, self.samplerate, 25)
             set_dft_freq(&band.dft_config, band.norm_freq, window_size)
             set_intp_dft_freq(&band.intp_dft_config, window_size, band.freq_hz, self.samplerate, 5)
@@ -241,7 +234,6 @@ run_phase_detection :: proc(self: ^PhaseComparator, use_phase_average: bool) -> 
 
     // Skip when there are no new samples, the scaled phase stays the same
     if available <= 0 {
-        // fmt.println(base_band.err_cents)
         return base_band.estimated_freq_hz, base_band.err_cents, true // no change
     }
 
@@ -251,10 +243,6 @@ run_phase_detection :: proc(self: ^PhaseComparator, use_phase_average: bool) -> 
         determine_band_phase(self, &band, band_idx, use_phase_average)
         update_band_noise_floor(self, &band, band_idx)
     }
-
-    // fmt.println(">>", base_band.moving_avg)
-    // fmt.println(">", base_band.estimated_freq_hz, base_band.err_cents)
-
 
     return base_band.estimated_freq_hz, base_band.err_cents, false
 }
@@ -327,20 +315,18 @@ determine_band_phase :: proc(
     // Run a single bin DFT and estimate frequency based on phase drift
     if self.mode == .HARMONIC_MODE || band_idx == 0 {
 
-        hop_size := best_hop_size(25, band.freq_hz, self.samplerate)
-        phase_delta: f32 = 0.0
+        hop_size := band.hop_size
 
         // measure phase difference
+        dft_hop: complex64
         if use_phase_average {
             dft = run_intp_dft(&band.intp_dft_config, self.sample_buffer[:])
-            dft_hop := run_intp_dft(&band.intp_dft_config, self.sample_buffer[hop_size:])
-            phase_delta = cmplx.phase(dft_hop) - cmplx.phase(dft)
-
+            dft_hop = run_intp_dft(&band.intp_dft_config, self.sample_buffer[hop_size:])
         } else {
             dft = run_single_dft(&band.dft_config, self.sample_buffer[:])
-            dft_hop := run_single_dft(&band.dft_config, self.sample_buffer[hop_size:])
-            phase_delta = cmplx.phase(dft_hop) - cmplx.phase(dft)
+            dft_hop = run_single_dft(&band.dft_config, self.sample_buffer[hop_size:])
         }
+        phase_delta := cmplx.phase(dft_hop) - cmplx.phase(dft)
 
         phase_delta = unwrap_phase(phase_delta)
 
@@ -358,17 +344,6 @@ determine_band_phase :: proc(
         band.err_cents = cents_deviation(band.estimated_freq_hz, band.freq_hz)
 
         // adjust the EWMA when large jumps occur
-        // if math.abs(band.smoothed_err_cents - band.err_cents) > 10.0 {
-        //     reset_ewma(&band.ewma_state)
-        // }
-
-        // band.smoothed_freq_hz = ewma_filter(&band.ewma_state, band.estimated_freq_hz)
-        // band.smoothed_err_cents = run_moving_avg(&band.moving_avg, band.err_cents)
-
-        // Convert to cents only after smoothing:
-        // band.smoothed_err_cents = cents_deviation(band.smoothed_freq_hz, band.freq_hz)
-        // band.smoothed_err_cents = cents_deviation(band.smoothed_freq_hz, band.freq_hz)
-
         band.phase_diff = phase_drift
 
         // Scale down by factor

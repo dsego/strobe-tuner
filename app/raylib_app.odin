@@ -64,14 +64,9 @@ run_raylib_app :: proc(config: ^Config) {
     // Save target note to config when exiting the app
     defer config.target_freq_hz = target_note.frequency
 
-    when ODIN_OS == .Darwin {
-        // setup_mac_app()
-        // theme_mac_titlebar(rl.GetWindowHandle(), strobe_bg_color)
-    }
-
     rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
     rl.SetConfigFlags({.WINDOW_HIGHDPI})
-    rl.InitWindow(1200 when ODIN_DEBUG else 488, 800 if COLOR_CONTROLS else 532, APP_NAME)
+    rl.InitWindow(1200 when ODIN_DEBUG else STROBE_WIDTH, 800 if COLOR_CONTROLS else 532, APP_NAME)
     rl.SetTargetFPS(120)
     defer rl.CloseWindow()
 
@@ -95,7 +90,7 @@ run_raylib_app :: proc(config: ^Config) {
 
     strobe_display := init_strobe_display(
         {0, 0},
-        {488, 560},
+        {STROBE_WIDTH, 560},
         get_strobe_colors(config),
         strobe_bg_color,
         config.strobe_contrast,
@@ -401,8 +396,6 @@ run_raylib_app :: proc(config: ^Config) {
                 config.strobe_contrast,
                 config.strobe_display_type,
             )
-            // rl.DrawLineEx({0, 306}, {488, 306}, 1.5, rl.GetColor(0x52535AFF))
-
             strobe_mode, strobe_mode_changed := gui_strobe_mode_toggle(
                 {16, 456},
                 config.strobe_mode,
