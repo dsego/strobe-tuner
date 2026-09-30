@@ -40,6 +40,10 @@ Tuner :: struct {
 
     confirmations:        int, // detections in a row before switching, the last one must be strong
     prevent_octave_jumps: bool,
+
+    // Cents each note from A0 up is tuned off equal temperament, e.g. a ukulele's E a little flat so its
+    // fretted chords sound right. The strobe and the readout follow, see note_offset_cents.
+    offsets_cents:        [NOTE_COUNT]f32,
 }
 
 init_tuner :: proc(target_freq_hz, pitch_standard: f32, confirmations: int, prevent_octave_jumps: bool) -> Tuner {
@@ -82,10 +86,12 @@ update_tuner :: proc(self: ^Tuner, pitch: PitchInfo) -> (retune: bool) {
 
             if new_target.cents != self.target_note.cents {
                 is_octave := octave_apart(self.target_note, new_target)
+                same_offset := note_offset_cents(self, self.target_note) == note_offset_cents(self, new_target)
                 self.target_note = new_target
 
-                // The strobe stays on the note it's following, the note is still shown
-                retune = !(self.prevent_octave_jumps && is_octave && self.active)
+                // The strobe stays on the note it's following, the note is still shown. Not when the octave
+                // is tuned off by another amount, the strobe would stand still in the wrong place.
+                retune = !(self.prevent_octave_jumps && is_octave && same_offset && self.active)
             }
         }
         self.active = true
@@ -144,6 +150,17 @@ set_tuner_pitch_standard :: proc(self: ^Tuner, pitch_standard: f32) {
     }
 }
 
+// How far the note is tuned off equal temperament, one offset per exact note: E2 and E4 are tuned apart
+note_offset_cents :: proc(self: ^Tuner, note: Note) -> f32 {
+    index, ok := note_index(note)
+    return self.offsets_cents[index] if ok else 0
+}
+
+// What the strobe is tuned to, the target note with its offset
+tuner_target_freq :: proc(self: ^Tuner) -> f32 {
+    return cents_to_freq(note_offset_cents(self, self.target_note), self.target_note.frequency)
+}
+
 // The detected note isn't the target, there's nothing for the readout to measure against. A locked note is
 // expected to differ, it's measured against anyway.
 tuner_out_of_range :: proc(self: ^Tuner) -> bool {
@@ -151,7 +168,8 @@ tuner_out_of_range :: proc(self: ^Tuner) -> bool {
 }
 
 // The latest detection as it is, and the strong detections averaged for the readout. A locked note is
-// measured against the target instead of the nearest note.
+// measured against the target instead of the nearest note. Either way from where the note is tuned to, the
+// readout is 0 where the strobe stands still.
 tuner_readout :: proc(self: ^Tuner) -> (pitch, steady_pitch: PitchInfo) {
     pitch = self.pitch
     steady_pitch = self.last_good_pitch
@@ -159,7 +177,10 @@ tuner_readout :: proc(self: ^Tuner) -> (pitch, steady_pitch: PitchInfo) {
 
     reference := self.target_note if self.locked else steady_pitch.detected_note
     steady_pitch.err_cents = cents_deviation(steady_pitch.detected_freq, reference.frequency)
+    steady_pitch.err_cents -= note_offset_cents(self, reference)
+
     if self.locked do pitch.err_cents = cents_deviation(pitch.detected_freq, self.target_note.frequency)
+    pitch.err_cents -= note_offset_cents(self, self.target_note if self.locked else pitch.detected_note)
     return
 }
 
@@ -227,4 +248,17 @@ test_tuner :: proc(t: ^testing.T) {
     update_tuner(&tuner, detection(cents_to_freq(20, A2)))
     _, steady = tuner_readout(&tuner)
     testing.expect(t, abs(steady.err_cents - 20) < 0.01)
+
+    // A note tuned 10 cents flat: the strobe is tuned there and the readout counts from there
+    tuner = init_tuner(A2, 440, 1, true)
+    a2_index, _ := note_index(tuner.target_note)
+    tuner.offsets_cents[a2_index] = -10
+    testing.expect(t, abs(tuner_target_freq(&tuner) - cents_to_freq(-10, A2)) < 0.001)
+    update_tuner(&tuner, detection(cents_to_freq(-10, A2)))
+    _, steady = tuner_readout(&tuner)
+    testing.expect(t, abs(steady.err_cents) < 0.01)
+
+    // The octave isn't tuned flat, the strobe moves there instead of staying
+    testing.expect(t, update_tuner(&tuner, detection(A3)))
+    testing.expect(t, tuner_target_freq(&tuner) == tuner.target_note.frequency)
 }

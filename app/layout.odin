@@ -34,6 +34,9 @@ Layout :: struct {
     response:       [2]f32, // hidden with the trace
     level_meter:    [2]f32, // left of the icon, top of the bar
     settings:       [2]f32,
+    note_offset:    [2]f32, // the middle of the note's offset, between the letter and the lock
+    note_offsets:   [2]f32, // the ± left of the settings, like them the top left of the icon
+    offsets_led:    [2]f32, // the LED and label left of the ±: their right edge and middle
 }
 
 PANEL_PADDING :: 16
@@ -50,7 +53,7 @@ READOUT_HEIGHT :: 48
 // 0.8 down from the top. The ruler is spaced by what's drawn.
 CAP_HALF :: 0.3 // the letter's top and baseline from its middle, in font sizes
 BASELINE :: 0.8 // from the top of the text, in font sizes
-RULER_GAP :: 32 // between the letter and the lock
+RULER_GAP :: 32 // between the letter and the lock, the note's offset is halfway
 READOUT_NOTE_TOP :: NOTE_BASELINE - 40 // the 24pt values and the labels above them
 
 // Where the right arrow of the note ends, the readout keeps clear of it
@@ -88,6 +91,9 @@ panel_layout :: proc(l: ^Layout, left, right, bottom: f32, ruler: bool, ruler_sc
     corners := bottom - SETTINGS_ICON_SIZE / 2
     l.transpose = {left, corners}
     l.settings = {right - SETTINGS_ICON_SIZE, corners - SETTINGS_ICON_SIZE / 2}
+    // The ± with its touch area next to the settings', the indicator an icon's width from it
+    l.note_offsets = l.settings - {2 * SETTINGS_ICON_SIZE, 0}
+    l.offsets_led = {l.note_offsets.x - SETTINGS_ICON_SIZE, corners}
 
     if ruler {
         // The readout in the top row, the response and the level meter centred on its values, the labels
@@ -110,6 +116,7 @@ panel_layout :: proc(l: ^Layout, left, right, bottom: f32, ruler: bool, ruler_sc
         l.measurements = {center, readout_top}
         l.readout_align = .CENTER
         l.lock = {center, middle + lock_y}
+        l.note_offset = l.lock - {0, (LOCK_BUTTON_HEIGHT + RULER_GAP) / 2}
         return
     }
 
@@ -126,6 +133,7 @@ panel_layout :: proc(l: ^Layout, left, right, bottom: f32, ruler: bool, ruler_sc
     }
     // Centred on the note without its arrows
     l.lock = {l.note.x + (NOTE_WIDTH - NOTE_RIGHT_ARROW_INSET) / 2, lock_y}
+    l.note_offset = l.lock - {0, (LOCK_BUTTON_HEIGHT + RULER_GAP) / 2}
 }
 
 // The settings, a sheet up from the bottom as tall as its rows, the strobe above it stays in sight to
@@ -147,13 +155,15 @@ SETTINGS_TITLE_HEIGHT :: 36 // from the top of the title to the first row
 
 // open is how far the sheet has slid up, 0 is hidden below the window and 1 is all the way. The settings
 // have SETTINGS_ROWS, a track's sheet fewer. Either covers the whole panel under the strobe at least, a
-// short sheet would leave half the panel peeking out above it.
+// short sheet would leave half the panel peeking out above it. extra is more room under the rows for what
+// isn't a row, the note offsets ask for the whole window.
 compute_settings_layout :: proc(
     window: [2]f32,
     safe: Rect,
     open: f32,
     rows: int,
     strobe: Rect,
+    extra: f32 = 0,
 ) -> (
     l: SettingsLayout,
 ) {
@@ -163,7 +173,7 @@ compute_settings_layout :: proc(
 
     // Below the rows, the home indicator on a phone
     below := window.y - (safe.y + safe.height) + PANEL_PADDING / 2
-    height := PANEL_PADDING + SETTINGS_TITLE_HEIGHT + f32(rows) * l.row_height + below
+    height := PANEL_PADDING + SETTINGS_TITLE_HEIGHT + f32(rows) * l.row_height + extra + below
     height = max(height, window.y - (strobe.y + strobe.height))
     height = min(height, window.y - safe.y)
     l.sheet = {0, window.y - open * height, window.x, height}

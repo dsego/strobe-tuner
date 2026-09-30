@@ -26,6 +26,9 @@ FONT_CODEPOINTS :: " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#/+-−
 //       --output-file=assets/fonts/phosphor/Phosphor-Icons.ttf
 // The codepoints are in the style.css of the @phosphor-icons/web package.
 ICON_SLIDERS: cstring : "\ue432"
+ICON_CARET_UP: cstring : "\ue13c"
+ICON_TRASH: cstring : "\ue4a8"
+ICON_PLUS_MINUS: cstring : "\ue3d8"
 ICON_GEAR: cstring : ""
 ICON_MICROPHONE: cstring : ""
 ICON_CARET_DOWN: cstring : ""
@@ -33,14 +36,14 @@ ICON_MINUS: cstring : ""
 ICON_PLUS: cstring : ""
 ICON_X: cstring : ""
 
-ICON_CODEPOINTS :: "\ue432"
+ICON_CODEPOINTS :: "\ue432\ue13c\ue4a8\ue3d8"
 
 // All the text is rasterized at exactly the size it's drawn at on this screen, a scaled atlas is soft or
 // jagged. Point sizes, whole pixels at 1x, 2x and 3x.
 LABEL_SIZE :: 14 // the controls and most of the text
 LABEL_LARGE_SIZE :: 16
 STEPPER_SIZE :: 24 // the − and + and the key of the transpose, half again a large label
-LABEL_SMALL_SIZE :: 12 // the debug stats
+LABEL_SMALL_SIZE :: 12 // the buttons that reset and clear, the debug stats
 LABEL_TIMES_SIZE :: 18 // the × as large as the body of a ¢ in a label
 TITLE_SIZE :: 18
 ICON_SIZE :: 16

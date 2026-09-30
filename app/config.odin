@@ -98,6 +98,15 @@ Config :: struct {
     // semitones the note is shown above the sounding pitch, 0 to 11, a Bb instrument reads 2, see gui_transpose
     transpose:                    int,
 
+    // notes are tuned off equal temperament by the note offsets of the selected slot, 0 is the first
+    note_offsets_on:              bool,
+    note_offset_slot:             int,
+    // per slot, the rows of the note offsets' sheet: how many there are, the note of each counted from A0,
+    // and the cents it's tuned off equal temperament. A row at 0 cents is kept. See gui_note_offsets.
+    note_offset_counts:           [NOTE_OFFSET_SLOTS]int,
+    note_offset_notes:            [NOTE_OFFSET_SLOTS][MAX_NOTE_OFFSETS]int,
+    note_offset_cents:            [NOTE_OFFSET_SLOTS][MAX_NOTE_OFFSETS]f32,
+
     // pitch detection settings
     pitch_detection_clarity_low:  f32,
     pitch_detection_clarity_high: f32,
@@ -144,6 +153,8 @@ config_defaults :: Config {
     partial_labels               = .MULTIPLES,
     chromatic_ruler              = true,
     transpose                    = 0,
+    note_offsets_on              = false,
+    note_offset_slot             = 0,
     pitch_detection_clarity_low  = 0.9,
     pitch_detection_clarity_high = 0.98,
     noise_floor_snr_db_threshold = 10, // to determine if it’s safe to update the noise floor
@@ -159,6 +170,14 @@ config_defaults :: Config {
 
 get_config_defaults :: proc() -> Config {
     return config_defaults
+}
+
+// Back to the defaults. The note offsets are switched off but stay in their slots, they're tuned in by hand
+// and have their own button to clear them.
+reset_config :: proc(config: ^Config) {
+    counts, notes, cents := config.note_offset_counts, config.note_offset_notes, config.note_offset_cents
+    config^ = get_config_defaults()
+    config.note_offset_counts, config.note_offset_notes, config.note_offset_cents = counts, notes, cents
 }
 
 // Load config from the standard OS path, eg ~/Library/Application Support/<APP_NAME>/config.ini on MacOS, see get_config_directory.
@@ -205,17 +224,27 @@ load_config :: proc() -> Config {
             if len(trimmed) > 0 {
                 split := strings.split(trimmed, ",")
                 defer delete(split)
-                ptr_array := cast(^[MAX_INTERVALS]f32)ptr
-                l := len(split)
-                for i in 0 ..< l {
-                    trimmed := strings.trim(split[i], " ")
-                    value, ok := strconv.parse_f32(trimmed)
-                    if ok {
-                        ptr_array^[i] = value
+                // Of f32 or int, an array of arrays is read in the order it's written out
+                element_type := field.type
+                for {
+                    array, is_array := reflect.type_info_base(element_type).variant.(reflect.Type_Info_Array)
+                    if !is_array do break
+                    element_type = array.elem
+                }
+                for i in 0 ..< field.type.size / element_type.size {
+                    element := rawptr(uintptr(ptr) + uintptr(i * element_type.size))
+                    // Fill in the rest, one that doesn't parse keeps its default
+                    if i >= len(split) {
+                        runtime.mem_zero(element, element_type.size)
+                        continue
+                    }
+                    trimmed := strings.trim(split[i], "[] ")
+                    if reflect.is_float(element_type) {
+                        if value, ok := strconv.parse_f32(trimmed); ok do (^f32)(element)^ = value
+                    } else if reflect.is_integer(element_type) {
+                        if value, ok := strconv.parse_int(trimmed); ok do write_int_field(element, element_type.size, value)
                     }
                 }
-                // Fill in the rest
-                for i in l ..< MAX_INTERVALS do ptr_array^[i] = 0.0
             }
         }
     }

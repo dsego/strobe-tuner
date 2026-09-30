@@ -78,6 +78,7 @@ run_app :: proc(config: ^Config) {
         config.note_switch_confirmations,
         config.prevent_strobe_octave_jumps,
     )
+    tuner.offsets_cents = active_note_offsets(config)
 
     // Save target note to config when exiting the app
     defer config.target_freq_hz = tuner.target_note.frequency
@@ -139,7 +140,7 @@ run_app :: proc(config: ^Config) {
 
     start_audio_capture(audio_capture)
 
-    retune(phase_comparator, target_freq_hz, config)
+    retune(phase_comparator, core.tuner_target_freq(&tuner), config)
 
 
     // --- GUI CONTROLS ----------------------------------------------------------------------------
@@ -164,6 +165,11 @@ run_app :: proc(config: ^Config) {
     track_slide: f32 = 0
     track_drag: SheetDrag
     selected_track := 0
+
+    // The note offsets' sheet, opened from the slot next to the settings
+    offsets_open := false
+    offsets_slide: f32 = 0
+    offsets_drag: SheetDrag
 
     note_low_state := false
     note_high_state := false
@@ -210,7 +216,7 @@ run_app :: proc(config: ^Config) {
         if key_pressed(.R) {
             config_changed = true
             fmt.println("Reset config to defaults")
-            config^ = get_config_defaults()
+            reset_config(config)
         }
 
         if key_pressed(.X) {
@@ -245,15 +251,16 @@ run_app :: proc(config: ^Config) {
             core.set_tuner_pitch_standard(&tuner, config.pitch_standard)
             tuner.confirmations = config.note_switch_confirmations
             tuner.prevent_octave_jumps = config.prevent_strobe_octave_jumps
+            tuner.offsets_cents = active_note_offsets(config)
 
             set_strobe_colors(&strobe_display, get_strobe_colors(config))
-            retune(phase_comparator, tuner.target_note.frequency, config)
+            retune(phase_comparator, core.tuner_target_freq(&tuner), config)
             config_changed = false
         }
 
 
         pitch_info := core.run_pitch_detection(&pitch_detector, tuner.pitch)
-        if core.update_tuner(&tuner, pitch_info) do retune(phase_comparator, tuner.target_note.frequency, config)
+        if core.update_tuner(&tuner, pitch_info) do retune(phase_comparator, core.tuner_target_freq(&tuner), config)
 
         out_of_range := core.tuner_out_of_range(&tuner)
         shown_pitch_info, steady_pitch_info := core.tuner_readout(&tuner)
@@ -286,7 +293,7 @@ run_app :: proc(config: ^Config) {
 
         if key_pressed(.I) && config.strobe_mode == .HARMONIC_MODE {
             apply_interval_preset(config, (config.strobe_intervals_index + 1) % len(interval_options))
-            retune(phase_comparator, tuner.target_note.frequency, config)
+            retune(phase_comparator, core.tuner_target_freq(&tuner), config)
         }
 
         window, safe := gfx_window_size(), gfx_safe_area()
@@ -325,9 +332,16 @@ run_app :: proc(config: ^Config) {
         }
         settings_was_open := settings_open
         settings_slide = slide_sheet(settings_slide, settings_open)
+        if offsets_drag.active && offsets_slide == 0 {
+            offsets_open = false
+            offsets_drag = {}
+        }
         track_was_open := track_open
         track_slide = slide_sheet(track_slide, track_open)
+        offsets_was_open := offsets_open
+        offsets_slide = slide_sheet(offsets_slide, offsets_open)
         gui_disabled = settings_open || settings_slide > 0 || track_open || track_slide > 0
+        if offsets_open || offsets_slide > 0 do gui_disabled = true
 
         {
 
@@ -391,7 +405,7 @@ run_app :: proc(config: ^Config) {
             }
 
             // Only the strong readings, a fading note drifts and would flash the arrows
-            arrow_cents_err := core.cents_deviation(tuner.last_good_pitch.detected_freq, tuner.target_note.frequency)
+            arrow_cents_err := core.cents_deviation(tuner.last_good_pitch.detected_freq, core.tuner_target_freq(&tuner))
             distance := abs(arrow_cents_err)
 
             // Without a lock, further than half a semitone is a neighbouring note that isn't confirmed yet
@@ -461,7 +475,17 @@ run_app :: proc(config: ^Config) {
             retune_target := false
             if lock_toggled && core.toggle_note_lock(&tuner) do retune_target = true
             if core.step_target_note(&tuner, step) do retune_target = true
-            if retune_target do retune(phase_comparator, tuner.target_note.frequency, config)
+            if retune_target do retune(phase_comparator, core.tuner_target_freq(&tuner), config)
+
+            // A note that's tuned off pitch says so between the letter and the lock, the strobe and the
+            // readout are on the offset note, see gui_note_offsets
+            if offset := core.note_offset_cents(&tuner, tuner.target_note); offset != 0 && shown_note.frequency != 0 {
+                text := fmt.ctprintf("%+.1f¢", offset)
+                width := measure_label(pixel_fonts.label, text, 1).x
+                // Like the note, white while there's a pitch
+                color := text_color_white if tuner.active else text_color_muted
+                draw_label(pixel_fonts.label, text, layout.note_offset - {width / 2, LABEL_SIZE / 2}, color, 1)
+            }
 
             draw_measurements(
                 layout.measurements,
@@ -483,6 +507,8 @@ run_app :: proc(config: ^Config) {
             }
 
             if gui_settings_button(layout.settings) do settings_open = true
+            if gui_note_offsets_indicator(layout.offsets_led, config) do config_changed = true
+            if gui_note_offsets_button(layout.note_offsets) do offsets_open = true
 
 
             // Draw input level, the microphone icon marks it as the input
@@ -704,6 +730,54 @@ run_app :: proc(config: ^Config) {
             }
         }
 
+        if offsets_slide > 0 {
+            // Over the whole window, room for every offset of a slot
+            sheet_layout := compute_settings_layout(
+                gfx_window_size(),
+                gfx_safe_area(),
+                offsets_slide,
+                NOTE_OFFSET_ROWS,
+                layout.strobe,
+                gfx_window_size().y,
+            )
+
+            // Not the tap that opened it, and not while it slides away
+            gui_disabled = !(offsets_was_open && offsets_open)
+
+            swiped := drag_sheet(&offsets_drag, &offsets_slide, sheet_layout)
+            if offsets_drag.active {
+                sheet_layout = compute_settings_layout(
+                    gfx_window_size(),
+                    gfx_safe_area(),
+                    offsets_slide,
+                    NOTE_OFFSET_ROWS,
+                    layout.strobe,
+                    gfx_window_size().y,
+                )
+            }
+
+            draw_strobe_bottom_shadow(&strobe_display, layout.strobe, sheet_layout.sheet.y)
+
+            // A new offset starts on the note the tuner is on
+            target := -1
+            if index, in_range := core.note_index(tuner.target_note); in_range && tuner.target_note.frequency != 0 {
+                target = index
+            }
+            close, changed := gui_note_offsets(sheet_layout, config, target)
+            if changed do config_changed = true
+
+            // Tapping the strobe above the sheet closes it too
+            above := sheet_layout.sheet
+            above.height = above.y
+            above.y = 0
+            if gui_button(above) || key_pressed(.ESCAPE) || swiped do close = true
+
+            if close {
+                offsets_open = false
+                offsets_drag = {}
+            }
+        }
+
         // With nothing to show the screen updates less often, it saves the battery of a tuner left open. The
         // strobe is dark while no band is above the background noise, and the pitch detection still runs
         // often enough to wake it up.
@@ -713,6 +787,7 @@ run_app :: proc(config: ^Config) {
         }
         touched := mouse_down() || mouse_pressed() || mouse_wheel() != 0
         sliding := settings_slide != f32(int(settings_open)) || track_slide != f32(int(track_open))
+        if offsets_slide != f32(int(offsets_open)) do sliding = true
         if signal || touched || sliding {
             quiet_time = 0
         } else {

@@ -21,6 +21,7 @@ Strobie is on the App Store for Mac and iPhone. The source is here to read and b
 - Fine mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity.
 - Fast toggle: the strobe spins 4× faster per cent of detuning, for the final adjustment.
 - Five displays: curved tracks, a spinning wheel, a trace of the cents over the last few seconds, a scope that draws the waveform synced to the strobe's frequency, and a ribbon, the classic strobe with stripes lit by the wave.
+- Note offsets: tune a note up to ±25 cents off pitch, e.g. a ukulele's E a little flat or a sweetened guitar tuning, the strobe stands still at the offset note. Three slots hold a tuning each.
 - Transpose for B♭, E♭, F and other transposing instruments.
 - Concert A from 400 to 480 Hz.
 - Hertz/Cents display.

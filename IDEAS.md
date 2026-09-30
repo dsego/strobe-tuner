@@ -38,18 +38,10 @@ path to real VoiceOver support later.
 
 ## Temperaments and sweetened tunings
 
-## Custom offsets in two slots
+The note offsets are set by hand per exact note. A temperament is 12 offsets and a root key, repeated in
+every octave, and would be picked in the settings.
 
-For intonation compromises, like tuning a ukulele's E down about 5¢ so the fretted chords sound right.
-The strobe stops at the offset note, so no one has to judge a slow drift by eye. No presets, no editor
-and no settings page, everything is on the main screen.
+## A dot on the offset notes in the ruler
 
-- **Slot switch** `Off · 1 · 2` in the bottom bar, where the audio input dropdown used to be. The
-  active slot is the one being edited and changes save automatically. Off is standard tuning, the
-  slots keep their offsets.
-- **± buttons** next to the cents readout while a note is locked, 0.5¢ a step. The readout never gets
-  steady enough to capture an offset from it, so offsets are set by number.
-- **One offset per exact note** (E4, not every E). Each string is its own note.
-- **Offsets apply unlocked too.** The detected note's target moves with its offset.
-- **Visible:** "E4 −5¢" under the note name and a dot on the offset notes in the ruler.
-- **Clearing:** long-press a slot, then confirm. Setting a note back to 0 resets that note.
+The target note shows its offset under the letter. The neighbours in the ruler don't show which of them
+are tuned off pitch in the slot that's on.

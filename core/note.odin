@@ -42,6 +42,33 @@ Note :: struct {
 }
 
 
+// A0 to C8, the notes of a piano, in semitones from A4
+LOWEST_NOTE :: -48
+HIGHEST_NOTE :: 39
+NOTE_COUNT :: HIGHEST_NOTE - LOWEST_NOTE + 1
+
+// Counted from A0, ok is false for a note outside of A0 to C8
+note_index :: proc(note: Note) -> (index: int, ok: bool) {
+    index = note.cents / 100 - LOWEST_NOTE
+    return index, index >= 0 && index < NOTE_COUNT
+}
+
+@(test)
+test_note_index :: proc(t: ^testing.T) {
+    index, ok := note_index(find_note(27.5))
+    testing.expect(t, ok)
+    testing.expect_value(t, index, 0)
+
+    index, ok = note_index(find_note(4186.01))
+    testing.expect(t, ok)
+    testing.expect_value(t, index, NOTE_COUNT - 1)
+
+    // Below A0
+    _, ok = note_index(find_note(20))
+    testing.expect(t, !ok)
+}
+
+
 note_str :: proc(note: Note) -> string {
     return fmt.aprintf("{}{}{}", note.name, "#" if note.is_accidental else "", note.octave)
 }

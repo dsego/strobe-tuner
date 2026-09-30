@@ -151,12 +151,10 @@ gui_settings :: proc(
 
     {
         // Everything back to the defaults like the R key, including what's only in the config file
-        rect := settings_row(l, row, "Reset to defaults", 2 * SEGMENT_WIDTH)
+        rect := settings_row(l, row, "Reset to defaults", 0)
         row += 1
-        draw_pill(rect, pill_gray if gui_button_held(touch_area(rect)) else pill_dark)
-        draw_centered_label("Reset", rect, text_color_white)
-        if gui_button(touch_area(rect)) {
-            config^ = get_config_defaults()
+        if gui_small_button(rect.x, rect.y + rect.height / 2, "RESET") {
+            reset_config(config)
             changed = true
         }
     }
@@ -265,11 +263,9 @@ gui_track_settings :: proc(
     }
 
     {
-        rect := settings_row(l, row, "Reset track", 2 * SEGMENT_WIDTH)
+        rect := settings_row(l, row, "Reset track", 0)
         row += 1
-        draw_pill(rect, pill_gray if gui_button_held(touch_area(rect)) else pill_dark)
-        draw_centered_label("Reset", rect, text_color_white)
-        if gui_button(touch_area(rect)) {
+        if gui_small_button(rect.x, rect.y + rect.height / 2, "RESET") {
             config.strobe_intervals[slot] = preset_partial
             config.strobe_offsets_cents[slot] = 0
             config.strobe_speeds[slot] = 1
@@ -375,6 +371,26 @@ touch_area :: proc(rect: Rect) -> Rect {
 }
 
 
+// For what can't be undone, a reset or a clear: smaller than the controls and in capitals, it isn't tapped
+// in passing. right is its right edge and middle its vertical middle, the touch area is as tall as a row.
+// Dimmed and dead when not enabled.
+gui_small_button :: proc(right, middle: f32, label: cstring, enabled := true) -> bool {
+    HEIGHT :: 26
+    PADDING :: 12 // left and right of the label
+
+    font := pixel_fonts.label_small
+    width := math.round(measure_label(font, label, 1).x) + 2 * PADDING
+    rect := Rect{right - width, middle - HEIGHT / 2, width, HEIGHT}
+    touch := Rect{rect.x, middle - SETTINGS_ROW_HEIGHT / 2, width, SETTINGS_ROW_HEIGHT}
+
+    draw_pill(rect, pill_gray if enabled && gui_button_held(touch) else pill_dark)
+    label_color := text_color_white if enabled else text_color_disabled
+    draw_label(font, label, {rect.x + PADDING, middle - LABEL_SMALL_SIZE / 2}, label_color, 1)
+
+    return enabled && gui_button(touch)
+}
+
+
 // A narrow pill as wide as its icon and label, pos is its top left. Dimmed and dead when not enabled.
 gui_icon_button :: proc(
     pos: [2]f32,
@@ -444,8 +460,16 @@ gui_stepper :: proc(rect: Rect, value, step, low, high, default: f32, format: st
 }
 
 // The - and + around label, times puts a × after it. Returns the steps taken or reset when the label is
-// double clicked.
-gui_stepper_buttons :: proc(rect: Rect, label: cstring, times := false) -> (steps: f32, reset: bool) {
+// double clicked. Dimmed and dead when not enabled.
+gui_stepper_buttons :: proc(
+    rect: Rect,
+    label: cstring,
+    times := false,
+    enabled := true,
+) -> (
+    steps: f32,
+    reset: bool,
+) {
     draw_pill(rect, pill_dark)
 
     button_width: f32 = 44
@@ -453,6 +477,13 @@ gui_stepper_buttons :: proc(rect: Rect, label: cstring, times := false) -> (step
     plus := Rect{rect.x + rect.width - button_width, rect.y, button_width, rect.height}
 
     icon_offset := [2]f32{(button_width - 16) / 2, (rect.height - 16) / 2}
+    if !enabled {
+        draw_icon(ICON_MINUS, {minus.x, minus.y} + icon_offset, text_color_disabled)
+        draw_centered_label(label, rect, text_color_disabled)
+        draw_icon(ICON_PLUS, {plus.x, plus.y} + icon_offset, text_color_disabled)
+        return
+    }
+
     draw_icon(ICON_MINUS, {minus.x, minus.y} + icon_offset, icon_color)
     if times {
         // The larger × centred on the same line as the digits, the pair centred together
