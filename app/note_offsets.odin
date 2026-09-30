@@ -162,8 +162,8 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
         draw_centered_label(label, rect, color)
         draw_icon(up_icon, {up.x + (BUTTON_WIDTH - ICON_SIZE) / 2, icon_y}, icon_color)
 
-        if gui_button(down) do step = -1
-        if gui_button(up) do step = 1
+        if gui_button_repeat(down) do step = -1
+        if gui_button_repeat(up) do step = 1
         return
     }
 

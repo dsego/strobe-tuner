@@ -499,8 +499,8 @@ gui_stepper_buttons :: proc(
     }
     draw_icon(ICON_PLUS, {plus.x, plus.y} + icon_offset, icon_color)
 
-    if gui_button(touch_area(minus)) do return -1, false
-    if gui_button(touch_area(plus)) do return 1, false
+    if gui_button_repeat(touch_area(minus)) do return -1, false
+    if gui_button_repeat(touch_area(plus)) do return 1, false
 
     // Double clicking the value between the buttons puts it back to the default
     if gui_button(touch_area({minus.x + minus.width, rect.y, plus.x - minus.x - minus.width, rect.height})) {

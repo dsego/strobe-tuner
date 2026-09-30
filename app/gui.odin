@@ -19,6 +19,7 @@ package app
 import "core:fmt"
 import "core:math"
 import "core:strings"
+import "core:time"
 
 
 import "../core"
@@ -382,6 +383,28 @@ gui_button :: proc(bounds: Rect) -> bool {
     }
     return false
 }
+
+// Like gui_button, and held down it goes on firing, after a pause and then steadily, like a key repeat.
+// Sliding off the button pauses it, sliding back on carries on.
+gui_button_repeat :: proc(bounds: Rect) -> bool {
+    REPEAT_DELAY :: 400 * time.Millisecond
+    REPEAT_INTERVAL :: 80 * time.Millisecond
+
+    if gui_button(bounds) {
+        repeat_button = bounds
+        repeat_next = time.tick_add(time.tick_now(), REPEAT_DELAY)
+        return true
+    }
+    if repeat_button != bounds || !gui_button_held(bounds) do return false
+
+    now := time.tick_now()
+    if time.tick_diff(repeat_next, now) < 0 do return false
+    repeat_next = time.tick_add(now, REPEAT_INTERVAL)
+    return true
+}
+
+repeat_button: Rect
+repeat_next: time.Tick
 
 // Whether the button is being held down, to draw it in its pressed shade
 gui_button_held :: proc(bounds: Rect) -> bool {
