@@ -45,15 +45,3 @@ every octave, and would be picked in the settings.
 
 The target note shows its offset under the letter. The neighbours in the ruler don't show which of them
 are tuned off pitch in the slot that's on.
-
-## Swiping the ruler to another note
-
-On a phone, a swipe along the ruler moves the target to the next note or the one before. A tap on a
-neighbour selects it on the press now, so a swipe that starts on a note would jump there first. Taps
-have to fire on the release instead, and only when the finger barely moved.
-
-- A flick steps one note, a fast one several, and locks the note like a tap on a neighbour. Swiping left
-  brings in the note on the right, like dragging the strip.
-- Better, the ruler follows the finger and snaps to the nearest note on the release. Much more work, the
-  ruler slides live and has to track the note under the finger.
-- Only worth it done right, a half-working swipe is worse than the taps.

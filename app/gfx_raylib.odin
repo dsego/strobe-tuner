@@ -262,6 +262,8 @@ when RENDERER == "raylib" {
             format  = .UNCOMPRESSED_GRAY_ALPHA,
         }
         font.texture = rl.LoadTextureFromImage(atlas)
+        // Smooth drawn at another size, e.g. the ruler's notes growing, at its own size it's texel for pixel
+        rl.SetTextureFilter(font.texture, .BILINEAR)
         return font
     }
 

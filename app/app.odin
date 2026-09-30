@@ -457,9 +457,9 @@ run_app :: proc(config: ^Config) {
             // No pitch yet, nothing to show
             if tuner.target_note.frequency == 0 do shown_note.frequency = 0
 
-            step: int
+            step, browse: int
             if config.chromatic_ruler {
-                step = gui_note_ruler(layout.ruler, shown_note, tuner.active)
+                step, browse = gui_note_ruler(layout.ruler, shown_note, tuner.active)
             } else {
                 draw_note(shown_note, layout.note, tuner.active)
                 step = gui_note_arrows(layout.note, tuner.locked)
@@ -479,8 +479,10 @@ run_app :: proc(config: ^Config) {
             if retune_target do retune(phase_comparator, core.tuner_target_freq(&tuner), config)
 
             // A note that's tuned off pitch says so between the letter and the lock, the strobe and the
-            // readout are on the offset note, see gui_note_offsets
-            if offset := core.note_offset_cents(&tuner, tuner.target_note); offset != 0 && shown_note.frequency != 0 {
+            // readout are on the offset note, see gui_note_offsets. While swiping the ruler, of the note in the middle.
+            middle_note := tuner.target_note
+            if browse != 0 do middle_note = core.cents_to_note(f32(middle_note.cents + 100 * browse), middle_note.pitch_standard)
+            if offset := core.note_offset_cents(&tuner, middle_note); offset != 0 && shown_note.frequency != 0 {
                 text := fmt.ctprintf("%+.1f¢", offset)
                 width := measure_label(pixel_fonts.label, text, 1).x
                 // Like the note, white while there's a pitch
@@ -792,7 +794,7 @@ run_app :: proc(config: ^Config) {
         }
         touched := mouse_down() || mouse_pressed() || mouse_wheel() != 0
         sliding := settings_slide != f32(int(settings_open)) || track_slide != f32(int(track_open))
-        if offsets_slide != f32(int(offsets_open)) do sliding = true
+        if offsets_slide != f32(int(offsets_open)) || ruler_swipe.coast != 0 do sliding = true
         if signal || touched || sliding {
             quiet_time = 0
         } else {
