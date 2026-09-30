@@ -450,7 +450,10 @@ run_app :: proc(config: ^Config) {
             // locks that one instead
             // A transposing instrument reads the written note, only what's shown moves, the steps are
             // relative and work the same either way
-            config.transpose = gui_transpose(layout.transpose, ((config.transpose % 12) + 12) % 12)
+            transpose := gui_transpose(layout.transpose, ((config.transpose % 12) + 12) % 12)
+            // Only the names change, the ruler doesn't slide to the new one
+            if transpose != config.transpose do ruler_initialized = false
+            config.transpose = transpose
             shown_note := core.cents_to_note(
                 f32(tuner.target_note.cents + 100 * config.transpose),
                 tuner.target_note.pitch_standard,
