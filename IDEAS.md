@@ -36,7 +36,7 @@ path to real VoiceOver support later.
 
 ## Piano stretch tuning
 
-## Temperaments and sweetened tunings
+## Temperaments and offset presets
 
 The note offsets are set by hand per exact note. A temperament is 12 offsets and a root key, repeated in
 every octave, and would be picked in the settings.

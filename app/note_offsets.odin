@@ -22,7 +22,7 @@ import "core:math"
 import "../core"
 
 // Notes tuned a few cents off equal temperament, e.g. a ukulele's E a little flat so its fretted chords
-// sound right, or a sweetened guitar tuning. The strobe stands still at the offset note and the readout
+// sound right, or a guitar's B string a touch low. The strobe stands still at the offset note and the readout
 // counts from there. One offset per exact note, a guitar's low and high E are tuned apart. A few slots
 // hold a tuning each.
 //

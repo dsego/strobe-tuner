@@ -207,7 +207,7 @@ void main()
     float alpha = curved_track;
 
     if (glow > 0) {
-        // Emulate a lamp shining through a strobe disc, like the old Conn Strobotuners
+        // Emulate a lamp shining through a strobe disc, like the old mechanical strobe tuners
 
         // Stripes drawn in color_a are the lit ones
         float lit = 1.0 - signal_value;
