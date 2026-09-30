@@ -31,6 +31,10 @@ SCOPE_ROWS :: 240
 SCOPE_BEAM_RADIUS :: 1.25 // points
 SCOPE_GRID_THICKNESS :: 2
 
+// Over the background noise the beam dims to this, the room's hiss stays in the same cells and would
+// be as bright as a note
+SCOPE_NOISE_BRIGHTNESS :: 0.3
+
 SCOPE_PERSISTENCE_STEP_MS :: 10
 SCOPE_MAX_PERSISTENCE_MS :: 500
 
@@ -52,15 +56,21 @@ SCOPE_BLOOM_PASSES :: 3
 
 // The scope or the ribbon. With the retro glow on the scope's beam glows like the strobe, through the
 // strobe display's render targets. The ribbon is lit all over and a glow adds little, it has none.
-draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: Rect, config: ^Config) {
+// snr_db is of the whole signal, the beam fades in with it like the strobe's stripes.
+draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: Rect, config: ^Config, snr_db: f32) {
     colors := get_strobe_colors(config)
     beam_color, dark_color := hex(colors[0]), hex(colors[1])
+
+    fade := STROBE_FADE_SNR_DB
+    target := math.lerp(f32(SCOPE_NOISE_BRIGHTNESS), 1, math.smoothstep(fade[0], fade[1], snr_db))
+    alpha := 1 - math.exp(-gfx_frame_time() / STROBE_LOOK_TIME_S)
+    display.scope_visibility += alpha * (target - display.scope_visibility)
 
     if config.strobe_display_type == .SCOPE && config.strobe_glow {
         // Offscreen, it's as large as rect and cuts off what is outside
         ensure_glow_targets(display, {rect.width, rect.height})
         begin_render_target(display.scene_rt, display.background, {rect.x, rect.y}, display.glow_scale)
-        draw_scope_screen(rect, scope, beam_color, dark_color)
+        draw_scope_screen(rect, scope, beam_color, dark_color, display.scope_visibility)
         end_render_target()
         render_bloom(display)
 
@@ -84,15 +94,15 @@ draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: Re
         heights, dwell := core.scope_from_above(scope, config.ribbon_shape)
         draw_ribbon(rect, heights, dwell, config.ribbon_shape, beam_color, dark_color)
     } else {
-        draw_scope_screen(rect, scope, beam_color, dark_color)
+        draw_scope_screen(rect, scope, beam_color, dark_color, display.scope_visibility)
     }
 }
 
 // The screen of an analog oscilloscope, as bright as the beam stayed long. The beam in the colorway's lit
 // color, the lines through the middle in its second color.
 // Every lit cell is a round dot wider than the cell, the dots of neighbouring cells overlap and add up
-// to a thicker and brighter beam.
-draw_scope_screen :: proc(rect: Rect, scope: ^core.Scope, beam_color, grid_color: Color) {
+// to a thicker and brighter beam. brightness dims the whole beam, 1 is full.
+draw_scope_screen :: proc(rect: Rect, scope: ^core.Scope, beam_color, grid_color: Color, brightness: f32) {
     // Through zero, and where the second period starts
     draw_rect({rect.x, rect.y + (rect.height - SCOPE_GRID_THICKNESS) / 2}, {rect.width, SCOPE_GRID_THICKNESS}, grid_color)
     draw_rect({rect.x + (rect.width - SCOPE_GRID_THICKNESS) / 2, rect.y}, {SCOPE_GRID_THICKNESS, rect.height}, grid_color)
@@ -117,7 +127,8 @@ draw_scope_screen :: proc(rect: Rect, scope: ^core.Scope, beam_color, grid_color
         row := i / scope.columns
         center := [2]f32{rect.x + (f32(column) + 0.5) * cell_size.x, rect.y + (f32(row) + 0.5) * cell_size.y}
         dot := Rect{center.x - SCOPE_BEAM_RADIUS, center.y - SCOPE_BEAM_RADIUS, 2 * SCOPE_BEAM_RADIUS, 2 * SCOPE_BEAM_RADIUS}
-        draw_texture(shape_texture, {0, 0, SHAPE_SIZE, SHAPE_SIZE}, dot, {beam_color.r, beam_color.g, beam_color.b, u8(255 * intensity)})
+        alpha := u8(255 * brightness * intensity)
+        draw_texture(shape_texture, {0, 0, SHAPE_SIZE, SHAPE_SIZE}, dot, {beam_color.r, beam_color.g, beam_color.b, alpha})
     }
 }
 

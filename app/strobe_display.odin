@@ -47,6 +47,8 @@ StrobeDisplay :: struct {
     // per band stripe sharpness and visibility, smoothed so they don't flicker, see update_band_look
     band_amp:        [core.MAX_BANDS]f32,
     band_visibility: [core.MAX_BANDS]f32,
+    // and of the scope's beam, see draw_scope_display
+    scope_visibility: f32,
 
     // The track whose sheet is open, outlined while the others dim. selection fades it in and out with
     // the sheet, 0 is no selection.

@@ -281,6 +281,7 @@ run_app :: proc(config: ^Config) {
             core.set_scope_freq(&scope, f64(phase_comparator.base_freq_hz))
         }
         scope.persistence_seconds = f64(config.scope_persistence_ms) / 1000
+        scope.noise_floor = pitch_detector.noise_floor.level
         core.update_scope(&scope)
 
         if key_pressed(.TAB) {
@@ -363,7 +364,7 @@ run_app :: proc(config: ^Config) {
                 scope_rect.y = layout.strobe_top
                 scope_rect.height -= layout.strobe_top
                 draw_rect({layout.strobe.x, layout.strobe.y}, {layout.strobe.width, layout.strobe_top}, hex(strobe_bg_color))
-                draw_scope_display(&strobe_display, &scope, scope_rect, config)
+                draw_scope_display(&strobe_display, &scope, scope_rect, config, pitch_detector.snr_db)
             } else {
                 // TODO
                 // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???

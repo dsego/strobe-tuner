@@ -49,7 +49,8 @@ SCOPE_MAX_BEAM_DOTS :: 256 // between two samples
 
 // The level follows the peaks at once and falls back this slowly, the wave is drawn against it
 SCOPE_LEVEL_RELEASE_SECONDS :: 1.0
-SCOPE_MIN_LEVEL :: 0.001 // -60 dBFS, silence isn't scaled up to the full height
+SCOPE_MIN_LEVEL :: 0.001 // -60 dBFS, digital silence isn't scaled up to the full height
+SCOPE_NOISE_HEADROOM :: 20 // 26 dB, the level stays this far above the background noise's RMS
 
 
 // What the screen from above shows of the beam's height
@@ -86,6 +87,8 @@ Scope :: struct {
     rows:                int,
     recent:              [3]f32, // the samples before the newest, the beam is drawn through them
     level:               f32, // peak level of the input
+    // The RMS of the background noise, the room's hiss stays low on the screen instead of filling it
+    noise_floor:         f32,
     chunk:               []f32,
 
     // The screen from above, see scope_from_above
@@ -157,9 +160,10 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
     release := f32(math.exp(-1 / (SCOPE_LEVEL_RELEASE_SECONDS * self.samplerate)))
     clock := self.sample_clock - i64(len(samples))
     brightness := math.pow(decay, f64(len(samples) - 1))
+    min_level := max(self.noise_floor * SCOPE_NOISE_HEADROOM, SCOPE_MIN_LEVEL)
 
     for sample, i in samples {
-        self.level = max(abs(sample), self.level * release, SCOPE_MIN_LEVEL)
+        self.level = max(abs(sample), self.level * release, min_level)
         move_beam(self, f64(clock + i64(i)) * self.step, sample, brightness)
         brightness /= decay
     }
@@ -397,6 +401,29 @@ test_scope_beam_is_continuous :: proc(t: ^testing.T) {
     phase, amp := scope_test_fundamental(heights)
     testing.expectf(t, abs(phase) < 0.01, "phase %v", phase)
     testing.expectf(t, amp > 0.95, "amp %v", amp)
+}
+
+@(test)
+test_scope_noise_stays_low :: proc(t: ^testing.T) {
+    FREQ :: 220.0
+    NOISE :: 0.01 // peak, as loud as the room
+
+    scope := scope_test_init(FREQ)
+    defer destroy_scope(&scope)
+    scope.noise_floor = NOISE / math.SQRT_TWO
+
+    // Longer than the level takes to fall back after a note, as small as it is over the noise
+    samples: [SCOPE_TEST_FRAME]f32
+    for _ in 0 ..< 120 {
+        scope_test_sine(samples[:], FREQ, SCOPE_TEST_SAMPLERATE, scope.sample_clock)
+        for &sample in samples do sample *= NOISE
+        clear_scope(&scope)
+        sweep_samples(&scope, samples[:])
+    }
+    heights, _ := scope_from_above(&scope, .RAW_WAVEFORM)
+    _, amp := scope_test_fundamental(heights)
+    expected := math.SQRT_TWO / SCOPE_NOISE_HEADROOM
+    testing.expectf(t, abs(amp - expected) < 0.02, "amp %v, expected %v", amp, expected)
 }
 
 @(test)

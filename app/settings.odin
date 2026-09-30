@@ -78,23 +78,26 @@ gui_settings :: proc(
     }
 
     {
-        // Harmonic shows a track per partial, fine the same frequency at different sensitivities
-        rect := settings_row(l, row, "Mode", 2 * 80)
-        row += 1
-        labels := []cstring{"Harmonic", "Fine"}
-        if i, ok := gui_segmented(rect, labels, int(config.strobe_mode)); ok {
-            config.strobe_mode = core.StrobeMode(i)
-            changed = true
-        }
-    }
-
-    {
         // Five of them, narrower than the other rows' to fit a phone
         labels := []cstring{"Tracks", "Wheel", "Trace", "Scope", "Ribbon"}
         rect := settings_row(l, row, "Display", f32(len(labels)) * 54)
         row += 1
         if i, ok := gui_segmented(rect, labels, int(config.strobe_display_type)); ok {
             config.strobe_display_type = StrobeDisplayType(i)
+        }
+    }
+
+    // The trace and the scope's views don't spin, they have no tracks to set
+    strobe := config.strobe_display_type == .CURVED_TRACKS || config.strobe_display_type == .SPINNING_WHEEL
+
+    {
+        // Harmonic shows a track per partial, fine the same frequency at different sensitivities
+        rect := settings_row(l, row, "Strobe mode", 2 * 80)
+        row += 1
+        labels := []cstring{"Harmonic", "Fine"}
+        if i, ok := gui_segmented(rect, labels, int(config.strobe_mode), strobe); ok {
+            config.strobe_mode = core.StrobeMode(i)
+            changed = true
         }
     }
 
@@ -121,10 +124,11 @@ gui_settings :: proc(
 
     {
         // Shown on the curved tracks in harmonic mode
+        shown := config.strobe_display_type == .CURVED_TRACKS && config.strobe_mode == .HARMONIC_MODE
         rect := settings_row(l, row, "Partial labels", 4 * SEGMENT_WIDTH)
         row += 1
         labels := []cstring{"Off", "1×", "Hz", "Note"}
-        if i, ok := gui_segmented(rect, labels, int(config.partial_labels)); ok {
+        if i, ok := gui_segmented(rect, labels, int(config.partial_labels), shown); ok {
             config.partial_labels = PartialLabelType(i)
         }
     }
@@ -428,8 +432,8 @@ icon_button_width :: proc(label: cstring) -> f32 {
 }
 
 
-// One of a few options, the selected one is a yellow pill on a dark track
-gui_segmented :: proc(rect: Rect, labels: []cstring, selected: int) -> (int, bool) {
+// One of a few options, the selected one is a yellow pill on a dark track. Dimmed and dead when not enabled.
+gui_segmented :: proc(rect: Rect, labels: []cstring, selected: int, enabled := true) -> (int, bool) {
     draw_pill(rect, pill_dark)
 
     segment_width := rect.width / f32(len(labels))
@@ -439,11 +443,12 @@ gui_segmented :: proc(rect: Rect, labels: []cstring, selected: int) -> (int, boo
         if i == selected {
             // Inset so the track shows around it, the radius shrinks by as much and the ends stay concentric
             INSET :: 2
-            draw_pill({segment.x + INSET, segment.y + INSET, segment.width - 2 * INSET, segment.height - 2 * INSET}, pill_yellow)
+            fill := pill_yellow if enabled else text_color_disabled
+            draw_pill({segment.x + INSET, segment.y + INSET, segment.width - 2 * INSET, segment.height - 2 * INSET}, fill)
             draw_centered_label(label, segment, text_color_dark)
         } else {
-            draw_centered_label(label, segment, text_color_light)
-            if gui_button(touch_area(segment)) do return i, true
+            draw_centered_label(label, segment, text_color_light if enabled else text_color_disabled)
+            if enabled && gui_button(touch_area(segment)) do return i, true
         }
     }
 
