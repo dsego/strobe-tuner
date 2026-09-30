@@ -280,6 +280,9 @@ run_app :: proc(config: ^Config) {
         if scope.freq_hz != f64(phase_comparator.base_freq_hz) {
             core.set_scope_freq(&scope, f64(phase_comparator.base_freq_hz))
         }
+        // The ribbon is the screen from above, it needs the sweep over time
+        sweep := config.scope_sweep if config.strobe_display_type == .SCOPE else .TIME
+        if scope.sweep != sweep do core.set_scope_sweep(&scope, sweep)
         scope.persistence_seconds = f64(config.scope_persistence_ms) / 1000
         scope.noise_floor = pitch_detector.noise_floor.level
         core.update_scope(&scope)
@@ -365,6 +368,11 @@ run_app :: proc(config: ^Config) {
                 scope_rect.height -= layout.strobe_top
                 draw_rect({layout.strobe.x, layout.strobe.y}, {layout.strobe.width, layout.strobe_top}, hex(strobe_bg_color))
                 draw_scope_display(&strobe_display, &scope, scope_rect, config, pitch_detector.snr_db)
+
+                // Tapping the scope switches it between the wave over time and the Lissajous figure
+                if config.strobe_display_type == .SCOPE && !microphone_denied() && gui_button(layout.strobe) {
+                    config.scope_sweep = .XY if config.scope_sweep == .TIME else .TIME
+                }
             } else {
                 // TODO
                 // when the detected note is too far away from the target, set a fixed spinning rate and attenuate strobe display ???

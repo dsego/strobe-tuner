@@ -130,6 +130,8 @@ Config :: struct {
     scope_persistence_ms:         f32,
     // what the ribbon shows, the positive half of the wave like a lamp or the wave as it is
     ribbon_shape:                 core.ScopeShape,
+    // the scope over time or as a Lissajous figure against the strobe's frequency, tapping it flips them
+    scope_sweep:                  core.ScopeSweep,
 }
 
 config_defaults :: Config {
@@ -165,6 +167,7 @@ config_defaults :: Config {
     show_band_cents              = false,
     scope_persistence_ms         = 40,
     ribbon_shape                 = .HALF_RECTIFIED,
+    scope_sweep                  = .TIME,
 }
 
 

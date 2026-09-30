@@ -24,6 +24,8 @@ import "core:math"
 //
 // Two periods of the strobe's frequency across. An in tune note stands still, a flat one drifts to the
 // left and a sharp one to the right, like the strobe tracks. Mirrored for that, time runs right to left.
+// Tapped, the scope draws the wave against the strobe's frequency instead, a Lissajous figure that
+// stands still in tune and rolls open and shut when it isn't.
 
 // The cells of the screen, about one a point at the desktop size
 SCOPE_COLUMNS :: STROBE_WIDTH
@@ -103,7 +105,15 @@ draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: Re
 // Every lit cell is a round dot wider than the cell, the dots of neighbouring cells overlap and add up
 // to a thicker and brighter beam. brightness dims the whole beam, 1 is full.
 draw_scope_screen :: proc(rect: Rect, scope: ^core.Scope, beam_color, grid_color: Color, brightness: f32) {
-    // Through zero, and where the second period starts
+    // The Lissajous figure is round, on a square in the middle
+    width := core.scope_width(scope)
+    rect := rect
+    if scope.sweep == .XY {
+        side := min(rect.width, rect.height)
+        rect = {rect.x + (rect.width - side) / 2, rect.y + (rect.height - side) / 2, side, side}
+    }
+
+    // Through zero, and where the second period starts or the reference's zero
     draw_rect({rect.x, rect.y + (rect.height - SCOPE_GRID_THICKNESS) / 2}, {rect.width, SCOPE_GRID_THICKNESS}, grid_color)
     draw_rect({rect.x + (rect.width - SCOPE_GRID_THICKNESS) / 2, rect.y}, {SCOPE_GRID_THICKNESS, rect.height}, grid_color)
 
@@ -112,18 +122,18 @@ draw_scope_screen :: proc(rect: Rect, scope: ^core.Scope, beam_color, grid_color
     total: f32 = 0
     for dwell in scope.screen do total += dwell
     if total == 0 do return
-    full := total / f32(scope.columns)
+    full := total / f32(width)
 
     // A steady beam is shared by a few cells of its column, more where the wave is steep. A third of
     // the column's dwell is full brightness.
     EXPOSURE :: 3
     DARK :: 0.02
-    cell_size := [2]f32{rect.width / f32(scope.columns), rect.height / f32(scope.rows)}
+    cell_size := [2]f32{rect.width / f32(width), rect.height / f32(scope.rows)}
     for dwell, i in scope.screen {
         intensity := min(EXPOSURE * dwell / full, 1)
         if intensity < DARK do continue
 
-        column := scope.columns - 1 - i % scope.columns
+        column := width - 1 - i % scope.columns
         row := i / scope.columns
         center := [2]f32{rect.x + (f32(column) + 0.5) * cell_size.x, rect.y + (f32(row) + 0.5) * cell_size.y}
         dot := Rect{center.x - SCOPE_BEAM_RADIUS, center.y - SCOPE_BEAM_RADIUS, 2 * SCOPE_BEAM_RADIUS, 2 * SCOPE_BEAM_RADIUS}

@@ -33,6 +33,11 @@
     the height of the beam in each column as a brightness. That's the classic strobe, stripes that wash
     out to gray when the beam smears.
 
+    X-Y: the reference drives the beam across instead of the sweep, a cosine at its frequency. With the
+    wave up and down that's a Lissajous figure, the way pitch was compared on an oscilloscope. An in tune
+    note draws a still ellipse, a detuned one rolls it open and shut by the phase it slips, a line, a
+    circle, a line the other way. The figure is square, as wide as the screen is high, on its left.
+
  -------------------------------------------------------------------------------------------------*/
 
 
@@ -67,11 +72,18 @@ raw_waveform :: proc(value: f32) -> f32 {
     return value
 }
 
+// What moves the beam across the screen
+ScopeSweep :: enum {
+    TIME, // two reference periods across, the wave over time
+    XY, // the reference's cosine, a Lissajous figure
+}
+
 
 Scope :: struct {
     using node:          AudioCaptureNode,
     samplerate:          f64,
     freq_hz:             f64,
+    sweep:               ScopeSweep,
 
     // How long the beam stays on the screen, the time constant of its decay. 0 keeps only what came
     // in since the previous frame.
@@ -127,6 +139,17 @@ set_scope_freq :: proc(self: ^Scope, freq_hz: f64) {
 
 clear_scope :: proc(self: ^Scope) {
     for &cell in self.screen do cell = 0
+}
+
+// Starts with a dark screen, the old figure would linger under the new one
+set_scope_sweep :: proc(self: ^Scope, sweep: ScopeSweep) {
+    self.sweep = sweep
+    clear_scope(self)
+}
+
+// How many columns of the screen the beam draws in, X-Y is square
+scope_width :: proc(self: ^Scope) -> int {
+    return min(self.rows, self.columns) if self.sweep == .XY else self.columns
 }
 
 // Draws what came in since the previous frame
@@ -186,6 +209,8 @@ move_beam :: proc(self: ^Scope, position: f64, sample: f32, brightness: f64) {
     self.recent = {from, to, after}
 
     columns := self.step * f64(self.columns)
+    // The cosine moves the beam fastest through the middle
+    if self.sweep == .XY do columns = math.TAU * SCOPE_PERIODS * self.step * 0.5 * SCOPE_FILL * f64(scope_width(self))
     rows := f64(abs(to - from) / self.level) * 0.5 * SCOPE_FILL * f64(self.rows)
     dots := clamp(int(math.ceil(max(columns, rows))), 1, SCOPE_MAX_BEAM_DOTS)
 
@@ -207,10 +232,12 @@ beam_dot :: proc(self: ^Scope, position: f64, value: f32, brightness: f64) {
     }
 
     across := position - math.floor(position)
+    // The reference at the sample, a cosine with the same reach as the wave
+    if self.sweep == .XY do across = 0.5 + 0.5 * SCOPE_FILL * math.cos(math.TAU * SCOPE_PERIODS * position)
     height := f64(clamp(value / self.level, -1, 1))
 
     // In cells, from the middle of the first column and of the top row
-    x := across * f64(self.columns) - 0.5
+    x := across * f64(scope_width(self)) - 0.5
     y := (0.5 - 0.5 * SCOPE_FILL * height) * f64(self.rows) - 0.5
 
     left := int(math.floor(x))
@@ -450,4 +477,49 @@ test_scope_persistence :: proc(t: ^testing.T) {
     _, faded := scope_test_fundamental(heights)
     expected := 0.5 * math.exp(f64(-0.05 / 0.05))
     testing.expectf(t, abs(faded - expected) < 0.02, "faded %v, expected %v", faded, expected)
+}
+
+@(test)
+test_scope_xy_in_tune_stands_still :: proc(t: ^testing.T) {
+    FREQ :: 440.0
+    OFF_HZ :: 1.0
+
+    // How far the beam is from the circle a sine draws against the reference's cosine, in cells,
+    // averaged over how long it stayed
+    off_circle :: proc(scope: ^Scope) -> f64 {
+        width := scope_width(scope)
+        radius := 0.5 * SCOPE_FILL * f64(width)
+        total, dwell: f64
+        for cell, i in scope.screen {
+            if cell == 0 do continue
+            x := f64(i % scope.columns) + 0.5 - 0.5 * f64(width)
+            y := f64(i / scope.columns) + 0.5 - 0.5 * f64(scope.rows)
+            total += f64(cell) * abs(math.sqrt(x * x + y * y) - radius)
+            dwell += f64(cell)
+        }
+        return total / dwell
+    }
+
+    scope := scope_test_init(FREQ)
+    defer destroy_scope(&scope)
+    set_scope_sweep(&scope, .XY)
+
+    samples: [SCOPE_TEST_FRAME]f32
+    for frame in 0 ..< 60 {
+        scope_test_sine(samples[:], FREQ, SCOPE_TEST_SAMPLERATE, scope.sample_clock)
+        clear_scope(&scope)
+        sweep_samples(&scope, samples[:])
+        distance := off_circle(&scope)
+        testing.expectf(t, distance < 1, "frame %v: %v cells off the circle", frame, distance)
+    }
+
+    // A quarter of a turn later the circle has rolled shut into a line
+    set_scope_sweep(&scope, .XY)
+    for _ in 0 ..< 15 {
+        scope_test_sine(samples[:], FREQ + OFF_HZ, SCOPE_TEST_SAMPLERATE, scope.sample_clock)
+        clear_scope(&scope)
+        sweep_samples(&scope, samples[:])
+    }
+    distance := off_circle(&scope)
+    testing.expectf(t, distance > 20, "%v cells off the circle", distance)
 }
