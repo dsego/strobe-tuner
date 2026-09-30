@@ -298,6 +298,13 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int)
         x := center.x + offset * spacing + math.sign(offset) * center_gap * min(distance, 1)
 
         if k == target {
+            // The sharp and the octave hang off to the right. Centred on the letter the note looks pushed
+            // right, centred with them the letter looks pushed left, they're small and thin and weigh less
+            // than their width. Halfway looks centred, once it's settled.
+            OPTICAL_WEIGHT :: 0.5
+            suffix := measure_label(pixel_fonts.octave, fmt.ctprintf("%v", note.octave)).x
+            if note.is_accidental do suffix = max(suffix, measure_label(pixel_fonts.note_sharp, "♯").x)
+            x -= (1 - min(distance, 1)) * OPTICAL_WEIGHT * suffix / 2
             draw_ruler_note(note, {x, center.y}, pixel_fonts.note, pixel_fonts.note_sharp, true, note_color)
             continue
         }
@@ -319,7 +326,8 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int)
     return
 }
 
-// The name centred on pos, the sharp and the octave (only on the target) to the right.
+// The name centred on pos, the sharp and the octave (only on the target) to the right, gui_note_ruler
+// moves the target over to centre them all.
 // Drawn at the fonts' own size, one texel to one pixel.
 draw_ruler_note :: proc(n: core.Note, pos: [2]f32, name_font, sharp_font: PixelFont, show_octave: bool, color: Color) {
     size := name_font.size
