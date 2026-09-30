@@ -263,8 +263,8 @@ RULER_LOWEST :: -48 // A0, in semitones from A4
 RULER_HIGHEST :: 39 // C8
 RULER_SWIPE_START :: 10 // points sideways before a press on the ruler is a swipe and not a tap
 RULER_COAST_MAX :: 20 // notes per second
-RULER_COAST_MIN :: 2 // notes per second, slower than this the coast settles
-RULER_COAST_FRICTION :: 4 // per second, how quickly the coast slows down
+RULER_COAST_MIN :: 2 // notes per second, let go slower than this it settles on the nearest note
+RULER_COAST_FRICTION :: 4 // how far a flick coasts, 1/4 of a second at the finger's speed, in about 1/2 a second
 
 // Where the middle of the ruler is, in semitones from A4, it follows the target note a little behind
 ruler_position: f32
@@ -280,7 +280,11 @@ RulerSwipe :: struct {
     grab:     f32, // ruler_position then
     last_x:   f32,
     velocity: f32, // points per second, right is positive
-    coast:    f32, // notes per second, up is positive, 0 unless coasting
+    caught:   bool, // pressed while it coasted, let go without swiping it settles where it is
+    coast:    f32, // seconds the coast takes, 0 unless coasting
+    coasted:  f32, // seconds so far
+    from:     f32, // ruler_position when let go
+    stop_at:  f32, // the note it coasts to
 }
 
 ruler_swipe: RulerSwipe
@@ -318,19 +322,25 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int,
     land := false
     if gui_disabled {
         // A sheet opened over it
-        land = swipe.swiping || swipe.coast != 0
+        land = swipe.swiping || swipe.coast != 0 || swipe.caught
         if !land do swipe^ = {}
-    } else if swipe.coast != 0 {
-        ruler_position += swipe.coast * dt
-        swipe.coast *= math.exp(-RULER_COAST_FRICTION * dt)
-        settle = math.round(ruler_position)
-        if mouse_pressed() {
-            // A press stops it on the nearest
-            land = true
-        } else if abs(swipe.coast) < RULER_COAST_MIN {
-            land = true
-            settle = math.ceil(ruler_position) if swipe.coast > 0 else math.floor(ruler_position)
+    } else if swipe.coast != 0 && mouse_pressed() {
+        // Caught on the ruler it stops there and can be swiped on, a press anywhere else settles it
+        caught := gui_background_pressed(rect)
+        swipe^ = {
+            pressed = caught,
+            caught  = caught,
+            press_x = mouse.x,
+            last_x  = mouse.x,
         }
+        land = !caught
+    } else if swipe.coast != 0 {
+        // Slowing down steadily to a stop on the note, from the finger's speed
+        swipe.coasted += dt
+        left := max(1 - swipe.coasted / swipe.coast, 0)
+        ruler_position = swipe.stop_at + (swipe.from - swipe.stop_at) * left * left
+        settle = math.round(ruler_position)
+        land = left == 0
     } else if !swipe.pressed {
         if gui_background_pressed(rect) {
             swipe^ = {
@@ -355,8 +365,24 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int,
     } else if swipe.swiping {
         swipe.pressed = false
         swipe.swiping = false
-        swipe.coast = clamp(-swipe.velocity / spacing, -RULER_COAST_MAX, RULER_COAST_MAX)
-        land = abs(swipe.coast) < RULER_COAST_MIN
+        swipe.caught = false
+        // Where friction would stop it, rounded to a note on the way, and slowing down evenly from the
+        // finger's speed it takes twice as long as at that speed
+        speed := clamp(-swipe.velocity / spacing, -RULER_COAST_MAX, RULER_COAST_MAX)
+        stop := ruler_position + speed / RULER_COAST_FRICTION
+        swipe.stop_at = clamp(math.round(stop), RULER_LOWEST, RULER_HIGHEST)
+        if speed > 0 do swipe.stop_at = max(swipe.stop_at, math.ceil(ruler_position))
+        if speed < 0 do swipe.stop_at = min(swipe.stop_at, math.floor(ruler_position))
+        distance := swipe.stop_at - ruler_position
+        if abs(speed) < RULER_COAST_MIN || abs(distance) < 0.002 {
+            land = true
+        } else {
+            swipe.coast = 2 * distance / speed
+            swipe.coasted = 0
+            swipe.from = ruler_position
+        }
+    } else if swipe.caught {
+        land = true
     } else {
         tapped = true
         swipe^ = {}
@@ -369,7 +395,7 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int,
         if swipe.coast != 0 do land = true
     }
 
-    moving := swipe.swiping || swipe.coast != 0
+    moving := swipe.swiping || swipe.coast != 0 || swipe.caught
     // Settled, the note becomes the target and the ruler eases onto it from where it is
     if land {
         step = int(settle) - target
@@ -410,15 +436,14 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int,
             name_font = {pixel_fonts.note.font, math.lerp(pixel_fonts.neighbour.size, pixel_fonts.note.size, large)}
             sharp_font = {pixel_fonts.note_sharp.font, math.lerp(pixel_fonts.neighbour_sharp.size, pixel_fonts.note_sharp.size, large)}
         }
-        // The octave on the closest one
-        show_octave := distance < 0.5
+        // The octave fades in on the way to the middle, gone halfway so there's only ever one
+        octave := 1 - math.smoothstep(f32(0), 0.5, distance)
 
         // The sharp and the octave hang off to the right. Centred on the letter the note looks pushed right,
         // centred with them the letter looks pushed left, they're small and thin and weigh less than their
         // width. Halfway looks centred, once it's settled.
         OPTICAL_WEIGHT :: 0.5
-        suffix: f32
-        if show_octave do suffix = measure_label(pixel_fonts.octave, fmt.ctprintf("%v", n.octave)).x
+        suffix := octave * measure_label(pixel_fonts.octave, fmt.ctprintf("%v", n.octave)).x
         if n.is_accidental do suffix = max(suffix, measure_text(sharp_font.font, "♯", sharp_font.size, 0).x)
         x -= large * OPTICAL_WEIGHT * suffix / 2
 
@@ -428,7 +453,7 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int,
             color[channel] = u8(math.round(math.lerp(f32(text_color_muted[channel]), f32(note_color[channel]), large)))
         }
         color.a = u8(f32(color.a) * clamp(f32(per_side) + 1 - distance, 0, 1))
-        draw_ruler_note(n, {x, center.y}, name_font, sharp_font, show_octave, color)
+        draw_ruler_note(n, {x, center.y}, name_font, sharp_font, octave, color)
 
         // Tapping another note locks it
         if tapped && k != target && distance <= f32(per_side) && point_in_rect(mouse, {x - spacing / 2, rect.y, spacing, rect.height}) {
@@ -439,10 +464,10 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int,
     return
 }
 
-// The name centred on pos, the sharp and the octave (only on the target) to the right, gui_note_ruler
-// moves the target over to centre them all.
+// The name centred on pos, the sharp and the octave (in the middle, octave is how much of it shows) to the
+// right, gui_note_ruler moves the note over to centre them all.
 // Drawn at the fonts' sizes, their own ones are texel for pixel.
-draw_ruler_note :: proc(n: core.Note, pos: [2]f32, name_font, sharp_font: PixelFont, show_octave: bool, color: Color) {
+draw_ruler_note :: proc(n: core.Note, pos: [2]f32, name_font, sharp_font: PixelFont, octave: f32, color: Color) {
     size := name_font.size
 
     name := fmt.ctprintf("%v", n.name)
@@ -458,10 +483,12 @@ draw_ruler_note :: proc(n: core.Note, pos: [2]f32, name_font, sharp_font: PixelF
         draw_text(sharp_font.font, "♯", sharp_pos, sharp_font.size, 0, color)
     }
 
-    if show_octave {
-        octave := pixel_fonts.octave
-        octave_pos := snap_to_pixels({right, top_left.y + name_size.y - 1.3 * octave.size})
-        draw_text(octave.font, fmt.ctprintf("%v", n.octave), octave_pos, octave.size, 0, color)
+    if octave > 0 {
+        font := pixel_fonts.octave
+        octave_color := color
+        octave_color.a = u8(f32(color.a) * octave)
+        octave_pos := snap_to_pixels({right, top_left.y + name_size.y - 1.3 * font.size})
+        draw_text(font.font, fmt.ctprintf("%v", n.octave), octave_pos, font.size, 0, octave_color)
     }
 }
 
