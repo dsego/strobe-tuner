@@ -153,7 +153,8 @@ when RENDERER == "sdl" {
         max_fps:          int, // see gfx_limit_fps
         keys_pressed:     bit_set[Key],
         mouse_clicked:    bool,
-        wheel:            f32,
+        touch:            bool, // the last press was a finger, see touch_input
+        wheel:           f32,
         last_counter:     u64,
         frame_time:       f32,
     }
@@ -272,6 +273,7 @@ when RENDERER == "sdl" {
                 }
             case .MOUSE_BUTTON_DOWN:
                 if event.button.button == sdl.BUTTON_LEFT do gpu.mouse_clicked = true
+                gpu.touch = event.button.which == sdl.TOUCH_MOUSEID
             case .MOUSE_WHEEL:
                 // Undo natural scrolling, scrolling up always means up
                 gpu.wheel += -event.wheel.y if event.wheel.direction == .FLIPPED else event.wheel.y
@@ -482,6 +484,11 @@ when RENDERER == "sdl" {
 
     mouse_down :: proc() -> bool {
         return .LEFT in sdl.GetMouseState(nil, nil)
+    }
+
+    // Whether the last press was a finger rather than a mouse or a trackpad, a finger covers what it presses
+    touch_input :: proc() -> bool {
+        return gpu.touch
     }
 
     mouse_wheel :: proc() -> f32 {

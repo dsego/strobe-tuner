@@ -62,6 +62,7 @@ RULER_NEIGHBOUR_SHARP_SIZE :: 20
 READOUT_SIZE :: 24 // the Hz and cents values, they grow with the ruler
 NOTE_ARROW_SIZE :: 26 // either side of the note without the ruler
 STROBE_ARROW_SIZE :: 22 // over the strobe, which way to tune
+OFFSET_VALUE_SIZE :: 32 // the value in the popup of the note offsets
 
 // A font and the point size that draws it one texel to one pixel
 PixelFont :: struct {
@@ -91,6 +92,7 @@ PixelFonts :: struct {
     readout:         PixelFont,
     note_arrow:      PixelFont,
     strobe_arrow:    PixelFont,
+    offset_value:    PixelFont,
 }
 
 pixel_fonts: PixelFonts
@@ -133,6 +135,7 @@ update_pixel_fonts :: proc(ruler_scale: f32) {
         readout         = load(inter_medium, ruler_scale * READOUT_SIZE, scale, "0123456789.-+"),
         note_arrow      = load(inter_medium, NOTE_ARROW_SIZE, scale, "◀▶"),
         strobe_arrow    = load(inter_medium, STROBE_ARROW_SIZE, scale, "◀▶"),
+        offset_value    = load(inter_medium, OFFSET_VALUE_SIZE, scale, "ABCDEFG#0123456789.+-¢"),
     }
 }
 
@@ -157,6 +160,7 @@ unload_pixel_fonts :: proc() {
     gfx_unload_font(pixel_fonts.readout.font)
     gfx_unload_font(pixel_fonts.note_arrow.font)
     gfx_unload_font(pixel_fonts.strobe_arrow.font)
+    gfx_unload_font(pixel_fonts.offset_value.font)
     pixel_fonts = {}
 }
 

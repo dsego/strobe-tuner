@@ -147,6 +147,11 @@ when RENDERER == "raylib" {
         return rl.IsMouseButtonDown(.LEFT)
     }
 
+    // Only on the desktop, a mouse or a trackpad
+    touch_input :: proc() -> bool {
+        return false
+    }
+
     mouse_wheel :: proc() -> f32 {
         wheel := rl.GetMouseWheelMove()
         // Undo natural scrolling, scrolling up always means up. raylib doesn't say if it's on, ask macOS.

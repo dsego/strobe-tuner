@@ -17,6 +17,7 @@
 package app
 
 import "core:fmt"
+import "core:math"
 
 import "../core"
 
@@ -28,7 +29,8 @@ import "../core"
 // On the main screen: an LED left of the settings that's lit while they're on, with the slot, tapping it
 // goes through the slots in use and off, the ± that opens the sheet, and the offset of the note being tuned
 // under its letter. The sheet covers the window: the slots, and the rows of the selected slot, each a note,
-// its octave and the cents. Tapping a row shows its controls, and the button under the rows removes it.
+// its octave and the cents. Tapping a row shows its controls, and the button under the rows removes it. With
+// a finger the controls are in a popup over the row instead, see gui_note_offsets.
 // The rows are kept as they are, in their order and at 0 cents too, see Config.note_offset_notes.
 
 NOTE_OFFSET_SLOTS :: 3
@@ -49,7 +51,7 @@ note_offset_slot :: proc(config: ^Config) -> int {
 active_note_offsets :: proc(config: ^Config) -> (offsets: [core.NOTE_COUNT]f32) {
     if !config.note_offsets_on do return
     slot := note_offset_slot(config)
-    // A note in more than one row is tuned by the first, the sheet dims the others
+    // A note in more than one row is tuned by the first
     for row := clamp(config.note_offset_counts[slot], 0, MAX_NOTE_OFFSETS) - 1; row >= 0; row -= 1 {
         index := config.note_offset_notes[slot][row]
         if index >= 0 && index < core.NOTE_COUNT do offsets[index] = config.note_offset_cents[slot][row]
@@ -152,19 +154,24 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
         return selected, false
     }
 
-    // A value with a button either side that steps it, down on the left. No pill, the icons and the value
-    // on the sheet. rect is the row's height, all of it is the touch area.
-    gui_spin :: proc(rect: Rect, label: cstring, color: Color, down_icon, up_icon: cstring) -> (step: int) {
-        BUTTON_WIDTH :: 22
-        down := Rect{rect.x, rect.y, BUTTON_WIDTH, rect.height}
-        up := Rect{rect.x + rect.width - BUTTON_WIDTH, rect.y, BUTTON_WIDTH, rect.height}
-        icon_y := rect.y + (rect.height - ICON_SIZE) / 2
-        draw_icon(down_icon, {down.x + (BUTTON_WIDTH - ICON_SIZE) / 2, icon_y}, icon_color)
-        draw_centered_label(label, rect, color)
-        draw_icon(up_icon, {up.x + (BUTTON_WIDTH - ICON_SIZE) / 2, icon_y}, icon_color)
+    // A value with a button either side that steps it, down on the left. No pill, the icons and the value on
+    // the sheet. The touch areas are halves of reach from its left to its right, split at the middle of rect,
+    // wider than the icons for a finger. Large in the popup.
+    gui_spin :: proc(rect: Rect, reach: [2]f32, label: cstring, down_icon, up_icon: cstring, large := false) -> (step: int) {
+        font := pixel_fonts.offset_value if large else pixel_fonts.label
+        spacing: f32 = 0 if large else 1
+        width := measure_label(font, label, spacing).x
+        draw_label(font, label, {rect.x + (rect.width - width) / 2, rect.y + (rect.height - font.size) / 2}, text_color_white, spacing)
 
-        if gui_button_repeat(down) do step = -1
-        if gui_button_repeat(up) do step = 1
+        button_width: f32 = 44 if large else 22
+        icon_size: f32 = ICON_LARGE_SIZE if large else ICON_SIZE
+        icon_y := rect.y + (rect.height - icon_size) / 2
+        draw_icon(down_icon, {rect.x + (button_width - icon_size) / 2, icon_y}, icon_color, large)
+        draw_icon(up_icon, {rect.x + rect.width - (button_width + icon_size) / 2, icon_y}, icon_color, large)
+
+        middle := rect.x + rect.width / 2
+        if gui_button_repeat({reach[0], rect.y, middle - reach[0], rect.height}) do step = -1
+        if gui_button_repeat({middle, rect.y, reach[1] - middle, rect.height}) do step = 1
         return
     }
 
@@ -195,6 +202,100 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
 
     right := l.rows.x + l.width
     top := l.rows.y
+    sheet_left, sheet_right := l.sheet.x, l.sheet.x + l.sheet.width
+
+    // A row an offset: the note and its octave, the bar, the cents. With a mouse the selected row is lighter
+    // and they're steppers, one row at a time, the rows stay where they are. A finger would cover what it
+    // steps, tapped the note or the cents open a popup over the row with the steppers large.
+    NAMES :: [12]cstring{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
+    GAP :: 8
+    NOTE_WIDTH :: 74
+    OCTAVE_WIDTH :: 58
+    BAR_GAP :: 12 // either side of the bar
+    CENTS_WIDTH :: 96
+    BAR_HEIGHT :: 8
+    BUTTONS_GAP :: 20 // from the rows to the buttons under them
+    BUTTONS_HEIGHT :: 28
+    // From C0 as it's shown, the octave changes at C. Offsets are kept by the sounding note, a transposing
+    // instrument reads the written one.
+    FROM_C0 :: 57 + core.LOWEST_NOTE
+
+    // No sign on a note that's tuned as usual
+    cents_text :: proc(cents: f32) -> cstring {
+        return fmt.ctprintf("%+.1f¢", cents) if cents != 0 else "0¢"
+    }
+
+    // Around the octave, past the notes that are out of A0 to C8
+    step_note :: proc(index, step, transpose: int) -> int {
+        shown := index + FROM_C0 + transpose
+        for try in 1 ..< 12 {
+            candidate := shown - shown %% 12 + (shown + try * step) %% 12 - FROM_C0 - transpose
+            if candidate >= 0 && candidate < core.NOTE_COUNT do return candidate
+        }
+        return index
+    }
+
+    step_octave :: proc(index, step: int) -> int {
+        candidate := index + 12 * step
+        return candidate if candidate >= 0 && candidate < core.NOTE_COUNT else index
+    }
+
+    step_cents :: proc(cents: f32, step: int) -> f32 {
+        return clamp(cents + f32(step) * NOTE_OFFSET_STEP_CENTS, -NOTE_OFFSET_MAX_CENTS, NOTE_OFFSET_MAX_CENTS)
+    }
+
+    // Taller rows where all of them fit, on a phone
+    ROW_HEIGHT_MAX :: 60
+    rows_top := top + l.row_height + 4
+    room := l.bottom - rows_top - BUTTONS_GAP - BUTTONS_HEIGHT
+    row_height := clamp(math.floor(room / MAX_NOTE_OFFSETS), l.row_height, ROW_HEIGHT_MAX)
+    name_width: f32 = NOTE_WIDTH + GAP + OCTAVE_WIDTH // the note and octave together, over their steppers
+    bar_x := l.rows.x + name_width + BAR_GAP
+    cents_x := right - CENTS_WIDTH
+
+    // The popup over the row, on what was tapped, or under the row near the top of the sheet. One line like
+    // the row, the steppers large: the note and the octave, or the cents.
+    POPUP_HEIGHT :: 64
+    POPUP_PAD :: 8
+    POPUP_GAP :: 4 // between the note and the octave
+    POPUP_NOTE_WIDTH :: 140
+    POPUP_OCTAVE_WIDTH :: 116
+    POPUP_CENTS_WIDTH :: 200
+    popup_rect :: proc(width, anchor_x, row_y, row_height, min_y: f32, sheet: Rect) -> Rect {
+        GAP :: 10 // from the row, the balloon's point reaches most of the way
+        x := clamp(anchor_x - width / 2, sheet.x + POPUP_PAD, sheet.x + sheet.width - POPUP_PAD - width)
+        y := row_y - GAP - POPUP_HEIGHT
+        if y < min_y do y = row_y + row_height + GAP
+        return {x, y, width, POPUP_HEIGHT}
+    }
+    popup_widths := [NoteOffsetPopup]f32 {
+        .None  = 0,
+        .Note  = 2 * POPUP_PAD + POPUP_NOTE_WIDTH + POPUP_GAP + POPUP_OCTAVE_WIDTH,
+        .Cents = 2 * POPUP_PAD + POPUP_CENTS_WIDTH,
+    }
+    anchors := [NoteOffsetPopup]f32 {
+        .None  = 0,
+        .Note  = l.rows.x + name_width / 2,
+        .Cents = cents_x + CENTS_WIDTH / 2,
+    }
+
+    touch := touch_input()
+    selected := &note_offset_selected
+    popup := &note_offset_popup
+    if selected^ >= config.note_offset_counts[note_offset_slot(config)] do selected^ = -1
+    if selected^ < 0 || !touch do popup^ = .None
+
+    // A tap on the popup is its own, the controls under it don't see it. A tap anywhere else puts it away and
+    // goes on to what's there, on the other value it opens that one's popup.
+    was_disabled := gui_disabled
+    if popup^ != .None {
+        rect := popup_rect(popup_widths[popup^], anchors[popup^], rows_top + f32(selected^) * row_height, row_height, top, l.sheet)
+        if point_in_rect(mouse_position(), rect) {
+            gui_disabled = true
+        } else if gui_button(l.sheet) {
+            popup^ = .None
+        }
+    }
 
     // The slots, the selected one is tuned to while the offsets are on and its rows are below. They're
     // switched on and off on the main screen, see gui_note_offsets_indicator.
@@ -204,11 +305,11 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
         rect := Rect{l.rows.x, top + (l.row_height - TAB_HEIGHT) / 2, NOTE_OFFSET_SLOTS * TAB_WIDTH, TAB_HEIGHT}
         if i, ok := gui_tabs(rect, []cstring{"Slot 1", "Slot 2", "Slot 3"}, note_offset_slot(config)); ok {
             config.note_offset_slot = i
-            note_offset_selected = -1
+            selected^ = -1
+            popup^ = .None
             changed = true
         }
     }
-    top += l.row_height + 4
 
     slot := note_offset_slot(config)
     count := &config.note_offset_counts[slot]
@@ -216,90 +317,67 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
     notes := &config.note_offset_notes[slot]
     cents := &config.note_offset_cents[slot]
 
-    // A row an offset: the note and its octave, the bar, the cents. Tapped it's lighter and they're steppers,
-    // one row at a time, the rows stay where they are.
-    NAMES :: [12]cstring{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
-    GAP :: 8
-    BAR_GAP :: 12 // either side of the bar
-    NOTE_WIDTH :: 74
-    OCTAVE_WIDTH :: 58
-    CENTS_WIDTH :: 96
-    BAR_HEIGHT :: 4
-    SELECTED_INSET :: 8 // the selected row's background past the rows at the sides
-    // From C0 as it's shown, the octave changes at C. Offsets are kept by the sounding note, a transposing
-    // instrument reads the written one.
-    FROM_C0 :: 57 + core.LOWEST_NOTE
-
     selected_color := hex(0x4D4E58FF)
-    selected := &note_offset_selected
-    if selected^ >= count^ do selected^ = -1
-    rows_rect := Rect{l.rows.x, top, l.width, f32(count^) * l.row_height}
+    rows_rect := Rect{sheet_left, rows_top, l.sheet.width, f32(count^) * row_height}
 
     names := NAMES
     for row in 0 ..< count^ {
         index := clamp(notes[row], 0, core.NOTE_COUNT - 1)
-        y := top + f32(row) * l.row_height
-        height := l.row_height
-
-        // Another row above has the same note, that one is tuned to and this one is dimmed
-        shadowed := false
-        for earlier in 0 ..< row {
-            if notes[earlier] == index do shadowed = true
-        }
-        color := text_color_muted if shadowed else text_color_white
-
         shown := index + FROM_C0 + config.transpose
-        cents_rect := Rect{right - CENTS_WIDTH, y, CENTS_WIDTH, height}
-        bar_x := l.rows.x + NOTE_WIDTH + GAP + OCTAVE_WIDTH + BAR_GAP
-        bar := Rect{bar_x, y + (height - BAR_HEIGHT) / 2, cents_rect.x - BAR_GAP - bar_x, BAR_HEIGHT}
-        // No sign on a note that's tuned as usual
-        label := fmt.ctprintf("%+.1f¢", cents[row]) if cents[row] != 0 else "0¢"
+        y := rows_top + f32(row) * row_height
+        bar := Rect{bar_x, y + (row_height - BAR_HEIGHT) / 2, cents_x - BAR_GAP - bar_x, BAR_HEIGHT}
+        cents_rect := Rect{cents_x, y, CENTS_WIDTH, row_height}
+        // Out to the edges of the sheet, a finger that misses the outer steppers doesn't put the controls away
+        row_rect := Rect{sheet_left, y, l.sheet.width, row_height}
 
-        if row != selected^ {
-            // The note and octave together, over where their steppers are
-            note_rect := Rect{l.rows.x, y, NOTE_WIDTH + GAP + OCTAVE_WIDTH, height}
-            draw_centered_label(fmt.ctprintf("%s%d", names[shown %% 12], shown / 12), note_rect, color)
-            draw_offset_bar(bar, cents[row], hex(sheet_bg_color))
-            draw_centered_label(label, cents_rect, color)
-            if gui_button({l.rows.x, y, l.width, height}) do selected^ = row
+        if row != selected^ || touch {
+            background := hex(sheet_bg_color)
+            if row == selected^ {
+                background = selected_color
+                draw_rect({sheet_left, y}, {l.sheet.width, row_height}, background)
+            }
+            draw_centered_label(fmt.ctprintf("%s%d", names[shown %% 12], shown / 12), {l.rows.x, y, name_width, row_height}, text_color_white)
+            draw_offset_bar(bar, cents[row], background)
+            draw_centered_label(cents_text(cents[row]), cents_rect, text_color_white)
+
+            // Selected for REMOVE, and with a finger the note or the cents open their popup
+            if gui_button(row_rect) {
+                selected^ = row
+                popup^ = .None
+                if touch {
+                    position := mouse_position()
+                    if position.x < bar.x - BAR_GAP / 2 do popup^ = .Note
+                    if position.x >= cents_x - BAR_GAP / 2 do popup^ = .Cents
+                }
+            }
             continue
         }
 
-        background := Rect{l.rows.x - SELECTED_INSET, y, l.width + 2 * SELECTED_INSET, height}
-        draw_rounded_rect(background, 8, selected_color)
+        draw_rect({sheet_left, y}, {l.sheet.width, row_height}, selected_color)
 
+        // Each stepper reaches halfway into the gaps beside it, the outer ones to the edges of the sheet
         x := l.rows.x
-        if step := gui_spin({x, y, NOTE_WIDTH, height}, names[shown %% 12], color, ICON_CARET_DOWN, ICON_CARET_UP);
+        note_reach := [2]f32{sheet_left, x + NOTE_WIDTH + GAP / 2}
+        if step := gui_spin({x, y, NOTE_WIDTH, row_height}, note_reach, names[shown %% 12], ICON_CARET_DOWN, ICON_CARET_UP);
            step != 0 {
-            // Around the octave, past the notes that are out of A0 to C8
-            for try in 1 ..< 12 {
-                candidate := shown - shown %% 12 + (shown + try * step) %% 12 - FROM_C0 - config.transpose
-                if candidate >= 0 && candidate < core.NOTE_COUNT {
-                    notes[row] = candidate
-                    changed = true
-                    break
-                }
-            }
+            notes[row] = step_note(index, step, config.transpose)
+            changed = true
         }
         x += NOTE_WIDTH + GAP
 
+        octave_reach := [2]f32{x - GAP / 2, x + OCTAVE_WIDTH + BAR_GAP / 2}
         octave := fmt.ctprintf("%d", shown / 12)
-        if step := gui_spin({x, y, OCTAVE_WIDTH, height}, octave, color, ICON_CARET_DOWN, ICON_CARET_UP); step != 0 {
-            candidate := index + 12 * step
-            if candidate >= 0 && candidate < core.NOTE_COUNT {
-                notes[row] = candidate
-                changed = true
-            }
-        }
-
-        draw_offset_bar(bar, cents[row], selected_color)
-        if step := gui_spin(cents_rect, label, color, ICON_MINUS, ICON_PLUS); step != 0 {
-            cents[row] = clamp(cents[row] + f32(step) * NOTE_OFFSET_STEP_CENTS, -NOTE_OFFSET_MAX_CENTS, NOTE_OFFSET_MAX_CENTS)
+        if step := gui_spin({x, y, OCTAVE_WIDTH, row_height}, octave_reach, octave, ICON_CARET_DOWN, ICON_CARET_UP); step != 0 {
+            notes[row] = step_octave(index, step)
             changed = true
         }
 
-        // Tapping it again between the steppers puts the controls away
-        if gui_button({bar.x - BAR_GAP, y, bar.width + 2 * BAR_GAP, height}) do selected^ = -1
+        draw_offset_bar(bar, cents[row], selected_color)
+        cents_reach := [2]f32{cents_x - BAR_GAP / 2, sheet_right}
+        if step := gui_spin(cents_rect, cents_reach, cents_text(cents[row]), ICON_MINUS, ICON_PLUS); step != 0 {
+            cents[row] = step_cents(cents[row], step)
+            changed = true
+        }
     }
 
     // Under the rows, far enough from them that a tap on the last row's + doesn't land here: a new one on
@@ -307,11 +385,8 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
     // button that removes the selected row.
     buttons_strip: Rect
     {
-        HEIGHT :: 28
-        TOP_GAP :: 20
-
-        y := top + f32(count^) * l.row_height + TOP_GAP
-        middle := y + HEIGHT / 2
+        y := rows_top + f32(count^) * row_height + BUTTONS_GAP
+        middle := y + BUTTONS_HEIGHT / 2
         buttons_strip = {l.rows.x, middle - SETTINGS_ROW_HEIGHT / 2, l.width, SETTINGS_ROW_HEIGHT}
 
         if gui_small_button(right, middle, "REMOVE", selected^ >= 0) {
@@ -321,10 +396,11 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
             }
             count^ -= 1
             selected^ = -1
+            popup^ = .None
             changed = true
         }
 
-        if gui_icon_button({l.rows.x, y}, HEIGHT, ICON_PLUS, "Add", count^ < MAX_NOTE_OFFSETS) {
+        if gui_icon_button({l.rows.x, y}, BUTTONS_HEIGHT, ICON_PLUS, "Add", count^ < MAX_NOTE_OFFSETS) {
             // Middle C in an empty slot when the tuner has no note, otherwise after the last row
             start := 39
             if count^ > 0 do start = notes[count^ - 1]
@@ -347,17 +423,85 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
             cents[count^] = 0
             // Selected, it's set next
             selected^ = count^
+            popup^ = .None
             count^ += 1
             changed = true
         }
     }
 
-    // A tap on the sheet away from the rows and the buttons under them puts the controls away
+    // A tap on the sheet away from the rows and the buttons under them unselects the row
     if gui_button(l.sheet) && !point_in_rect(mouse_position(), rows_rect) && !point_in_rect(mouse_position(), buttons_strip) {
         selected^ = -1
+        popup^ = .None
+    }
+
+    gui_disabled = was_disabled
+
+    // The popup, over everything
+    if popup^ != .None {
+        row := selected^
+        index := clamp(notes[row], 0, core.NOTE_COUNT - 1)
+        shown := index + FROM_C0 + config.transpose
+        row_y := rows_top + f32(row) * row_height
+        rect := popup_rect(popup_widths[popup^], anchors[popup^], row_y, row_height, top, l.sheet)
+        RADIUS :: 14
+        draw_rounded_rect(rect, RADIUS, pill_dark)
+
+        // A balloon, it points at what was tapped. Line by line like the cuts between the slots.
+        {
+            POINT_WIDTH :: 16
+            POINT_HEIGHT :: 8
+            inset: f32 = RADIUS + POINT_WIDTH / 2 // off the round corners
+            tip_x := clamp(anchors[popup^], rect.x + inset, rect.x + rect.width - inset)
+            under := rect.y > row_y
+            line_height := 1 / pixel_fonts.scale
+            for offset: f32 = 0; offset < POINT_HEIGHT; offset += line_height {
+                half := POINT_WIDTH / 2 * (1 - offset / POINT_HEIGHT)
+                y := rect.y - offset - line_height if under else rect.y + rect.height + offset
+                draw_rect({tip_x - half, y}, {2 * half, line_height}, pill_dark)
+            }
+        }
+
+        // Each stepper reaches halfway into the gap beside it, the outer ones to the edges of the popup
+        x := rect.x + POPUP_PAD
+        switch popup^ {
+        case .Note:
+            note_reach := [2]f32{rect.x, x + POPUP_NOTE_WIDTH + POPUP_GAP / 2}
+            note_rect := Rect{x, rect.y, POPUP_NOTE_WIDTH, rect.height}
+            if step := gui_spin(note_rect, note_reach, names[shown %% 12], ICON_CARET_DOWN, ICON_CARET_UP, large = true);
+               step != 0 {
+                notes[row] = step_note(index, step, config.transpose)
+                changed = true
+            }
+            x += POPUP_NOTE_WIDTH + POPUP_GAP
+
+            octave_reach := [2]f32{x - POPUP_GAP / 2, rect.x + rect.width}
+            octave_rect := Rect{x, rect.y, POPUP_OCTAVE_WIDTH, rect.height}
+            octave := fmt.ctprintf("%d", shown / 12)
+            if step := gui_spin(octave_rect, octave_reach, octave, ICON_CARET_DOWN, ICON_CARET_UP, large = true); step != 0 {
+                notes[row] = step_octave(index, step)
+                changed = true
+            }
+        case .Cents:
+            cents_rect := Rect{x, rect.y, POPUP_CENTS_WIDTH, rect.height}
+            reach := [2]f32{rect.x, rect.x + rect.width}
+            if step := gui_spin(cents_rect, reach, cents_text(cents[row]), ICON_MINUS, ICON_PLUS, large = true); step != 0 {
+                cents[row] = step_cents(cents[row], step)
+                changed = true
+            }
+        case .None:
+        }
     }
 
     return
 }
 
-note_offset_selected := -1 // the row on the sheet showing its controls, -1 for none
+// What the popup on the sheet steps in the selected row, only with a finger
+NoteOffsetPopup :: enum {
+    None,
+    Note, // and its octave
+    Cents,
+}
+
+note_offset_selected := -1 // the row selected on the sheet, -1 for none
+note_offset_popup: NoteOffsetPopup
