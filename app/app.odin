@@ -775,6 +775,7 @@ run_app :: proc(config: ^Config) {
             if close {
                 offsets_open = false
                 offsets_drag = {}
+                note_offset_selected = -1
             }
         }
 

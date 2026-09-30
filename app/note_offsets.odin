@@ -27,9 +27,9 @@ import "../core"
 //
 // On the main screen: an LED left of the settings that's lit while they're on, with the slot, tapping it
 // goes through the slots in use and off, the ± that opens the sheet, and the offset of the note being tuned
-// under its letter. The sheet covers the window: the slots, and the rows of the selected slot, added and
-// removed, each a note, its octave and the cents. The rows are kept as they are, in their order and at 0 cents too, see
-// Config.note_offset_notes.
+// under its letter. The sheet covers the window: the slots, and the rows of the selected slot, each a note,
+// its octave and the cents. Tapping a row shows its controls, and the button under the rows removes it.
+// The rows are kept as they are, in their order and at 0 cents too, see Config.note_offset_notes.
 
 NOTE_OFFSET_SLOTS :: 3
 NOTE_OFFSET_STEP_CENTS :: 0.5
@@ -143,9 +143,10 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
             draw_centered_label(label, tab, text_color_white if i == selected else text_color_light)
         }
 
+        // Slimmer than the other pills, the touch area is still as tall as a row
         for _, i in labels {
-            tab := Rect{rect.x + f32(i) * tab_width, rect.y, tab_width, rect.height}
-            if i != selected && gui_button(touch_area(tab)) do return i, true
+            touch := Rect{rect.x + f32(i) * tab_width, rect.y + (rect.height - SETTINGS_ROW_HEIGHT) / 2, tab_width, SETTINGS_ROW_HEIGHT}
+            if i != selected && gui_button(touch) do return i, true
         }
 
         return selected, false
@@ -169,8 +170,8 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
 
     // How far the note is off pitch along a line, flat to the left of the middle and sharp to the right,
     // the whole half is NOTE_OFFSET_MAX_CENTS. Like the input level: the rounded line again in the light
-    // colour, cut off flat where the bar ends. The sheet shows through in the middle, on pitch.
-    draw_offset_bar :: proc(line: Rect, offset: f32) {
+    // colour, cut off flat where the bar ends. The background shows through in the middle, on pitch.
+    draw_offset_bar :: proc(line: Rect, offset: f32, background: Color) {
         SPLIT :: 2
         radius := line.height / 2
         middle := line.x + line.width / 2
@@ -182,7 +183,7 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
         draw_rounded_rect(line, radius, hex(0x82E2FFFF))
         end_scissor()
 
-        draw_rect({middle - SPLIT / 2, line.y}, {SPLIT, line.height}, hex(sheet_bg_color))
+        draw_rect({middle - SPLIT / 2, line.y}, {SPLIT, line.height}, background)
     }
 
     draw_rect({l.sheet.x, l.sheet.y}, {l.sheet.width, l.sheet.height}, hex(sheet_bg_color))
@@ -198,15 +199,12 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
     // The slots, the selected one is tuned to while the offsets are on and its rows are below. They're
     // switched on and off on the main screen, see gui_note_offsets_indicator.
     {
-        TAB_WIDTH :: 68
-        rect := Rect {
-            l.rows.x,
-            top + SETTINGS_CONTROL_MARGIN,
-            NOTE_OFFSET_SLOTS * TAB_WIDTH,
-            l.row_height - 2 * SETTINGS_CONTROL_MARGIN,
-        }
+        TAB_WIDTH :: 60
+        TAB_HEIGHT :: 26 // as tall as the small buttons
+        rect := Rect{l.rows.x, top + (l.row_height - TAB_HEIGHT) / 2, NOTE_OFFSET_SLOTS * TAB_WIDTH, TAB_HEIGHT}
         if i, ok := gui_tabs(rect, []cstring{"Slot 1", "Slot 2", "Slot 3"}, note_offset_slot(config)); ok {
             config.note_offset_slot = i
+            note_offset_selected = -1
             changed = true
         }
     }
@@ -218,21 +216,26 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
     notes := &config.note_offset_notes[slot]
     cents := &config.note_offset_cents[slot]
 
-    // A row an offset: the note and its octave, the bar, the cents, and the trash that removes it
+    // A row an offset: the note and its octave, the bar, the cents. Tapped it's lighter and they're steppers,
+    // one row at a time, the rows stay where they are.
     NAMES :: [12]cstring{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
     GAP :: 8
     BAR_GAP :: 12 // either side of the bar
     NOTE_WIDTH :: 74
     OCTAVE_WIDTH :: 58
     CENTS_WIDTH :: 96
-    TRASH_WIDTH :: 24
     BAR_HEIGHT :: 4
+    SELECTED_INSET :: 8 // the selected row's background past the rows at the sides
     // From C0 as it's shown, the octave changes at C. Offsets are kept by the sounding note, a transposing
     // instrument reads the written one.
     FROM_C0 :: 57 + core.LOWEST_NOTE
 
+    selected_color := hex(0x4D4E58FF)
+    selected := &note_offset_selected
+    if selected^ >= count^ do selected^ = -1
+    rows_rect := Rect{l.rows.x, top, l.width, f32(count^) * l.row_height}
+
     names := NAMES
-    removed := -1
     for row in 0 ..< count^ {
         index := clamp(notes[row], 0, core.NOTE_COUNT - 1)
         y := top + f32(row) * l.row_height
@@ -246,6 +249,25 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
         color := text_color_muted if shadowed else text_color_white
 
         shown := index + FROM_C0 + config.transpose
+        cents_rect := Rect{right - CENTS_WIDTH, y, CENTS_WIDTH, height}
+        bar_x := l.rows.x + NOTE_WIDTH + GAP + OCTAVE_WIDTH + BAR_GAP
+        bar := Rect{bar_x, y + (height - BAR_HEIGHT) / 2, cents_rect.x - BAR_GAP - bar_x, BAR_HEIGHT}
+        // No sign on a note that's tuned as usual
+        label := fmt.ctprintf("%+.1f¢", cents[row]) if cents[row] != 0 else "0¢"
+
+        if row != selected^ {
+            // The note and octave together, over where their steppers are
+            note_rect := Rect{l.rows.x, y, NOTE_WIDTH + GAP + OCTAVE_WIDTH, height}
+            draw_centered_label(fmt.ctprintf("%s%d", names[shown %% 12], shown / 12), note_rect, color)
+            draw_offset_bar(bar, cents[row], hex(sheet_bg_color))
+            draw_centered_label(label, cents_rect, color)
+            if gui_button({l.rows.x, y, l.width, height}) do selected^ = row
+            continue
+        }
+
+        background := Rect{l.rows.x - SELECTED_INSET, y, l.width + 2 * SELECTED_INSET, height}
+        draw_rounded_rect(background, 8, selected_color)
+
         x := l.rows.x
         if step := gui_spin({x, y, NOTE_WIDTH, height}, names[shown %% 12], color, ICON_CARET_DOWN, ICON_CARET_UP);
            step != 0 {
@@ -269,37 +291,39 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
                 changed = true
             }
         }
-        x += OCTAVE_WIDTH + BAR_GAP
 
-        trash := Rect{right - TRASH_WIDTH, y, TRASH_WIDTH, height}
-        cents_rect := Rect{trash.x - GAP - CENTS_WIDTH, y, CENTS_WIDTH, height}
-        draw_offset_bar({x, y + (height - BAR_HEIGHT) / 2, cents_rect.x - BAR_GAP - x, BAR_HEIGHT}, cents[row])
-
-        // No sign on a note that's tuned as usual
-        label := fmt.ctprintf("%+.1f¢", cents[row]) if cents[row] != 0 else "0¢"
+        draw_offset_bar(bar, cents[row], selected_color)
         if step := gui_spin(cents_rect, label, color, ICON_MINUS, ICON_PLUS); step != 0 {
             cents[row] = clamp(cents[row] + f32(step) * NOTE_OFFSET_STEP_CENTS, -NOTE_OFFSET_MAX_CENTS, NOTE_OFFSET_MAX_CENTS)
             changed = true
         }
 
-        draw_icon(ICON_TRASH, {trash.x + TRASH_WIDTH - ICON_SIZE, y + (height - ICON_SIZE) / 2}, icon_color)
-        if gui_button(trash) do removed = row
+        // Tapping it again between the steppers puts the controls away
+        if gui_button({bar.x - BAR_GAP, y, bar.width + 2 * BAR_GAP, height}) do selected^ = -1
     }
 
-    if removed >= 0 {
-        for row in removed ..< count^ - 1 {
-            notes[row] = notes[row + 1]
-            cents[row] = cents[row + 1]
-        }
-        count^ -= 1
-        changed = true
-    }
-
-    // Under the rows: a new one on the left, on the note the tuner is on or the closest one above it that
-    // has no row. Opposite it the button that empties the slot.
+    // Under the rows, far enough from them that a tap on the last row's + doesn't land here: a new one on
+    // the left, on the note the tuner is on or the closest one above it that has no row. Opposite it the
+    // button that removes the selected row.
+    buttons_strip: Rect
     {
         HEIGHT :: 28
-        y := top + f32(count^) * l.row_height + GAP
+        TOP_GAP :: 20
+
+        y := top + f32(count^) * l.row_height + TOP_GAP
+        middle := y + HEIGHT / 2
+        buttons_strip = {l.rows.x, middle - SETTINGS_ROW_HEIGHT / 2, l.width, SETTINGS_ROW_HEIGHT}
+
+        if gui_small_button(right, middle, "REMOVE", selected^ >= 0) {
+            for row in selected^ ..< count^ - 1 {
+                notes[row] = notes[row + 1]
+                cents[row] = cents[row + 1]
+            }
+            count^ -= 1
+            selected^ = -1
+            changed = true
+        }
+
         if gui_icon_button({l.rows.x, y}, HEIGHT, ICON_PLUS, "Add", count^ < MAX_NOTE_OFFSETS) {
             // Middle C in an empty slot when the tuner has no note, otherwise after the last row
             start := 39
@@ -321,15 +345,19 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
             }
             notes[count^] = added
             cents[count^] = 0
+            // Selected, it's set next
+            selected^ = count^
             count^ += 1
-            changed = true
-        }
-
-        if gui_small_button(right, y + HEIGHT / 2, "CLEAR SLOT", count^ > 0) {
-            count^ = 0
             changed = true
         }
     }
 
+    // A tap on the sheet away from the rows and the buttons under them puts the controls away
+    if gui_button(l.sheet) && !point_in_rect(mouse_position(), rows_rect) && !point_in_rect(mouse_position(), buttons_strip) {
+        selected^ = -1
+    }
+
     return
 }
+
+note_offset_selected := -1 // the row on the sheet showing its controls, -1 for none
