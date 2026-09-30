@@ -165,9 +165,10 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
 
         button_width: f32 = 44 if large else 22
         icon_size: f32 = ICON_LARGE_SIZE if large else ICON_SIZE
+        icon_font := pixel_fonts.icon_large_bold if large else pixel_fonts.icon
         icon_y := rect.y + (rect.height - icon_size) / 2
-        draw_icon(down_icon, {rect.x + (button_width - icon_size) / 2, icon_y}, icon_color, large)
-        draw_icon(up_icon, {rect.x + rect.width - (button_width + icon_size) / 2, icon_y}, icon_color, large)
+        draw_label(icon_font, down_icon, {rect.x + (button_width - icon_size) / 2, icon_y}, icon_color)
+        draw_label(icon_font, up_icon, {rect.x + rect.width - (button_width + icon_size) / 2, icon_y}, icon_color)
 
         middle := rect.x + rect.width / 2
         if gui_button_repeat({reach[0], rect.y, middle - reach[0], rect.height}) do step = -1
@@ -291,8 +292,9 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
     if popup^ != .None {
         rect := popup_rect(popup_widths[popup^], anchors[popup^], rows_top + f32(selected^) * row_height, row_height, top, l.sheet)
         if point_in_rect(mouse_position(), rect) {
+            if mouse_pressed() do gui_press_taken = true
             gui_disabled = true
-        } else if gui_button(l.sheet) {
+        } else if gui_background_pressed(l.sheet) {
             popup^ = .None
         }
     }
@@ -300,7 +302,7 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
     // The slots, the selected one is tuned to while the offsets are on and its rows are below. They're
     // switched on and off on the main screen, see gui_note_offsets_indicator.
     {
-        TAB_WIDTH :: 60
+        TAB_WIDTH :: 96
         TAB_HEIGHT :: 26 // as tall as the small buttons
         rect := Rect{l.rows.x, top + (l.row_height - TAB_HEIGHT) / 2, NOTE_OFFSET_SLOTS * TAB_WIDTH, TAB_HEIGHT}
         if i, ok := gui_tabs(rect, []cstring{"Slot 1", "Slot 2", "Slot 3"}, note_offset_slot(config)); ok {
@@ -430,7 +432,7 @@ gui_note_offsets :: proc(l: SettingsLayout, config: ^Config, target: int) -> (cl
     }
 
     // A tap on the sheet away from the rows and the buttons under them unselects the row
-    if gui_button(l.sheet) && !point_in_rect(mouse_position(), rows_rect) && !point_in_rect(mouse_position(), buttons_strip) {
+    if gui_background_pressed(l.sheet) && !point_in_rect(mouse_position(), rows_rect) && !point_in_rect(mouse_position(), buttons_strip) {
         selected^ = -1
         popup^ = .None
     }

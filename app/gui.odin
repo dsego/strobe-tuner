@@ -31,6 +31,9 @@ exclusive_control_mode := false
 // The controls being drawn don't take input, e.g. the main screen under the settings sheet
 gui_disabled := false
 
+// A control took this frame's press, one that nothing took drags a sheet down
+gui_press_taken := false
+
 text_color_dark := hex(0x15141BFF)
 text_color_light := hex(0xBDBDBDFF)
 text_color_white := hex(0xFBFBFBFF) // the note and readout while there's a pitch, titles
@@ -375,13 +378,14 @@ gui_response_toggle :: proc(pos: [2]f32, speed: f32) -> (f32, bool) {
 }
 
 gui_button :: proc(bounds: Rect) -> bool {
-    mouse_point := mouse_position()
-    if point_in_rect(mouse_point, bounds) && !exclusive_control_mode && !gui_disabled {
-        if mouse_pressed() {
-            return true
-        }
-    }
-    return false
+    if !gui_background_pressed(bounds) do return false
+    gui_press_taken = true
+    return true
+}
+
+// A press on the background, it doesn't take the press like a button so it can still drag the sheet
+gui_background_pressed :: proc(bounds: Rect) -> bool {
+    return mouse_pressed() && point_in_rect(mouse_position(), bounds) && !exclusive_control_mode && !gui_disabled
 }
 
 // Like gui_button, and held down it goes on firing, after a pause and then steadily, like a key repeat.
@@ -457,7 +461,8 @@ gui_dropdown :: proc(
 
     if mouse_pressed() {
         if edit_mode {
-            // clicked outside
+            // An option or clicked outside, either way the menu's
+            gui_press_taken = true
             if !point_in_rect(mouse_point, menu_bounds) {
                 edit_mode = false
                 exclusive_control_mode = false
@@ -466,6 +471,7 @@ gui_dropdown :: proc(
             if !exclusive_control_mode && !gui_disabled && point_in_rect(mouse_point, btn_bounds) {
                 edit_mode = true
                 exclusive_control_mode = true
+                gui_press_taken = true
             }
         }
     }

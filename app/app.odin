@@ -308,6 +308,7 @@ run_app :: proc(config: ^Config) {
         // Draw the GUI controls
         gfx_begin_frame(hex(strobe_bg_color))
         defer gfx_end_frame()
+        gui_press_taken = false
 
         // Choose new audio input, or reopen the same one
         if restart_audio || audio_devices[audio_device_dropdown_index].id != audio_capture.active_device {
@@ -632,8 +633,8 @@ run_app :: proc(config: ^Config) {
                 layout.strobe,
             )
 
-            // Not the tap that opened it, and not while it slides away
-            gui_disabled = !(settings_was_open && settings_open)
+            // Not the tap that opened it, not while it slides away or follows the finger
+            gui_disabled = !(settings_was_open && settings_open) || settings_drag.active
 
             swiped := drag_sheet(&settings_drag, &settings_slide, settings_layout)
             if settings_drag.active {
@@ -658,6 +659,7 @@ run_app :: proc(config: ^Config) {
                 &audio_device_dropdown_active,
             )
             if changed do config_changed = true
+            grab_sheet(&settings_drag, settings_layout)
 
             // Tapping the strobe above the sheet closes it too
             above := settings_layout.sheet
@@ -682,8 +684,8 @@ run_app :: proc(config: ^Config) {
                 layout.strobe,
             )
 
-            // Not the tap that opened it, and not while it slides away
-            gui_disabled = !(track_was_open && track_open)
+            // Not the tap that opened it, not while it slides away or follows the finger
+            gui_disabled = !(track_was_open && track_open) || track_drag.active
 
             swiped := drag_sheet(&track_drag, &track_slide, sheet_layout)
             if track_drag.active {
@@ -706,6 +708,7 @@ run_app :: proc(config: ^Config) {
                 phase_comparator.bands[selected_track],
             )
             if changed do config_changed = true
+            grab_sheet(&track_drag, sheet_layout)
 
             // Tapping another track above the sheet switches to it, anywhere else closes the sheet
             above := sheet_layout.sheet
@@ -741,8 +744,8 @@ run_app :: proc(config: ^Config) {
                 gfx_window_size().y,
             )
 
-            // Not the tap that opened it, and not while it slides away
-            gui_disabled = !(offsets_was_open && offsets_open)
+            // Not the tap that opened it, not while it slides away or follows the finger
+            gui_disabled = !(offsets_was_open && offsets_open) || offsets_drag.active
 
             swiped := drag_sheet(&offsets_drag, &offsets_slide, sheet_layout)
             if offsets_drag.active {
@@ -765,6 +768,7 @@ run_app :: proc(config: ^Config) {
             }
             close, changed := gui_note_offsets(sheet_layout, config, target)
             if changed do config_changed = true
+            grab_sheet(&offsets_drag, sheet_layout)
 
             // Tapping the strobe above the sheet closes it too
             above := sheet_layout.sheet
@@ -809,7 +813,7 @@ slide_sheet :: proc(slide: f32, open: bool) -> f32 {
     return slide
 }
 
-// A sheet follows the finger down from its title strip
+// A sheet follows the finger down from anywhere that isn't a control
 SheetDrag :: struct {
     active:   bool,
     grab:     f32, // from the top of the sheet to the finger
@@ -821,25 +825,21 @@ SheetDrag :: struct {
 SHEET_DISMISS_SLIDE :: 0.7
 SHEET_DISMISS_VELOCITY :: 600
 
+// After the sheet's controls, a press on the sheet that none of them took starts dragging it
+grab_sheet :: proc(drag: ^SheetDrag, l: SettingsLayout) {
+    mouse := mouse_position()
+    if gui_press_taken || drag.active || !gui_background_pressed(l.sheet) do return
+    drag^ = {
+        active = true,
+        grab   = mouse.y - l.sheet.y,
+        last_y = mouse.y,
+    }
+}
+
 // Moves the sheet while it's dragged, returns true when it's let go to close
 drag_sheet :: proc(drag: ^SheetDrag, slide: ^f32, l: SettingsLayout) -> (close: bool) {
+    if !drag.active do return false
     mouse := mouse_position()
-    if !drag.active {
-        // The ✕ closes on the press, the rows below are the controls
-        strip := Rect{l.sheet.x, l.sheet.y, l.sheet.width, l.rows.y - l.sheet.y}
-        if mouse_pressed() &&
-           point_in_rect(mouse, strip) &&
-           !point_in_rect(mouse, l.close) &&
-           !exclusive_control_mode &&
-           !gui_disabled {
-            drag^ = {
-                active = true,
-                grab   = mouse.y - l.sheet.y,
-                last_y = mouse.y,
-            }
-        }
-        return false
-    }
 
     if !mouse_down() {
         drag.active = false

@@ -38,6 +38,10 @@ ICON_X: cstring : ""
 
 ICON_CODEPOINTS :: "\ue432\ue13c\ue4a8\ue3d8"
 
+// Phosphor Bold, cut down the same way from Phosphor-Bold.ttf to Phosphor-Bold-Icons.ttf, for the large
+// steppers only: beside their 32pt value the regular stroke is too thin.
+ICON_BOLD_CODEPOINTS :: ""
+
 // All the text is rasterized at exactly the size it's drawn at on this screen, a scaled atlas is soft or
 // jagged. Point sizes, whole pixels at 1x, 2x and 3x.
 LABEL_SIZE :: 14 // the controls and most of the text
@@ -81,7 +85,8 @@ PixelFonts :: struct {
     title:           PixelFont,
     icon:            PixelFont,
     icon_large:      PixelFont,
-    note_name:       PixelFont, // the note without the ruler
+    icon_large_bold: PixelFont, // the large steppers
+    note_name:      PixelFont, // the note without the ruler
     note_octave:     PixelFont,
     note_name_sharp: PixelFont,
     note:            PixelFont, // the ruler's target note
@@ -108,6 +113,7 @@ update_pixel_fonts :: proc(ruler_scale: f32) {
     inter_bold := #load("../assets/fonts/inter/Inter-Bold.ttf")
     noto_sans_mono := #load("../assets/fonts/noto/NotoSansMono-Medium.ttf")
     phosphor := #load("../assets/fonts/phosphor/Phosphor-Icons.ttf")
+    phosphor_bold := #load("../assets/fonts/phosphor/Phosphor-Bold-Icons.ttf")
     load :: proc(ttf: []u8, points, scale: f32, codepoints: string) -> PixelFont {
         pixels := math.round(points * scale)
         return {gfx_load_font(ttf, i32(pixels), codepoints), pixels / scale}
@@ -124,6 +130,7 @@ update_pixel_fonts :: proc(ruler_scale: f32) {
         title           = load(inter_bold, TITLE_SIZE, scale, FONT_CODEPOINTS),
         icon            = load(phosphor, ICON_SIZE, scale, ICON_CODEPOINTS),
         icon_large      = load(phosphor, ICON_LARGE_SIZE, scale, ICON_CODEPOINTS),
+        icon_large_bold = load(phosphor_bold, ICON_LARGE_SIZE, scale, ICON_BOLD_CODEPOINTS),
         note_name       = load(inter_medium, NOTE_NAME_SIZE, scale, "ABCDEFG"),
         note_octave     = load(inter_medium, NOTE_OCTAVE_SIZE, scale, "0123456789"),
         note_name_sharp = load(noto_sans_mono, NOTE_SHARP_SIZE, scale, "♯"),
@@ -149,6 +156,7 @@ unload_pixel_fonts :: proc() {
     gfx_unload_font(pixel_fonts.title.font)
     gfx_unload_font(pixel_fonts.icon.font)
     gfx_unload_font(pixel_fonts.icon_large.font)
+    gfx_unload_font(pixel_fonts.icon_large_bold.font)
     gfx_unload_font(pixel_fonts.note_name.font)
     gfx_unload_font(pixel_fonts.note_octave.font)
     gfx_unload_font(pixel_fonts.note_name_sharp.font)
