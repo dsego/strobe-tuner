@@ -22,8 +22,9 @@ import "core:math"
 //   scope   - its screen
 //   ribbon - its screen from above, stripes as bright as the wave is high
 //
-// Two periods of the strobe's frequency across. An in tune note stands still, a flat one drifts to the
-// left and a sharp one to the right, like the strobe tracks. Mirrored for that, time runs right to left.
+// Two periods of the strobe's frequency across. An in tune note stands still, a detuned one drifts. The
+// scope runs left to right like an oscilloscope, a sawtooth leans the way it's generated and a sharp note
+// drifts left. The ribbon is mirrored to move like the strobe tracks, flat to the left and sharp to the right.
 // Tapped, the scope draws the wave against the strobe's frequency instead, a Lissajous figure that
 // stands still in tune and rolls open and shut when it isn't.
 
@@ -60,7 +61,7 @@ SCOPE_BLOOM_PASSES :: 3
 // strobe display's render targets. The ribbon is lit all over and a glow adds little, it has none.
 // snr_db is of the whole signal, the beam fades in with it like the strobe's stripes.
 draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: Rect, config: ^Config, snr_db: f32) {
-    colors := get_strobe_colors(config)
+    colors := strobe_colors(config)
     beam_color, dark_color := hex(colors[0]), hex(colors[1])
 
     fade := STROBE_FADE_SNR_DB
@@ -133,7 +134,7 @@ draw_scope_screen :: proc(rect: Rect, scope: ^core.Scope, beam_color, grid_color
         intensity := min(EXPOSURE * dwell / full, 1)
         if intensity < DARK do continue
 
-        column := width - 1 - i % scope.columns
+        column := i % scope.columns
         row := i / scope.columns
         center := [2]f32{rect.x + (f32(column) + 0.5) * cell_size.x, rect.y + (f32(row) + 0.5) * cell_size.y}
         dot := Rect{center.x - SCOPE_BEAM_RADIUS, center.y - SCOPE_BEAM_RADIUS, 2 * SCOPE_BEAM_RADIUS, 2 * SCOPE_BEAM_RADIUS}

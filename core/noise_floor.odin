@@ -61,14 +61,14 @@ reset_noise_floor :: proc(self: ^NoiseFloor) {
 // starts out with. is_tonal is a clear pitch, the warmup doesn't learn from it.
 update_noise_floor :: proc(
     self: ^NoiseFloor,
-    level: f32,
+    measured_level: f32,
     dt: f32,
     warming_up := true,
     is_tonal := false,
 ) -> (
     snr_db: f32,
 ) {
-    level := max(level, MIN_NOISE_FLOOR)
+    level := max(measured_level, MIN_NOISE_FLOOR)
 
     if self.warmup > 0 && is_tonal && self.tonal_time < NOISE_FLOOR_WARMUP_MAX_TONAL_S {
         self.tonal_time += dt

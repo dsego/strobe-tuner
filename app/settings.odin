@@ -39,7 +39,7 @@ settings_separator_color := hex(0x35363EFF)
 
 // Returns close when ✕ is tapped, changed when the strobe or the note detection needs updating
 gui_settings :: proc(
-    l: SettingsLayout,
+    sheet_layout: SheetLayout,
     config: ^Config,
     audio_devices: []GuiOption,
     audio_device_index: ^int,
@@ -48,19 +48,21 @@ gui_settings :: proc(
     close: bool,
     changed: bool,
 ) {
-    // Over the main screen
-    draw_rect({l.sheet.x, l.sheet.y}, {l.sheet.width, l.sheet.height}, hex(sheet_bg_color))
+    sheet, close_area := sheet_layout.sheet, sheet_layout.close
 
-    draw_label(pixel_fonts.title, "Settings", l.title, text_color_white, 1)
+    // Over the main screen
+    draw_rect({sheet.x, sheet.y}, {sheet.width, sheet.height}, hex(sheet_bg_color))
+
+    draw_label(pixel_fonts.title, "Settings", sheet_layout.title, text_color_white, 1)
 
     // 16pt icon in the middle of a larger touch area
-    draw_icon(ICON_X, {l.close.x + (l.close.width - 16) / 2, l.close.y + (l.close.height - 16) / 2}, icon_color)
-    if gui_button(l.close) do close = true
+    draw_icon(ICON_X, {close_area.x + (close_area.width - 16) / 2, close_area.y + (close_area.height - 16) / 2}, icon_color)
+    if gui_button(close_area) do close = true
 
     row := 0
 
     {
-        rect := settings_row(l, row, "Concert A", 176)
+        rect := settings_row(sheet_layout, row, "Concert A", 176)
         row += 1
         pitch_standard, ok := gui_stepper(
             rect,
@@ -68,7 +70,7 @@ gui_settings :: proc(
             1,
             PITCH_STANDARD_MIN,
             PITCH_STANDARD_MAX,
-            get_config_defaults().pitch_standard,
+            config_defaults.pitch_standard,
             "%.0f Hz",
         )
         if ok {
@@ -80,7 +82,7 @@ gui_settings :: proc(
     {
         // Five of them, narrower than the other rows' to fit a phone
         labels := []cstring{"Tracks", "Wheel", "Trace", "Scope", "Ribbon"}
-        rect := settings_row(l, row, "Display", f32(len(labels)) * 54)
+        rect := settings_row(sheet_layout, row, "Display", f32(len(labels)) * 54)
         row += 1
         if i, ok := gui_segmented(rect, labels, int(config.strobe_display_type)); ok {
             config.strobe_display_type = StrobeDisplayType(i)
@@ -92,7 +94,7 @@ gui_settings :: proc(
 
     {
         // Harmonic shows a track per partial, fine the same frequency at different sensitivities
-        rect := settings_row(l, row, "Strobe mode", 2 * 80)
+        rect := settings_row(sheet_layout, row, "Strobe mode", 2 * 80)
         row += 1
         labels := []cstring{"Harmonic", "Fine"}
         if i, ok := gui_segmented(rect, labels, int(config.strobe_mode), strobe); ok {
@@ -103,7 +105,7 @@ gui_settings :: proc(
 
     {
         labels := []cstring{"Red", "Mint", "Amber", "Mono"}
-        rect := settings_row(l, row, "Colors", f32(len(labels)) * SEGMENT_WIDTH)
+        rect := settings_row(sheet_layout, row, "Colors", f32(len(labels)) * SEGMENT_WIDTH)
         row += 1
         if i, ok := gui_segmented(rect, labels, int(config.strobe_colorway)); ok {
             config.strobe_colorway = StrobeColorway(i)
@@ -113,7 +115,7 @@ gui_settings :: proc(
 
     {
         // Lights the stripes like a lamp behind the disc, in the hue of the colors above
-        rect := settings_row(l, row, "Retro glow", 2 * SEGMENT_WIDTH)
+        rect := settings_row(sheet_layout, row, "Retro glow", 2 * SEGMENT_WIDTH)
         row += 1
         labels := []cstring{"Off", "On"}
         if i, ok := gui_segmented(rect, labels, int(config.strobe_glow)); ok {
@@ -124,8 +126,8 @@ gui_settings :: proc(
 
     {
         // Shown on the curved tracks in harmonic mode
-        shown := config.strobe_display_type == .CURVED_TRACKS && config.strobe_mode == .HARMONIC_MODE
-        rect := settings_row(l, row, "Partial labels", 4 * SEGMENT_WIDTH)
+        shown := config.strobe_display_type == .CURVED_TRACKS && config.strobe_mode == .HARMONIC
+        rect := settings_row(sheet_layout, row, "Partial labels", 4 * SEGMENT_WIDTH)
         row += 1
         labels := []cstring{"Off", "1×", "Hz", "Note"}
         if i, ok := gui_segmented(rect, labels, int(config.partial_labels), shown); ok {
@@ -136,26 +138,26 @@ gui_settings :: proc(
     // iOS routes the input itself: built-in mic, headset or an audio interface
     when !IOS {
         // Last, the menu opens upwards over the rows above
-        rect := settings_row(l, row, "Input", 240)
+        input_rect := settings_row(sheet_layout, row, "Input", 240)
         row += 1
 
         // TODO: add refresh button to show newly connected devices
         audio_device_menu_open^ = gui_dropdown(
-            {rect.x, rect.y},
-            rect.width,
+            {input_rect.x, input_rect.y},
+            input_rect.width,
             audio_devices,
             audio_device_index,
             audio_device_menu_open^,
             left_pad = 36,
-            height = rect.height,
+            height = input_rect.height,
         )
 
-        draw_icon(ICON_MICROPHONE, {rect.x + 12, rect.y + (rect.height - 16) / 2}, icon_color)
+        draw_icon(ICON_MICROPHONE, {input_rect.x + 12, input_rect.y + (input_rect.height - 16) / 2}, icon_color)
     }
 
     {
         // Everything back to the defaults like the R key, including what's only in the config file
-        rect := settings_row(l, row, "Reset to defaults", 0)
+        rect := settings_row(sheet_layout, row, "Reset to defaults", 0)
         row += 1
         if gui_small_button(rect.x, rect.y + rect.height / 2, "RESET") {
             reset_config(config)
@@ -179,7 +181,7 @@ TRACK_OFFSET_MAX_CENTS :: 50
 TRACK_OFFSET_STEP_CENTS :: 0.5
 
 gui_track_settings :: proc(
-    l: SettingsLayout,
+    sheet_layout: SheetLayout,
     config: ^Config,
     track: int,
     band: core.PhaseBand,
@@ -187,11 +189,12 @@ gui_track_settings :: proc(
     close: bool,
     changed: bool,
 ) {
-    draw_rect({l.sheet.x, l.sheet.y}, {l.sheet.width, l.sheet.height}, hex(sheet_bg_color))
+    sheet, close_area, title_position := sheet_layout.sheet, sheet_layout.close, sheet_layout.title
+    draw_rect({sheet.x, sheet.y}, {sheet.width, sheet.height}, hex(sheet_bg_color))
 
     // The title, then the note the track follows and its target
     title := fmt.ctprintf("Track %d", track + 1)
-    draw_label(pixel_fonts.title, title, l.title, text_color_white, 1)
+    draw_label(pixel_fonts.title, title, title_position, text_color_white, 1)
     details := fmt.ctprintf(
         "%v%v%v · %.1f Hz%v",
         band.note.name,
@@ -201,11 +204,11 @@ gui_track_settings :: proc(
         "" if band.in_range else " · too high to show",
     )
     title_size := measure_label(pixel_fonts.title, title, 1)
-    details_y := l.title.y + (title_size.y - LABEL_SIZE) / 2
-    draw_label(pixel_fonts.label, details, {l.title.x + title_size.x + 12, details_y}, text_color_light, 1)
+    details_y := title_position.y + (title_size.y - LABEL_SIZE) / 2
+    draw_label(pixel_fonts.label, details, {title_position.x + title_size.x + 12, details_y}, text_color_light, 1)
 
-    draw_icon(ICON_X, {l.close.x + (l.close.width - 16) / 2, l.close.y + (l.close.height - 16) / 2}, icon_color)
-    if gui_button(l.close) do close = true
+    draw_icon(ICON_X, {close_area.x + (close_area.width - 16) / 2, close_area.y + (close_area.height - 16) / 2}, icon_color)
+    if gui_button(close_area) do close = true
 
     slot := track_slot(config, track)
     if slot < 0 do return
@@ -219,7 +222,7 @@ gui_track_settings :: proc(
     row := 0
 
     {
-        rect := settings_row(l, row, "Partial", 176)
+        rect := settings_row(sheet_layout, row, "Partial", 176)
         row += 1
         partial := config.strobe_intervals[slot]
         steps, reset := gui_stepper_buttons(rect, partial_text(partial), times = true)
@@ -236,7 +239,7 @@ gui_track_settings :: proc(
 
     {
         // The track stands still this far off the exact partial, eg a stretched octave
-        rect := settings_row(l, row, "Target offset", 176)
+        rect := settings_row(sheet_layout, row, "Target offset", 176)
         row += 1
         offset := config.strobe_offsets_cents[slot]
         // No sign on the exact partial
@@ -254,7 +257,7 @@ gui_track_settings :: proc(
         // On top of the strobe speed, a high partial spins faster than the rest. In percent, × is for partials.
         speeds := [?]f32{0.25, 0.5, 1, 2}
         labels := []cstring{"25%", "50%", "100%", "200%"}
-        rect := settings_row(l, row, "Speed", f32(len(labels)) * SEGMENT_WIDTH)
+        rect := settings_row(sheet_layout, row, "Speed", f32(len(labels)) * SEGMENT_WIDTH)
         row += 1
         selected := -1
         for speed, i in speeds {
@@ -267,7 +270,7 @@ gui_track_settings :: proc(
     }
 
     {
-        rect := settings_row(l, row, "Reset track", 0)
+        rect := settings_row(sheet_layout, row, "Reset track", 0)
         row += 1
         if gui_small_button(rect.x, rect.y + rect.height / 2, "RESET") {
             config.strobe_intervals[slot] = preset_partial
@@ -291,7 +294,7 @@ gui_track_settings :: proc(
         height: f32 = 28
         remove_width := icon_button_width("Remove")
         width := remove_width + GAP + icon_button_width("Add")
-        pos := [2]f32{l.rows.x + math.round((l.width - width) / 2), l.bottom - height}
+        pos := [2]f32{sheet_layout.rows.x + math.round((sheet_layout.width - width) / 2), sheet_layout.bottom - height}
         remove := gui_icon_button(pos, height, ICON_MINUS, "Remove", count > 1)
         pos.x += remove_width + GAP
         add := gui_icon_button(pos, height, ICON_PLUS, "Add", count < MAX_TRACKS && top + 1 < MAX_INTERVALS)
@@ -328,16 +331,16 @@ step_partial :: proc(partial: f32, steps: int) -> f32 {
     partial := partial
     for _ in 0 ..< abs(steps) {
         if steps > 0 {
-            for p in partials {
-                if p > partial {
-                    partial = p
+            for candidate in partials {
+                if candidate > partial {
+                    partial = candidate
                     break
                 }
             }
         } else {
-            #reverse for p in partials {
-                if p < partial {
-                    partial = p
+            #reverse for candidate in partials {
+                if candidate < partial {
+                    partial = candidate
                     break
                 }
             }
@@ -355,23 +358,24 @@ gui_settings_button :: proc(position: [2]f32) -> bool {
 
 
 // Label on the left, the control right aligned, returns where the control goes
-settings_row :: proc(l: SettingsLayout, index: int, label: cstring, control_width: f32) -> Rect {
-    y := l.rows.y + f32(index) * l.row_height
+settings_row :: proc(sheet_layout: SheetLayout, index: int, label: cstring, control_width: f32) -> Rect {
+    left, width, row_height := sheet_layout.rows.x, sheet_layout.width, sheet_layout.row_height
+    y := sheet_layout.rows.y + f32(index) * row_height
 
-    draw_label(pixel_fonts.label, label, {l.rows.x, y + (l.row_height - LABEL_SIZE) / 2}, text_color_light, 1)
-    draw_rect({l.rows.x, y + l.row_height - 1}, {l.width, 1}, settings_separator_color)
+    draw_label(pixel_fonts.label, label, {left, y + (row_height - LABEL_SIZE) / 2}, text_color_light, 1)
+    draw_rect({left, y + row_height - 1}, {width, 1}, settings_separator_color)
 
     return {
-        l.rows.x + l.width - control_width,
-        y + SETTINGS_CONTROL_MARGIN,
+        left + width - control_width,
+        y + SHEET_CONTROL_MARGIN,
         control_width,
-        l.row_height - 2 * SETTINGS_CONTROL_MARGIN,
+        row_height - 2 * SHEET_CONTROL_MARGIN,
     }
 }
 
 // The pills are slimmer than a finger, taps anywhere in the height of their row count
 touch_area :: proc(rect: Rect) -> Rect {
-    return {rect.x, rect.y - SETTINGS_CONTROL_MARGIN, rect.width, rect.height + 2 * SETTINGS_CONTROL_MARGIN}
+    return {rect.x, rect.y - SHEET_CONTROL_MARGIN, rect.width, rect.height + 2 * SHEET_CONTROL_MARGIN}
 }
 
 
@@ -385,7 +389,7 @@ gui_small_button :: proc(right, middle: f32, label: cstring, enabled := true) ->
     font := pixel_fonts.label_small
     width := math.round(measure_label(font, label, 1).x) + 2 * PADDING
     rect := Rect{right - width, middle - HEIGHT / 2, width, HEIGHT}
-    touch := Rect{rect.x, middle - SETTINGS_ROW_HEIGHT / 2, width, SETTINGS_ROW_HEIGHT}
+    touch := Rect{rect.x, middle - SHEET_ROW_HEIGHT / 2, width, SHEET_ROW_HEIGHT}
 
     draw_pill(rect, pill_gray if enabled && gui_button_held(touch) else pill_dark)
     label_color := text_color_white if enabled else text_color_disabled

@@ -57,53 +57,53 @@ RULER_GAP :: 32 // between the letter and the lock, the note's offset is halfway
 READOUT_NOTE_TOP :: NOTE_BASELINE - 40 // the 24pt values and the labels above them
 
 // Where the right arrow of the note ends, the readout keeps clear of it
-note_right :: proc(l: Layout) -> f32 {
-    return l.note.x + NOTE_WIDTH - NOTE_RIGHT_ARROW_INSET + NOTE_ARROW_SLOT
+note_right :: proc(layout: Layout) -> f32 {
+    return layout.note.x + NOTE_WIDTH - NOTE_RIGHT_ARROW_INSET + NOTE_ARROW_SLOT
 }
 
-compute_layout :: proc(window: [2]f32, safe: Rect, ruler: bool) -> (l: Layout) {
+compute_layout :: proc(window: [2]f32, safe: Rect, ruler: bool) -> (layout: Layout) {
     left := safe.x + PANEL_PADDING
     right := safe.x + safe.width - PANEL_PADDING
     bottom := safe.y + safe.height - PANEL_PADDING
 
     // The strobe takes about half of the safe area, its background runs up behind the notch
-    l.strobe_scale = clamp(0.5 * safe.height / STROBE_HEIGHT, 1, 1.4)
-    l.strobe_top = safe.y
-    l.strobe = {0, 0, window.x, safe.y + l.strobe_scale * STROBE_HEIGHT}
-    panel := l.strobe.y + l.strobe.height
+    layout.strobe_scale = clamp(0.5 * safe.height / STROBE_HEIGHT, 1, 1.4)
+    layout.strobe_top = safe.y
+    layout.strobe = {0, 0, window.x, safe.y + layout.strobe_scale * STROBE_HEIGHT}
+    panel := layout.strobe.y + layout.strobe.height
 
-    l.stats = {left + 131, panel + 80}
-    panel_layout(&l, left, right, bottom, ruler, RULER_SCALE)
+    layout.stats = {left + 131, panel + 80}
+    panel_layout(&layout, left, right, bottom, ruler, RULER_SCALE)
     return
 }
 
 // The response and the level meter in a row just under the strobe, the note with the readout above it
 // and the lock under it, and the transpose and the settings in the bottom corners
-panel_layout :: proc(l: ^Layout, left, right, bottom: f32, ruler: bool, ruler_scale: f32) {
-    panel := l.strobe.y + l.strobe.height
+panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, ruler: bool, ruler_scale: f32) {
+    panel := layout.strobe.y + layout.strobe.height
 
     // The response changes how fast the strobe spins, it sits just under it on the left, the level meter
     // opposite it on the right. The 4pt bar lines up with the LED.
-    l.response = {left, panel + 20}
-    l.level_meter = {right - LEVEL_METER_WIDTH, l.response.y - 2}
+    layout.response = {left, panel + 20}
+    layout.level_meter = {right - LEVEL_METER_WIDTH, layout.response.y - 2}
 
     // A row along the bottom like the one under the strobe
     corners := bottom - SETTINGS_ICON_SIZE / 2
-    l.transpose = {left, corners}
-    l.settings = {right - SETTINGS_ICON_SIZE, corners - SETTINGS_ICON_SIZE / 2}
+    layout.transpose = {left, corners}
+    layout.settings = {right - SETTINGS_ICON_SIZE, corners - SETTINGS_ICON_SIZE / 2}
     // The ± with its touch area next to the settings', the indicator an icon's width from it
-    l.note_offsets = l.settings - {2 * SETTINGS_ICON_SIZE, 0}
-    l.offsets_led = {l.note_offsets.x - SETTINGS_ICON_SIZE, corners}
+    layout.note_offsets = layout.settings - {2 * SETTINGS_ICON_SIZE, 0}
+    layout.offsets_led = {layout.note_offsets.x - SETTINGS_ICON_SIZE, corners}
 
     if ruler {
         // The readout in the top row, the response and the level meter centred on its values, the labels
         // sit above. The note with the lock under it centred between the readout values and the bottom row.
         // Offsets from the middle of the ruler.
-        l.ruler_scale = ruler_scale
-        readout_top := l.response.y - LABEL_SIZE / 2
+        layout.ruler_scale = ruler_scale
+        readout_top := layout.response.y - LABEL_SIZE / 2
         readout_bottom := readout_top + READOUT_VALUE_Y + BASELINE * ruler_scale * READOUT_SIZE
-        l.response.y = readout_bottom - CAP_HALF * ruler_scale * READOUT_SIZE
-        l.level_meter.y = l.response.y - 2
+        layout.response.y = readout_bottom - CAP_HALF * ruler_scale * READOUT_SIZE
+        layout.level_meter.y = layout.response.y - 2
         rows_bottom := corners - TRANSPOSE_LABEL_TOP
 
         note_top := -CAP_HALF * ruler_scale * RULER_NOTE_SIZE
@@ -112,77 +112,28 @@ panel_layout :: proc(l: ^Layout, left, right, bottom: f32, ruler: bool, ruler_sc
 
         center := (left + right) / 2
         height := ruler_scale * RULER_HEIGHT
-        l.ruler = {left, middle - height / 2, right - left, height}
-        l.measurements = {center, readout_top}
-        l.readout_align = .CENTER
-        l.lock = {center, middle + lock_y}
-        l.note_offset = l.lock - {0, (LOCK_BUTTON_HEIGHT + RULER_GAP) / 2}
+        layout.ruler = {left, middle - height / 2, right - left, height}
+        layout.measurements = {center, readout_top}
+        layout.readout_align = .CENTER
+        layout.lock = {center, middle + lock_y}
+        layout.note_offset = layout.lock - {0, (LOCK_BUTTON_HEIGHT + RULER_GAP) / 2}
         return
     }
 
     // The readout next to the note when there's room, otherwise under it, and the lock under both
-    l.ruler_scale = 1
+    layout.ruler_scale = 1
     // Below the response, the top of the note is the room above the letter
-    l.note = {left + NOTE_ARROW_SLOT, panel + 24}
-    lock_y := l.note.y + NOTE_HEIGHT + 24
-    if right - READOUT_WIDTH >= note_right(l^) + 12 {
-        l.measurements = {right, l.note.y + READOUT_NOTE_TOP}
+    layout.note = {left + NOTE_ARROW_SLOT, panel + 24}
+    lock_y := layout.note.y + NOTE_HEIGHT + 24
+    if right - READOUT_WIDTH >= note_right(layout^) + 12 {
+        layout.measurements = {right, layout.note.y + READOUT_NOTE_TOP}
     } else {
-        l.measurements = {right, l.note.y + NOTE_HEIGHT}
-        lock_y = l.measurements.y + READOUT_HEIGHT + 24
+        layout.measurements = {right, layout.note.y + NOTE_HEIGHT}
+        lock_y = layout.measurements.y + READOUT_HEIGHT + 24
     }
     // Centred on the note without its arrows
-    l.lock = {l.note.x + (NOTE_WIDTH - NOTE_RIGHT_ARROW_INSET) / 2, lock_y}
-    l.note_offset = l.lock - {0, (LOCK_BUTTON_HEIGHT + RULER_GAP) / 2}
-}
-
-// The settings, a sheet up from the bottom as tall as its rows, the strobe above it stays in sight to
-// show the changes.
-SettingsLayout :: struct {
-    sheet:      Rect, // runs to the bottom of the window
-    title:      [2]f32,
-    close:      Rect, // touch area of the ✕
-    rows:       [2]f32, // top left of the first row
-    width:      f32,
-    row_height: f32, // the controls are SETTINGS_CONTROL_MARGIN shorter at the top and bottom
-    bottom:     f32, // as far from the home indicator as the rows are from the sides, for what sits under the rows
+    layout.lock = {layout.note.x + (NOTE_WIDTH - NOTE_RIGHT_ARROW_INSET) / 2, lock_y}
+    layout.note_offset = layout.lock - {0, (LOCK_BUTTON_HEIGHT + RULER_GAP) / 2}
 }
 
 SETTINGS_ICON_SIZE :: ICON_LARGE_SIZE // the sliders, right aligned on the main screen
-SETTINGS_ROW_HEIGHT :: 44 // a finger
-SETTINGS_CONTROL_MARGIN :: 6 // between the pills and their row, the touch area is the whole row
-SETTINGS_TITLE_HEIGHT :: 36 // from the top of the title to the first row
-
-// open is how far the sheet has slid up, 0 is hidden below the window and 1 is all the way. The settings
-// have SETTINGS_ROWS, a track's sheet fewer. Either covers the whole panel under the strobe at least, a
-// short sheet would leave half the panel peeking out above it. extra is more room under the rows for what
-// isn't a row, the note offsets ask for the whole window.
-compute_settings_layout :: proc(
-    window: [2]f32,
-    safe: Rect,
-    open: f32,
-    rows: int,
-    strobe: Rect,
-    extra: f32 = 0,
-) -> (
-    l: SettingsLayout,
-) {
-    left := safe.x + PANEL_PADDING
-    l.width = safe.width - 2 * PANEL_PADDING
-    l.row_height = SETTINGS_ROW_HEIGHT
-
-    // Below the rows, the home indicator on a phone
-    below := window.y - (safe.y + safe.height) + PANEL_PADDING / 2
-    height := PANEL_PADDING + SETTINGS_TITLE_HEIGHT + f32(rows) * l.row_height + extra + below
-    height = max(height, window.y - (strobe.y + strobe.height))
-    height = min(height, window.y - safe.y)
-    l.sheet = {0, window.y - open * height, window.x, height}
-    l.bottom = l.sheet.y + height - (window.y - (safe.y + safe.height)) - PANEL_PADDING
-
-    top := l.sheet.y + PANEL_PADDING
-    l.title = {left, top}
-    // Right aligned with the rows, centred on the title
-    l.close = {left + l.width - 32, top - 11, 48, 48}
-    l.rows = {left, top + SETTINGS_TITLE_HEIGHT}
-    return
-}

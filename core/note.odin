@@ -22,7 +22,6 @@ import "core:fmt"
 import "core:math"
 import "core:strconv"
 import "core:testing"
-import "core:unicode/utf8"
 
 
 // GUITAR_STD_NOTES :: []
@@ -366,8 +365,8 @@ cents_deviation :: proc(freq_1_hz: f32, freq_2_hz: f32) -> f32 {
     return freq_to_cents(freq_1_hz, freq_2_hz)
 }
 
-octave_apart :: proc(a: Note, b: Note) -> bool {
-    return math.abs(a.cents - b.cents) == 1200
+octave_apart :: proc(first: Note, second: Note) -> bool {
+    return math.abs(first.cents - second.cents) == 1200
 }
 
 // The note with the given name (C = 0 ... B = 11) closest to `note`, within half an octave

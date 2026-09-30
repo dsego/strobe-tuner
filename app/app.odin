@@ -19,11 +19,6 @@ package app
 import "core:c/libc"
 import "core:fmt"
 import "core:math"
-import "core:math/linalg"
-import "core:path/filepath"
-import "core:sort"
-import "core:strings"
-
 
 import "../core"
 
@@ -44,7 +39,7 @@ DEBUG_STATS :: #config(DEBUG_STATS, false)
 // A preset of the tracks for the I key, it replaces the partials and clears what was set on each track
 apply_interval_preset :: proc(config: ^Config, index: int) {
     options := INTERVAL_OPTIONS
-    defaults := get_config_defaults()
+    defaults := config_defaults
     config.strobe_intervals_index = index
     config.strobe_intervals = options[index]
     config.strobe_offsets_cents = defaults.strobe_offsets_cents
@@ -105,14 +100,14 @@ run_app :: proc(config: ^Config) {
 
 
     strobe_display := init_strobe_display(
-        get_strobe_colors(config),
+        strobe_colors(config),
         strobe_bg_color,
         config.strobe_display_type,
     )
     defer destroy_strobe_display(&strobe_display)
 
 
-    // TODO: update pitch detector when config changes
+    // Follows the config, see config_changed
     pitch_detector := core.init_pitch_detector(
         config.samplerate,
         config.pitch_detect_fft_size,
@@ -156,20 +151,13 @@ run_app :: proc(config: ^Config) {
 
     audio_device_dropdown_active := false
 
-    settings_open := false
-    settings_slide: f32 = 0 // how far the sheet is up, it follows settings_open
-    settings_drag: SheetDrag
-
-    // A track's own sheet, opened by tapping the track, slides up the same way
-    track_open := false
-    track_slide: f32 = 0
-    track_drag: SheetDrag
+    settings_sheet: Sheet
+    // A track's own sheet, opened by tapping the track
+    track_sheet: Sheet
     selected_track := 0
-
     // The note offsets' sheet, opened from the slot next to the settings
-    offsets_open := false
-    offsets_slide: f32 = 0
-    offsets_drag: SheetDrag
+    offsets_sheet: Sheet
+    sheets := [?]^Sheet{&settings_sheet, &track_sheet, &offsets_sheet}
 
     note_low_state := false
     note_high_state := false
@@ -238,14 +226,34 @@ run_app :: proc(config: ^Config) {
             } else {
                 // TODO: support windows & linux
                 when ODIN_OS == .Darwin && !IOS {
-                    config_path := get_config_path()
-                    defer delete(config_path)
-                    libc.system(fmt.ctprintf("open -a TextEdit \"%s\"", config_path))
+                    path := config_path()
+                    defer delete(path)
+                    libc.system(fmt.ctprintf("open -a TextEdit \"%s\"", path))
                 }
             }
         }
 
         if config_changed {
+            // A new FFT size needs new buffers, the device is closed while they're swapped, it waits for
+            // the audio thread to finish with the old ones, and opened again below
+            if config.pitch_detect_fft_size != pitch_detector.nsdf.fft_size {
+                close_device(audio_capture)
+                core.destroy_pitch_detector(&pitch_detector)
+                pitch_detector = core.init_pitch_detector(
+                    config.samplerate,
+                    config.pitch_detect_fft_size,
+                    config.pitch_detection_clarity_high,
+                    config.pitch_detection_clarity_low,
+                    config.pitch_detection_min_snr_db,
+                    config.noise_floor_snr_db_threshold,
+                )
+                restart_audio = true
+            }
+            pitch_detector.clarity_high = config.pitch_detection_clarity_high
+            pitch_detector.clarity_low = config.pitch_detection_clarity_low
+            pitch_detector.min_snr_db = config.pitch_detection_min_snr_db
+            pitch_detector.noise_floor.snr_threshold_db = config.noise_floor_snr_db_threshold
+
             // Same notes, retuned to the pitch standard
             pitch_detector.pitch_standard = config.pitch_standard
             core.set_tuner_pitch_standard(&tuner, config.pitch_standard)
@@ -253,7 +261,7 @@ run_app :: proc(config: ^Config) {
             tuner.prevent_octave_jumps = config.prevent_strobe_octave_jumps
             tuner.offsets_cents = active_note_offsets(config)
 
-            set_strobe_colors(&strobe_display, get_strobe_colors(config))
+            set_strobe_colors(&strobe_display, strobe_colors(config))
             retune(phase_comparator, core.tuner_target_freq(&tuner), config)
             config_changed = false
         }
@@ -295,7 +303,7 @@ run_app :: proc(config: ^Config) {
             config.strobe_glow = !config.strobe_glow
         }
 
-        if key_pressed(.I) && config.strobe_mode == .HARMONIC_MODE {
+        if key_pressed(.I) && config.strobe_mode == .HARMONIC {
             apply_interval_preset(config, (config.strobe_intervals_index + 1) % len(interval_options))
             retune(phase_comparator, core.tuner_target_freq(&tuner), config)
         }
@@ -324,43 +332,27 @@ run_app :: proc(config: ^Config) {
             core.reset_phase_noise_floor(phase_comparator)
         }
 
-        // The settings sheet slides up over the main screen, which keeps running under it and ignores
-        // taps until the sheet is all the way down again. The sheet is drawn at the end of the frame.
-        // Dragged all the way off, the sheet closes, it isn't there to see the finger let go
-        if settings_drag.active && settings_slide == 0 {
-            settings_open = false
-            settings_drag = {}
+        // The sheets slide up over the main screen, which keeps running under them and ignores taps until
+        // they're all the way down again. They're drawn at the end of the frame.
+        gui_disabled = false
+        for sheet in sheets {
+            slide_sheet(sheet)
+            if sheet.open || sheet.slide > 0 do gui_disabled = true
         }
-        if track_drag.active && track_slide == 0 {
-            track_open = false
-            track_drag = {}
-        }
-        settings_was_open := settings_open
-        settings_slide = slide_sheet(settings_slide, settings_open)
-        if offsets_drag.active && offsets_slide == 0 {
-            offsets_open = false
-            offsets_drag = {}
-        }
-        track_was_open := track_open
-        track_slide = slide_sheet(track_slide, track_open)
-        offsets_was_open := offsets_open
-        offsets_slide = slide_sheet(offsets_slide, offsets_open)
-        gui_disabled = settings_open || settings_slide > 0 || track_open || track_slide > 0
-        if offsets_open || offsets_slide > 0 do gui_disabled = true
 
         {
 
             setup_strobe_display(&strobe_display, config.strobe_display_type)
             // The selected track stands out as its sheet comes up
             strobe_display.selected_track = selected_track
-            strobe_display.selection = track_slide
+            strobe_display.selection = track_sheet.slide
 
             if config.strobe_display_type == .TRACE {
                 trace_rect := layout.strobe
                 trace_rect.y = layout.strobe_top
                 trace_rect.height -= layout.strobe_top
                 draw_rect({layout.strobe.x, layout.strobe.y}, {layout.strobe.width, layout.strobe_top}, hex(strobe_bg_color))
-                colors := get_strobe_colors(config)
+                colors := strobe_colors(config)
                 draw_cents_trace(&cents_trace, trace_rect, hex(colors.x), hex(colors.y), hex(strobe_bg_color))
             } else if config.strobe_display_type == .SCOPE || config.strobe_display_type == .RIBBON {
                 scope_rect := layout.strobe
@@ -386,7 +378,7 @@ run_app :: proc(config: ^Config) {
                 )
 
                 // Tapping a track opens its sheet, fine mode shows the same pitch on every track
-                if config.strobe_mode == .HARMONIC_MODE && !microphone_denied() && gui_button(layout.strobe) {
+                if config.strobe_mode == .HARMONIC && !microphone_denied() && gui_button(layout.strobe) {
                     track := strobe_track_at(
                         config.strobe_display_type,
                         layout.strobe,
@@ -396,7 +388,7 @@ run_app :: proc(config: ^Config) {
                     )
                     if track >= 0 {
                         selected_track = track
-                        track_open = true
+                        track_sheet.open = true
                     }
                 }
             }
@@ -518,9 +510,9 @@ run_app :: proc(config: ^Config) {
                 }
             }
 
-            if gui_settings_button(layout.settings) do settings_open = true
+            if gui_settings_button(layout.settings) do settings_sheet.open = true
             if gui_note_offsets_indicator(layout.offsets_led, config) do config_changed = true
-            if gui_note_offsets_button(layout.note_offsets) do offsets_open = true
+            if gui_note_offsets_button(layout.note_offsets) do offsets_sheet.open = true
 
 
             // Draw input level, the microphone icon marks it as the input
@@ -635,82 +627,30 @@ run_app :: proc(config: ^Config) {
             }
         }
 
-        if settings_slide > 0 {
-            settings_layout := compute_settings_layout(
-                gfx_window_size(),
-                gfx_safe_area(),
-                settings_slide,
-                SETTINGS_ROWS,
-                layout.strobe,
-            )
-
-            // Not the tap that opened it, not while it slides away or follows the finger
-            gui_disabled = !(settings_was_open && settings_open) || settings_drag.active
-
-            swiped := drag_sheet(&settings_drag, &settings_slide, settings_layout)
-            if settings_drag.active {
-                settings_layout = compute_settings_layout(
-                    gfx_window_size(),
-                    gfx_safe_area(),
-                    settings_slide,
-                    SETTINGS_ROWS,
-                    layout.strobe,
-                )
-            }
-
-            // The strobe looks set into the window above the sheet like above the panel, and the edge
-            // shades the panel on the way up
-            draw_strobe_bottom_shadow(&strobe_display, layout.strobe, settings_layout.sheet.y)
-
+        if settings_sheet.slide > 0 {
+            sheet_layout, swiped := begin_sheet(&settings_sheet, SETTINGS_ROWS, &strobe_display, layout.strobe)
             close, changed := gui_settings(
-                settings_layout,
+                sheet_layout,
                 config,
                 audio_devices[:],
                 &audio_device_dropdown_index,
                 &audio_device_dropdown_active,
             )
             if changed do config_changed = true
-            grab_sheet(&settings_drag, settings_layout)
+            grab_sheet(&settings_sheet, sheet_layout)
 
             // Tapping the strobe above the sheet closes it too
-            above := settings_layout.sheet
-            above.height = above.y
-            above.y = 0
-            if gui_button(above) || key_pressed(.ESCAPE) || swiped do close = true
+            if gui_button(above_sheet(sheet_layout)) || key_pressed(.ESCAPE) || swiped do close = true
 
             if close {
-                settings_open = false
-                settings_drag = {}
+                close_sheet(&settings_sheet)
                 audio_device_dropdown_active = false
                 exclusive_control_mode = false
             }
         }
 
-        if track_slide > 0 {
-            sheet_layout := compute_settings_layout(
-                gfx_window_size(),
-                gfx_safe_area(),
-                track_slide,
-                TRACK_SETTINGS_ROWS,
-                layout.strobe,
-            )
-
-            // Not the tap that opened it, not while it slides away or follows the finger
-            gui_disabled = !(track_was_open && track_open) || track_drag.active
-
-            swiped := drag_sheet(&track_drag, &track_slide, sheet_layout)
-            if track_drag.active {
-                sheet_layout = compute_settings_layout(
-                    gfx_window_size(),
-                    gfx_safe_area(),
-                    track_slide,
-                    TRACK_SETTINGS_ROWS,
-                    layout.strobe,
-                )
-            }
-
-            draw_strobe_bottom_shadow(&strobe_display, layout.strobe, sheet_layout.sheet.y)
-
+        if track_sheet.slide > 0 {
+            sheet_layout, swiped := begin_sheet(&track_sheet, TRACK_SETTINGS_ROWS, &strobe_display, layout.strobe)
             selected_track = min(selected_track, len(phase_comparator.bands) - 1)
             close, changed := gui_track_settings(
                 sheet_layout,
@@ -719,13 +659,10 @@ run_app :: proc(config: ^Config) {
                 phase_comparator.bands[selected_track],
             )
             if changed do config_changed = true
-            grab_sheet(&track_drag, sheet_layout)
+            grab_sheet(&track_sheet, sheet_layout)
 
             // Tapping another track above the sheet switches to it, anywhere else closes the sheet
-            above := sheet_layout.sheet
-            above.height = above.y
-            above.y = 0
-            if gui_button(above) {
+            if gui_button(above_sheet(sheet_layout)) {
                 track := strobe_track_at(
                     config.strobe_display_type,
                     layout.strobe,
@@ -738,39 +675,18 @@ run_app :: proc(config: ^Config) {
             }
 
             if key_pressed(.ESCAPE) || swiped do close = true
-            if close {
-                track_open = false
-                track_drag = {}
-            }
+            if close do close_sheet(&track_sheet)
         }
 
-        if offsets_slide > 0 {
+        if offsets_sheet.slide > 0 {
             // Over the whole window, room for every offset of a slot
-            sheet_layout := compute_settings_layout(
-                gfx_window_size(),
-                gfx_safe_area(),
-                offsets_slide,
+            sheet_layout, swiped := begin_sheet(
+                &offsets_sheet,
                 NOTE_OFFSET_ROWS,
+                &strobe_display,
                 layout.strobe,
                 gfx_window_size().y,
             )
-
-            // Not the tap that opened it, not while it slides away or follows the finger
-            gui_disabled = !(offsets_was_open && offsets_open) || offsets_drag.active
-
-            swiped := drag_sheet(&offsets_drag, &offsets_slide, sheet_layout)
-            if offsets_drag.active {
-                sheet_layout = compute_settings_layout(
-                    gfx_window_size(),
-                    gfx_safe_area(),
-                    offsets_slide,
-                    NOTE_OFFSET_ROWS,
-                    layout.strobe,
-                    gfx_window_size().y,
-                )
-            }
-
-            draw_strobe_bottom_shadow(&strobe_display, layout.strobe, sheet_layout.sheet.y)
 
             // A new offset starts on the note the tuner is on
             target := -1
@@ -779,17 +695,13 @@ run_app :: proc(config: ^Config) {
             }
             close, changed := gui_note_offsets(sheet_layout, config, target)
             if changed do config_changed = true
-            grab_sheet(&offsets_drag, sheet_layout)
+            grab_sheet(&offsets_sheet, sheet_layout)
 
             // Tapping the strobe above the sheet closes it too
-            above := sheet_layout.sheet
-            above.height = above.y
-            above.y = 0
-            if gui_button(above) || key_pressed(.ESCAPE) || swiped do close = true
+            if gui_button(above_sheet(sheet_layout)) || key_pressed(.ESCAPE) || swiped do close = true
 
             if close {
-                offsets_open = false
-                offsets_drag = {}
+                close_sheet(&offsets_sheet)
                 note_offset_selected = -1
             }
         }
@@ -802,8 +714,10 @@ run_app :: proc(config: ^Config) {
             if band.snr_db > STROBE_FADE_SNR_DB[0] do signal = true
         }
         touched := mouse_down() || mouse_pressed() || mouse_wheel() != 0
-        sliding := settings_slide != f32(int(settings_open)) || track_slide != f32(int(track_open))
-        if offsets_slide != f32(int(offsets_open)) || ruler_swipe.coast != 0 do sliding = true
+        sliding := ruler_swipe.coast != 0
+        for sheet in sheets {
+            if sheet.slide != f32(int(sheet.open)) do sliding = true
+        }
         if signal || touched || sliding {
             quiet_time = 0
         } else {
@@ -811,61 +725,6 @@ run_app :: proc(config: ^Config) {
         }
         gfx_limit_fps(IDLE_FPS if quiet_time > IDLE_AFTER_S else 0)
     }
-}
-
-// Per second, how quickly the settings sheet closes the distance, like the ruler
-SETTINGS_SLIDE_SPEED :: 14
-
-// How far a sheet is up next frame, it eases towards open or closed and snaps the last bit
-slide_sheet :: proc(slide: f32, open: bool) -> f32 {
-    target := f32(int(open))
-    slide := slide + (target - slide) * min(1, SETTINGS_SLIDE_SPEED * gfx_frame_time())
-    if abs(target - slide) < 0.002 do slide = target
-    return slide
-}
-
-// A sheet follows the finger down from anywhere that isn't a control
-SheetDrag :: struct {
-    active:   bool,
-    grab:     f32, // from the top of the sheet to the finger
-    last_y:   f32,
-    velocity: f32, // points per second, down is positive
-}
-
-// Released this far down, or flicked down this fast, the sheet closes, otherwise it slides back up
-SHEET_DISMISS_SLIDE :: 0.7
-SHEET_DISMISS_VELOCITY :: 600
-
-// After the sheet's controls, a press on the sheet that none of them took starts dragging it
-grab_sheet :: proc(drag: ^SheetDrag, l: SettingsLayout) {
-    mouse := mouse_position()
-    if gui_press_taken || drag.active || !gui_background_pressed(l.sheet) do return
-    drag^ = {
-        active = true,
-        grab   = mouse.y - l.sheet.y,
-        last_y = mouse.y,
-    }
-}
-
-// Moves the sheet while it's dragged, returns true when it's let go to close
-drag_sheet :: proc(drag: ^SheetDrag, slide: ^f32, l: SettingsLayout) -> (close: bool) {
-    if !drag.active do return false
-    mouse := mouse_position()
-
-    if !mouse_down() {
-        drag.active = false
-        return slide^ < SHEET_DISMISS_SLIDE || drag.velocity > SHEET_DISMISS_VELOCITY
-    }
-
-    // Smoothed, a finger stops for a frame or two before it lets go
-    if dt := gfx_frame_time(); dt > 0 {
-        drag.velocity += ((mouse.y - drag.last_y) / dt - drag.velocity) * 0.5
-    }
-    drag.last_y = mouse.y
-
-    window := gfx_window_size()
-    slide^ = clamp((window.y - (mouse.y - drag.grab)) / l.sheet.height, 0, 1)
-    return false
 }
 
 // See quiet_time in run_app

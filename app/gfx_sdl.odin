@@ -375,8 +375,8 @@ when RENDERER == "sdl" {
                 store_op = .STORE,
             }
             if clear, ok := pass.clear.?; ok {
-                c := normalize_color(clear)
-                color_target.clear_color = {c.r, c.g, c.b, c.a}
+                normalized := normalize_color(clear)
+                color_target.clear_color = {normalized.r, normalized.g, normalized.b, normalized.a}
                 color_target.load_op = .CLEAR
             }
 
@@ -449,9 +449,9 @@ when RENDERER == "sdl" {
     }
 
     gfx_window_size :: proc() -> [2]f32 {
-        w, h: i32
-        sdl.GetWindowSize(gpu.window, &w, &h)
-        return {f32(w), f32(h)}
+        width, height: i32
+        sdl.GetWindowSize(gpu.window, &width, &height)
+        return {f32(width), f32(height)}
     }
 
     // Part of the window clear of the notch and the home indicator
@@ -496,14 +496,14 @@ when RENDERER == "sdl" {
     }
 
     gfx_load_texture :: proc(png: []u8) -> Texture {
-        w, h, channels: i32
-        pixels := stbi.load_from_memory(raw_data(png), i32(len(png)), &w, &h, &channels, 4)
+        width, height, channels: i32
+        pixels := stbi.load_from_memory(raw_data(png), i32(len(png)), &width, &height, &channels, 4)
         if pixels == nil {
             fmt.eprintln("Could not load image:", stbi.failure_reason())
             return {}
         }
         defer stbi.image_free(pixels)
-        return create_texture(w, h, pixels[:w * h * 4])
+        return create_texture(width, height, pixels[:width * height * 4])
     }
 
     // Straight alpha RGBA, the sampler is linear already
@@ -533,7 +533,8 @@ when RENDERER == "sdl" {
         GlyphBox :: struct {
             codepoint: rune,
             x0, y0:    i32,
-            w, h:      i32,
+            width:     i32,
+            height:    i32,
             atlas:     [2]i32,
         }
         boxes := make([dynamic]GlyphBox, context.temp_allocator)
@@ -549,22 +550,22 @@ when RENDERER == "sdl" {
             }
             x1, y1: i32
             stbtt.GetCodepointBitmapBox(&info, codepoint, scale, scale, &box.x0, &box.y0, &x1, &y1)
-            box.w = x1 - box.x0
-            box.h = y1 - box.y0
+            box.width = x1 - box.x0
+            box.height = y1 - box.y0
 
-            if pen.x + box.w + PADDING > atlas_width {
+            if pen.x + box.width + PADDING > atlas_width {
                 pen = {PADDING, pen.y + row_height + PADDING}
                 row_height = 0
             }
             box.atlas = pen
-            pen.x += box.w + PADDING
-            row_height = max(row_height, box.h)
+            pen.x += box.width + PADDING
+            row_height = max(row_height, box.height)
             append(&boxes, box)
 
             advance, left_side_bearing: i32
             stbtt.GetCodepointHMetrics(&info, codepoint, &advance, &left_side_bearing)
             font.glyphs[codepoint] = Glyph {
-                source  = {f32(box.atlas.x), f32(box.atlas.y), f32(box.w), f32(box.h)},
+                source  = {f32(box.atlas.x), f32(box.atlas.y), f32(box.width), f32(box.height)},
                 offset  = {f32(box.x0), f32(box.y0 + i32(f32(ascent) * scale))},
                 advance = f32(i32(f32(advance) * scale)),
             }
@@ -573,12 +574,12 @@ when RENDERER == "sdl" {
 
         alpha := make([]u8, atlas_width * atlas_height, context.temp_allocator)
         for box in boxes {
-            if box.w <= 0 || box.h <= 0 do continue
+            if box.width <= 0 || box.height <= 0 do continue
             stbtt.MakeCodepointBitmap(
                 &info,
                 &alpha[box.atlas.y * atlas_width + box.atlas.x],
-                box.w,
-                box.h,
+                box.width,
+                box.height,
                 atlas_width,
                 scale,
                 scale,
@@ -587,11 +588,11 @@ when RENDERER == "sdl" {
         }
 
         pixels := make([]u8, len(alpha) * 4, context.temp_allocator)
-        for a, i in alpha {
+        for coverage, i in alpha {
             pixels[i * 4 + 0] = 255
             pixels[i * 4 + 1] = 255
             pixels[i * 4 + 2] = 255
-            pixels[i * 4 + 3] = a
+            pixels[i * 4 + 3] = coverage
         }
 
         font.texture = create_texture(atlas_width, atlas_height, pixels)
@@ -627,11 +628,11 @@ when RENDERER == "sdl" {
     }
 
     draw_rect_lines :: proc(rect: Rect, thickness: f32, color: Color) {
-        t := thickness
-        draw_rect({rect.x, rect.y}, {rect.width, t}, color)
-        draw_rect({rect.x, rect.y + rect.height - t}, {rect.width, t}, color)
-        draw_rect({rect.x, rect.y + t}, {t, rect.height - 2 * t}, color)
-        draw_rect({rect.x + rect.width - t, rect.y + t}, {t, rect.height - 2 * t}, color)
+        line := thickness
+        draw_rect({rect.x, rect.y}, {rect.width, line}, color)
+        draw_rect({rect.x, rect.y + rect.height - line}, {rect.width, line}, color)
+        draw_rect({rect.x, rect.y + line}, {line, rect.height - 2 * line}, color)
+        draw_rect({rect.x + rect.width - line, rect.y + line}, {line, rect.height - 2 * line}, color)
     }
 
     draw_line :: proc(start, end: [2]f32, thickness: f32, color: Color) {

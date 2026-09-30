@@ -301,12 +301,12 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int,
     target := note.cents / 100
 
     // The gaps grow with the letters, the fonts were loaded at the layout's size
-    s := pixel_fonts.ruler_scale
-    center_gap := s * RULER_CENTER_GAP
+    scale := pixel_fonts.ruler_scale
+    center_gap := scale * RULER_CENTER_GAP
 
     // As many neighbours as fit, up to 2 a side, the same distance apart in any width
-    room := rect.width / 2 - s * RULER_EDGE - center_gap
-    spacing := s * RULER_SPACING
+    room := rect.width / 2 - scale * RULER_EDGE - center_gap
+    spacing := scale * RULER_SPACING
     per_side := clamp(int(room / spacing), 1, RULER_MAX_PER_SIDE)
 
     if !ruler_initialized {
@@ -419,12 +419,12 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int,
     // Notes slide in and out at the ends, fading, the next one out is only drawn while it slides
     first := max(int(math.floor(ruler_position)) - per_side - 1, RULER_LOWEST)
     last := min(int(math.ceil(ruler_position)) + per_side + 1, RULER_HIGHEST)
-    for k in first ..= last {
-        offset := f32(k) - ruler_position
+    for semitone in first ..= last {
+        offset := f32(semitone) - ruler_position
         distance := abs(offset)
         x := center.x + offset * spacing + math.sign(offset) * center_gap * min(distance, 1)
 
-        n := note if k == target else core.cents_to_note(f32(k * 100), note.pitch_standard)
+        ruler_note := note if semitone == target else core.cents_to_note(f32(semitone * 100), note.pitch_standard)
 
         // Large in the middle and small a note away, in between it grows as it comes in and shrinks as it
         // goes, drawn from the large letters scaled down. Settled they're the fonts' own sizes.
@@ -443,8 +443,8 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int,
         // centred with them the letter looks pushed left, they're small and thin and weigh less than their
         // width. Halfway looks centred, once it's settled.
         OPTICAL_WEIGHT :: 0.5
-        suffix := octave * measure_label(pixel_fonts.octave, fmt.ctprintf("%v", n.octave)).x
-        if n.is_accidental do suffix = max(suffix, measure_text(sharp_font.font, "♯", sharp_font.size, 0).x)
+        suffix := octave * measure_label(pixel_fonts.octave, fmt.ctprintf("%v", ruler_note.octave)).x
+        if ruler_note.is_accidental do suffix = max(suffix, measure_text(sharp_font.font, "♯", sharp_font.size, 0).x)
         x -= large * OPTICAL_WEIGHT * suffix / 2
 
         // Muted a note away, the ones at the ends fade out
@@ -453,11 +453,11 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int,
             color[channel] = u8(math.round(math.lerp(f32(text_color_muted[channel]), f32(note_color[channel]), large)))
         }
         color.a = u8(f32(color.a) * clamp(f32(per_side) + 1 - distance, 0, 1))
-        draw_ruler_note(n, {x, center.y}, name_font, sharp_font, octave, color)
+        draw_ruler_note(ruler_note, {x, center.y}, name_font, sharp_font, octave, color)
 
         // Tapping another note locks it
-        if tapped && k != target && distance <= f32(per_side) && point_in_rect(mouse, {x - spacing / 2, rect.y, spacing, rect.height}) {
-            step = k - target
+        if tapped && semitone != target && distance <= f32(per_side) && point_in_rect(mouse, {x - spacing / 2, rect.y, spacing, rect.height}) {
+            step = semitone - target
         }
     }
 
@@ -467,10 +467,10 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int,
 // The name centred on pos, the sharp and the octave (in the middle, octave is how much of it shows) to the
 // right, gui_note_ruler moves the note over to centre them all.
 // Drawn at the fonts' sizes, their own ones are texel for pixel.
-draw_ruler_note :: proc(n: core.Note, pos: [2]f32, name_font, sharp_font: PixelFont, octave: f32, color: Color) {
+draw_ruler_note :: proc(note: core.Note, pos: [2]f32, name_font, sharp_font: PixelFont, octave: f32, color: Color) {
     size := name_font.size
 
-    name := fmt.ctprintf("%v", n.name)
+    name := fmt.ctprintf("%v", note.name)
     name_size := measure_text(name_font.font, name, size, 0)
 
     // Centred on the letter, the sharp hangs off to the right so the letters are evenly spaced
@@ -478,7 +478,7 @@ draw_ruler_note :: proc(n: core.Note, pos: [2]f32, name_font, sharp_font: PixelF
     draw_text(name_font.font, name, top_left, size, 0, color)
 
     right := top_left.x + name_size.x
-    if n.is_accidental {
+    if note.is_accidental {
         sharp_pos := snap_to_pixels({right, top_left.y + 0.1 * size})
         draw_text(sharp_font.font, "♯", sharp_pos, sharp_font.size, 0, color)
     }
@@ -488,7 +488,7 @@ draw_ruler_note :: proc(n: core.Note, pos: [2]f32, name_font, sharp_font: PixelF
         octave_color := color
         octave_color.a = u8(f32(color.a) * octave)
         octave_pos := snap_to_pixels({right, top_left.y + name_size.y - 1.3 * font.size})
-        draw_text(font.font, fmt.ctprintf("%v", n.octave), octave_pos, font.size, 0, octave_color)
+        draw_text(font.font, fmt.ctprintf("%v", note.octave), octave_pos, font.size, 0, octave_color)
     }
 }
 
@@ -502,8 +502,8 @@ gui_response_toggle :: proc(pos: [2]f32, speed: f32) -> (f32, bool) {
 
     // The config can hold any speed, show the closest step
     step := 0
-    for s, i in speeds {
-        if abs(math.log2(s / speed)) < abs(math.log2(speeds[step] / speed)) do step = i
+    for option, i in speeds {
+        if abs(math.log2(option / speed)) < abs(math.log2(speeds[step] / speed)) do step = i
     }
 
     if gui_led_toggle(pos, "FAST", step == 1, pill_mint) {

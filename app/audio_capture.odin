@@ -199,17 +199,19 @@ stream_callback :: proc "c" (device: ^ma.device, output, input: rawptr, frame_co
 
     self := cast(^AudioCapture)device.pUserData
 
-    // High-pass once for all nodes to strip DC and low frequency rumble from the mic
+    // High-pass once for all nodes to strip DC and low frequency rumble from the mic, except the ones that
+    // want the input as it is
     for len(input_slice) > 0 {
-        n := min(len(input_slice), len(self.filtered))
-        chunk := self.filtered[:n]
-        core.biquad_process(&self.highpass, input_slice[:n], chunk)
-        input_slice = input_slice[n:]
+        count := min(len(input_slice), len(self.filtered))
+        raw := input_slice[:count]
+        chunk := self.filtered[:count]
+        core.biquad_process(&self.highpass, raw, chunk)
+        input_slice = input_slice[count:]
 
         // process all nodes
         for node in self.nodes {
             if node.stream_callback != nil {
-                node.stream_callback(node, chunk)
+                node.stream_callback(node, raw if node.unfiltered else chunk)
             }
         }
     }

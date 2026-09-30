@@ -41,16 +41,16 @@ set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32, window_size: int, spr
     self.window_size = window_size
     self.norm_freq = norm_freq
 
-    // exp(-j*w*i), rotated one step at a time. In f64, a long window runs to a couple hundred thousand
+    // exp(-j*omega*i), rotated one step at a time. In f64, a long window runs to a couple hundred thousand
     // steps and the f32 rounding adds up.
-    w := math.TAU * f64(norm_freq)
-    step := complex(math.cos(w), -math.sin(w))
+    omega := math.TAU * f64(norm_freq)
+    step := complex(math.cos(omega), -math.sin(omega))
     rotation := complex128(1)
 
     // The neighbouring bins relative to the centre one
     ratio := math.pow(2, f64(spread_cents) / 1200)
-    below_step := complex(math.cos(w / ratio - w), -math.sin(w / ratio - w))
-    above_step := complex(math.cos(w * ratio - w), -math.sin(w * ratio - w))
+    below_step := complex(math.cos(omega / ratio - omega), -math.sin(omega / ratio - omega))
+    above_step := complex(math.cos(omega * ratio - omega), -math.sin(omega * ratio - omega))
     below := complex128(1)
     above := complex128(1)
 
@@ -58,7 +58,7 @@ set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32, window_size: int, spr
         twiddle := rotation
         if spread_cents != 0 do twiddle *= 1 + below + above
 
-        window := f64(blackmann_window(f32(i), f32(window_size)))
+        window := f64(blackman_window(f32(i), f32(window_size)))
         self.twiddles[i] = complex64(complex(window, 0) * twiddle)
 
         rotation *= step
@@ -83,8 +83,8 @@ run_single_dft :: proc(self: ^SingleFreqDFT, samples: []f32) -> complex64 {
         im += samples[i] * imag(twiddle)
     }
 
-    n := f32(self.window_size)
-    self.dft = complex(re / n, im / n)
+    size := f32(self.window_size)
+    self.dft = complex(re / size, im / size)
     return self.dft
 }
 
@@ -97,7 +97,7 @@ test_phase_average_matches_three_bins :: proc(t: ^testing.T) {
 
     samples := make([]f32, WINDOW)
     defer delete(samples)
-    for &s, i in samples do s = math.sin(math.TAU * 111 * f32(i) / SAMPLERATE)
+    for &sample, i in samples do sample = math.sin(math.TAU * 111 * f32(i) / SAMPLERATE)
 
     averaged: SingleFreqDFT
     defer destroy_dft(&averaged)

@@ -33,14 +33,14 @@ load_shapes :: proc() {
     for y in 0 ..< SHAPE_SIZE {
         for x in 0 ..< SHAPE_SIZE {
             // Distance from the pixel centre to the edge covers the pixel partially
-            d := linalg.length([2]f32{f32(x) + 0.5, f32(y) + 0.5} - radius)
-            coverage := clamp(radius - d + 0.5, 0, 1)
+            distance := linalg.length([2]f32{f32(x) + 0.5, f32(y) + 0.5} - radius)
+            coverage := clamp(radius - distance + 0.5, 0, 1)
 
-            i := (y * SHAPE_SIZE + x) * 4
-            pixels[i + 0] = 255
-            pixels[i + 1] = 255
-            pixels[i + 2] = 255
-            pixels[i + 3] = u8(coverage * 255 + 0.5)
+            pixel := (y * SHAPE_SIZE + x) * 4
+            pixels[pixel + 0] = 255
+            pixels[pixel + 1] = 255
+            pixels[pixel + 2] = 255
+            pixels[pixel + 3] = u8(coverage * 255 + 0.5)
         }
     }
 
@@ -52,31 +52,31 @@ unload_shapes :: proc() {
 }
 
 draw_rounded_rect :: proc(rect: Rect, radius: f32, color: Color) {
-    r := min(radius, rect.width / 2, rect.height / 2)
+    corner := min(radius, rect.width / 2, rect.height / 2)
     half: f32 = SHAPE_SIZE / 2
 
-    left, right := rect.x, rect.x + rect.width - r
-    top, bottom := rect.y, rect.y + rect.height - r
-    inner := [2]f32{rect.width - 2 * r, rect.height - 2 * r}
+    left, right := rect.x, rect.x + rect.width - corner
+    top, bottom := rect.y, rect.y + rect.height - corner
+    inner := [2]f32{rect.width - 2 * corner, rect.height - 2 * corner}
 
     // Corners
-    draw_texture(shape_texture, {0, 0, half, half}, {left, top, r, r}, color)
-    draw_texture(shape_texture, {half, 0, half, half}, {right, top, r, r}, color)
-    draw_texture(shape_texture, {0, half, half, half}, {left, bottom, r, r}, color)
-    draw_texture(shape_texture, {half, half, half, half}, {right, bottom, r, r}, color)
+    draw_texture(shape_texture, {0, 0, half, half}, {left, top, corner, corner}, color)
+    draw_texture(shape_texture, {half, 0, half, half}, {right, top, corner, corner}, color)
+    draw_texture(shape_texture, {0, half, half, half}, {left, bottom, corner, corner}, color)
+    draw_texture(shape_texture, {half, half, half, half}, {right, bottom, corner, corner}, color)
 
     // Edges
     if inner.x > 0 {
-        draw_texture(shape_texture, {half - 0.5, 0, 1, half}, {left + r, top, inner.x, r}, color)
-        draw_texture(shape_texture, {half - 0.5, half, 1, half}, {left + r, bottom, inner.x, r}, color)
+        draw_texture(shape_texture, {half - 0.5, 0, 1, half}, {left + corner, top, inner.x, corner}, color)
+        draw_texture(shape_texture, {half - 0.5, half, 1, half}, {left + corner, bottom, inner.x, corner}, color)
     }
     if inner.y > 0 {
-        draw_texture(shape_texture, {0, half - 0.5, half, 1}, {left, top + r, r, inner.y}, color)
-        draw_texture(shape_texture, {half, half - 0.5, half, 1}, {right, top + r, r, inner.y}, color)
+        draw_texture(shape_texture, {0, half - 0.5, half, 1}, {left, top + corner, corner, inner.y}, color)
+        draw_texture(shape_texture, {half, half - 0.5, half, 1}, {right, top + corner, corner, inner.y}, color)
     }
 
     if inner.x > 0 && inner.y > 0 {
-        draw_rect({left + r, top + r}, inner, color)
+        draw_rect({left + corner, top + corner}, inner, color)
     }
 }
 

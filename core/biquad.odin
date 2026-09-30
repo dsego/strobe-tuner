@@ -39,16 +39,16 @@ Biquad :: struct {
 init_highpass :: proc(cutoff_hz: f32, samplerate: f32) -> (bq: Biquad) {
     if cutoff_hz <= 0 || cutoff_hz >= samplerate / 2 do return
 
-    w := math.TAU * f64(cutoff_hz) / f64(samplerate)
-    cos_w := math.cos(w)
-    alpha := math.sin(w) / math.SQRT_TWO // sin(w) / (2Q), Q = 1/√2
+    omega := math.TAU * f64(cutoff_hz) / f64(samplerate)
+    cos_omega := math.cos(omega)
+    alpha := math.sin(omega) / math.SQRT_TWO // sin(omega) / (2Q), Q = 1/√2
     a0 := 1.0 + alpha
 
     bq.enabled = true
-    bq.b0 = (1.0 + cos_w) / 2.0 / a0
-    bq.b1 = -(1.0 + cos_w) / a0
-    bq.b2 = (1.0 + cos_w) / 2.0 / a0
-    bq.a1 = -2.0 * cos_w / a0
+    bq.b0 = (1.0 + cos_omega) / 2.0 / a0
+    bq.b1 = -(1.0 + cos_omega) / a0
+    bq.b2 = (1.0 + cos_omega) / 2.0 / a0
+    bq.a1 = -2.0 * cos_omega / a0
     bq.a2 = (1.0 - alpha) / a0
     return
 }
@@ -83,12 +83,12 @@ test_highpass :: proc(t: ^testing.T) {
         defer delete(input)
         defer delete(output)
 
-        for &s, i in input do s = math.sin(math.TAU * freq_hz * f32(i) / samplerate)
+        for &sample, i in input do sample = math.sin(math.TAU * freq_hz * f32(i) / samplerate)
         biquad_process(&bq, input, output)
 
         // skip the transient, measure the peak of the second half
         peak: f32 = 0
-        for s in output[len(output) / 2:] do peak = max(peak, abs(s))
+        for sample in output[len(output) / 2:] do peak = max(peak, abs(sample))
         return peak
     }
 

@@ -50,8 +50,8 @@ destroy_trace :: proc(self: ^Trace) {
 }
 
 trace_sample :: proc(self: ^Trace, i: int) -> TraceSample {
-    n := len(self.samples)
-    return self.samples[(self.head - self.count + i + n) % n]
+    capacity := len(self.samples)
+    return self.samples[(self.head - self.count + i + capacity) % capacity]
 }
 
 push_sample :: proc(self: ^Trace, sample: TraceSample) {
@@ -104,9 +104,9 @@ draw_cents_trace :: proc(self: ^Trace, rect: Rect, line_color, band_color, backg
     glow.a = 16
 
     // Placed by time, the newest reading is at the right edge now and scrolls left
-    point :: proc(s: TraceSample, clock: f32, plot: Rect, middle: f32) -> [2]f32 {
-        x := plot.x + plot.width - (clock - s.time) / TRACE_SECONDS * plot.width
-        return {x, middle - clamp(s.cents / TRACE_RANGE, -1, 1) * plot.height / 2}
+    point :: proc(sample: TraceSample, clock: f32, plot: Rect, middle: f32) -> [2]f32 {
+        x := plot.x + plot.width - (clock - sample.time) / TRACE_SECONDS * plot.width
+        return {x, middle - clamp(sample.cents / TRACE_RANGE, -1, 1) * plot.height / 2}
     }
     usable :: proc(self: ^Trace, i: int) -> bool {
         return i >= 0 && i < self.count && !math.is_nan(trace_sample(self, i).cents)
@@ -131,10 +131,12 @@ draw_cents_trace :: proc(self: ^Trace, rect: Rect, line_color, band_color, backg
             // A curve through the readings (Catmull-Rom), the neighbours on either side set its direction
             p0 := point(trace_sample(self, i - 1), self.clock, plot, middle) if usable(self, i - 1) else p1
             p3 := point(trace_sample(self, i + 2), self.clock, plot, middle) if usable(self, i + 2) else p2
-            for k in 1 ..= TRACE_CURVE_STEPS {
-                t := f32(k) / TRACE_CURVE_STEPS
-                q := 0.5 * (2 * p1 + (p2 - p0) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (3 * p1 - p0 - 3 * p2 + p3) * t * t * t)
-                pen_line_to(&pen, q)
+            for step in 1 ..= TRACE_CURVE_STEPS {
+                progress := f32(step) / TRACE_CURVE_STEPS
+                bend := 2 * p0 - 5 * p1 + 4 * p2 - p3
+                twist := 3 * p1 - p0 - 3 * p2 + p3
+                on_curve := 0.5 * (2 * p1 + (p2 - p0) * progress + bend * progress * progress + twist * progress * progress * progress)
+                pen_line_to(&pen, on_curve)
             }
         }
     }
@@ -152,14 +154,14 @@ Pen :: struct {
     until_next: f32, // distance left to the next dot
 }
 
-pen_start :: proc(pen: ^Pen, p: [2]f32) {
-    draw_dot(p, pen.radius, pen.color)
-    pen.position = p
+pen_start :: proc(pen: ^Pen, position: [2]f32) {
+    draw_dot(position, pen.radius, pen.color)
+    pen.position = position
     pen.until_next = 0.5 * pen.radius
 }
 
-pen_line_to :: proc(pen: ^Pen, p: [2]f32) {
-    delta := p - pen.position
+pen_line_to :: proc(pen: ^Pen, to: [2]f32) {
+    delta := to - pen.position
     length := math.sqrt(delta.x * delta.x + delta.y * delta.y)
     travelled: f32 = 0
     for travelled + pen.until_next <= length {
@@ -168,5 +170,5 @@ pen_line_to :: proc(pen: ^Pen, p: [2]f32) {
         pen.until_next = 0.5 * pen.radius
     }
     pen.until_next -= length - travelled
-    pen.position = p
+    pen.position = to
 }

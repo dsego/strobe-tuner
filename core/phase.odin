@@ -28,7 +28,6 @@
 
 package core
 
-import "base:runtime"
 import "core:c/libc"
 import "core:fmt"
 import "core:math"
@@ -66,8 +65,8 @@ ONSET_MIN_MEASUREMENT_VAR :: 0.05 // rad²
 
 
 StrobeMode :: enum {
-    HARMONIC_MODE, // each track display a harmonic frequency
-    FINE_MODE, // displays the same frequency at different sensitivities
+    HARMONIC, // each track display a harmonic frequency
+    FINE, // displays the same frequency at different sensitivities
 }
 
 
@@ -110,10 +109,10 @@ PhaseBand :: struct {
 
 // 2-state Kalman filter following the lock-in phase: [phase, frequency offset]
 PhaseTracker :: struct {
-    active: bool,
-    phase:  f64,
-    omega:  f64,
-    p:      matrix[2, 2]f64, // covariance
+    active:     bool,
+    phase:      f64,
+    omega:      f64,
+    covariance: matrix[2, 2]f64,
 }
 
 
@@ -223,12 +222,12 @@ set_phase_comparator_tracks :: proc(
 set_phase_comparator_speed :: proc(self: ^PhaseComparator, base_speed: f32) {
     speed: f32 = base_speed
 
-    if self.mode == .FINE_MODE {
+    if self.mode == .FINE {
         for &band in self.bands {
             band.speed = speed
             speed *= self.speed_multiplier
         }
-    } else if self.mode == .HARMONIC_MODE {
+    } else if self.mode == .HARMONIC {
         for &band in self.bands {
             band.speed = speed * band.interval * band.speed_scale
         }
@@ -273,12 +272,12 @@ set_phase_comparator_freq :: proc(
         band.envelope = 0.0
         band.onset_hold = 0
 
-        if self.mode == .HARMONIC_MODE {
+        if self.mode == .HARMONIC {
             // Named after the exact partial, a big offset would otherwise land on the next note
             band.note = find_note(band.interval * base_freq_hz, pitch_standard)
             band.freq_hz = band.interval * base_freq_hz * math.pow(2, band.offset_cents / 1200)
             band.speed = speed * band.interval * band.speed_scale
-        } else if self.mode == .FINE_MODE {
+        } else if self.mode == .FINE {
             band.freq_hz = base_freq_hz
             band.note = find_note(band.freq_hz, pitch_standard)
             band.speed = speed
@@ -288,7 +287,7 @@ set_phase_comparator_freq :: proc(
         band.in_range = band.norm_freq < MAX_BAND_NORM_FREQ
         band.ref_omega = math.TAU * f64(band.freq_hz) / f64(self.samplerate)
 
-        if self.mode == .HARMONIC_MODE || i == 0 {
+        if self.mode == .HARMONIC || i == 0 {
             window_size := best_dft_window_size(band.freq_hz, self.samplerate, 25)
             set_dft_freq(&band.dft_config, band.norm_freq, window_size)
             set_dft_freq(&band.averaged_dft_config, band.norm_freq, window_size, PHASE_AVERAGE_SPREAD_CENTS)
@@ -324,7 +323,7 @@ run_phase_detection :: proc(
     // Just the longest window, the lowest partial's, which isn't always the first track's.
     // Need to keep this buffer slice relatively small to keep the display refresh without latency.
     window_size := base_band.dft_config.window_size
-    if self.mode == .HARMONIC_MODE {
+    if self.mode == .HARMONIC {
         for band in self.bands {
             window_size = max(window_size, band.dft_config.window_size)
         }
@@ -384,12 +383,12 @@ test_best_dft_window_size :: proc(t: ^testing.T) {
 @(test)
 test_track_offset_and_speed :: proc(t: ^testing.T) {
     intervals := []f32{1, 2, 3}
-    self := init_phase_comparator(110, 48_000, intervals, .HARMONIC_MODE, 10)
+    self := init_phase_comparator(110, 48_000, intervals, .HARMONIC, 10)
     defer destroy_phase_comparator(self)
 
     // A wide octave, a slower twelfth
     set_phase_comparator_tracks(self, intervals, {0, 30, 0}, {1, 1, 0.5})
-    set_phase_comparator_freq(self, 110, 440, 0.01, 2, .HARMONIC_MODE)
+    set_phase_comparator_freq(self, 110, 440, 0.01, 2, .HARMONIC)
 
     testing.expect(t, abs(self.bands[1].freq_hz - 220 * math.pow(f32(2), 30.0 / 1200)) < 0.001)
     testing.expect_value(t, self.bands[1].note.name, 'A')
@@ -400,7 +399,7 @@ test_track_offset_and_speed :: proc(t: ^testing.T) {
 
     // 8× of C8 is past what 48 kHz can hold
     set_phase_comparator_tracks(self, {1, 2, 8}, {0, 0, 0}, {1, 1, 1})
-    set_phase_comparator_freq(self, 4186, 440, 0.01, 2, .HARMONIC_MODE)
+    set_phase_comparator_freq(self, 4186, 440, 0.01, 2, .HARMONIC)
     testing.expect(t, self.bands[1].in_range)
     testing.expect(t, !self.bands[2].in_range)
 
@@ -411,7 +410,7 @@ test_track_offset_and_speed :: proc(t: ^testing.T) {
 
     // Tracks added and removed on top
     set_phase_comparator_tracks(self, {1, 2, 3, 4, 5}, {0, 0, 0, 0, 0}, {1, 1, 1, 1, 1})
-    set_phase_comparator_freq(self, 110, 440, 0.01, 2, .HARMONIC_MODE)
+    set_phase_comparator_freq(self, 110, 440, 0.01, 2, .HARMONIC)
     testing.expect_value(t, len(self.bands), 5)
     testing.expect(t, abs(self.bands[4].freq_hz - 550) < 0.001)
     testing.expect(t, self.bands[4].dft_config.window_size > 0)
@@ -446,7 +445,7 @@ determine_band_phase :: proc(
 ) {
     // Harmonic mode - each band tracks a separate frequency
     // Run a single bin DFT over the newest samples and demodulate it against a reference oscillator
-    if self.mode == .HARMONIC_MODE || band_idx == 0 {
+    if self.mode == .HARMONIC || band_idx == 0 {
         window_size := band.dft_config.window_size
 
         // Every band analyses the newest samples, i.e. the end of the buffer
@@ -478,7 +477,7 @@ determine_band_phase :: proc(
         // No advance on the first frame after a reset, the initial phase is arbitrary.
         phase_advance := band.tracker.phase - prev_phase if was_active else 0
         band.phase_diff = f32(phase_advance * STROBE_REFERENCE_HZ / f64(band.freq_hz))
-        band.phase_sigma = f32(math.sqrt(band.tracker.p[0, 0]) * STROBE_REFERENCE_HZ / f64(band.freq_hz))
+        band.phase_sigma = f32(math.sqrt(band.tracker.covariance[0, 0]) * STROBE_REFERENCE_HZ / f64(band.freq_hz))
 
         // Frequency estimation from the tracked frequency offset
         band.freq_diff_hz = f32(band.tracker.omega * f64(self.samplerate) / math.TAU)
@@ -517,55 +516,56 @@ update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand, window_size: int)
 // The measurement noise follows the band SNR: a loud note is tracked closely, a decaying note
 // gradually coasts on its last good frequency instead of wandering with the noise.
 update_phase_tracker :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
-    tr := &band.tracker
+    tracker := &band.tracker
     measured := f64(band.phase)
 
     // radians per sample for one cent at this frequency
     cent_omega := band.ref_omega * (math.pow(2.0, 1.0 / 1200.0) - 1.0)
 
-    if !tr.active {
-        tr.active = true
-        tr.phase = measured
-        tr.omega = 0
+    if !tracker.active {
+        tracker.active = true
+        tracker.phase = measured
+        tracker.omega = 0
         freq_var := math.pow(TRACKER_INITIAL_FREQ_CENTS * cent_omega, 2)
-        tr.p = {math.PI * math.PI, 0, 0, freq_var}
+        tracker.covariance = {math.PI * math.PI, 0, 0, freq_var}
         return
     }
 
     // Predict
     dt := f64(self.available)
-    fs := f64(self.samplerate)
-    f := matrix[2, 2]f64{1, dt, 0, 1}
-    q := matrix[2, 2]f64 {
-        TRACKER_PHASE_NOISE_RAD * TRACKER_PHASE_NOISE_RAD / fs * dt, 0,
-        0, math.pow(TRACKER_FREQ_NOISE_CENTS * cent_omega, 2) / fs * dt,
+    samplerate := f64(self.samplerate)
+    transition := matrix[2, 2]f64{1, dt, 0, 1}
+    process_noise := matrix[2, 2]f64 {
+        TRACKER_PHASE_NOISE_RAD * TRACKER_PHASE_NOISE_RAD / samplerate * dt, 0,
+        0, math.pow(TRACKER_FREQ_NOISE_CENTS * cent_omega, 2) / samplerate * dt,
     }
-    tr.phase += tr.omega * dt
-    tr.p = f * tr.p * linalg.transpose(f) + q
+    tracker.phase += tracker.omega * dt
+    tracker.covariance = transition * tracker.covariance * linalg.transpose(transition) + process_noise
 
     // Phase noise variance of a phasor in noise ≈ 1 / (2 SNR)
     EPS :: 1e-12
     noise_ratio := f64(band.noise_floor.level) / (f64(band.amp) + EPS)
-    r := clamp(0.5 * noise_ratio * noise_ratio, 1e-9, TRACKER_MAX_MEASUREMENT_VAR)
-    if band.onset_hold > 0 do r = max(r, ONSET_MIN_MEASUREMENT_VAR)
+    measurement_var := clamp(0.5 * noise_ratio * noise_ratio, 1e-9, TRACKER_MAX_MEASUREMENT_VAR)
+    if band.onset_hold > 0 do measurement_var = max(measurement_var, ONSET_MIN_MEASUREMENT_VAR)
 
     // Update, unwrapping the measurement around the prediction
-    innovation := wrap_phase(measured - tr.phase)
-    s := tr.p[0, 0] + r
-    k := [2]f64{tr.p[0, 0] / s, tr.p[1, 0] / s}
+    innovation := wrap_phase(measured - tracker.phase)
+    covariance := tracker.covariance
+    innovation_var := covariance[0, 0] + measurement_var
+    gain := [2]f64{covariance[0, 0] / innovation_var, covariance[1, 0] / innovation_var}
 
-    tr.phase += k[0] * innovation
-    tr.omega += k[1] * innovation
-    tr.p = {
-        tr.p[0, 0] - k[0] * tr.p[0, 0], tr.p[0, 1] - k[0] * tr.p[0, 1],
-        tr.p[1, 0] - k[1] * tr.p[0, 0], tr.p[1, 1] - k[1] * tr.p[0, 1],
+    tracker.phase += gain[0] * innovation
+    tracker.omega += gain[1] * innovation
+    tracker.covariance = {
+        covariance[0, 0] - gain[0] * covariance[0, 0], covariance[0, 1] - gain[0] * covariance[0, 1],
+        covariance[1, 0] - gain[1] * covariance[0, 0], covariance[1, 1] - gain[1] * covariance[0, 1],
     }
 }
 
 
 // Keep an up-to-date estimate of background noise (i.e. when no note is playing)
 update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx: int, is_tonal: bool) {
-    if self.mode == .HARMONIC_MODE || band_idx == 0 {
+    if self.mode == .HARMONIC || band_idx == 0 {
         dt := f32(self.available) / self.samplerate
         // The window starts out on the silence the sample buffer is filled with
         window_full := self.sample_clock >= i64(band.dft_config.window_size)
@@ -587,18 +587,18 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
 
     run :: proc(target_hz: f32, detune_cents: f32, use_phase_average: bool) -> (err_cents: [2]f32, phase_diff: f32) {
         intervals := []f32{1, 2}
-        pc := init_phase_comparator(target_hz, SAMPLERATE, intervals, .HARMONIC_MODE, 10)
+        pc := init_phase_comparator(target_hz, SAMPLERATE, intervals, .HARMONIC, 10)
         defer destroy_phase_comparator(pc)
-        set_phase_comparator_freq(pc, target_hz, 440, 0.025, 2, .HARMONIC_MODE)
+        set_phase_comparator_freq(pc, target_hz, 440, 0.025, 2, .HARMONIC)
 
         freq := f64(cents_to_freq(detune_cents, target_hz))
         chunk: [FRAME]f32
-        n := 0
+        clock := 0
         for _ in 0 ..< 2 * SAMPLERATE / FRAME {
-            for &s in chunk {
-                phase := math.TAU * freq * f64(n) / SAMPLERATE
-                s = f32(0.1 * math.sin(phase) + 0.05 * math.sin(2 * phase))
-                n += 1
+            for &sample in chunk {
+                phase := math.TAU * freq * f64(clock) / SAMPLERATE
+                sample = f32(0.1 * math.sin(phase) + 0.05 * math.sin(2 * phase))
+                clock += 1
             }
             audio_capture_callback(pc, chunk[:])
             run_phase_detection(pc, use_phase_average)
@@ -636,21 +636,21 @@ test_strobe_turn_rate :: proc(t: ^testing.T) {
     // Radians of the wheel per second, over the last of 3 seconds
     run :: proc(target_hz: f32, detune_cents: f32, speed_scale: f32) -> f32 {
         intervals := []f32{1}
-        pc := init_phase_comparator(target_hz, SAMPLERATE, intervals, .HARMONIC_MODE, 10)
+        pc := init_phase_comparator(target_hz, SAMPLERATE, intervals, .HARMONIC, 10)
         defer destroy_phase_comparator(pc)
         set_phase_comparator_tracks(pc, intervals, {0}, {speed_scale})
-        set_phase_comparator_freq(pc, target_hz, 440, BASE_SPEED, 2, .HARMONIC_MODE)
+        set_phase_comparator_freq(pc, target_hz, 440, BASE_SPEED, 2, .HARMONIC)
 
         freq := f64(cents_to_freq(detune_cents, target_hz))
         chunk: [FRAME]f32
-        n := 0
+        clock := 0
         frames_per_s := SAMPLERATE / FRAME
         start: f32
         for frame in 0 ..< 3 * frames_per_s {
             if frame == 2 * frames_per_s do start = pc.bands[0].scaled_phase
-            for &s in chunk {
-                s = f32(0.1 * math.sin(math.TAU * freq * f64(n) / SAMPLERATE))
-                n += 1
+            for &sample in chunk {
+                sample = f32(0.1 * math.sin(math.TAU * freq * f64(clock) / SAMPLERATE))
+                clock += 1
             }
             audio_capture_callback(pc, chunk[:])
             run_phase_detection(pc, false)

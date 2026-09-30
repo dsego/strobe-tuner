@@ -14,19 +14,16 @@
 // with this program.  If not, see <http://www.gnu.org/licenses/>.
 package app
 
-import "base:intrinsics"
 import "core:encoding/ini"
 import "core:fmt"
 import "core:os"
 import "core:path/filepath"
-import "core:reflect"
 import "core:slice"
-import "core:strconv"
 
 CONFIG_NAME :: "config.ini"
 
 create_app_directory :: proc() -> Maybe(string) {
-    dir_path := get_config_directory(APP_NAME)
+    dir_path := config_directory(APP_NAME)
 
     if os.exists(dir_path) do return dir_path
 
@@ -36,8 +33,8 @@ create_app_directory :: proc() -> Maybe(string) {
     return dir_path
 }
 
-get_config_path :: proc () -> string {
-    dir_path := get_config_directory(APP_NAME)
+config_path :: proc() -> string {
+    dir_path := config_directory(APP_NAME)
     defer delete(dir_path)
     path, _ := filepath.join({dir_path, CONFIG_NAME})
     return path
@@ -47,8 +44,6 @@ load_ini :: proc() -> (ini.Map, bool) {
     // Load or create config directory in a standard location based on the OS
     dir_path, dir_ok := create_app_directory().?
     defer delete(dir_path)
-
-    fmt.println(dir_path, dir_ok)
 
     if !dir_ok do return nil, false
 
@@ -66,7 +61,7 @@ load_ini :: proc() -> (ini.Map, bool) {
     ini_map, err, ok := ini.load_map_from_path(ini_path, allocator = context.allocator)
 
     if !ok {
-        fmt.println("Failed to load config file", ini_path)
+        fmt.println("Failed to load config file", ini_path, err)
         return nil, false
     }
 
@@ -76,6 +71,12 @@ load_ini :: proc() -> (ini.Map, bool) {
 save_ini :: proc(ini_map: ini.Map) {
     dir_path, dir_ok := create_app_directory().?
     defer delete(dir_path)
+
+    // Without it the path would be relative, the file would land wherever the app was started from
+    if !dir_ok {
+        fmt.println("Failed to create the config directory")
+        return
+    }
 
     ini_path, _ := filepath.join({dir_path, CONFIG_NAME})
     defer delete(ini_path)
@@ -105,12 +106,12 @@ save_ini :: proc(ini_map: ini.Map) {
     // Keep order the same in the ini file
     slice.sort(keys)
 
-    for k in keys {
-        ini.write_pair(stream, k, section[k])
+    for key in keys {
+        ini.write_pair(stream, key, section[key])
     }
 }
 
-get_config_directory :: proc(app_name: string) -> string {
+config_directory :: proc(app_name: string) -> string {
     when ODIN_OS == .Darwin {
         // macOS: ~/Library/Application Support
         home := os.get_env("HOME", context.allocator)
@@ -129,20 +130,4 @@ get_config_directory :: proc(app_name: string) -> string {
         path, _ := filepath.join({config_home, app_name})
         return path
     }
-}
-
-get_config :: proc(ini_map: ini.Map, name: string, $T: typeid, default: T) -> T {
-    section := ini_map[""]
-    when intrinsics.type_is_enum(T) {
-        value, ok := reflect.enum_from_name_any(T, section[name])
-        if ok do return cast(T)value
-        return default
-    } else when T == f32 {
-        return strconv.parse_f32(section[name]) or_else default
-    } else when T == int {
-        return strconv.parse_int(section[name]) or_else default
-    } else when T == bool {
-        return strconv.parse_bool(section[name]) or_else default
-    }
-    return default
 }

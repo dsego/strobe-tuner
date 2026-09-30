@@ -152,8 +152,8 @@ normalize_color :: proc(color: Color) -> [4]f32 {
 }
 
 color_from_normalized :: proc(color: [4]f32) -> Color {
-    c := linalg.clamp(color, 0, 1) * 255.0
-    return {u8(c.r + 0.5), u8(c.g + 0.5), u8(c.b + 0.5), u8(c.a + 0.5)}
+    scaled := linalg.clamp(color, 0, 1) * 255.0
+    return {u8(scaled.r + 0.5), u8(scaled.g + 0.5), u8(scaled.b + 0.5), u8(scaled.a + 0.5)}
 }
 
 point_in_rect :: proc(point: [2]f32, rect: Rect) -> bool {

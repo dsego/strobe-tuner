@@ -85,7 +85,7 @@ Config :: struct {
     strobe_blur:                  bool,
     // average the strobe pattern over its movement since the previous frame, reduces shimmer when it spins fast
     motion_blur:                  bool,
-    // lamp-lit look of the old mechanical strobe tuners in the colorway's hue, see get_glow_params
+    // lamp-lit look of the old mechanical strobe tuners in the colorway's hue, see glow_params
     strobe_glow:                  bool,
     prevent_strobe_octave_jumps:  bool,
 
@@ -143,7 +143,7 @@ config_defaults :: Config {
     strobe_speeds                = {1, 1, 1, 1, 1, 1, 1, 1},
     pitch_detect_fft_size        = 8192,
     samplerate                   = 48_000,
-    strobe_mode                  = .HARMONIC_MODE,
+    strobe_mode                  = .HARMONIC,
     strobe_speed                 = 0.0125,
     speed_multiplier             = 2.0,
     strobe_display_type          = .CURVED_TRACKS,
@@ -171,61 +171,49 @@ config_defaults :: Config {
 }
 
 
-get_config_defaults :: proc() -> Config {
-    return config_defaults
-}
-
 // Back to the defaults. The note offsets are switched off but stay in their slots, they're tuned in by hand
 // and have their own button to clear them.
 reset_config :: proc(config: ^Config) {
     counts, notes, cents := config.note_offset_counts, config.note_offset_notes, config.note_offset_cents
-    config^ = get_config_defaults()
+    config^ = config_defaults
     config.note_offset_counts, config.note_offset_notes, config.note_offset_cents = counts, notes, cents
 }
 
-// Load config from the standard OS path, eg ~/Library/Application Support/<APP_NAME>/config.ini on MacOS, see get_config_directory.
+// Load config from the standard OS path, eg ~/Library/Application Support/<APP_NAME>/config.ini on MacOS, see config_directory.
 load_config :: proc() -> Config {
 
-    config := get_config_defaults()
+    config := config_defaults
 
-    ini_map, ok := load_ini()
-    defer if ok do ini.delete_map(ini_map)
+    ini_map, loaded := load_ini()
+    defer if loaded do ini.delete_map(ini_map)
     section := ini_map[""]
 
     fields := reflect.struct_fields_zipped(Config)
 
     for field in fields {
-        value := reflect.struct_field_value(config, field)
         ptr := rawptr(uintptr(&config) + field.offset)
 
-        #partial switch v in field.type.variant {
+        #partial switch _ in field.type.variant {
         case reflect.Type_Info_Named:
-            named := field.type.variant.(reflect.Type_Info_Named)
-            value, ok := reflect.enum_from_name_any(field.type.id, section[field.name])
-            if ok {
+            if value, ok := reflect.enum_from_name_any(field.type.id, section[field.name]); ok {
                 write_int_field(ptr, field.type.size, int(value))
             }
         case reflect.Type_Info_Float:
-            value, ok := strconv.parse_f32(section[field.name])
-            if ok {
-                ptr_f32 := cast(^f32)ptr
-                ptr_f32^ = value
+            if value, ok := strconv.parse_f32(section[field.name]); ok {
+                (^f32)(ptr)^ = value
             }
         case reflect.Type_Info_Integer:
-            value, ok := strconv.parse_int(section[field.name])
-            if ok {
+            if value, ok := strconv.parse_int(section[field.name]); ok {
                 write_int_field(ptr, field.type.size, value)
             }
         case reflect.Type_Info_Boolean:
-            value, ok := strconv.parse_bool(section[field.name])
-            if ok {
-                ptr_bool := cast(^bool)ptr
-                ptr_bool^ = value
+            if value, ok := strconv.parse_bool(section[field.name]); ok {
+                (^bool)(ptr)^ = value
             }
         case reflect.Type_Info_Array:
-            trimmed := strings.trim(section[field.name], "[] ")
-            if len(trimmed) > 0 {
-                split := strings.split(trimmed, ",")
+            listed := strings.trim(section[field.name], "[] ")
+            if len(listed) > 0 {
+                split := strings.split(listed, ",")
                 defer delete(split)
                 // Of f32 or int, an array of arrays is read in the order it's written out
                 element_type := field.type

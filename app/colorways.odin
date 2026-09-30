@@ -44,7 +44,7 @@ GlowParams :: struct {
     saturation: f32, // 1 keeps the full color, lower mixes in gray
 }
 
-get_glow_params :: proc(config: ^Config) -> GlowParams {
+glow_params :: proc(config: ^Config) -> GlowParams {
     switch config.strobe_colorway {
     case .VIBRANT_RED:
         // The lamp only adds light, the filters are picked to land on the flat colors: the coral of the
@@ -65,7 +65,7 @@ get_glow_params :: proc(config: ^Config) -> GlowParams {
     return {}
 }
 
-get_strobe_colors :: proc(config: ^Config) -> [2]u32 {
+strobe_colors :: proc(config: ^Config) -> [2]u32 {
     switch config.strobe_colorway {
     case .VIBRANT_RED:
         return vibrant_red

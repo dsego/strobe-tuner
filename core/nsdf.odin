@@ -143,36 +143,36 @@ nsdf_find_peak :: proc(self: ^NSDFConfig) -> Vec2 {
     clear(&self.nsdf_peaks)
 
     // TODO
-    n := len(self.nsdf) - 256
+    end := len(self.nsdf) - 256
 
-    MIN_PEAK_VALUE := 0.5 * self.nsdf[0]
+    min_peak_value := 0.5 * self.nsdf[0]
 
     max_peak := Vec2{0.0, 0.0}
 
     // enumerate all the candidate peaks
     i := 1
-    for i < n {
+    for i < end {
 
         // go down the first slope
-        for i < n && self.nsdf[i] > 0.0 do i += 1
+        for i < end && self.nsdf[i] > 0.0 do i += 1
 
         // skip all negative values
-        for i < n && self.nsdf[i] <= 0.0 do i += 1
+        for i < end && self.nsdf[i] <= 0.0 do i += 1
 
         lag := i
-        min := lag
+        start := lag
 
         // search for a local max peak in the positive area
-        for i < n - 1 && self.nsdf[i] > 0.0 {
+        for i < end - 1 && self.nsdf[i] > 0.0 {
             if self.nsdf[i] > self.nsdf[lag] &&
                self.nsdf[i] > self.nsdf[i + 1] &&
-               self.nsdf[i] > MIN_PEAK_VALUE {
+               self.nsdf[i] > min_peak_value {
                 lag = i
             }
             i += 1
         }
 
-        if lag > min {
+        if lag > start {
             peak_location, magnitude := parabolic(
                 self.nsdf[lag - 1],
                 self.nsdf[lag],
@@ -192,14 +192,14 @@ nsdf_find_peak :: proc(self: ^NSDFConfig) -> Vec2 {
         i += 1
     }
 
-    THRESHOLD: f32 = 0.95
+    THRESHOLD :: 0.95
     chosen_peak: Vec2 = {}
     self.chosen_peak_idx = -1
 
     // take the first key maximum above this threshold
-    for p, idx in self.nsdf_peaks {
-        if p.y >= THRESHOLD * max_peak.y {
-            chosen_peak = p
+    for peak, idx in self.nsdf_peaks {
+        if peak.y >= THRESHOLD * max_peak.y {
+            chosen_peak = peak
             self.chosen_peak_idx = idx
             break
         }
@@ -211,16 +211,16 @@ nsdf_find_peak :: proc(self: ^NSDFConfig) -> Vec2 {
 // Normalized Square Difference Function (through autocorrelation)
 // http://riogrande.cs.tcu.edu/1516Ribbit/resources/A_Smarter_Way_to_Find_Pitch.pdf
 nsdf_run_nsdf :: proc(self: ^NSDFConfig, samples: []f32) {
-    n := len(samples)
-    copy(self.nsdf, self.autocorr[:n])
+    count := len(samples)
+    copy(self.nsdf, self.autocorr[:count])
 
     // left-hand summation for zero lag
     lhsum := 2.0 * self.nsdf[0]
 
-    for i in 0 ..< n {
+    for i in 0 ..< count {
         if lhsum > 0.0 {
             self.nsdf[i] *= 2.0 / lhsum
-            lhsum -= samples[i] * samples[i] + samples[n - i - 1] * samples[n - i - 1]
+            lhsum -= samples[i] * samples[i] + samples[count - i - 1] * samples[count - i - 1]
         } else {
             self.nsdf[i] = 0.0
         }
@@ -244,8 +244,8 @@ test_autocorrelation :: proc(t: ^testing.T) {
 
     // DC and a tone at the Nyquist frequency of the padded transform go through its packed first bin
     samples: [FFT_SIZE / 2]f32
-    for &s, i in samples {
-        s = 0.3 + 0.2 * math.sin(f32(i) * 0.37) + (0.1 if i % 2 == 0 else -0.1)
+    for &sample, i in samples {
+        sample = 0.3 + 0.2 * math.sin(f32(i) * 0.37) + (0.1 if i % 2 == 0 else -0.1)
     }
     nsdf_process_samples(&self, samples[:])
 

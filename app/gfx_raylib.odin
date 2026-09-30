@@ -274,8 +274,8 @@ when RENDERER == "raylib" {
     draw_texture :: proc(texture: Texture, source: Rect, dest: Rect, tint := WHITE) {
         rl.DrawTexturePro(
             texture,
-            transmute(rl.Rectangle)source,
-            transmute(rl.Rectangle)dest,
+            rl.Rectangle(source),
+            rl.Rectangle(dest),
             {0, 0},
             0,
             rl.Color(tint),
@@ -287,7 +287,7 @@ when RENDERER == "raylib" {
     }
 
     draw_rect_lines :: proc(rect: Rect, thickness: f32, color: Color) {
-        rl.DrawRectangleLinesEx(transmute(rl.Rectangle)rect, thickness, rl.Color(color))
+        rl.DrawRectangleLinesEx(rl.Rectangle(rect), thickness, rl.Color(color))
     }
 
     draw_line :: proc(start, end: [2]f32, thickness: f32, color: Color) {

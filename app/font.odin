@@ -173,9 +173,9 @@ unload_pixel_fonts :: proc() {
 }
 
 // Whole pixels on this screen, so text drawn at a pixel font's size lands texel for pixel
-snap_to_pixels :: proc(p: [2]f32) -> [2]f32 {
+snap_to_pixels :: proc(position: [2]f32) -> [2]f32 {
     scale := pixel_fonts.scale
-    return {math.round(p.x * scale), math.round(p.y * scale)} / scale
+    return {math.round(position.x * scale), math.round(position.y * scale)} / scale
 }
 
 // Icon with its top left at position, ICON_SIZE or ICON_LARGE_SIZE

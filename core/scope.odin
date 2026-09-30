@@ -33,6 +33,10 @@
     the height of the beam in each column as a brightness. That's the classic strobe, stripes that wash
     out to gray when the beam smears.
 
+    The input: before the capture's highpass, which shifts the fundamental against the harmonics and
+    tilts the flat top of a square wave, bends a sawtooth. Only the DC is taken out, like the AC coupling
+    of an oscilloscope.
+
     X-Y: the reference drives the beam across instead of the sweep, a cosine at its frequency. With the
     wave up and down that's a Lissajous figure, the way pitch was compared on an oscilloscope. An in tune
     note draws a still ellipse, a detuned one rolls it open and shut by the phase it slips, a line, a
@@ -56,6 +60,9 @@ SCOPE_MAX_BEAM_DOTS :: 256 // between two samples
 SCOPE_LEVEL_RELEASE_SECONDS :: 1.0
 SCOPE_MIN_LEVEL :: 0.001 // -60 dBFS, digital silence isn't scaled up to the full height
 SCOPE_NOISE_HEADROOM :: 20 // 26 dB, the level stays this far above the background noise's RMS
+
+// The corner of the AC coupling, the flat top of an A4 square wave sags under 2%, a low E's under 10%
+SCOPE_AC_COUPLING_HZ :: 2
 
 
 // What the screen from above shows of the beam's height
@@ -102,6 +109,7 @@ Scope :: struct {
     // The RMS of the background noise, the room's hiss stays low on the screen instead of filling it
     noise_floor:         f32,
     chunk:               []f32,
+    coupling:            [2]f32, // the previous input and output of the AC coupling
 
     // The screen from above, see scope_from_above
     heights:             []f32,
@@ -111,6 +119,7 @@ Scope :: struct {
 
 init_scope :: proc(samplerate: f64, columns, rows: int) -> (self: Scope) {
     init_audio_capture_node(&self, "scope")
+    self.unfiltered = true
     self.samplerate = samplerate
     self.columns = columns
     self.rows = rows
@@ -159,9 +168,17 @@ update_scope :: proc(self: ^Scope) {
 
     if self.persistence_seconds <= 0 do clear_scope(self)
 
+    // A one pole highpass, the output follows the changes of the input and lets the steady part go
+    pole := f32(math.exp(-math.TAU * SCOPE_AC_COUPLING_HZ / self.samplerate))
+
     for available > 0 {
         count := min(available, len(self.chunk))
         read_ringbuffer(&self.ringbuffer, self.chunk, u32(count))
+        for &sample in self.chunk[:count] {
+            input := sample
+            sample = input - self.coupling[0] + pole * self.coupling[1]
+            self.coupling = {input, sample}
+        }
         sweep_samples(self, self.chunk[:count])
         available -= count
     }

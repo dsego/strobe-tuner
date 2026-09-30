@@ -16,7 +16,6 @@
 
 package core
 
-import "core:math"
 import "core:testing"
 
 

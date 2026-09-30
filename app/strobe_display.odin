@@ -89,38 +89,38 @@ strobe_geometry :: proc(
     scale: f32,
     band_count: int,
 ) -> (
-    g: StrobeGeometry,
+    geometry: StrobeGeometry,
     ok: bool,
 ) {
     switch display_type {
     case .SPINNING_WHEEL:
-        g.curvature_radius = 90.0
-        g.band_height = 26.0
-        g.period_count = 4.0
+        geometry.curvature_radius = 90.0
+        geometry.band_height = 26.0
+        geometry.period_count = 4.0
     case .CURVED_TRACKS:
-        g.curvature_radius = DESKTOP_TRACKS_RADIUS
-        g.band_height = 66.0
+        geometry.curvature_radius = DESKTOP_TRACKS_RADIUS
+        geometry.band_height = 66.0
         if band_count > 3 {
-            g.band_height = 50.0
+            geometry.band_height = 50.0
         }
-        g.period_count = DESKTOP_TRACKS_PERIODS
+        geometry.period_count = DESKTOP_TRACKS_PERIODS
     case .TRACE, .SCOPE, .RIBBON:
         return {}, false
     }
-    g.curvature_radius *= scale
-    g.band_height *= scale
+    geometry.curvature_radius *= scale
+    geometry.band_height *= scale
 
-    g.density = 1
+    geometry.density = 1
     if display_type == .CURVED_TRACKS {
-        g.density = strobe_density(rect.width / 2, g.curvature_radius)
-        g.period_count *= g.density
+        geometry.density = strobe_density(rect.width / 2, geometry.curvature_radius)
+        geometry.period_count *= geometry.density
     }
 
-    g.y = rect.y + rect.height - scale * STROBE_HEIGHT
+    geometry.y = rect.y + rect.height - scale * STROBE_HEIGHT
     if display_type == .CURVED_TRACKS {
-        g.y += 32 * scale
+        geometry.y += 32 * scale
     }
-    return g, true
+    return geometry, true
 }
 
 // The track under point, -1 for none. The tracks are concentric, the gap outside a track counts as part
@@ -132,14 +132,15 @@ strobe_track_at :: proc(
     band_count: int,
     point: [2]f32,
 ) -> int {
-    g, ok := strobe_geometry(display_type, rect, scale, band_count)
+    geometry, ok := strobe_geometry(display_type, rect, scale, band_count)
     if !ok || !point_in_rect(point, rect) do return -1
 
     // The centre of the circles, see draw_strobe_bands and the strobe shader
-    center := [2]f32{rect.x + rect.width / 2, g.y + 10 + g.curvature_radius + g.band_height * f32(band_count - 1)}
-    r := linalg.length(point - center)
+    outer_radius := geometry.curvature_radius + geometry.band_height * f32(band_count - 1)
+    center := [2]f32{rect.x + rect.width / 2, geometry.y + 10 + outer_radius}
+    distance := linalg.length(point - center)
 
-    track := int(math.ceil((r - g.curvature_radius) / g.band_height))
+    track := int(math.ceil((distance - geometry.curvature_radius) / geometry.band_height))
     if track < 0 || track >= band_count do return -1
     return track
 }
@@ -245,8 +246,8 @@ glow_background :: proc(background: Color, glow: GlowParams) -> Color {
     filter := glow_filter(glow.dark_color) * glow.dark_level
 
     darkest: [3]f32
-    for c, i in filter {
-        darkest[i] = 1 - math.exp(-DARK_TRANSMISSION * MIN_LAMP * glow.exposure * c)
+    for channel, i in filter {
+        darkest[i] = 1 - math.exp(-DARK_TRANSMISSION * MIN_LAMP * glow.exposure * channel)
     }
 
     luma := darkest.r * 0.299 + darkest.g * 0.587 + darkest.b * 0.114
@@ -296,15 +297,15 @@ draw_strobe_display :: proc(
     config: ^Config,
 ) {
     // The trace is drawn by draw_cents_trace instead
-    g, ok := strobe_geometry(self.display_type, rect, scale, len(phase_info.bands))
+    geometry, ok := strobe_geometry(self.display_type, rect, scale, len(phase_info.bands))
     if !ok do return
-    y := g.y
-    curvature_radius := g.curvature_radius
-    band_height := g.band_height
-    period_count := g.period_count
+    y := geometry.y
+    curvature_radius := geometry.curvature_radius
+    band_height := geometry.band_height
+    period_count := geometry.period_count
 
     glow_enabled := config.strobe_glow
-    glow_params := get_glow_params(config)
+    glow := glow_params(config)
 
     // Shared by all bands, draw_strobe_bands fills in the rest
     uniforms := StrobeUniforms {
@@ -314,8 +315,8 @@ draw_strobe_display :: proc(
         glow            = i32(glow_enabled),
         // The wheel is lit evenly all around, the tracks only show the top of the disc
         lamp_spread     = 1000.0 if self.display_type == .SPINNING_WHEEL else 0.45,
-        glow_exposure   = glow_params.exposure,
-        glow_saturation = glow_params.saturation,
+        glow_exposure   = glow.exposure,
+        glow_saturation = glow.saturation,
         color_a         = normalize_color(self.colors.x),
         color_b         = normalize_color(self.colors.y),
         // most inner radius
@@ -323,8 +324,8 @@ draw_strobe_display :: proc(
         // most outer radius
         max_radius      = curvature_radius + band_height * f32(len(phase_info.bands) - 1),
     }
-    uniforms.glow_filter.rgb = glow_filter(glow_params.color)
-    uniforms.glow_dark_filter.rgb = glow_filter(glow_params.dark_color) * glow_params.dark_level
+    uniforms.glow_filter.rgb = glow_filter(glow.color)
+    uniforms.glow_dark_filter.rgb = glow_filter(glow.dark_color) * glow.dark_level
     uniforms.highlight_color = normalize_color(hex(0x82E2FFFF))
     min_radius := uniforms.min_radius
 
@@ -334,11 +335,11 @@ draw_strobe_display :: proc(
 
         begin_render_target(
             self.scene_rt,
-            glow_background(self.background, glow_params),
+            glow_background(self.background, glow),
             {rect.x, rect.y},
             self.glow_scale,
         )
-        draw_strobe_bands(self, rect, phase_info, &uniforms, y, curvature_radius, band_height, period_count, g.density)
+        draw_strobe_bands(self, rect, phase_info, &uniforms, y, curvature_radius, band_height, period_count, geometry.density)
         end_render_target()
 
         render_bloom(self)
@@ -358,20 +359,20 @@ draw_strobe_display :: proc(
         set_blend_mode(.ALPHA)
     } else {
         draw_rect({rect.x, rect.y}, {rect.width, rect.height}, self.background)
-        draw_strobe_bands(self, rect, phase_info, &uniforms, y, curvature_radius, band_height, period_count, g.density)
+        draw_strobe_bands(self, rect, phase_info, &uniforms, y, curvature_radius, band_height, period_count, geometry.density)
     }
 
     // Draw labels for partials
-    if config.strobe_mode == .HARMONIC_MODE &&
+    if config.strobe_mode == .HARMONIC &&
        self.display_type == .CURVED_TRACKS &&
        config.partial_labels != .NONE {
-        r := min_radius
+        radius := min_radius
 
         for &band, band_idx in phase_info.bands {
             order := len(phase_info.bands) - 1 - band_idx
             cos := 0.5 * rect.width - 28
-            r += band_height
-            sin := math.sqrt(r * r - cos * cos)
+            radius += band_height
+            sin := math.sqrt(radius * radius - cos * cos)
 
             // Hidden, too high for the sample rate
             if !band.in_range do continue
@@ -382,12 +383,12 @@ draw_strobe_display :: proc(
                 font := pixel_fonts.label_large
                 right := rect.x + 16 + measure_label(font, "-00.0").x
                 text := fmt.ctprintf("%+.1f", band.err_cents)
-                draw_text_right(font.font, text, {right, y + band_height * (f32(order) + 0.6) + r - sin}, font.size, 0, hex(0x82E2FFFF))
+                draw_text_right(font.font, text, {right, y + band_height * (f32(order) + 0.6) + radius - sin}, font.size, 0, hex(0x82E2FFFF))
             }
 
             // Partial order, e.g. 1x, 2x, etc
             draw_strobe_partial(
-                {rect.x + rect.width - 12, y + band_height * (f32(order) + 0.6) + r - sin},
+                {rect.x + rect.width - 12, y + band_height * (f32(order) + 0.6) + radius - sin},
                 config.partial_labels,
                 band,
             )
@@ -515,7 +516,7 @@ draw_strobe_bands :: proc(
             draw_shader_quad({rect.x, rect.y + 10, rect.width, rect.height})
         }
 
-        if phase_info.mode == .FINE_MODE {
+        if phase_info.mode == .FINE {
             period_count *= 2.0
         }
     }
