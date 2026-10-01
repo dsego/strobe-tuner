@@ -106,19 +106,17 @@ Config :: struct {
     // chromatic, semitones the note is shown above the sounding pitch, 0 to 11, a Bb instrument reads 2
     transpose:                    int,
 
-    // The bank of presets, how many there are, and per preset like the built-ins: its Instrument, tuning,
-    // capo and transpose
-    preset_count:                 int,
-    preset_instruments:           [MAX_PRESETS]int,
-    preset_tunings:               [MAX_PRESETS]int,
-    preset_capos:                 [MAX_PRESETS]int,
-    preset_transposes:            [MAX_PRESETS]int,
+    // Per preset slot like the built-ins: its Instrument, tuning, capo and transpose
+    preset_instruments:           [PRESET_SLOTS]int,
+    preset_tunings:               [PRESET_SLOTS]int,
+    preset_capos:                 [PRESET_SLOTS]int,
+    preset_transposes:            [PRESET_SLOTS]int,
     // per preset, the rows of the note offsets: how many there are, the note of each counted from A0, and
     // the cents it's tuned off equal temperament. A row at 0 cents is kept. On a stringed instrument the
     // rows are its strings in the order they're tuned, only the cents are kept. See gui_note_offsets.
-    note_offset_counts:           [MAX_PRESETS]int,
-    note_offset_notes:            [MAX_PRESETS][MAX_NOTE_OFFSETS]int,
-    note_offset_cents:            [MAX_PRESETS][MAX_NOTE_OFFSETS]f32,
+    note_offset_counts:           [PRESET_SLOTS]int,
+    note_offset_notes:            [PRESET_SLOTS][MAX_NOTE_OFFSETS]int,
+    note_offset_cents:            [PRESET_SLOTS][MAX_NOTE_OFFSETS]f32,
 
     // pitch detection settings
     pitch_detection_clarity_low:  f32,
@@ -170,7 +168,6 @@ config_defaults :: Config {
     instrument                   = .CHROMATIC,
     preset                       = -1,
     transpose                    = 0,
-    preset_count                 = 0,
     pitch_detection_clarity_low  = 0.9,
     pitch_detection_clarity_high = 0.98,
     noise_floor_snr_db_threshold = 10, // to determine if it’s safe to update the noise floor
@@ -185,12 +182,11 @@ config_defaults :: Config {
 }
 
 
-// Back to the defaults, on chromatic. The presets stay, their note offsets are tuned in by hand and they
-// have their own button to delete them.
+// Back to the defaults, on chromatic. The presets stay, their note offsets are tuned in by hand.
 reset_config :: proc(config: ^Config) {
     kept := config^
     config^ = config_defaults
-    config.preset_count, config.preset_instruments = kept.preset_count, kept.preset_instruments
+    config.preset_instruments = kept.preset_instruments
     config.preset_tunings, config.preset_capos = kept.preset_tunings, kept.preset_capos
     config.preset_transposes = kept.preset_transposes
     config.note_offset_counts, config.note_offset_notes = kept.note_offset_counts, kept.note_offset_notes
