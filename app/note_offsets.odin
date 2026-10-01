@@ -293,9 +293,30 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, rows: int, config: ^Config, 
     // right, on the note the tuner is on or the closest one above it that has no row. Left of it the button
     // that removes the selected row.
     header_strip := Rect{sheet_left, top, sheet.width, sheet_layout.row_height}
+    middle := header.y + header.height / 2
+    add_x := right - icon_button_width("Add")
+
+    // Every offset of the preset at once, rightmost or left of REMOVE. The first tap asks, the second
+    // clears, a tap anywhere else leaves them.
+    clear_right := right if stringed else add_x - 12 - small_button_width("REMOVE") - 8
+    clearable := !stringed && count > 0
+    for row in 0 ..< count do if cents[row] != 0 do clearable = true
+    if gui_small_button(clear_right, middle, "SURE?" if note_offsets_clearing else "CLEAR", clearable) {
+        if note_offsets_clearing {
+            config.note_offset_counts[preset] = 0
+            notes^, cents^ = {}, {}
+            selected^ = -1
+            popup^ = .NONE
+            changed = true
+        }
+        note_offsets_clearing = !note_offsets_clearing
+    } else if mouse_pressed() || !clearable {
+        note_offsets_clearing = false
+    }
+    // Cleared, the chromatic rows are gone, a string's are at 0
+    if !stringed do count = config.note_offset_counts[preset]
+
     if !stringed {
-        middle := header.y + header.height / 2
-        add_x := right - icon_button_width("Add")
 
         if gui_small_button(add_x - 12, middle, "REMOVE", selected^ >= 0) {
             for row in selected^ ..< count - 1 {
@@ -415,3 +436,4 @@ NoteOffsetPopup :: enum {
 
 note_offset_selected := -1 // the row selected on the sheet, -1 for none
 note_offset_popup: NoteOffsetPopup
+note_offsets_clearing: bool // CLEAR was tapped once, it asks

@@ -171,6 +171,8 @@ run_app :: proc(config: ^Config) {
 
     interval_options := INTERVAL_OPTIONS
     config_changed := false
+    // Changed since it was saved, see save_config below
+    unsaved := false
 
     // Open the input again, after the app was in the background or an interruption stopped it
     restart_audio := false
@@ -192,11 +194,11 @@ run_app :: proc(config: ^Config) {
         defer free_all(context.temp_allocator)
 
         // iOS suspends the app in the background and may end it there without warning, so the config is
-        // saved on the way out
+        // saved on the way out, first, iOS soon suspends it
         if gfx_in_background() {
-            stop_audio_capture(audio_capture)
             config.target_freq_hz = tuner.target_note.frequency
             save_config(config^)
+            stop_audio_capture(audio_capture)
             gfx_wait_for_foreground()
             restart_audio = true
             continue
@@ -267,6 +269,7 @@ run_app :: proc(config: ^Config) {
             set_strobe_colors(&strobe_display, strobe_colors(config))
             retune(phase_comparator, core.tuner_target_freq(&tuner), config)
             config_changed = false
+            unsaved = true
         }
 
 
@@ -749,7 +752,15 @@ run_app :: proc(config: ^Config) {
                 settings_menu = .NONE
                 exclusive_control_mode = false
                 note_offset_selected = -1
+                note_offsets_clearing = false
             }
+        }
+
+        // Written once the sheets are down, a quit that skips the save at the end keeps what was changed:
+        // the stop button of a debugger, Ctrl+C in the terminal, a crash
+        if unsaved && !settings_sheet.open && !track_sheet.open && !instrument_sheet.open {
+            save_config(config^)
+            unsaved = false
         }
 
         // With nothing to show the screen updates less often, it saves the battery of a tuner left open. The

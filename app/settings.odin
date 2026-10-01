@@ -406,18 +406,24 @@ touch_area :: proc(rect: Rect) -> Rect {
 // Dimmed and dead when not enabled.
 gui_small_button :: proc(right, middle: f32, label: cstring, enabled := true) -> bool {
     HEIGHT :: 26
-    PADDING :: 12 // left and right of the label
 
     font := pixel_fonts.label_small
-    width := math.round(measure_label(font, label, 1).x) + 2 * PADDING
+    width := small_button_width(label)
     rect := Rect{right - width, middle - HEIGHT / 2, width, HEIGHT}
     touch := Rect{rect.x, middle - SHEET_ROW_HEIGHT / 2, width, SHEET_ROW_HEIGHT}
 
     draw_pill(rect, pill_gray if enabled && gui_button_held(touch) else pill_dark)
     label_color := text_color_white if enabled else text_color_disabled
-    draw_label(font, label, {rect.x + PADDING, middle - LABEL_SMALL_SIZE / 2}, label_color, 1)
+    draw_label(font, label, {rect.x + SMALL_BUTTON_PADDING, middle - LABEL_SMALL_SIZE / 2}, label_color, 1)
 
     return enabled && gui_button(touch)
+}
+
+SMALL_BUTTON_PADDING :: 12 // left and right of the label
+
+// Buttons side by side are lined up by it
+small_button_width :: proc(label: cstring) -> f32 {
+    return math.round(measure_label(pixel_fonts.label_small, label, 1).x) + 2 * SMALL_BUTTON_PADDING
 }
 
 

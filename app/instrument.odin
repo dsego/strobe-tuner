@@ -322,14 +322,18 @@ gui_instrument :: proc(
     }
 
     {
-        // The built-in instruments, then the preset slots by number, a line between them. An unused slot is
-        // chromatic, its instrument is picked under it.
+        // The built-in instruments, then the preset slots by number with what's in them like the corner, a
+        // line between them. An unused slot is chromatic as it starts, its instrument is picked under it.
         names := INSTRUMENT_NAMES
         options := make([]GuiOption, len(Instrument) + PRESET_SLOTS, context.temp_allocator)
         for instrument in Instrument do options[int(instrument)] = {i32(instrument), names[instrument]}
         for slot in 0 ..< PRESET_SLOTS {
             option := len(Instrument) + slot
-            options[option] = {i32(option), fmt.tprintf("Preset %d", slot + 1)}
+            held := preset_setup(config, slot)
+            empty := held.instrument == .CHROMATIC && transpose_key(held) == 0 && config.note_offset_counts[slot] == 0
+            held.preset = -1 // without the P1 in front
+            summary := "Empty" if empty else setup_label(held)
+            options[option] = {i32(option), fmt.tprintf("Preset %d - %s", slot + 1, summary)}
         }
         dividers := []int{len(Instrument)}
 

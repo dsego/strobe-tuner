@@ -19,6 +19,7 @@ import "core:fmt"
 import "core:os"
 import "core:path/filepath"
 import "core:slice"
+import "core:strings"
 
 CONFIG_NAME :: "config.ini"
 
@@ -27,7 +28,8 @@ create_app_directory :: proc() -> Maybe(string) {
 
     if os.exists(dir_path) do return dir_path
 
-    err := os.make_directory(dir_path)
+    // With the folders above it, an iOS app's container has no Application Support until it's made
+    err := os.make_directory_all(dir_path)
     if err != nil do return nil
 
     return dir_path
@@ -69,6 +71,31 @@ load_ini :: proc() -> (ini.Map, bool) {
 }
 
 save_ini :: proc(ini_map: ini.Map) {
+    // The pairs sorted by key, the order stays the same. On the disk when it returns, not in a buffer.
+    write_ini :: proc(path: string, ini_map: ini.Map) -> bool {
+        // Truncate so a shorter config doesn't leave stale bytes at the end of the file
+        file, err := os.open(path, {.Write, .Create, .Trunc})
+        if err != nil do return false
+        defer os.close(file)
+
+        // The stream wraps the file handle, which is closed above
+        stream := os.to_stream(file)
+
+        section := ini_map[""]
+
+        keys, keys_err := slice.map_keys(section)
+        if keys_err != nil do return false
+        defer delete(keys)
+
+        // Keep order the same in the ini file
+        slice.sort(keys)
+
+        for key in keys {
+            if _, write_err := ini.write_pair(stream, key, section[key]); write_err != .None do return false
+        }
+        return os.sync(file) == nil
+    }
+
     dir_path, dir_ok := create_app_directory().?
     defer delete(dir_path)
 
@@ -81,33 +108,19 @@ save_ini :: proc(ini_map: ini.Map) {
     ini_path, _ := filepath.join({dir_path, CONFIG_NAME})
     defer delete(ini_path)
 
-    // Truncate so a shorter config doesn't leave stale bytes at the end of the file
-    file, err := os.open(ini_path, {.Write, .Create, .Trunc})
-    if err != nil {
-        fmt.println("Failed to load the config file.", ini_path)
-        return
-    }
-    defer os.close(file)
+    // Written next to it and renamed over it, a rename is all or nothing: the app ended halfway, by iOS or
+    // a crash, leaves the last config, not half of one
+    temp_path := strings.concatenate({ini_path, ".tmp"})
+    defer delete(temp_path)
 
     fmt.println("Saving config to", ini_path)
 
-    // The stream wraps the file handle, which is closed above
-    stream := os.to_stream(file)
-
-    section := ini_map[""]
-
-    keys, keys_err := slice.map_keys(section)
-    if keys_err != nil {
-        fmt.println("Failed to save config file", ini_path)
+    if !write_ini(temp_path, ini_map) {
+        fmt.println("Failed to save the config file", temp_path)
         return
     }
-    defer delete(keys)
-
-    // Keep order the same in the ini file
-    slice.sort(keys)
-
-    for key in keys {
-        ini.write_pair(stream, key, section[key])
+    if err := os.rename(temp_path, ini_path); err != nil {
+        fmt.println("Failed to replace the config file", ini_path, err)
     }
 }
 
