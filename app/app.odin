@@ -495,7 +495,16 @@ run_app :: proc(config: ^Config) {
                 // Within half a semitone of the note, or a few semitones of a string
                 steady := steady_pitch_info
                 lit := tuner.active && steady.measured && !out_of_range
-                draw_cents_gauge(layout.gauge, steady.err_cents, lit, string_mode, hex(strobe_colors(config).x))
+                // Further than the gauge reaches from any string, e.g. a guitar's low E on a ukulele, it says
+                // so instead of the gauge stuck at its end
+                if string_mode && lit && abs(steady.err_cents) > 100 * GAUGE_SEMITONE_TICKS {
+                    label: cstring = "OUT OF RANGE"
+                    width := measure_label(pixel_fonts.label, label, 1).x
+                    label_y := layout.gauge.y + (GAUGE_HEIGHT - LABEL_SIZE) / 2
+                    draw_label(pixel_fonts.label, label, {layout.gauge.x - width / 2, label_y}, text_color_light, 1)
+                } else {
+                    draw_cents_gauge(layout.gauge, steady.err_cents, lit, string_mode, hex(strobe_colors(config).x))
+                }
             } else {
                 draw_note(shown_note, layout.note, tuner.active)
                 step = gui_note_arrows(layout.note, tuner.locked)

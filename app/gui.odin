@@ -447,7 +447,6 @@ GAUGE_SEMITONE_TICKS :: 3
 GAUGE_SPACING :: 13 // between the ticks, it grows with the ruler
 GAUGE_TICK :: 12 // tall, the red one and every few are GAUGE_HEIGHT
 GAUGE_HEIGHT :: 20
-GAUGE_GAP :: 18 // from the bottom of the note's letter, clear of the octave
 GAUGE_SLIDE_SPEED :: 6 // per second, how quickly it closes the distance, slow enough to ride over the jitter
 GAUGE_TOLERANCE :: 0.3 // ticks, it only goes after the pitch once it's moved this far
 

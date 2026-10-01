@@ -54,7 +54,7 @@ READOUT_HEIGHT :: 48
 // 0.8 down from the top. The ruler is spaced by what's drawn.
 CAP_HALF :: 0.3 // the letter's top and baseline from its middle, in font sizes
 BASELINE :: 0.8 // from the top of the text, in font sizes
-RULER_GAP :: 32 // between the gauge under the letter and the lock, the note's offset is halfway
+RULER_GAP :: 32 // without the ruler, between the note and the lock, the note's offset is halfway
 READOUT_NOTE_TOP :: NOTE_BASELINE - 40 // the 24pt values and the labels above them
 
 // Where the right arrow of the note ends, the readout keeps clear of it
@@ -98,8 +98,8 @@ panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, ruler: bool, rul
 
     if ruler {
         // The readout in the top row, the response and the level meter centred on its values, the labels
-        // sit above. The note with the gauge and the lock under it centred between the readout values and
-        // the bottom row. Offsets from the middle of the ruler.
+        // sit above. The note with the gauge and the lock under it between the readout values and the bottom
+        // row. Offsets from the middle of the ruler.
         layout.ruler_scale = ruler_scale
         readout_top := layout.response.y - LABEL_SIZE / 2
         readout_bottom := readout_top + READOUT_VALUE_Y + BASELINE * ruler_scale * READOUT_SIZE
@@ -107,10 +107,16 @@ panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, ruler: bool, rul
         layout.level_meter.y = layout.response.y - 2
         rows_bottom := corners - BOTTOM_ROW_CLEARANCE
 
+        // The readout, the letter with its octave, the gauge, the lock and the bottom row evenly apart
+        OCTAVE_BELOW :: 4 // past the letter's baseline
+        MIN_GAP :: 12
         note_top := -CAP_HALF * ruler_scale * RULER_NOTE_SIZE
-        gauge_y := -note_top + GAUGE_GAP
-        lock_y := gauge_y + GAUGE_HEIGHT + RULER_GAP + LOCK_BUTTON_HEIGHT / 2
-        middle := (readout_bottom + rows_bottom) / 2 - (note_top + lock_y + LOCK_BUTTON_HEIGHT / 2) / 2
+        note_bottom := -note_top + ruler_scale * OCTAVE_BELOW
+        contents := note_bottom - note_top + GAUGE_HEIGHT + LOCK_BUTTON_HEIGHT
+        gap := max((rows_bottom - readout_bottom - contents) / 4, MIN_GAP)
+        gauge_y := note_bottom + gap
+        lock_y := gauge_y + GAUGE_HEIGHT + gap + LOCK_BUTTON_HEIGHT / 2
+        middle := readout_bottom + gap - note_top
 
         center := (left + right) / 2
         height := ruler_scale * RULER_HEIGHT
@@ -119,7 +125,7 @@ panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, ruler: bool, rul
         layout.readout_align = .CENTER
         layout.gauge = {center, middle + gauge_y}
         layout.lock = {center, middle + lock_y}
-        layout.note_offset = layout.lock - {0, (LOCK_BUTTON_HEIGHT + RULER_GAP) / 2}
+        layout.note_offset = layout.lock - {0, (LOCK_BUTTON_HEIGHT + gap) / 2}
         return
     }
 

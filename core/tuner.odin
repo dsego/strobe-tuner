@@ -178,7 +178,11 @@ set_tuner_strings :: proc(self: ^Tuner, strings: []int) -> (retune: bool) {
         self.strings[i] = strings[i]
     }
     self.string_count = count
-    if !changed || count == 0 do return false
+    if !changed do return false
+
+    // The note being played picks the target again, it's only picked when the note changes
+    self.detected_note = {cents = -1}
+    if count == 0 do return false
 
     prev := self.target_note
     self.string_index = 0
@@ -390,4 +394,14 @@ test_tuner :: proc(t: ^testing.T) {
     set_tuner_strings(&tuner, nil)
     update_tuner(&tuner, detection(A2))
     testing.expect_value(t, tuner.target_note.name, 'A')
+
+    // The same note played on after the strings change picks the target again: a G2 on the low E string,
+    // then every note, is the G
+    set_tuner_strings(&tuner, guitar)
+    update_tuner(&tuner, detection(E2))
+    update_tuner(&tuner, detection(97.999))
+    testing.expect_value(t, tuner.string_index, 0)
+    set_tuner_strings(&tuner, nil)
+    update_tuner(&tuner, detection(97.999))
+    testing.expect_value(t, tuner.target_note.name, 'G')
 }
