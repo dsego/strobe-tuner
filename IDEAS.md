@@ -68,7 +68,7 @@ What falls short is around it, in this order:
      reads A0 and D0, 50 and 55 Hz only repeat together every 5 Hz. E1 barely moves.
 
    The fix:
-   - Always on, detections within about 8 ¢ of 50 or 60 Hz don't name a note, the grid holds mains
+   - Done, always on, detections within about 8 ¢ of 50 or 60 Hz don't name a note, the grid holds mains
      to a few cents. No string is tuned there, 50 Hz is G1 +35 ¢, 60 Hz is A♯1 +50 ¢ and the low B1
      of a seven string or baritone -49 ¢, but a string tuned up or down passes through. Locked or on
      a string the strobe keeps its note. No exception for an onset, plugging a cable in is one too.
@@ -78,30 +78,42 @@ What falls short is around it, in this order:
      about 19 ¢ of them, higher ones hit partials, 660 Hz is 11 × 60 and E5 is 2 ¢ off it. The one
      fix for a note pulled sharp or lost early, which costs bass the most.
    - Not a steady tone taken for background, a bowed or held note is one too.
-2. The detection rate is a throttle, not a cost. The 8192-point FFT takes tens of µs, 20 detections
-   a second with 3 confirmations is about 150 ms before a switch. Run it at 50 to 100 a second and
-   confirm by time, about 100 ms, not by count, the frames overlap and aren't independent.
-3. The window is a fixed 4096 samples, 85 ms. That's 2.3 periods at A0 and 2.6 at a five string
-   bass's low B, the far lags rest on few samples. High notes don't need it, and a long window
-   keeps the attack's sharp glide in view longer. About 4 periods of the candidate, clamped.
-4. Skip the pitch frames for 30 to 50 ms after a pluck, `update_onset` in `phase.odin` already
-   finds it. The attack's glide doesn't become a candidate.
-5. Low-pass or decimate the input while the candidate is under about 1 kHz. Pick noise and hiss
-   go, the NSDF gets cheaper, the precision it loses isn't used.
-6. The SNR gate is on the broadband RMS, a fan or rumble pulls it down while the partials stand
-   well clear in their own bands. Clarity does most of the rejection anyway (0.98 is about 17 dB
-   periodic to aperiodic, 0.9 about 10 dB), the 2 dB gate rarely decides. The bands' SNR is the
-   better signal.
-7. One candidate a frame. `nsdf_find_peak` keeps the first peak over 0.95 of the highest, and the
-   tuner rebuilds the reasoning over time by hand: `candidate_count`, `steady_count`,
-   `shortest_period`, `prevent_octave_jumps`. pYIN's part worth taking is the HMM, not YIN: keep 2
-   or 3 peaks a frame with their clarity as a likelihood, and pick the note path over time with
-   Viterbi, continuity settles the octave on a low string. Reshapes the tuner, discuss first, and
-   only if the octave rules keep growing.
+2. Done, the pitch detection hears up to 5 kHz, a low-pass on its own samples. With white hiss
+   40 dB down the Strat's A2 reads strong 14 times instead of 2, the acoustic's at 35 dB down
+   stays lit to 12 s instead of 2.8 s, the clean recordings don't change.
+3. The detection rate is a throttle, not a cost. The 8192-point FFT takes tens of µs, 20 detections
+   a second with 3 confirmations is about 150 ms before a switch. Run it at 60 a second and confirm
+   by time, about 150 ms, not by count, the frames overlap and aren't independent.
+   `note_switch_confirmations` becomes a time and `READOUT_SMOOTHING` a time constant.
+4. The window is a fixed 4096 samples, 85 ms. That's 2.3 periods at A0 and 2.6 at a five string
+   bass's low B, the far lags rest on few samples. Measure first, A0 and B0 with a weak
+   fundamental in `test_nsdf_accuracy`, and only if they fail a longer window while the followed
+   note is low.
+5. Octaves by continuity. The decay of a string can repeat at half its period, the bass's E1
+   reads E2 from about 4 s and the ukulele's A4 reads A5, and the tuner shows the octave. Both
+   peaks are in `nsdf_peaks`. `sandbox/hmm` picks the note with an HMM over all of them, like
+   pYIN, a causal forward pass, clarity^8 as the likelihood, later peaks counting half, a note
+   staying 0.97. Against the tuner on the recordings:
+   - E1 between 4 and 8 s, right 100% instead of 58%, the ukulele's A4 never shown as A5.
+   - It loses notes the tuner keeps, the last A2 of a sequence in hiss or hum 71 to 75% instead
+     of 100%, the A1 under hum after 8 s 47% instead of 100%. The tuner has the strobe's settled
+     track to hold a note, the HMM doesn't.
+   - After 8 s the E1 really repeats at E2, both show E2.
 
-To try, no promises: compressed spectrum before the inverse FFT, |X|^0.67 instead of |X|²
-(Tolonen and Karjalainen). Sharper peaks, a dominant partial pulls less, but it no longer matches
-the time domain normalization in `nsdf_run_nsdf`, the clarity thresholds would move.
+   The HMM as a whole isn't a win, its continuity on the octave is. The smaller version: a
+   detection an octave or two above the followed note doesn't switch while the NSDF also has a
+   peak at the followed note's period above `clarity_low`. One more rule next to
+   `prevent_octave_jumps`, maybe in place of some of it.
+
+Dropped: skipping the pitch frames after a pluck, the readout near the note comes from the strobe
+now and it would hold back the first detection. Replacing the broadband SNR gate, clarity does the
+rejection (0.98 is about 17 dB periodic to aperiodic, 0.9 about 10 dB) and the low-pass took the
+hiss out of the level too.
+
+Tried and dropped: compressed magnitudes (Tolonen and Karjalainen), the samples rebuilt with |X|^k
+and their phases so the normalization still matches. It flattens the hiss along with the partials,
+with white hiss 40 dB down the Strat's A2 reads right 13% of the time at k = 0.5 and 83% at 0.75,
+against 100%. Only the bass E1's decay gains, 77% to 90%, fewer octave errors.
 
 ## Temperaments
 
