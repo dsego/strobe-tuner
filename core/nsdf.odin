@@ -38,13 +38,11 @@ NSDFConfig :: struct {
     pffft_setup:     rawptr,
     fft_size:        int,
     fft:             []complex64,
-    spectrum:        []f32,
     autocorr:        []f32,
     nsdf:            []f32,
     samplerate:      int,
     padded_samples:  []f32,
-    autocorr_peaks:  [dynamic]int,
-    nsdf_peaks:      [dynamic]Vec2,
+    nsdf_peaks:     [dynamic]Vec2,
     chosen_peak_idx: int,
 }
 
@@ -55,7 +53,6 @@ nsdf_init :: proc(fft_size: int, samplerate: int) -> (self: NSDFConfig = {}) {
     // A real transform of fft_size samples has fft_size / 2 complex bins, see nsdf_process_samples
     self.fft = runtime.make_aligned([]complex64, fft_size / 2, 16)
     self.autocorr = runtime.make_aligned([]f32, fft_size, 16)
-    self.spectrum = make([]f32, fft_size)
     self.nsdf = make([]f32, fft_size / 2)
     self.samplerate = samplerate
     self.padded_samples = runtime.make_aligned([]f32, fft_size, 16)
@@ -65,11 +62,9 @@ nsdf_init :: proc(fft_size: int, samplerate: int) -> (self: NSDFConfig = {}) {
 nsdf_destroy :: proc(self: ^NSDFConfig) {
     pffft.destroy_setup(self.pffft_setup)
     delete(self.fft)
-    delete(self.spectrum)
     delete(self.autocorr)
     delete(self.nsdf)
     delete(self.padded_samples)
-    delete(self.autocorr_peaks)
     delete(self.nsdf_peaks)
 }
 
