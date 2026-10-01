@@ -81,10 +81,11 @@ What falls short is around it, in this order:
 2. Done, the pitch detection hears up to 5 kHz, a low-pass on its own samples. With white hiss
    40 dB down the Strat's A2 reads strong 14 times instead of 2, the acoustic's at 35 dB down
    stays lit to 12 s instead of 2.8 s, the clean recordings don't change.
-3. The detection rate is a throttle, not a cost. The 8192-point FFT takes tens of µs, 20 detections
-   a second with 3 confirmations is about 150 ms before a switch. Run it at 60 a second and confirm
-   by time, about 150 ms, not by count, the frames overlap and aren't independent.
-   `note_switch_confirmations` becomes a time and `READOUT_SMOOTHING` a time constant.
+3. Done, 60 detections a second and the tuner confirms by time, `note_switch_s` instead of a
+   count, the readout smoothing a time constant, a steady run held to its first detection
+   instead of each previous one. At the old 0.1 s a note shows about 70 ms sooner, 0.20 s
+   instead of 0.27 s, at 0.05 s from 0.12 to 0.15 s, the same notes right everywhere. At 0 the
+   ukulele under hum shows a wrong note 12% of the time.
 4. The window is a fixed 4096 samples, 85 ms. That's 2.3 periods at A0 and 2.6 at a five string
    bass's low B, the far lags rest on few samples. Measured and it holds, in
    `test_nsdf_accuracy` A0 and B0 read within 0.05 ¢ as sines and 0.2 ¢ with a weak fundamental

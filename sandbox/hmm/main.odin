@@ -22,7 +22,7 @@ CLARITY_HIGH :: 0.98
 CLARITY_LOW :: 0.9
 MIN_SNR_DB :: 2
 NOISE_FLOOR_SNR_DB :: 10
-CONFIRMATIONS :: 3
+note_switch_s: f32 = 0.05 // NOTE_SWITCH_S in the environment tries another
 HIGHPASS_HZ :: 60
 INTERVALS :: [?]f32{1, 2, 4}
 STROBE_SPEED :: 0.0125
@@ -111,6 +111,8 @@ main :: proc() {
     if value, found := os.lookup_env("STAY", context.temp_allocator); found do stay = strconv.parse_f64(value) or_else stay
     if value, found := os.lookup_env("SHARPNESS", context.temp_allocator); found do sharpness = strconv.parse_f64(value) or_else sharpness
 
+    if value, found := os.lookup_env("NOTE_SWITCH_S", context.temp_allocator); found do note_switch_s = strconv.parse_f32(value) or_else note_switch_s
+
     verbose := os.args[len(os.args) - 1] == "-v"
     expected := os.args[2:len(os.args) - 1] if verbose else os.args[2:]
 
@@ -126,7 +128,7 @@ main :: proc() {
 
     detector := core.init_pitch_detector(SAMPLERATE, FFT_SIZE, CLARITY_HIGH, CLARITY_LOW, MIN_SNR_DB, NOISE_FLOOR_SNR_DB)
     defer core.destroy_pitch_detector(&detector)
-    tuner := core.init_tuner(110, 440, CONFIRMATIONS, true)
+    tuner := core.init_tuner(110, 440, note_switch_s, true)
 
     intervals := INTERVALS
     strobe := core.init_phase_comparator(110, SAMPLERATE, intervals[:], .HARMONIC, NOISE_FLOOR_SNR_DB)

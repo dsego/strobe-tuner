@@ -70,7 +70,7 @@ run_app :: proc(config: ^Config) {
     tuner := core.init_tuner(
         target_freq_hz,
         config.pitch_standard,
-        config.note_switch_confirmations,
+        config.note_switch_s,
         config.prevent_strobe_octave_jumps,
     )
     tuner.offsets_cents = active_note_offsets(config)
@@ -264,7 +264,7 @@ run_app :: proc(config: ^Config) {
             // Same notes, retuned to the pitch standard
             pitch_detector.pitch_standard = config.pitch_standard
             core.set_tuner_pitch_standard(&tuner, config.pitch_standard)
-            tuner.confirmations = config.note_switch_confirmations
+            tuner.confirm_s = config.note_switch_s
             tuner.prevent_octave_jumps = config.prevent_strobe_octave_jumps
             tuner.octave_track = config.strobe_mode == .HARMONIC
             tuner.offsets_cents = active_note_offsets(config)

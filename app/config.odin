@@ -124,8 +124,8 @@ Config :: struct {
     noise_floor_snr_db_threshold: f32,
     pitch_detection_min_snr_db:   f32,
 
-    // number of consecutive pitch detections of a new note before the strobe switches to it
-    note_switch_confirmations:    int,
+    // how long a new note is detected in a row before the strobe switches to it
+    note_switch_s:                f32,
 
     // high-pass filter on the input to remove DC and low frequency rumble, 0 to disable
     highpass_cutoff_hz:           f32,
@@ -172,7 +172,7 @@ config_defaults :: Config {
     pitch_detection_clarity_high = 0.98,
     noise_floor_snr_db_threshold = 10, // to determine if it’s safe to update the noise floor
     pitch_detection_min_snr_db   = 2, // dB
-    note_switch_confirmations    = 3, // ~150ms at 20 detections per second, the last one strong or the run steady
+    note_switch_s                = 0.05, // the last detection strong or the run steady, at 0 a note under hum flickers
     highpass_cutoff_hz           = 60, // below guitar low E (82Hz), lower it for bass
     use_phase_average            = true,
     show_band_cents              = false,

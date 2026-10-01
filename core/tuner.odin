@@ -16,12 +16,13 @@
 
 package core
 
+import "core:math"
 import "core:testing"
 
 
 // Picks the note the strobe is tuned to from the pitch detections.
 //
-// A new note has to be detected several times in a row before the strobe switches to it, otherwise a single
+// A new note has to be detected for a moment in a row before the strobe switches to it, otherwise a single
 // noisy detection of a decaying note resets the strobe. A locked note keeps its name and the octave follows
 // the detected note. A note ringing out an octave off, like a harmonic on some guitar and bass strings, can
 // keep the strobe where it is.
@@ -35,13 +36,13 @@ Tuner :: struct {
     steady_freq:          f32, // the strong detections averaged for the readout, 0 before the first
     strobe_anchor:        Maybe(f32), // the strobe's cents at the latest strong detection, see update_tuner
 
-    // the note seen in a row so far and how many times
+    // the note seen in a row so far, cents -1 for none, and for how long
     candidate_note:       Note,
-    candidate_count:      int,
-    candidate_freq:       f32, // its latest detection
-    steady_count:         int, // of those, in a row each within STEADY_RUN_CENTS of the one before
+    candidate_s:          f32,
+    steady_s:             f32, // of that, held within STEADY_RUN_CENTS of run_freq, -1 for no run
+    run_freq:             f32, // the first detection of the steady run
 
-    confirmations:        int, // detections in a row before switching, the last one strong or the run steady
+    confirm_s:            f32, // seen this long in a row before switching, the last one strong or the run steady
     prevent_octave_jumps: bool,
     // The strobe shows the octave on a track of its own, it can stay where it is when the note jumps an
     // octave. Fine mode has every track on the one note, it goes dark on the octave and follows it instead.
@@ -61,18 +62,18 @@ Tuner :: struct {
 
 MAX_STRINGS :: 6
 
-init_tuner :: proc(target_freq_hz, pitch_standard: f32, confirmations: int, prevent_octave_jumps: bool) -> Tuner {
+init_tuner :: proc(target_freq_hz, pitch_standard: f32, confirm_s: f32, prevent_octave_jumps: bool) -> Tuner {
     return {
         target_note = find_note(target_freq_hz, pitch_standard),
         detected_note = {cents = -1},
         candidate_note = {cents = -1},
-        confirmations = confirmations,
+        confirm_s = confirm_s,
         prevent_octave_jumps = prevent_octave_jumps,
         octave_track = true,
     }
 }
 
-// Detections of the same note this close one after the other are a steady pitch, see update_tuner
+// Detections of the same note this close to the first of them are a steady pitch, see update_tuner
 STEADY_RUN_CENTS :: 5
 
 // The strobe keeps a note lit while it reads within this of where it was at the latest strong detection
@@ -87,37 +88,42 @@ STROBE_HOLD_CENTS :: 15
 update_tuner :: proc(self: ^Tuner, pitch: PitchInfo, strobe_cents: Maybe(f32) = nil) -> (retune: bool) {
     self.pitch = pitch
 
-    // Count consecutive detections of the same note, only for new measurements. Medium clarity detections
+    // Time consecutive detections of the same note, only for new measurements. Medium clarity detections
     // count too, a short pluck may only be strong briefly, but the switch itself needs a strong detection or
     // a steady run.
     if pitch.fresh {
         if pitch.is_weak_pitch {
-            self.candidate_count = 0
-            self.steady_count = 0
+            self.candidate_note = {cents = -1}
         } else if self.candidate_note.cents == pitch.detected_note.cents {
-            self.candidate_count += 1
-            steady := abs(cents_deviation(pitch.detected_freq, self.candidate_freq)) <= STEADY_RUN_CENTS
-            self.steady_count = self.steady_count + 1 if steady else 1
+            self.candidate_s += pitch.elapsed_s
+            if self.steady_s >= 0 && abs(cents_deviation(pitch.detected_freq, self.run_freq)) <= STEADY_RUN_CENTS {
+                self.steady_s += pitch.elapsed_s
+            } else {
+                self.steady_s = 0
+                self.run_freq = pitch.detected_freq
+            }
         } else {
             self.candidate_note = pitch.detected_note
-            self.candidate_count = 1
-            self.steady_count = 1
+            self.candidate_s = 0
+            self.steady_s = 0
+            self.run_freq = pitch.detected_freq
         }
         // A guess at a multiple of the period isn't a steady pitch however close it holds, the wave can
         // repeat better over a few periods for a moment
-        if !pitch.shortest_period do self.steady_count = 0
-        self.candidate_freq = pitch.detected_freq
+        if !pitch.shortest_period do self.steady_s = -1
     }
-    confirmed := self.candidate_count >= self.confirmations
+    seen := self.candidate_note.cents == pitch.detected_note.cents
+    confirmed := seen && self.candidate_s >= self.confirm_s
 
     // Or medium clarity detections that hold steady for as long, e.g. another string ringing along muddies
     // the wave. A stray one in between, like the pitch detection's guess at a multiple of the period,
     // breaks the run. Noise doesn't hold a note to a few cents.
-    strong := pitch.is_strong_pitch || (!pitch.is_weak_pitch && self.steady_count >= self.confirmations)
+    steady := seen && self.steady_s >= 0 && self.steady_s >= self.confirm_s
+    strong := pitch.is_strong_pitch || (!pitch.is_weak_pitch && steady)
 
     // Keep the previous measurement while there is no detected note
     if strong {
-        if pitch.fresh do steady_readout(self, pitch.detected_freq)
+        if pitch.fresh do steady_readout(self, pitch.detected_freq, pitch.elapsed_s)
         self.last_good_pitch = pitch
         self.strobe_anchor = strobe_cents
         if confirmed && self.detected_note.cents != pitch.detected_note.cents {
@@ -155,20 +161,21 @@ update_tuner :: proc(self: ^Tuner, pitch: PitchInfo, strobe_cents: Maybe(f32) = 
     return
 }
 
-// A detection moves the readout a fraction of the way, about a quarter second to settle at 20 detections a second
-READOUT_SMOOTHING :: 0.2
+// The readout follows the detections with this time constant, about a quarter second to settle
+READOUT_SMOOTHING_S :: 0.224
 
 // Further than this from the readout is a new note or a turned peg, the readout jumps there instead of gliding
 READOUT_JUMP_CENTS :: 6
 
 // Averages the strong detections so the readout doesn't flicker with every one, a new pluck starts afresh
-steady_readout :: proc(self: ^Tuner, freq: f32) {
+steady_readout :: proc(self: ^Tuner, freq: f32, elapsed_s: f32) {
     jump := self.steady_freq == 0 || !self.active || abs(cents_deviation(freq, self.steady_freq)) > READOUT_JUMP_CENTS
     if jump {
         self.steady_freq = freq
     } else {
         // In cents rather than Hz, the same smoothing for every note
-        self.steady_freq = cents_to_freq(READOUT_SMOOTHING * cents_deviation(freq, self.steady_freq), self.steady_freq)
+        smoothing := 1 - math.exp(-elapsed_s / READOUT_SMOOTHING_S)
+        self.steady_freq = cents_to_freq(smoothing * cents_deviation(freq, self.steady_freq), self.steady_freq)
     }
 }
 
@@ -312,6 +319,7 @@ test_tuner :: proc(t: ^testing.T) {
     detection :: proc(freq: f32, strong := true) -> PitchInfo {
         return {
             fresh = true,
+            elapsed_s = 0.05, // 20 detections a second
             detected_freq = freq,
             detected_note = find_note(freq),
             is_strong_pitch = strong,
@@ -325,14 +333,21 @@ test_tuner :: proc(t: ^testing.T) {
     A3 :: 220.0
 
     // A new note needs 3 detections in a row
-    tuner := init_tuner(E2, 440, 3, true)
+    tuner := init_tuner(E2, 440, 0.1, true)
     testing.expect(t, !update_tuner(&tuner, detection(A2)))
     testing.expect(t, !update_tuner(&tuner, detection(A2)))
     testing.expect(t, update_tuner(&tuner, detection(A2)))
     testing.expect_value(t, tuner.target_note.name, 'A')
 
+    // At 60 detections a second it takes as long, 7 of them
+    tuner = init_tuner(E2, 440, 0.1, true)
+    fast := detection(A2)
+    fast.elapsed_s = 1.0 / 60
+    for _ in 0 ..< 6 do testing.expect(t, !update_tuner(&tuner, fast))
+    testing.expect(t, update_tuner(&tuner, fast))
+
     // A weak detection starts the count again
-    tuner = init_tuner(E2, 440, 3, true)
+    tuner = init_tuner(E2, 440, 0.1, true)
     update_tuner(&tuner, detection(A2))
     update_tuner(&tuner, detection(A2))
     update_tuner(&tuner, detection(A2, strong = false))
@@ -346,7 +361,7 @@ test_tuner :: proc(t: ^testing.T) {
         pitch.is_weak_pitch = false
         return pitch
     }
-    tuner = init_tuner(E2, 440, 3, true)
+    tuner = init_tuner(E2, 440, 0.1, true)
     update_tuner(&tuner, medium(A2))
     update_tuner(&tuner, medium(A2 * 2.0 / 3.0))
     update_tuner(&tuner, medium(A2))
@@ -359,7 +374,7 @@ test_tuner :: proc(t: ^testing.T) {
     testing.expect_value(t, tuner.target_note.name, 'A')
 
     // Not a steady run of guesses at three periods, a third of the note
-    tuner = init_tuner(E2, 440, 3, true)
+    tuner = init_tuner(E2, 440, 0.1, true)
     for _ in 0 ..< 5 {
         guess := medium(A3 / 3)
         guess.shortest_period = false
@@ -368,13 +383,13 @@ test_tuner :: proc(t: ^testing.T) {
     testing.expect(t, !tuner.active)
 
     // An octave jump while a note is followed keeps the strobe, the target note still changes
-    tuner = init_tuner(A2, 440, 1, true)
+    tuner = init_tuner(A2, 440, 0, true)
     update_tuner(&tuner, detection(A2))
     testing.expect(t, !update_tuner(&tuner, detection(A3)))
     testing.expect_value(t, tuner.target_note.octave, 3)
 
     // The strobe keeps a followed note lit when the detections turn weak, but doesn't light one
-    tuner = init_tuner(A2, 440, 1, true)
+    tuner = init_tuner(A2, 440, 0, true)
     update_tuner(&tuner, detection(A2, strong = false), strobe_cents = 0)
     testing.expect(t, !tuner.active)
     update_tuner(&tuner, detection(A2), strobe_cents = 2)
@@ -394,13 +409,13 @@ test_tuner :: proc(t: ^testing.T) {
     testing.expect(t, !tuner.active)
 
     // Not without a track for the octave, the strobe follows it
-    tuner = init_tuner(A2, 440, 1, true)
+    tuner = init_tuner(A2, 440, 0, true)
     tuner.octave_track = false
     update_tuner(&tuner, detection(A2))
     testing.expect(t, update_tuner(&tuner, detection(A3)))
 
     // A locked note keeps its name, the octave follows
-    tuner = init_tuner(E2, 440, 1, false)
+    tuner = init_tuner(E2, 440, 0, false)
     toggle_note_lock(&tuner)
     update_tuner(&tuner, detection(A3))
     testing.expect_value(t, tuner.target_note.name, 'E')
@@ -417,7 +432,7 @@ test_tuner :: proc(t: ^testing.T) {
     testing.expect_value(t, tuner.target_note.name, 'G')
 
     // The readout averages small wobbles, a bigger change jumps straight there
-    tuner = init_tuner(A2, 440, 1, true)
+    tuner = init_tuner(A2, 440, 0, true)
     update_tuner(&tuner, detection(A2))
     update_tuner(&tuner, detection(cents_to_freq(2, A2)))
     _, steady := tuner_readout(&tuner)
@@ -427,7 +442,7 @@ test_tuner :: proc(t: ^testing.T) {
     testing.expect(t, abs(steady.err_cents - 20) < 0.01)
 
     // A note tuned 10 cents flat: the strobe is tuned there and the readout counts from there
-    tuner = init_tuner(A2, 440, 1, true)
+    tuner = init_tuner(A2, 440, 0, true)
     a2_index, _ := note_index(tuner.target_note)
     tuner.offsets_cents[a2_index] = -10
     testing.expect(t, abs(tuner_target_freq(&tuner) - cents_to_freq(-10, A2)) < 0.001)
@@ -441,7 +456,7 @@ test_tuner :: proc(t: ^testing.T) {
 
     // A guitar in standard tuning, E2 A2 D3 G3 B3 E4 in semitones from A4
     guitar := []int{-29, -24, -19, -14, -10, -5}
-    tuner = init_tuner(A3, 440, 1, true)
+    tuner = init_tuner(A3, 440, 0, true)
     testing.expect(t, set_tuner_strings(&tuner, guitar))
     testing.expect_value(t, tuner.string_index, 3)
     testing.expect_value(t, tuner.target_note.name, 'G')

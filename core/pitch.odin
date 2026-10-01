@@ -31,6 +31,10 @@ SNR_HYSTERESIS_DB :: 1.5
 MAINS_HZ :: [?]f32{50, 60}
 MAINS_CENTS :: 8
 
+// The window moves on by a display frame at 60 fps, the 8192 point FFT is cheap. The tuner confirms a note by
+// time, so the rate only changes how soon it's seen.
+DETECTIONS_PER_SECOND :: 60
+
 // The pitch detection hears up to here, above C8 (4186 Hz). Hiss and pick noise over it only blur the
 // period, the strobe still gets the whole band.
 PITCH_LOWPASS_HZ :: 5000
@@ -53,6 +57,7 @@ PitchDetector :: struct {
 PitchInfo :: struct {
     measured:        bool,
     fresh:           bool, // a new measurement this frame, false when repeating the previous one
+    elapsed_s:       f32, // the new audio since the previous measurement
     detected_freq:   f32,
     detected_note:   Note,
     clarity:         f32,
@@ -102,14 +107,8 @@ destroy_pitch_detector :: proc(self: ^PitchDetector) {
 run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> PitchInfo {
     info := PitchInfo{}
 
-    // Target FPS so we only run the FFT at so many times per second, instead of hundreds of times
-    frames_per_second := 20
-
-    available := audio_capture_read(
-        self,
-        self.samples,
-        i32(self.nsdf.samplerate / frames_per_second),
-    )
+    // Once a display frame's worth of new samples is in, the read wants more than its minimum
+    available := audio_capture_read(self, self.samples, i32(self.nsdf.samplerate / DETECTIONS_PER_SECOND) - 1)
 
     // no new audio samples available, skip pitch detection
     if available <= 0 {
@@ -131,6 +130,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.rms_dbfs = dbfs(info.rms)
 
     dt := f32(available) / f32(self.nsdf.samplerate)
+    info.elapsed_s = dt
     // Down to A0, flat by up to half a semitone, at the pitch standard
     min_freq := cents_to_freq(LOWEST_NOTE * 100 - 50, self.pitch_standard)
     mains := false

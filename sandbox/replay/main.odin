@@ -25,12 +25,12 @@ CLARITY_HIGH :: 0.98
 CLARITY_LOW :: 0.9
 MIN_SNR_DB :: 2
 NOISE_FLOOR_SNR_DB :: 10
-CONFIRMATIONS :: 3
+NOTE_SWITCH_S :: 0.05
 HIGHPASS_HZ :: 60
 INTERVALS :: [?]f32{1, 2, 4}
 STROBE_SPEED :: 0.0125
 
-// The app draws at 60 fps and the pitch detection runs when a 20th of a second has come in
+// The app draws at 60 fps and the pitch detection runs on every frame's new samples
 FRAME_SAMPLES :: SAMPLERATE / 60
 PRINT_EVERY_S :: 0.25
 
@@ -59,7 +59,7 @@ main :: proc() {
 
     detector := core.init_pitch_detector(SAMPLERATE, FFT_SIZE, CLARITY_HIGH, CLARITY_LOW, MIN_SNR_DB, NOISE_FLOOR_SNR_DB)
     defer core.destroy_pitch_detector(&detector)
-    tuner := core.init_tuner(110, 440, CONFIRMATIONS, true)
+    tuner := core.init_tuner(110, 440, NOTE_SWITCH_S, true)
 
     // The strobe tracks, following the tuner's note like in the app
     intervals := INTERVALS
