@@ -139,18 +139,13 @@ main :: proc() {
     for &score in tuner_scores do score.first_right_s = -1
     for &score in hmm_scores do score.first_right_s = -1
 
-    readout_track := -1
-    readout_ready := false
     for start := 0; start + FRAME_SAMPLES <= len(samples); start += FRAME_SAMPLES {
         frame := samples[start:start + FRAME_SAMPLES]
         core.audio_capture_write(&detector, frame)
         core.audio_capture_write(strobe, frame)
         pitch := core.run_pitch_detection(&detector, tuner.pitch)
         core.run_phase_detection(strobe, true, pitch.is_tonal)
-        readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
-        strobe_cents: Maybe(f32)
-        if readout_ready do strobe_cents = strobe.bands[readout_track].err_cents
-        if core.update_tuner(&tuner, pitch, strobe_cents) do retune(strobe, tuner.target_note.frequency)
+        if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) do retune(strobe, tuner.target_note.frequency)
         if !pitch.fresh do continue
 
         hmm_step(&belief, detector.nsdf.peaks[:], pitch.snr_db)

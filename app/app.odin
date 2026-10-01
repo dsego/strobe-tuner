@@ -318,12 +318,10 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     reading.pitch = core.run_pitch_detection(&app.pitch_detector, tuner.pitch)
     core.run_phase_detection(app.phase_comparator, app.config.use_phase_average, reading.pitch.is_tonal)
 
-    // The track the readout follows, while it's settled it keeps the note lit when the pitch detection loses it
+    // The track the readout follows. The strobe keeps the note lit while it shows it.
     ready: bool
     app.readout_track, ready = core.strobe_readout_track(app.phase_comparator, app.readout_track)
-    strobe_cents: Maybe(f32)
-    if ready do strobe_cents = app.phase_comparator.bands[app.readout_track].err_cents
-    if core.update_tuner(tuner, reading.pitch, strobe_cents) do retune(app)
+    if core.update_tuner(tuner, reading.pitch, core.strobe_shows_note(app.phase_comparator)) do retune(app)
 
     reading.out_of_range = core.tuner_out_of_range(tuner)
     reading.shown, reading.steady = core.tuner_readout(tuner)
@@ -692,7 +690,7 @@ save_when_settled :: proc(app: ^App) {
 limit_frame_rate :: proc(app: ^App) {
     signal := app.tuner.active
     for band in app.phase_comparator.bands {
-        if band.snr_db > STROBE_FADE_SNR_DB[0] do signal = true
+        if band.snr_db > core.STROBE_FADE_SNR_DB[0] do signal = true
     }
     touched := mouse_down() || mouse_pressed() || mouse_wheel() != 0
     sliding := ruler_swipe.gesture == .COASTING

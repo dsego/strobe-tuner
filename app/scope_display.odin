@@ -64,7 +64,7 @@ draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: Re
     colors := strobe_colors(config)
     beam_color, dark_color := hex(colors[0]), hex(colors[1])
 
-    fade := STROBE_FADE_SNR_DB
+    fade := core.STROBE_FADE_SNR_DB
     target := math.lerp(f32(SCOPE_NOISE_BRIGHTNESS), 1, math.smoothstep(fade[0], fade[1], snr_db))
     alpha := 1 - math.exp(-gfx_frame_time() / STROBE_LOOK_TIME_S)
     display.scope_visibility += alpha * (target - display.scope_visibility)

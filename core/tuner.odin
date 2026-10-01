@@ -34,7 +34,6 @@ Tuner :: struct {
     pitch:                PitchInfo, // the latest detection
     last_good_pitch:      PitchInfo, // the latest strong detection
     steady_freq:          f32, // the strong detections averaged for the readout, 0 before the first
-    strobe_anchor:        Maybe(f32), // the strobe's cents at the latest strong detection, see update_tuner
 
     // the note seen in a row so far, cents -1 for none, and for how long
     candidate_note:       Note,
@@ -76,16 +75,13 @@ init_tuner :: proc(target_freq_hz, pitch_standard: f32, confirm_s: f32, prevent_
 // Detections of the same note this close to the first of them are a steady pitch, see update_tuner
 STEADY_RUN_CENTS :: 5
 
-// The strobe keeps a note lit while it reads within this of where it was at the latest strong detection
-STROBE_HOLD_CENTS :: 15
-
 // Takes the latest detection, returns whether the strobe has to be retuned to target_note.
 //
-// strobe_cents is the readout's strobe track while it's loud and settled, see strobe_readout_track. It keeps
-// a followed note lit when the pitch detection loses it, but only the pitch detection lights one. A fading
-// string barely moves, another sound at the track's frequency beating with it pulls the track further and
-// the note goes dark.
-update_tuner :: proc(self: ^Tuner, pitch: PitchInfo, strobe_cents: Maybe(f32) = nil) -> (retune: bool) {
+// strobe_hears is whether the strobe shows the note, see strobe_shows_note. It keeps a followed note lit
+// when the pitch detection loses it, but only the pitch detection lights one. A fading string sinks into
+// the room's noise for the pitch detection while the strobe's narrow tracks still hear it and its
+// overtones, settled or still swinging from the attack. The note and the stripes go dark together.
+update_tuner :: proc(self: ^Tuner, pitch: PitchInfo, strobe_hears := false) -> (retune: bool) {
     self.pitch = pitch
 
     // Time consecutive detections of the same note, only for new measurements. Medium clarity detections
@@ -127,7 +123,6 @@ update_tuner :: proc(self: ^Tuner, pitch: PitchInfo, strobe_cents: Maybe(f32) = 
         if !locked_note(self) || pitch.detected_note.cents == self.target_note.cents {
             if pitch.fresh do steady_readout(self, pitch.detected_freq, pitch.elapsed_s)
             self.last_good_pitch = pitch
-            self.strobe_anchor = strobe_cents
         }
         if confirmed && self.detected_note.cents != pitch.detected_note.cents {
             self.detected_note = pitch.detected_note
@@ -159,11 +154,7 @@ update_tuner :: proc(self: ^Tuner, pitch: PitchInfo, strobe_cents: Maybe(f32) = 
         self.active = true
     }
 
-    held := false
-    cents, measured := strobe_cents.?
-    anchor, anchored := self.strobe_anchor.?
-    if measured && anchored do held = abs(cents - anchor) <= STROBE_HOLD_CENTS
-    if pitch.is_weak_pitch && !held do self.active = false
+    if pitch.is_weak_pitch && !strobe_hears do self.active = false
 
     return
 }
@@ -411,22 +402,12 @@ test_tuner :: proc(t: ^testing.T) {
 
     // The strobe keeps a followed note lit when the detections turn weak, but doesn't light one
     tuner = init_tuner(A2, 440, 0, true)
-    update_tuner(&tuner, detection(A2, strong = false), strobe_cents = 0)
+    update_tuner(&tuner, detection(A2, strong = false), strobe_hears = true)
     testing.expect(t, !tuner.active)
-    update_tuner(&tuner, detection(A2), strobe_cents = 2)
-    update_tuner(&tuner, detection(A2, strong = false), strobe_cents = -6)
+    update_tuner(&tuner, detection(A2))
+    update_tuner(&tuner, detection(A2, strong = false), strobe_hears = true)
     testing.expect(t, tuner.active)
     update_tuner(&tuner, detection(A2, strong = false))
-    testing.expect(t, !tuner.active)
-
-    // Not when it's pulled further from where it was at the latest strong detection
-    update_tuner(&tuner, detection(A2), strobe_cents = 2)
-    update_tuner(&tuner, detection(A2, strong = false), strobe_cents = 19)
-    testing.expect(t, !tuner.active)
-
-    // Nor without a strobe reading at the strong detection, right after the pluck the track isn't settled
-    update_tuner(&tuner, detection(A2))
-    update_tuner(&tuner, detection(A2, strong = false), strobe_cents = 0)
     testing.expect(t, !tuner.active)
 
     // Not without a track for the octave, the strobe follows it

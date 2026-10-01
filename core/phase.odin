@@ -507,9 +507,11 @@ update_phase_tracker :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
 }
 
 
-// The readout follows a track this loud, where its stripes are fully there (STROBE_FADE_SNR_DB in
-// app/strobe_display.odin)
-READOUT_MIN_SNR_DB :: 16
+// The stripes fade in between these SNRs, below it's the background noise (it stays under ~10 dB)
+STROBE_FADE_SNR_DB :: [2]f32{8, 16}
+
+// The readout follows a track this loud, where its stripes are fully there
+READOUT_MIN_SNR_DB :: STROBE_FADE_SNR_DB[1]
 READOUT_MAX_SIGMA_CENTS :: 2 // the tracked frequency is known this closely, not just reset or coasting
 READOUT_WEAK_FUNDAMENTAL_DB :: 20 // this far under the loudest partial the fundamental gives way to it
 READOUT_SWITCH_DB :: 6 // another partial takes over once it's this much louder, the fundamental this much nearer
@@ -551,6 +553,16 @@ strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: in
     sigma_cents := math.sqrt(band.tracker.covariance[1, 1]) / band_cent_omega(band)
     ready = band.tracker.active && band.onset_hold == 0 && sigma_cents <= READOUT_MAX_SIGMA_CENTS
     return
+}
+
+// Whether any track's stripes are at least half faded in, the note is still ringing. The background noise
+// stays under it.
+strobe_shows_note :: proc(self: ^PhaseComparator) -> bool {
+    fade := STROBE_FADE_SNR_DB
+    for band in self.bands {
+        if band.in_range && band.snr_db >= 0.5 * (fade[0] + fade[1]) do return true
+    }
+    return false
 }
 
 // Radians per sample for one cent at the band's frequency

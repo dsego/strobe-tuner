@@ -79,11 +79,9 @@ main :: proc() {
         core.audio_capture_write(strobe, frame)
         pitch := core.run_pitch_detection(&detector, tuner.pitch)
         core.run_phase_detection(strobe, true, pitch.is_tonal)
-        // Like the app's readout, and a settled track keeps the note lit
+        // Like the app's readout, and the strobe keeps the note lit while it shows it
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
-        strobe_cents: Maybe(f32)
-        if readout_ready do strobe_cents = strobe.bands[readout_track].err_cents
-        if core.update_tuner(&tuner, pitch, strobe_cents) do retune(strobe, tuner.target_note.frequency)
+        if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) do retune(strobe, tuner.target_note.frequency)
         if !pitch.fresh do continue
 
         // Every so often, and whenever the tuner lets go of the note or picks it up
@@ -119,7 +117,7 @@ main :: proc() {
             readout = fmt.tprintf("%+.1f¢ %v×", band.err_cents, band.interval)
         }
         fmt.printf("%-9v ", readout)
-        // The stripes fade out between 16 and 8 dB, see STROBE_FADE_SNR_DB in app/strobe_display.odin
+        // The stripes fade out between 16 and 8 dB, see core.STROBE_FADE_SNR_DB
         for band in strobe.bands {
             fmt.printf("  %v× %-7v %-6v", band.interval, fmt.tprintf("%.1fdB", band.snr_db), fmt.tprintf("%+.1f¢", band.err_cents))
         }

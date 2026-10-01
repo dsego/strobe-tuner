@@ -400,8 +400,6 @@ draw_strobe_bottom_shadow :: proc(self: ^StrobeDisplay, strobe: Rect, bottom: f3
 // about 2 / amp radians of the strobe phase, keep that a few standard deviations of the phase wide.
 STROBE_EDGE_SIGMAS :: 3.0
 STROBE_MAX_AMP :: 50.0 // limit, to avoid jagged edges in the strobe display
-// The stripes fade in between these SNRs, below it's the background noise (it stays under ~10 dB)
-STROBE_FADE_SNR_DB :: [2]f32{8, 16}
 STROBE_LOOK_TIME_S :: 0.05
 
 // The sharpness and visibility of a band's stripes, smoothed so they don't flicker
@@ -418,7 +416,7 @@ update_band_look :: proc(
     sigma := band.phase_sigma * band.speed * period_count
     target_amp := clamp(2.0 / (STROBE_EDGE_SIGMAS * max(sigma, 1e-6)), 1.0, STROBE_MAX_AMP)
 
-    fade := STROBE_FADE_SNR_DB
+    fade := core.STROBE_FADE_SNR_DB
     target_visibility := math.smoothstep(fade[0], fade[1], band.snr_db)
 
     alpha := 1.0 - math.exp(-gfx_frame_time() / STROBE_LOOK_TIME_S)
