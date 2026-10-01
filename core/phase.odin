@@ -21,8 +21,8 @@
     Lock-in amplifier: runs a single bin DFT over the newest samples and demodulates it against a
     reference oscillator running at the target frequency on an absolute sample clock. In tune, the
     resulting phase stands still; a detuned signal makes it rotate at the frequency difference.
-    The strobe turns by that phase as measured. The cents of each track are its rate, averaged for a
-    steady readout.
+    The strobe turns by that phase as measured. The cents of each track are its rate, a least squares
+    line fitted through it for a steady readout.
 
  -------------------------------------------------------------------------------------------------*/
 
@@ -49,9 +49,10 @@ MAX_BAND_NORM_FREQ :: 0.45
 // rate per cent of detuning
 STROBE_REFERENCE_HZ :: 656.5
 
-// The cents of each track are the phase's rate averaged over this long, steady but a turned peg shows
-// this much later than on the stripes
-READOUT_AVERAGE_S :: 0.3
+// The cents of each track are the slope of a least squares line through the phase, older measurements
+// weighted down with this time constant. Its weight on the rate of each moment peaks this long ago and is
+// twice that on average, steady but a turned peg shows that much later than on the stripes.
+READOUT_FIT_S :: 0.15
 MAX_PHASE_VAR :: 10.0 // rad², the stripes are as soft as they go
 
 // The pitch of a plucked string glides down from sharp during the attack. The readout's average starts
@@ -91,14 +92,25 @@ PhaseBand :: struct {
     // Lock-in reference oscillator frequency, radians per sample
     ref_omega:    f64,
 
-    // The readout, the phase's rate vs the reference (rad/sample) averaged since the last pluck
+    // The readout, the phase's rate vs the reference (rad/sample) fitted since the last pluck
     measuring:    bool, // phase holds the previous frame's measurement, off until the first after a reset
     rate:         f64,
-    rate_time_s:  f32, // averaged this long
+    rate_time_s:  f32, // fitted this long
+    fit:          RateFit,
 
     // Onset detection
     envelope:     f32,
     onset_hold:   int, // samples left during which the attack is distrusted
+}
+
+// The weighted sums of the least squares line through the phase since the last pluck. The newest
+// measurement sits at time 0 and phase 0, the older ones at negative times, so the sums stay small.
+RateFit :: struct {
+    weight:     f64,
+    time:       f64, // samples
+    time_sq:    f64,
+    phase:      f64, // rad, unwrapped
+    time_phase: f64,
 }
 
 
@@ -280,6 +292,7 @@ restart_band :: proc(band: ^PhaseBand) {
     band.measuring = false
     band.rate = 0
     band.rate_time_s = 0
+    band.fit = {}
     band.envelope = 0
     band.onset_hold = 0
 }
@@ -446,18 +459,31 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, use_phase
     band.phase_diff = f32(phase_advance * STROBE_REFERENCE_HZ / f64(band.freq_hz))
     band.phase_sigma = f32(math.sqrt(phase_measurement_var(band^)) * STROBE_REFERENCE_HZ / f64(band.freq_hz))
 
-    // The readout averages the rate once the attack has passed, and while the stripes show, a fading note
-    // keeps the last of it
+    // The fit's measurements move back by the new samples and down by the phase advance, the new one comes
+    // in at 0, and the older ones weigh less
+    step := f64(self.available)
+    if had_phase {
+        fit := &band.fit
+        fit.time_phase += step * phase_advance * fit.weight - step * fit.phase - phase_advance * fit.time
+        fit.time_sq += step * step * fit.weight - 2 * step * fit.time
+        fit.time -= step * fit.weight
+        fit.phase -= phase_advance * fit.weight
+
+        decay := math.exp(-step / (READOUT_FIT_S * f64(self.samplerate)))
+        fit^ = {fit.weight * decay, fit.time * decay, fit.time_sq * decay, fit.phase * decay, fit.time_phase * decay}
+    }
+
+    // The readout fits the rate once the attack has passed, and while the stripes show, a fading note
+    // keeps the last of it. Each measurement is weighted by its samples, a stalled frame counts for as long
+    // as it took. A single one has no slope yet, the rate is its advance.
     if had_phase && band.onset_hold == 0 && band.snr_db >= STROBE_FADE_SNR_DB[0] {
-        dt_s := f32(self.available) / self.samplerate
-        rate := phase_advance / f64(self.available)
-        if band.rate_time_s == 0 {
-            band.rate = rate
-        } else {
-            alpha := 1 - math.exp(-f64(dt_s) / READOUT_AVERAGE_S)
-            band.rate += alpha * (rate - band.rate)
-        }
-        band.rate_time_s += dt_s
+        if band.rate_time_s == 0 do band.fit = {}
+        band.rate_time_s += f32(self.available) / self.samplerate
+
+        band.fit.weight += step
+        fit := band.fit
+        spread := fit.weight * fit.time_sq - fit.time * fit.time
+        band.rate = (fit.weight * fit.time_phase - fit.time * fit.phase) / spread if spread > 0 else phase_advance / step
     }
     freq_diff_hz := f32(band.rate * f64(self.samplerate) / math.TAU)
     band.err_cents = cents_deviation(band.freq_hz + freq_diff_hz, band.freq_hz)
@@ -535,7 +561,7 @@ strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: in
     }
 
     band := self.bands[track]
-    ready = band.onset_hold == 0 && band.rate_time_s >= READOUT_AVERAGE_S
+    ready = band.onset_hold == 0 && band.rate_time_s >= 2 * READOUT_FIT_S
     return
 }
 
