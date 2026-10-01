@@ -54,6 +54,26 @@ init_highpass :: proc(cutoff_hz: f32, samplerate: f32) -> (bq: Biquad) {
 }
 
 
+// 2nd order Butterworth low-pass (RBJ cookbook, Q = 1/√2).
+// A cutoff of 0 disables the filter (pass-through).
+init_lowpass :: proc(cutoff_hz: f32, samplerate: f32) -> (bq: Biquad) {
+    if cutoff_hz <= 0 || cutoff_hz >= samplerate / 2 do return
+
+    omega := math.TAU * f64(cutoff_hz) / f64(samplerate)
+    cos_omega := math.cos(omega)
+    alpha := math.sin(omega) / math.SQRT_TWO // sin(omega) / (2Q), Q = 1/√2
+    a0 := 1.0 + alpha
+
+    bq.enabled = true
+    bq.b0 = (1.0 - cos_omega) / 2.0 / a0
+    bq.b1 = (1.0 - cos_omega) / a0
+    bq.b2 = (1.0 - cos_omega) / 2.0 / a0
+    bq.a1 = -2.0 * cos_omega / a0
+    bq.a2 = (1.0 - alpha) / a0
+    return
+}
+
+
 biquad_process :: proc(bq: ^Biquad, input: []f32, output: []f32) {
     assert(len(output) >= len(input))
 
@@ -73,11 +93,11 @@ biquad_process :: proc(bq: ^Biquad, input: []f32, output: []f32) {
 
 
 @(test)
-test_highpass :: proc(t: ^testing.T) {
+test_butterworth :: proc(t: ^testing.T) {
     samplerate: f32 = 48_000
 
-    measure_gain :: proc(freq_hz: f32, samplerate: f32) -> f32 {
-        bq := init_highpass(60, samplerate)
+    measure_gain :: proc(bq: Biquad, freq_hz: f32, samplerate: f32) -> f32 {
+        bq := bq
         input := make([]f32, int(samplerate))
         output := make([]f32, int(samplerate))
         defer delete(input)
@@ -93,7 +113,14 @@ test_highpass :: proc(t: ^testing.T) {
     }
 
     // -3dB at the cutoff, DC and rumble removed, passband untouched
-    testing.expect(t, abs(measure_gain(60, samplerate) - math.SQRT_TWO / 2) < 0.01)
-    testing.expect(t, measure_gain(10, samplerate) < 0.03)
-    testing.expect(t, abs(measure_gain(440, samplerate) - 1.0) < 0.01)
+    highpass := init_highpass(60, samplerate)
+    testing.expect(t, abs(measure_gain(highpass, 60, samplerate) - math.SQRT_TWO / 2) < 0.01)
+    testing.expect(t, measure_gain(highpass, 10, samplerate) < 0.03)
+    testing.expect(t, abs(measure_gain(highpass, 440, samplerate) - 1.0) < 0.01)
+
+    // The same at the other end, hiss above the cutoff goes
+    lowpass := init_lowpass(5000, samplerate)
+    testing.expect(t, abs(measure_gain(lowpass, 5000, samplerate) - math.SQRT_TWO / 2) < 0.01)
+    testing.expect(t, measure_gain(lowpass, 20_000, samplerate) < 0.07)
+    testing.expect(t, abs(measure_gain(lowpass, 440, samplerate) - 1.0) < 0.01)
 }

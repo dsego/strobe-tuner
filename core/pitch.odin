@@ -31,12 +31,17 @@ SNR_HYSTERESIS_DB :: 1.5
 MAINS_HZ :: [?]f32{50, 60}
 MAINS_CENTS :: 8
 
+// The pitch detection hears up to here, above C8 (4186 Hz). Hiss and pick noise over it only blur the
+// period, the strobe still gets the whole band.
+PITCH_LOWPASS_HZ :: 5000
+
 
 PitchDetector :: struct {
     using node:                   AudioCaptureNode,
     nsdf:                         NSDFConfig,
     samples:                      []f32,
-    clarity_high:                 f32,
+    lowpass:                      Biquad,
+    clarity_high:                f32,
     clarity_low:                  f32,
     noise_floor:                  NoiseFloor, // of the RMS
     min_snr_db:                   f32,
@@ -75,6 +80,7 @@ init_pitch_detector :: proc(
     self: PitchDetector,
 ) {
     self.samples = make([]f32, fft_size / 2)
+    self.lowpass = init_lowpass(PITCH_LOWPASS_HZ, f32(samplerate))
     self.nsdf = nsdf_init(fft_size, samplerate)
     self.clarity_high = clarity_high
     self.clarity_low = clarity_low
@@ -111,6 +117,10 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
         stale.fresh = false
         return stale
     }
+
+    // The new samples are at the end, the older ones were filtered on the way in before
+    new_samples := self.samples[max(len(self.samples) - int(available), 0):]
+    biquad_process(&self.lowpass, new_samples, new_samples)
 
     info.measured = true
     info.fresh = true
