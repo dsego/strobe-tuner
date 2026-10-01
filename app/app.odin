@@ -479,6 +479,8 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
                 config.scope_sweep = .XY if config.scope_sweep == .TIME else .TIME
             }
         }
+        // Over the whole strobe area like the strobe's, the readout's part included
+        draw_strobe_shadow(display, layout.strobe)
     }
 
     // A denied microphone only gives silence and the strobe would just stand still, say why instead

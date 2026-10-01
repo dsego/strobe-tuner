@@ -368,10 +368,15 @@ draw_strobe_display :: proc(
         }
     }
 
+    draw_strobe_shadow(self, rect)
+}
+
+// The inner shadow that sets the strobe into the window, over the trace and the scope's views too
+draw_strobe_shadow :: proc(self: ^StrobeDisplay, strobe: Rect) {
     draw_texture(
         self.shadow_tex,
         {0, 0, f32(self.shadow_tex.width), f32(self.shadow_tex.height)},
-        shadow_rect(rect),
+        shadow_rect(strobe),
     )
 }
 
