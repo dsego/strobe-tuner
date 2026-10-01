@@ -161,7 +161,7 @@ config_defaults :: Config {
     strobe_colorway              = .VIBRANT_RED,
     strobe_blur                  = true,
     motion_blur                  = true,
-    strobe_glow                  = false,
+    strobe_glow                  = true,
     prevent_strobe_octave_jumps  = true,
     partial_labels               = .MULTIPLES,
     chromatic_ruler              = true,
