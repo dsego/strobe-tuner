@@ -41,6 +41,10 @@ Tuner :: struct {
     candidate_freq:       f32, // its latest detection
     steady_count:         int, // of those, in a row each within STEADY_RUN_CENTS of the one before
 
+    // The level of the previous detection and how many detections ago a pluck raised it, see update_tuner
+    prev_rms_dbfs:        f32,
+    since_pluck:          int,
+
     confirmations:        int, // detections in a row before switching, the last one strong or the run steady
     prevent_octave_jumps: bool,
     // The strobe shows the octave on a track of its own, it can stay where it is when the note jumps an
@@ -78,6 +82,13 @@ STEADY_RUN_CENTS :: 5
 // The strobe keeps a note lit while it reads within this of where it was at the latest strong detection
 STROBE_HOLD_CENTS :: 15
 
+// A pluck raises the level at least this much from one detection to the next, a ringing string only fades
+PLUCK_RISE_DB :: 3
+
+// Detections after a pluck, about half a second, while a note an octave or two above the followed one is a
+// new note, see update_tuner
+PLUCK_DETECTIONS :: 10
+
 // Takes the latest detection, returns whether the strobe has to be retuned to target_note.
 //
 // strobe_cents is the readout's strobe track while it's loud and settled, see strobe_readout_track. It keeps
@@ -86,6 +97,25 @@ STROBE_HOLD_CENTS :: 15
 // the note goes dark.
 update_tuner :: proc(self: ^Tuner, pitch: PitchInfo, strobe_cents: Maybe(f32) = nil) -> (retune: bool) {
     self.pitch = pitch
+
+    // A string's decay can repeat at half or a quarter of its period once its odd partials fade, and the
+    // pitch detection reads it an octave or two up. While the wave still repeats better at the followed
+    // note's period and nothing was plucked since, it's the same string ringing out, the detection is
+    // left out, and so is every repeat of it. A string plucked an octave up repeats better at its own
+    // period, or comes with a pluck while the old one still rings.
+    if pitch.fresh {
+        plucked := pitch.rms_dbfs > self.prev_rms_dbfs + PLUCK_RISE_DB
+        self.since_pluck = 0 if plucked else self.since_pluck + 1
+        self.prev_rms_dbfs = pitch.rms_dbfs
+    }
+    octaves_up := pitch.detected_note.cents - self.detected_note.cents
+    if self.active && !pitch.is_weak_pitch && (octaves_up == 1200 || octaves_up == 2400) && self.since_pluck >= PLUCK_DETECTIONS {
+        for index in 0 ..< pitch.period_peak_count {
+            peak := pitch.period_peaks[index]
+            followed := find_note(peak.x, self.detected_note.pitch_standard).cents == self.detected_note.cents
+            if followed && peak.y > pitch.clarity do return
+        }
+    }
 
     // Count consecutive detections of the same note, only for new measurements. Medium clarity detections
     // count too, a short pluck may only be strong briefly, but the switch itself needs a strong detection or
@@ -372,6 +402,41 @@ test_tuner :: proc(t: ^testing.T) {
     update_tuner(&tuner, detection(A2))
     testing.expect(t, !update_tuner(&tuner, detection(A3)))
     testing.expect_value(t, tuner.target_note.octave, 3)
+
+    // A string ringing out an octave up, the wave still repeats better at its own period, is still that note.
+    // Not once the octave repeats better, nor right after a pluck.
+    E1 :: 41.2
+    decay :: proc(octave_clarity, followed_clarity: f32, rms_dbfs: f32 = -30) -> PitchInfo {
+        pitch := detection(2 * E1)
+        pitch.clarity = octave_clarity
+        pitch.rms_dbfs = rms_dbfs
+        pitch.period_peaks[0] = {2 * E1, octave_clarity}
+        pitch.period_peaks[1] = {E1, followed_clarity}
+        pitch.period_peak_count = 2
+        return pitch
+    }
+    ringing :: proc() -> PitchInfo {
+        pitch := detection(E1)
+        pitch.rms_dbfs = -30
+        return pitch
+    }
+    tuner = init_tuner(E1, 440, 3, true)
+    for _ in 0 ..< PLUCK_DETECTIONS do update_tuner(&tuner, ringing())
+    // Repeated between detections like the app does every frame
+    repeat := decay(0.97, 1)
+    repeat.fresh = false
+    for _ in 0 ..< 5 {
+        update_tuner(&tuner, decay(0.97, 1))
+        update_tuner(&tuner, repeat)
+    }
+    testing.expect_value(t, tuner.detected_note.octave, 1)
+    for _ in 0 ..< 3 do update_tuner(&tuner, decay(0.99, 0.98))
+    testing.expect_value(t, tuner.detected_note.octave, 2)
+
+    tuner = init_tuner(E1, 440, 3, true)
+    for _ in 0 ..< PLUCK_DETECTIONS do update_tuner(&tuner, ringing())
+    for _ in 0 ..< 3 do update_tuner(&tuner, decay(0.97, 1, rms_dbfs = -20))
+    testing.expect_value(t, tuner.detected_note.octave, 2)
 
     // The strobe keeps a followed note lit when the detections turn weak, but doesn't light one
     tuner = init_tuner(A2, 440, 1, true)

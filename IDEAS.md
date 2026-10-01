@@ -100,10 +100,14 @@ What falls short is around it, in this order:
      track to hold a note, the HMM doesn't.
    - After 8 s the E1 really repeats at E2, both show E2.
 
-   The HMM as a whole isn't a win, its continuity on the octave is. The smaller version: a
-   detection an octave or two above the followed note doesn't switch while the NSDF also has a
-   peak at the followed note's period above `clarity_low`. One more rule next to
-   `prevent_octave_jumps`, maybe in place of some of it.
+   The HMM as a whole isn't a win, its continuity on the octave is. Done in `update_tuner`
+   instead: a detection an octave or two above the followed note is left out while the wave
+   repeats better at the followed note's period, and nothing was plucked in the last 10
+   detections (the level up 3 dB). A string really played an octave up repeats better at its own
+   period, A2 after A1 at 0.975 to 0.993 against 0.948 to 0.984. The bass's E1 reads right from
+   4 to 12 s, 100% instead of 58% and 0%, the ukulele's A4 shows as A5 11% of the time instead
+   of 33%, A1 to A2 still switches in 0.27 s. A string plucked an octave or two up while the old
+   one still rings loud stays the old note, the NSDF itself reads the mix at the longer period.
 
 Dropped: skipping the pitch frames after a pluck, the readout near the note comes from the strobe
 now and it would hold back the first detection. Replacing the broadband SNR gate, clarity does the
