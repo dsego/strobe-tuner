@@ -434,44 +434,70 @@ draw_ruler_note :: proc(note: core.Note, pos: [2]f32, name_font, sharp_font: Pix
 }
 
 
-// The gauge under the ruler's note: a row of ticks either side of a middle one, the tick for how far the pitch
-// is off lights up, flat on the left like the lower notes on the ruler. The ticks are evenly spaced, each
-// a wider range of cents than the one before it, so the last few cents to the middle take as many ticks
-// as the rest. Within the middle one's range it's in tune.
+// The gauge under the ruler's note: a row of ticks, the middle one red, slides with the pitch like an old
+// bathroom scale's dial. The red tick is as far off the note as the pitch, flat on the left like the lower
+// notes on the ruler, and the gauge closes in under the note as it's tuned. It glides after the pitch and
+// is held where it was while there's no pitch. The ticks fade out towards the ends of the gauge's room.
+// The distances are evenly spaced ticks, each a wider range of cents than the one before it, so the last
+// few cents to the middle take as many ticks as the rest.
 // Up to half a semitone, where the next note takes over on the ruler. A string is tuned up from further
-// away, past half a semitone its longer ticks go on a semitone each, the last for anything further.
-GAUGE_CENTS :: [?]f32{2, 5, 10, 20, 35, 50} // the middle tick's range, then the ticks outwards
+// away, past half a semitone its longer ticks go on a semitone each.
+GAUGE_CENTS :: [?]f32{0, 5, 10, 20, 35, 50} // the distances in ticks from the middle outwards
 GAUGE_SEMITONE_TICKS :: 3
 GAUGE_SPACING :: 13 // between the ticks, it grows with the ruler
-GAUGE_TICK :: 12 // tall, the longer ones are GAUGE_HEIGHT
+GAUGE_TICK :: 12 // tall, the red one and every few are GAUGE_HEIGHT
 GAUGE_HEIGHT :: 20
 GAUGE_GAP :: 18 // from the bottom of the note's letter, clear of the octave
+GAUGE_SLIDE_SPEED :: 6 // per second, how quickly it closes the distance, slow enough to ride over the jitter
+GAUGE_TOLERANCE :: 0.3 // ticks, it only goes after the pitch once it's moved this far
 
-// top is the middle of the gauge at its top. Lights a tick while there's a pitch, cents from the target.
+// Where the red tick is, counted in ticks from under the note, flat is negative
+gauge_position: f32
+gauge_target: f32 // where it's going, within GAUGE_TOLERANCE of the pitch
+
+// top is the middle of the gauge at its top. Follows the cents from the target while there's a pitch.
 draw_cents_gauge :: proc(top: [2]f32, cents: f32, lit: bool, semitones: bool, color: Color) {
-    ranges := GAUGE_CENTS
-    per_side := len(ranges) - 1 + (GAUGE_SEMITONE_TICKS if semitones else 0)
+    ticks := GAUGE_CENTS
+    per_side := len(ticks) - 1 + (GAUGE_SEMITONE_TICKS if semitones else 0)
 
-    // The tick for these cents counted out from the middle, the outermost for anything further
-    tick := 0
-    distance := abs(cents)
-    for tick < per_side {
-        upper := ranges[tick] if tick < len(ranges) else 100 * f32(tick - len(ranges) + 1)
-        if distance <= upper do break
-        tick += 1
+    // The cents in ticks, between two ticks in proportion, the outermost for anything further. The gauge
+    // goes after the pitch once it's moved past the tolerance, and to where it is, it doesn't stop short.
+    if lit {
+        distance := abs(cents)
+        tick := f32(per_side)
+        for index in 1 ..= per_side {
+            upper := ticks[index] if index < len(ticks) else 100 * f32(index - len(ticks) + 1)
+            lower := ticks[index - 1] if index - 1 < len(ticks) else 100 * f32(index - len(ticks))
+            if distance <= upper {
+                tick = f32(index - 1) + (distance - lower) / (upper - lower)
+                break
+            }
+        }
+        pitch := math.sign(cents) * tick
+        if abs(pitch - gauge_target) > GAUGE_TOLERANCE do gauge_target = pitch
     }
-    side := -1 if cents < 0 else 1
 
+    gauge_target = clamp(gauge_target, -f32(per_side), f32(per_side))
+    gauge_position += (gauge_target - gauge_position) * min(1, GAUGE_SLIDE_SPEED * gfx_frame_time())
+
+    // The ticks either side of the red one, as far as the room reaches from under the note, every few long
+    // like a ruler's. Not snapped to the pixels, they glide.
+    LONG_EVERY :: 5
     spacing := pixel_fonts.ruler_scale * GAUGE_SPACING
-    for offset in -per_side ..= per_side {
-        long := offset == 0 || abs(offset) >= len(ranges)
+    first := int(math.floor(-f32(per_side) - gauge_position)) - 1
+    last := int(math.ceil(f32(per_side) - gauge_position)) + 1
+    for offset in first ..= last {
+        along := f32(offset) + gauge_position
+        fade := clamp(f32(per_side) + 1 - abs(along), 0, 1)
+        if fade == 0 do continue
+        red := offset == 0
+        long := red || offset % LONG_EVERY == 0
         height: f32 = GAUGE_HEIGHT if long else GAUGE_TICK
-        x := top.x + f32(offset) * spacing
-        on := lit && (offset == 0 if tick == 0 else offset == side * tick)
-        // Thin like a ruler's, the lit one twice as wide
-        width: f32 = 2 if on else 1
-        position := snap_to_pixels({x - width / 2, top.y + (GAUGE_HEIGHT - height) / 2})
-        draw_rect(position, {width, height}, color if on else text_color_muted)
+        width: f32 = 2 if red else 1
+        // Red while there's a pitch
+        tick_color := color if red && lit else text_color_muted
+        tick_color.a = u8(f32(tick_color.a) * fade)
+        draw_rect({top.x + along * spacing - width / 2, top.y + (GAUGE_HEIGHT - height) / 2}, {width, height}, tick_color)
     }
 }
 
