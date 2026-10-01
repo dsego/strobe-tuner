@@ -97,63 +97,6 @@ gui_lock_toggle :: proc(center: [2]f32, locked: bool) -> bool {
     return gui_button({rect.x, center.y - TOUCH_HEIGHT / 2, rect.width, TOUCH_HEIGHT})
 }
 
-// The key of a transposing instrument: the key between − and + that step it, and above them an LED and
-// the label like the FAST toggle, the label over its value like the readout. The LED lights in any key
-// but C so it isn't left on by mistake, tapping it or the label goes back to C. pos is the left edge and
-// the middle of the stepper, see TRANSPOSE_LABEL_TOP. Returns the new transpose, see Config.transpose.
-gui_transpose :: proc(pos: [2]f32, transpose: int) -> int {
-    // A Bb instrument sounds a tone below the written note, the note shows 2 semitones up
-    KEYS :: [12]cstring{"C", "B", "Bb", "A", "Ab", "G", "Gb", "F", "E", "Eb", "D", "Db"}
-    LABEL :: "TRANSPOSE"
-    LED_SIZE :: 8
-    LABEL_GAP :: 10
-    KEY_SLOT :: 56 // between the − and +, wide enough for "Bb" without them moving
-    STEP_TOUCH :: 56 // centred on the − and +, the inner halves run to the middle of the key
-    TOUCH_BELOW :: 26 // from the middle of the stepper, its touch area runs up to the label
-
-    keys := KEYS
-    on := transpose != 0
-
-    // The LED and the label
-    label_top := pos.y - TRANSPOSE_LABEL_TOP
-    label_middle := label_top + LABEL_SIZE / 2
-    draw_led({pos.x, label_middle - LED_SIZE / 2, LED_SIZE, LED_SIZE}, on, pill_yellow)
-    label_x := pos.x + LED_SIZE + LABEL_GAP
-    label_width := measure_label(pixel_fonts.label, LABEL, 1).x
-    draw_label(pixel_fonts.label, LABEL, {label_x, label_top}, text_color_white if on else text_color_light, 1)
-
-    // − and the key and + under the label, the key centred under the LED and the label together
-    font := pixel_fonts.stepper
-    minus_size := measure_label(font, "−")
-    plus_size := measure_label(font, "+")
-    key_size := measure_label(font, keys[transpose])
-    key_center := math.round((pos.x + label_x + label_width) / 2)
-    minus_x := key_center - KEY_SLOT / 2 - minus_size.x
-    plus_x := key_center + KEY_SLOT / 2
-    text_y := pos.y - key_size.y / 2
-    draw_label(font, "−", {minus_x, text_y}, text_color_light)
-    draw_label(font, keys[transpose], {key_center - key_size.x / 2, text_y}, text_color_white)
-    draw_label(font, "+", {plus_x, text_y}, text_color_light)
-
-    // Down a key is up a semitone on the note. The touch areas split halfway from the label to the stepper,
-    // the + is under the label.
-    step_top := (label_top + LABEL_SIZE + text_y) / 2
-    step_height := pos.y + TOUCH_BELOW - step_top
-    minus_left := minus_x + minus_size.x / 2 - STEP_TOUCH / 2
-    plus_right := plus_x + plus_size.x / 2 + STEP_TOUCH / 2
-    if gui_button({minus_left, step_top, key_center - minus_left, step_height}) do return (transpose + 1) % 12
-    if gui_button({key_center, step_top, plus_right - key_center, step_height}) do return (transpose + 11) % 12
-    // The LED and the label, down to the stepper
-    reset_left := pos.x - 12
-    reset_top := label_top - 14
-    if gui_button({reset_left, reset_top, label_x + label_width + 12 - reset_left, step_top - reset_top}) do return 0
-    return transpose
-}
-
-// From the top of the transpose label to the middle of the stepper under it, much further from its value
-// than the readout's labels so a tap on the + doesn't reach the label
-TRANSPOSE_LABEL_TOP :: LABEL_SIZE + TRANSPOSE_GAP + STEPPER_SIZE / 2
-TRANSPOSE_GAP :: 20 // between the label and the stepper
 
 
 // A partial without the ×, the fifth as 1½ like the 1 1½ 2 preset
@@ -249,24 +192,23 @@ gui_note_arrows :: proc(pos: [2]f32, locked: bool) -> (step: int) {
 }
 
 
-// The chromatic ruler, all the notes in a row with the target note large in the middle.
-// The notes slide over to the next semitone, further jumps snap, a swipe drags the row. A note grows as it
+// The ruler, the notes in a row with the target note large in the middle: every semitone, or an
+// instrument's strings in the order they're tuned.
+// The notes slide over to the next one, further jumps snap, a swipe drags the row. A note grows as it
 // comes into the middle and shrinks as it goes.
 // The fonts are loaded at the exact sizes, see update_pixel_fonts, and everything lands on whole pixels.
 
-RULER_SPACING :: 70 // between the letters of neighbouring semitones, room for a sharp between them
+RULER_SPACING :: 70 // between the letters of neighbouring notes, room for a sharp between them
 RULER_CENTER_GAP :: 30 // extra room either side of the large note
 RULER_EDGE :: 36 // half a letter and a sharp, the outermost ones stay inside the edges
 RULER_MAX_PER_SIDE :: 2
 RULER_SLIDE_SPEED :: 14 // per second, how quickly the slide closes the distance
-RULER_LOWEST :: -48 // A0, in semitones from A4
-RULER_HIGHEST :: 39 // C8
 RULER_SWIPE_START :: 10 // points sideways before a press on the ruler is a swipe and not a tap
 RULER_COAST_MAX :: 20 // notes per second
 RULER_COAST_MIN :: 2 // notes per second, let go slower than this it settles on the nearest note
 RULER_COAST_FRICTION :: 4 // how far a flick coasts, 1/4 of a second at the finger's speed, in about 1/2 a second
 
-// Where the middle of the ruler is, in semitones from A4, it follows the target note a little behind
+// Where the middle of the ruler is, counted in its notes, it follows the target note a little behind
 ruler_position: f32
 ruler_initialized: bool
 
@@ -289,16 +231,15 @@ RulerSwipe :: struct {
 
 ruler_swipe: RulerSwipe
 
-// Returns how many semitones to step when another note is tapped or a swipe lands, and while swiping how
-// far the note in the middle is from the target
-gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int, browse: int) {
+// notes[target] is the target note, none hides the ruler. Returns how many notes to step when another note is
+// tapped or a swipe lands, and while swiping how far the note in the middle is from the target.
+gui_note_ruler :: proc(rect: Rect, notes: []core.Note, target: int, active: bool) -> (step: int, browse: int) {
     swipe := &ruler_swipe
-    if note.frequency == 0 {
+    if len(notes) == 0 {
         swipe^ = {}
         return
     }
-
-    target := note.cents / 100
+    highest := f32(len(notes) - 1)
 
     // The gaps grow with the letters, the fonts were loaded at the layout's size
     scale := pixel_fonts.ruler_scale
@@ -370,7 +311,7 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int,
         // finger's speed it takes twice as long as at that speed
         speed := clamp(-swipe.velocity / spacing, -RULER_COAST_MAX, RULER_COAST_MAX)
         stop := ruler_position + speed / RULER_COAST_FRICTION
-        swipe.stop_at = clamp(math.round(stop), RULER_LOWEST, RULER_HIGHEST)
+        swipe.stop_at = clamp(math.round(stop), 0, highest)
         if speed > 0 do swipe.stop_at = max(swipe.stop_at, math.ceil(ruler_position))
         if speed < 0 do swipe.stop_at = min(swipe.stop_at, math.floor(ruler_position))
         distance := swipe.stop_at - ruler_position
@@ -389,8 +330,8 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int,
     }
 
     // Not past the ends
-    if ruler_position <= RULER_LOWEST || ruler_position >= RULER_HIGHEST {
-        ruler_position = clamp(ruler_position, RULER_LOWEST, RULER_HIGHEST)
+    if ruler_position <= 0 || ruler_position >= highest {
+        ruler_position = clamp(ruler_position, 0, highest)
         settle = math.round(ruler_position)
         if swipe.coast != 0 do land = true
     }
@@ -404,7 +345,7 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int,
     if moving && !land {
         browse = int(settle) - target
     } else {
-        // Slide to the next semitone, and settle exactly on the note, a jump further snaps
+        // Slide to the next note, and settle exactly on it, a jump further snaps
         shown := target + step
         if abs(f32(shown) - ruler_position) > 1 && step == 0 do ruler_position = f32(shown)
         ruler_position += (f32(shown) - ruler_position) * min(1, RULER_SLIDE_SPEED * dt)
@@ -417,14 +358,14 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int,
     note_color := text_color_white if active else text_color_muted
 
     // Notes slide in and out at the ends, fading, the next one out is only drawn while it slides
-    first := max(int(math.floor(ruler_position)) - per_side - 1, RULER_LOWEST)
-    last := min(int(math.ceil(ruler_position)) + per_side + 1, RULER_HIGHEST)
-    for semitone in first ..= last {
-        offset := f32(semitone) - ruler_position
+    first := max(int(math.floor(ruler_position)) - per_side - 1, 0)
+    last := min(int(math.ceil(ruler_position)) + per_side + 1, len(notes) - 1)
+    for index in first ..= last {
+        offset := f32(index) - ruler_position
         distance := abs(offset)
         x := center.x + offset * spacing + math.sign(offset) * center_gap * min(distance, 1)
 
-        ruler_note := note if semitone == target else core.cents_to_note(f32(semitone * 100), note.pitch_standard)
+        ruler_note := notes[index]
 
         // Large in the middle and small a note away, in between it grows as it comes in and shrinks as it
         // goes, drawn from the large letters scaled down. Settled they're the fonts' own sizes.
@@ -456,8 +397,8 @@ gui_note_ruler :: proc(rect: Rect, note: core.Note, active: bool) -> (step: int,
         draw_ruler_note(ruler_note, {x, center.y}, name_font, sharp_font, octave, color)
 
         // Tapping another note locks it
-        if tapped && semitone != target && distance <= f32(per_side) && point_in_rect(mouse, {x - spacing / 2, rect.y, spacing, rect.height}) {
-            step = semitone - target
+        if tapped && index != target && distance <= f32(per_side) && point_in_rect(mouse, {x - spacing / 2, rect.y, spacing, rect.height}) {
+            step = index - target
         }
     }
 
@@ -492,6 +433,47 @@ draw_ruler_note :: proc(note: core.Note, pos: [2]f32, name_font, sharp_font: Pix
     }
 }
 
+
+// The gauge under the ruler's note: a row of ticks either side of a middle one, the tick for how far the pitch
+// is off lights up, flat on the left like the lower notes on the ruler. The ticks are evenly spaced, each
+// a wider range of cents than the one before it, so the last few cents to the middle take as many ticks
+// as the rest. Within the middle one's range it's in tune.
+// Up to half a semitone, where the next note takes over on the ruler. A string is tuned up from further
+// away, past half a semitone its longer ticks go on a semitone each, the last for anything further.
+GAUGE_CENTS :: [?]f32{2, 5, 10, 20, 35, 50} // the middle tick's range, then the ticks outwards
+GAUGE_SEMITONE_TICKS :: 3
+GAUGE_SPACING :: 13 // between the ticks, it grows with the ruler
+GAUGE_TICK :: 12 // tall, the longer ones are GAUGE_HEIGHT
+GAUGE_HEIGHT :: 20
+GAUGE_GAP :: 18 // from the bottom of the note's letter, clear of the octave
+
+// top is the middle of the gauge at its top. Lights a tick while there's a pitch, cents from the target.
+draw_cents_gauge :: proc(top: [2]f32, cents: f32, lit: bool, semitones: bool, color: Color) {
+    ranges := GAUGE_CENTS
+    per_side := len(ranges) - 1 + (GAUGE_SEMITONE_TICKS if semitones else 0)
+
+    // The tick for these cents counted out from the middle, the outermost for anything further
+    tick := 0
+    distance := abs(cents)
+    for tick < per_side {
+        upper := ranges[tick] if tick < len(ranges) else 100 * f32(tick - len(ranges) + 1)
+        if distance <= upper do break
+        tick += 1
+    }
+    side := -1 if cents < 0 else 1
+
+    spacing := pixel_fonts.ruler_scale * GAUGE_SPACING
+    for offset in -per_side ..= per_side {
+        long := offset == 0 || abs(offset) >= len(ranges)
+        height: f32 = GAUGE_HEIGHT if long else GAUGE_TICK
+        x := top.x + f32(offset) * spacing
+        on := lit && (offset == 0 if tick == 0 else offset == side * tick)
+        // Thin like a ruler's, the lit one twice as wide
+        width: f32 = 2 if on else 1
+        position := snap_to_pixels({x - width / 2, top.y + (GAUGE_HEIGHT - height) / 2})
+        draw_rect(position, {width, height}, color if on else text_color_muted)
+    }
+}
 
 // Strobe speeds per cent of detuning, fast spins 4× faster for the final adjustment
 RESPONSE_SPEEDS :: [2]f32{0.0125, 0.05}
@@ -565,6 +547,7 @@ gui_dropdown :: proc(
     edit_mode: bool,
     left_pad: f32 = 12,
     height: f32 = 24,
+    down := false, // the menu opens under the button, it's drawn after the controls below it
 ) -> bool {
     edit_mode := edit_mode
     btn_bounds := Rect{position.x, position.y, width, height}
@@ -587,11 +570,12 @@ gui_dropdown :: proc(
         )
     }
 
-    // The menu sits 6pt above the button, the gap counts as part of it for the clicks
+    // The menu sits 6pt above the button, or below it, the gap counts as part of it for the clicks
     MENU_RADIUS :: 12
     MENU_PAD :: 4 // above the first option and below the last one, part of them and their highlight
     menu_height := f32(len(options) * 24) + 2 * MENU_PAD
     menu_bounds := Rect{position.x, position.y - menu_height - 6, width, menu_height + 6}
+    if down do menu_bounds.y = position.y + height
 
     mouse_point := mouse_position()
 
@@ -614,7 +598,7 @@ gui_dropdown :: proc(
 
     // Draw the dropdown menu
     if edit_mode {
-        menu_position := [2]f32{menu_bounds.x, menu_bounds.y}
+        menu_position := [2]f32{menu_bounds.x, menu_bounds.y + (f32(6) if down else 0)}
 
         draw_rounded_rect({menu_position.x, menu_position.y, width, menu_height}, MENU_RADIUS, pill_dark)
         // debug

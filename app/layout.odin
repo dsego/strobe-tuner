@@ -25,18 +25,19 @@ Layout :: struct {
     strobe_scale:   f32, // size of the strobe tracks relative to the desktop
     ruler:          Rect,
     ruler_scale:    f32, // size of the ruler's notes relative to the desktop
+    gauge:          [2]f32, // under the ruler's note, the middle of its top, see draw_cents_gauge
     note:           [2]f32, // top left of the note without the ruler
     measurements:   [2]f32, // see ReadoutAlign
     readout_align:  ReadoutAlign,
     stats:          [2]f32,
     lock:           [2]f32, // the middle of the button
-    transpose:      [2]f32, // left edge, the middle of the stepper, the label is above it
     response:       [2]f32, // hidden with the trace
     level_meter:    [2]f32, // left of the icon, top of the bar
     settings:       [2]f32,
     note_offset:    [2]f32, // the middle of the note's offset, between the letter and the lock
     note_offsets:   [2]f32, // the ± left of the settings, like them the top left of the icon
     offsets_led:    [2]f32, // the LED and label left of the ±: their right edge and middle
+    instrument:     [2]f32, // the icon and its name in the bottom left corner: their left edge and middle
 }
 
 PANEL_PADDING :: 16
@@ -53,7 +54,7 @@ READOUT_HEIGHT :: 48
 // 0.8 down from the top. The ruler is spaced by what's drawn.
 CAP_HALF :: 0.3 // the letter's top and baseline from its middle, in font sizes
 BASELINE :: 0.8 // from the top of the text, in font sizes
-RULER_GAP :: 32 // between the letter and the lock, the note's offset is halfway
+RULER_GAP :: 32 // between the gauge under the letter and the lock, the note's offset is halfway
 READOUT_NOTE_TOP :: NOTE_BASELINE - 40 // the 24pt values and the labels above them
 
 // Where the right arrow of the note ends, the readout keeps clear of it
@@ -78,7 +79,7 @@ compute_layout :: proc(window: [2]f32, safe: Rect, ruler: bool) -> (layout: Layo
 }
 
 // The response and the level meter in a row just under the strobe, the note with the readout above it
-// and the lock under it, and the transpose and the settings in the bottom corners
+// and the lock under it, and the instrument and the settings in the bottom corners
 panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, ruler: bool, ruler_scale: f32) {
     panel := layout.strobe.y + layout.strobe.height
 
@@ -89,25 +90,26 @@ panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, ruler: bool, rul
 
     // A row along the bottom like the one under the strobe
     corners := bottom - SETTINGS_ICON_SIZE / 2
-    layout.transpose = {left, corners}
     layout.settings = {right - SETTINGS_ICON_SIZE, corners - SETTINGS_ICON_SIZE / 2}
     // The ± with its touch area next to the settings', the indicator an icon's width from it
     layout.note_offsets = layout.settings - {2 * SETTINGS_ICON_SIZE, 0}
     layout.offsets_led = {layout.note_offsets.x - SETTINGS_ICON_SIZE, corners}
+    layout.instrument = {left, corners}
 
     if ruler {
         // The readout in the top row, the response and the level meter centred on its values, the labels
-        // sit above. The note with the lock under it centred between the readout values and the bottom row.
-        // Offsets from the middle of the ruler.
+        // sit above. The note with the gauge and the lock under it centred between the readout values and
+        // the bottom row. Offsets from the middle of the ruler.
         layout.ruler_scale = ruler_scale
         readout_top := layout.response.y - LABEL_SIZE / 2
         readout_bottom := readout_top + READOUT_VALUE_Y + BASELINE * ruler_scale * READOUT_SIZE
         layout.response.y = readout_bottom - CAP_HALF * ruler_scale * READOUT_SIZE
         layout.level_meter.y = layout.response.y - 2
-        rows_bottom := corners - TRANSPOSE_LABEL_TOP
+        rows_bottom := corners - BOTTOM_ROW_CLEARANCE
 
         note_top := -CAP_HALF * ruler_scale * RULER_NOTE_SIZE
-        lock_y := -note_top + RULER_GAP + LOCK_BUTTON_HEIGHT / 2
+        gauge_y := -note_top + GAUGE_GAP
+        lock_y := gauge_y + GAUGE_HEIGHT + RULER_GAP + LOCK_BUTTON_HEIGHT / 2
         middle := (readout_bottom + rows_bottom) / 2 - (note_top + lock_y + LOCK_BUTTON_HEIGHT / 2) / 2
 
         center := (left + right) / 2
@@ -115,6 +117,7 @@ panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, ruler: bool, rul
         layout.ruler = {left, middle - height / 2, right - left, height}
         layout.measurements = {center, readout_top}
         layout.readout_align = .CENTER
+        layout.gauge = {center, middle + gauge_y}
         layout.lock = {center, middle + lock_y}
         layout.note_offset = layout.lock - {0, (LOCK_BUTTON_HEIGHT + RULER_GAP) / 2}
         return
@@ -137,3 +140,4 @@ panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, ruler: bool, rul
 }
 
 SETTINGS_ICON_SIZE :: ICON_LARGE_SIZE // the sliders, right aligned on the main screen
+BOTTOM_ROW_CLEARANCE :: 46 // from the middle of the bottom row up to the room the note and the lock are centred in

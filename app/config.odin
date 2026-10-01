@@ -95,8 +95,14 @@ Config :: struct {
     // all the notes in a sliding row, off shows just the note with arrows either side to step it
     chromatic_ruler:              bool,
 
-    // semitones the note is shown above the sounding pitch, 0 to 11, a Bb instrument reads 2, see gui_transpose
+    // semitones the note is shown above the sounding pitch, 0 to 11, a Bb instrument reads 2, see gui_instrument
     transpose:                    int,
+
+    // every note, or only an instrument's strings in one of its TUNINGS, counted from 0 in its list
+    instrument:                   Instrument,
+    tuning:                       int,
+    // the fret a capo is on, the strings sound that many semitones up, 0 is none
+    capo:                         int,
 
     // notes are tuned off equal temperament by the note offsets of the selected slot, 0 is the first
     note_offsets_on:              bool,
@@ -155,6 +161,9 @@ config_defaults :: Config {
     partial_labels               = .MULTIPLES,
     chromatic_ruler              = true,
     transpose                    = 0,
+    instrument                   = .CHROMATIC,
+    tuning                       = 0,
+    capo                         = 0,
     note_offsets_on              = false,
     note_offset_slot             = 0,
     pitch_detection_clarity_low  = 0.9,

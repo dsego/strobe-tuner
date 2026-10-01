@@ -23,6 +23,7 @@ Strobie is on the App Store for Mac and iPhone. The source is here to read and b
 - Five displays: curved tracks, a spinning wheel, a trace of the cents over the last few seconds, a scope that draws the waveform synced to the strobe's frequency, and a ribbon, the classic strobe with stripes lit by the wave.
 - Note offsets: tune a note up to ±25 cents off pitch, e.g. a ukulele's E a little flat or a guitar's B string a touch low, the strobe stands still at the offset note. Three slots hold a tuning each.
 - Transpose for B♭, E♭, F and other transposing instruments.
+- Guitar, bass and ukulele: the ruler shows only the strings of a named tuning (standard, drop D, DADGAD, open G and others) with an optional capo, the nearest string is picked as it's tuned up, and a gauge of ticks under the note shows how many semitones are left to go.
 - Concert A from 400 to 480 Hz.
 - Hertz/Cents display.
 - Four colorways (red, mint, amber, mono) and an optional retro lamp glow.

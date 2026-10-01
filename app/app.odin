@@ -74,6 +74,7 @@ run_app :: proc(config: ^Config) {
         config.prevent_strobe_octave_jumps,
     )
     tuner.offsets_cents = active_note_offsets(config)
+    core.set_tuner_strings(&tuner, tuning_strings(config))
 
     // Save target note to config when exiting the app
     defer config.target_freq_hz = tuner.target_note.frequency
@@ -149,7 +150,8 @@ run_app :: proc(config: ^Config) {
     }
     audio_device_dropdown_index = int(audio_capture.active_device)
 
-    audio_device_dropdown_active := false
+    // The settings' dropdown whose menu is open
+    settings_menu: SettingsMenu
 
     settings_sheet: Sheet
     // A track's own sheet, opened by tapping the track
@@ -157,7 +159,9 @@ run_app :: proc(config: ^Config) {
     selected_track := 0
     // The note offsets' sheet, opened from the slot next to the settings
     offsets_sheet: Sheet
-    sheets := [?]^Sheet{&settings_sheet, &track_sheet, &offsets_sheet}
+    // The instrument and its tuning, opened from the icon above the settings
+    instrument_sheet: Sheet
+    sheets := [?]^Sheet{&settings_sheet, &track_sheet, &offsets_sheet, &instrument_sheet}
 
     note_low_state := false
     note_high_state := false
@@ -260,6 +264,7 @@ run_app :: proc(config: ^Config) {
             tuner.confirmations = config.note_switch_confirmations
             tuner.prevent_octave_jumps = config.prevent_strobe_octave_jumps
             tuner.offsets_cents = active_note_offsets(config)
+            core.set_tuner_strings(&tuner, tuning_strings(config))
 
             set_strobe_colors(&strobe_display, strobe_colors(config))
             retune(phase_comparator, core.tuner_target_freq(&tuner), config)
@@ -314,7 +319,10 @@ run_app :: proc(config: ^Config) {
             window.x = STROBE_WIDTH
             safe.width = STROBE_WIDTH
         }
-        layout := compute_layout(window, safe, config.chromatic_ruler)
+        // An instrument's strings are on the ruler
+        string_mode := config.instrument != .CHROMATIC
+        ruler := config.chromatic_ruler || string_mode
+        layout := compute_layout(window, safe, ruler)
         update_pixel_fonts(layout.ruler_scale)
 
         // Draw the GUI controls
@@ -407,18 +415,20 @@ run_app :: proc(config: ^Config) {
             }
 
             // Only the strong readings, a fading note drifts and would flash the arrows
-            arrow_cents_err := core.cents_deviation(tuner.last_good_pitch.detected_freq, core.tuner_target_freq(&tuner))
+            arrow_cents_err := core.tuner_cents_off(&tuner, tuner.last_good_pitch.detected_freq)
             distance := abs(arrow_cents_err)
+            measures_target := core.measures_target(&tuner)
 
-            // Without a lock, further than half a semitone is a neighbouring note that isn't confirmed yet
-            if tuner.active && (tuner.locked || distance <= 50) {
+            // Without a lock or a string, further than half a semitone is a neighbouring note that isn't
+            // confirmed yet
+            if tuner.active && (measures_target || distance <= 50) {
                 note_low_state = core.schmitt_trigger_neg(note_low_state, arrow_cents_err, -8, -10)
                 note_high_state = core.schmitt_trigger(note_high_state, arrow_cents_err, 8, 10)
 
-                // Far from a locked note the strobe means nothing, the arrow pulses instead: slowly an octave
-                // or more away, quicker as the string comes closer, steady within 50 cents
+                // Far from a locked note or a string the strobe means nothing, the arrow pulses instead:
+                // slowly an octave or more away, quicker as the string comes closer, steady within 50 cents
                 arrow_color := hex(0x82E2FFFF)
-                if tuner.locked && distance > 50 {
+                if measures_target && distance > 50 {
                     closeness := clamp((1200 - distance) / (1200 - 50), 0, 1)
                     pulse_hz := math.lerp(f32(0.5), 2.5, closeness)
                     arrow_pulse_phase = math.mod(arrow_pulse_phase + pulse_hz * gfx_frame_time(), 1)
@@ -450,20 +460,42 @@ run_app :: proc(config: ^Config) {
             // locks that one instead
             // A transposing instrument reads the written note, only what's shown moves, the steps are
             // relative and work the same either way
-            transpose := gui_transpose(layout.transpose, ((config.transpose % 12) + 12) % 12)
-            // Only the names change, the ruler doesn't slide to the new one
-            if transpose != config.transpose do ruler_initialized = false
-            config.transpose = transpose
+            // With a capo the strings sound higher and keep the names of the open strings, like the chord
+            // shapes played over it
+            transpose := -capo_fret(config) if string_mode else ((config.transpose % 12) + 12) % 12
             shown_note := core.cents_to_note(
-                f32(tuner.target_note.cents + 100 * config.transpose),
+                f32(tuner.target_note.cents + 100 * transpose),
                 tuner.target_note.pitch_standard,
             )
             // No pitch yet, nothing to show
             if tuner.target_note.frequency == 0 do shown_note.frequency = 0
 
             step, browse: int
-            if config.chromatic_ruler {
-                step, browse = gui_note_ruler(layout.ruler, shown_note, tuner.active)
+            if ruler {
+                // The strings, or every note of a piano with the target among them
+                ruler_notes: []core.Note
+                target: int
+                if shown_note.frequency == 0 {
+                    // Nothing on the ruler
+                } else if string_mode {
+                    ruler_notes = make([]core.Note, tuner.string_count, context.temp_allocator)
+                    for &note, i in ruler_notes {
+                        note = core.cents_to_note(f32(100 * (tuner.strings[i] + transpose)), shown_note.pitch_standard)
+                    }
+                    target = tuner.string_index
+                } else {
+                    ruler_notes = make([]core.Note, core.NOTE_COUNT, context.temp_allocator)
+                    for &note, i in ruler_notes {
+                        note = core.cents_to_note(f32(100 * (core.LOWEST_NOTE + i + transpose)), shown_note.pitch_standard)
+                    }
+                    target = clamp(tuner.target_note.cents / 100 - core.LOWEST_NOTE, 0, core.NOTE_COUNT - 1)
+                }
+                step, browse = gui_note_ruler(layout.ruler, ruler_notes, target, tuner.active)
+
+                // Within half a semitone of the note, or a few semitones of a string
+                steady := steady_pitch_info
+                lit := tuner.active && steady.measured && !out_of_range
+                draw_cents_gauge(layout.gauge, steady.err_cents, lit, string_mode, hex(strobe_colors(config).x))
             } else {
                 draw_note(shown_note, layout.note, tuner.active)
                 step = gui_note_arrows(layout.note, tuner.locked)
@@ -485,7 +517,11 @@ run_app :: proc(config: ^Config) {
             // A note that's tuned off pitch says so between the letter and the lock, the strobe and the
             // readout are on the offset note, see gui_note_offsets. While swiping the ruler, of the note in the middle.
             middle_note := tuner.target_note
-            if browse != 0 do middle_note = core.cents_to_note(f32(middle_note.cents + 100 * browse), middle_note.pitch_standard)
+            if browse != 0 && string_mode {
+                middle_note = core.string_note(&tuner, tuner.string_index + browse)
+            } else if browse != 0 {
+                middle_note = core.cents_to_note(f32(middle_note.cents + 100 * browse), middle_note.pitch_standard)
+            }
             if offset := core.note_offset_cents(&tuner, middle_note); offset != 0 && shown_note.frequency != 0 {
                 text := fmt.ctprintf("%+.1f¢", offset)
                 width := measure_label(pixel_fonts.label, text, 1).x
@@ -514,6 +550,7 @@ run_app :: proc(config: ^Config) {
             }
 
             if gui_settings_button(layout.settings) do settings_sheet.open = true
+            if gui_instrument_button(layout.instrument, config.instrument) do instrument_sheet.open = true
             if gui_note_offsets_indicator(layout.offsets_led, config) do config_changed = true
             if gui_note_offsets_button(layout.note_offsets) do offsets_sheet.open = true
 
@@ -637,7 +674,7 @@ run_app :: proc(config: ^Config) {
                 config,
                 audio_devices[:],
                 &audio_device_dropdown_index,
-                &audio_device_dropdown_active,
+                &settings_menu,
             )
             if changed do config_changed = true
             grab_sheet(&settings_sheet, sheet_layout)
@@ -647,7 +684,7 @@ run_app :: proc(config: ^Config) {
 
             if close {
                 close_sheet(&settings_sheet)
-                audio_device_dropdown_active = false
+                settings_menu = .NONE
                 exclusive_control_mode = false
             }
         }
@@ -706,6 +743,32 @@ run_app :: proc(config: ^Config) {
             if close {
                 close_sheet(&offsets_sheet)
                 note_offset_selected = -1
+            }
+        }
+
+        if instrument_sheet.slide > 0 {
+            sheet_layout, swiped := begin_sheet(
+                &instrument_sheet,
+                INSTRUMENT_ROWS,
+                &strobe_display,
+                layout.strobe,
+                instrument_sheet_extra(),
+            )
+            close, changed := gui_instrument(sheet_layout, config, &settings_menu)
+            if changed {
+                config_changed = true
+                // Other notes on the ruler, it starts again on the target
+                ruler_initialized = false
+            }
+            grab_sheet(&instrument_sheet, sheet_layout)
+
+            // Tapping the strobe above the sheet closes it too
+            if gui_button(above_sheet(sheet_layout)) || key_pressed(.ESCAPE) || swiped do close = true
+
+            if close {
+                close_sheet(&instrument_sheet)
+                settings_menu = .NONE
+                exclusive_control_mode = false
             }
         }
 

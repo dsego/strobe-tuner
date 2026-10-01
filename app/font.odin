@@ -29,6 +29,8 @@ ICON_SLIDERS: cstring : "\ue432"
 ICON_CARET_UP: cstring : "\ue13c"
 ICON_TRASH: cstring : "\ue4a8"
 ICON_PLUS_MINUS: cstring : "\ue3d8"
+ICON_PIANO_KEYS: cstring : "\ue9c8"
+ICON_GUITAR: cstring : "\uea8a"
 ICON_GEAR: cstring : ""
 ICON_MICROPHONE: cstring : ""
 ICON_CARET_DOWN: cstring : ""
@@ -36,7 +38,7 @@ ICON_MINUS: cstring : ""
 ICON_PLUS: cstring : ""
 ICON_X: cstring : ""
 
-ICON_CODEPOINTS :: "\ue432\ue13c\ue4a8\ue3d8"
+ICON_CODEPOINTS :: "\ue432\ue13c\ue4a8\ue3d8\ue9c8\uea8a"
 
 // Phosphor Bold, cut down the same way from Phosphor-Bold.ttf to Phosphor-Bold-Icons.ttf, for the large
 // steppers only: beside their 32pt value the regular stroke is too thin.
@@ -46,7 +48,6 @@ ICON_BOLD_CODEPOINTS :: ""
 // jagged. Point sizes, whole pixels at 1x, 2x and 3x.
 LABEL_SIZE :: 14 // the controls and most of the text
 LABEL_LARGE_SIZE :: 16
-STEPPER_SIZE :: 24 // the − and + and the key of the transpose, half again a large label
 LABEL_SMALL_SIZE :: 12 // the buttons that reset and clear, the debug stats
 LABEL_TIMES_SIZE :: 18 // the × as large as the body of a ¢ in a label
 TITLE_SIZE :: 18
@@ -80,7 +81,6 @@ PixelFonts :: struct {
     label:           PixelFont,
     label_large:     PixelFont,
     label_small:     PixelFont,
-    stepper:         PixelFont,
     label_times:     PixelFont, // the × after a label's digits, Inter's is only as tall as a lowercase letter
     title:           PixelFont,
     icon:            PixelFont,
@@ -125,7 +125,6 @@ update_pixel_fonts :: proc(ruler_scale: f32) {
         label           = load(inter_medium, LABEL_SIZE, scale, FONT_CODEPOINTS),
         label_large     = load(inter_medium, LABEL_LARGE_SIZE, scale, FONT_CODEPOINTS),
         label_small     = load(inter_medium, LABEL_SMALL_SIZE, scale, FONT_CODEPOINTS),
-        stepper         = load(inter_medium, STEPPER_SIZE, scale, "ABCDEFGb+−"),
         label_times     = load(inter_medium, LABEL_TIMES_SIZE, scale, "×"),
         title           = load(inter_bold, TITLE_SIZE, scale, FONT_CODEPOINTS),
         icon            = load(phosphor, ICON_SIZE, scale, ICON_CODEPOINTS),
@@ -151,7 +150,6 @@ unload_pixel_fonts :: proc() {
     gfx_unload_font(pixel_fonts.label.font)
     gfx_unload_font(pixel_fonts.label_large.font)
     gfx_unload_font(pixel_fonts.label_small.font)
-    gfx_unload_font(pixel_fonts.stepper.font)
     gfx_unload_font(pixel_fonts.label_times.font)
     gfx_unload_font(pixel_fonts.title.font)
     gfx_unload_font(pixel_fonts.icon.font)

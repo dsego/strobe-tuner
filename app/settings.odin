@@ -37,13 +37,39 @@ SETTINGS_ROWS :: 7 when IOS else 8
 settings_separator_color := hex(0x35363EFF)
 
 
+// The dropdown whose menu is open, one at a time, on the settings or the instrument's sheet
+SettingsMenu :: enum {
+    NONE,
+    DISPLAY,
+    INPUT,
+    INSTRUMENT,
+    TUNING,
+}
+
+// Opens or closes menu's dropdown, the one that's open stays as it is when another closes
+gui_settings_dropdown :: proc(
+    open: ^SettingsMenu,
+    menu: SettingsMenu,
+    rect: Rect,
+    options: []GuiOption,
+    selected: ^int,
+    left_pad: f32 = 12,
+    down := false,
+) {
+    if gui_dropdown({rect.x, rect.y}, rect.width, options, selected, open^ == menu, left_pad, rect.height, down) {
+        open^ = menu
+    } else if open^ == menu {
+        open^ = .NONE
+    }
+}
+
 // Returns close when ✕ is tapped, changed when the strobe or the note detection needs updating
 gui_settings :: proc(
     sheet_layout: SheetLayout,
     config: ^Config,
     audio_devices: []GuiOption,
     audio_device_index: ^int,
-    audio_device_menu_open: ^bool,
+    menu: ^SettingsMenu,
 ) -> (
     close: bool,
     changed: bool,
@@ -79,15 +105,9 @@ gui_settings :: proc(
         }
     }
 
-    {
-        // Five of them, narrower than the other rows' to fit a phone
-        labels := []cstring{"Tracks", "Wheel", "Trace", "Scope", "Ribbon"}
-        rect := settings_row(sheet_layout, row, "Display", f32(len(labels)) * 54)
-        row += 1
-        if i, ok := gui_segmented(rect, labels, int(config.strobe_display_type)); ok {
-            config.strobe_display_type = StrobeDisplayType(i)
-        }
-    }
+    // The display's dropdown goes in this row after the rows under it, its menu opens down over them
+    display_row := row
+    row += 1
 
     // The trace and the scope's views don't spin, they have no tracks to set
     strobe := config.strobe_display_type == .CURVED_TRACKS || config.strobe_display_type == .SPINNING_WHEEL
@@ -135,22 +155,22 @@ gui_settings :: proc(
         }
     }
 
+    {
+        options := []GuiOption{{0, "Tracks"}, {1, "Wheel"}, {2, "Trace"}, {3, "Scope"}, {4, "Ribbon"}}
+        rect := settings_row(sheet_layout, display_row, "Display", 176)
+        selected := int(config.strobe_display_type)
+        gui_settings_dropdown(menu, .DISPLAY, rect, options, &selected, down = true)
+        config.strobe_display_type = StrobeDisplayType(selected)
+    }
+
     // iOS routes the input itself: built-in mic, headset or an audio interface
     when !IOS {
-        // Last, the menu opens upwards over the rows above
+        // After the display's, the menu opens upwards over the rows above
         input_rect := settings_row(sheet_layout, row, "Input", 240)
         row += 1
 
         // TODO: add refresh button to show newly connected devices
-        audio_device_menu_open^ = gui_dropdown(
-            {input_rect.x, input_rect.y},
-            input_rect.width,
-            audio_devices,
-            audio_device_index,
-            audio_device_menu_open^,
-            left_pad = 36,
-            height = input_rect.height,
-        )
+        gui_settings_dropdown(menu, .INPUT, input_rect, audio_devices, audio_device_index, left_pad = 36)
 
         draw_icon(ICON_MICROPHONE, {input_rect.x + 12, input_rect.y + (input_rect.height - 16) / 2}, icon_color)
     }
