@@ -22,7 +22,6 @@ AudioCaptureNode :: struct {
     ringbuffer:      RingBuffer,
     ringbuffer_data: []u8,
     stream_callback: proc(ctx: ^AudioCaptureNode, input: []f32),
-    unfiltered:      bool, // gets the input as it comes, before the capture's highpass
 }
 
 init_audio_capture_node :: proc(self: ^AudioCaptureNode, name: string) {

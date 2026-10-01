@@ -27,9 +27,6 @@ import ma "vendor:miniaudio"
 import "../core"
 
 
-// Max samples filtered in one go, larger callbacks are processed in chunks
-FILTER_CHUNK_SIZE :: 4096
-
 AudioCapture :: struct {
     ctx:                ma.context_type,
     device:             ma.device,
@@ -38,9 +35,6 @@ AudioCapture :: struct {
     active_device:      i32, // index into capture_infos
     nodes:              [dynamic]^core.AudioCaptureNode,
     samplerate:         u32,
-    highpass_cutoff_hz: f32,
-    highpass:           core.Biquad,
-    filtered:           []f32, // high-passed copy of the input, shared by all nodes
 
     // Set from miniaudio's thread when an iOS audio interruption (a call, Siri, an alarm) is over.
     // miniaudio stops the device when one begins but doesn't start it again.
@@ -62,9 +56,6 @@ switch_audio_device :: proc(self: ^AudioCapture, device_index: i32) {
     for node in self.nodes {
         core.flush_audio_capture_ringbuffer(node)
     }
-
-    // Reset the filter state, the previous device's signal is unrelated
-    self.highpass = core.init_highpass(self.highpass_cutoff_hz, f32(self.samplerate))
 
     self.active_device = device_index
 
@@ -108,12 +99,9 @@ open_stream_on_active_device :: proc(self: ^AudioCapture) -> bool {
 }
 
 
-init_audio_capture :: proc(samplerate: u32, highpass_cutoff_hz: f32) -> (bool, ^AudioCapture) {
+init_audio_capture :: proc(samplerate: u32) -> (bool, ^AudioCapture) {
     self := new(AudioCapture)
     self.samplerate = samplerate
-    self.highpass_cutoff_hz = highpass_cutoff_hz
-    self.highpass = core.init_highpass(highpass_cutoff_hz, f32(samplerate))
-    self.filtered = make([]f32, FILTER_CHUNK_SIZE)
 
     if check(ma.context_init(nil, 0, nil, &self.ctx)) do return false, self
 
@@ -187,7 +175,6 @@ destroy_audio_capture :: proc(self: ^AudioCapture) {
     fmt.println("Terminated miniaudio")
 
     delete(self.nodes)
-    delete(self.filtered)
     free(self)
 }
 
@@ -199,21 +186,9 @@ stream_callback :: proc "c" (device: ^ma.device, output, input: rawptr, frame_co
 
     self := cast(^AudioCapture)device.pUserData
 
-    // High-pass once for all nodes to strip DC and low frequency rumble from the mic, except the ones that
-    // want the input as it is
-    for len(input_slice) > 0 {
-        count := min(len(input_slice), len(self.filtered))
-        raw := input_slice[:count]
-        chunk := self.filtered[:count]
-        core.biquad_process(&self.highpass, raw, chunk)
-        input_slice = input_slice[count:]
-
-        // process all nodes
-        for node in self.nodes {
-            if node.stream_callback != nil {
-                node.stream_callback(node, raw if node.unfiltered else chunk)
-            }
-        }
+    // The input as it is to every node, the pitch detection filters its own
+    for node in self.nodes {
+        if node.stream_callback != nil do node.stream_callback(node, input_slice)
     }
 }
 

@@ -123,10 +123,7 @@ main :: proc() {
     }
     defer delete(samples)
 
-    highpass := core.init_highpass(HIGHPASS_HZ, SAMPLERATE)
-    core.biquad_process(&highpass, samples, samples)
-
-    detector := core.init_pitch_detector(SAMPLERATE, FFT_SIZE, CLARITY_HIGH, CLARITY_LOW, MIN_SNR_DB, NOISE_FLOOR_SNR_DB)
+    detector := core.init_pitch_detector(SAMPLERATE, FFT_SIZE, CLARITY_HIGH, CLARITY_LOW, MIN_SNR_DB, NOISE_FLOOR_SNR_DB, HIGHPASS_HZ)
     defer core.destroy_pitch_detector(&detector)
     tuner := core.init_tuner(110, 440, note_switch_s, true)
 

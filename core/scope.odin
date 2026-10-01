@@ -33,9 +33,9 @@
     the height of the beam in each column as a brightness. That's the classic strobe, stripes that wash
     out to gray when the beam smears.
 
-    The input: before the capture's highpass, which shifts the fundamental against the harmonics and
-    tilts the flat top of a square wave, bends a sawtooth. Only the DC is taken out, like the AC coupling
-    of an oscilloscope.
+    The input as it comes, a highpass would shift the fundamental against the harmonics, tilt the flat
+    top of a square wave and bend a sawtooth. Only the DC is taken out, like the AC coupling of an
+    oscilloscope.
 
     X-Y: the reference drives the beam across instead of the sweep, a cosine at its frequency. With the
     wave up and down that's a Lissajous figure, the way pitch was compared on an oscilloscope. An in tune
@@ -119,7 +119,6 @@ Scope :: struct {
 
 init_scope :: proc(samplerate: f64, columns, rows: int) -> (self: Scope) {
     init_audio_capture_node(&self, "scope")
-    self.unfiltered = true
     self.samplerate = samplerate
     self.columns = columns
     self.rows = rows

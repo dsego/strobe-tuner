@@ -117,12 +117,13 @@ run_app :: proc(config: ^Config) {
         config.pitch_detection_clarity_low,
         config.pitch_detection_min_snr_db,
         config.noise_floor_snr_db_threshold,
+        config.highpass_cutoff_hz,
     )
     defer core.destroy_pitch_detector(&pitch_detector)
     pitch_detector.pitch_standard = config.pitch_standard
 
 
-    ok, audio_capture := init_audio_capture(u32(config.samplerate), config.highpass_cutoff_hz)
+    ok, audio_capture := init_audio_capture(u32(config.samplerate))
     if !ok do return
     defer destroy_audio_capture(audio_capture)
 
@@ -253,6 +254,7 @@ run_app :: proc(config: ^Config) {
                     config.pitch_detection_clarity_low,
                     config.pitch_detection_min_snr_db,
                     config.noise_floor_snr_db_threshold,
+                    config.highpass_cutoff_hz,
                 )
                 restart_audio = true
             }
@@ -365,6 +367,7 @@ run_app :: proc(config: ^Config) {
             switch_audio_device(audio_capture, audio_devices[audio_device_dropdown_index].id)
             core.flush_audio_capture_ringbuffer(&pitch_detector)
             core.reset_noise_floor(&pitch_detector.noise_floor)
+            core.reset_pitch_filters(&pitch_detector)
             core.flush_audio_capture_ringbuffer(phase_comparator)
             core.reset_phase_noise_floor(phase_comparator)
         }

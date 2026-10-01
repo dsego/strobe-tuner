@@ -44,6 +44,9 @@ PitchDetector :: struct {
     using node:                   AudioCaptureNode,
     nsdf:                         NSDFConfig,
     samples:                      []f32,
+    // DC and rumble lift the NSDF so it doesn't dip between periods, hiss blurs it, see PITCH_LOWPASS_HZ.
+    // Only here, the strobe's tracks are narrow and the scope wants the wave as it is.
+    highpass:                     Biquad,
     lowpass:                      Biquad,
     clarity_high:                f32,
     clarity_low:                  f32,
@@ -81,10 +84,12 @@ init_pitch_detector :: proc(
     clarity_low: f32,
     min_snr_db: f32,
     noise_floor_snr_db_threshold: f32,
+    highpass_cutoff_hz: f32,
 ) -> (
     self: PitchDetector,
 ) {
     self.samples = make([]f32, fft_size / 2)
+    self.highpass = init_highpass(highpass_cutoff_hz, f32(samplerate))
     self.lowpass = init_lowpass(PITCH_LOWPASS_HZ, f32(samplerate))
     self.nsdf = nsdf_init(fft_size, samplerate)
     self.clarity_high = clarity_high
@@ -103,6 +108,12 @@ destroy_pitch_detector :: proc(self: ^PitchDetector) {
     delete(self.samples)
 }
 
+// Another input's signal is unrelated to the previous one's, the filters start from rest
+reset_pitch_filters :: proc(self: ^PitchDetector) {
+    self.highpass.z1, self.highpass.z2 = 0, 0
+    self.lowpass.z1, self.lowpass.z2 = 0, 0
+}
+
 // Takes the previous detection to repeat when there are no new samples, the Tuner keeps the history
 run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> PitchInfo {
     info := PitchInfo{}
@@ -119,6 +130,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
 
     // The new samples are at the end, the older ones were filtered on the way in before
     new_samples := self.samples[max(len(self.samples) - int(available), 0):]
+    biquad_process(&self.highpass, new_samples, new_samples)
     biquad_process(&self.lowpass, new_samples, new_samples)
 
     info.measured = true
@@ -184,16 +196,23 @@ test_mains_hum :: proc(t: ^testing.T) {
     FFT_SIZE :: 8192
 
     detect :: proc(fundamental: f32) -> PitchInfo {
-        detector := init_pitch_detector(SAMPLERATE, FFT_SIZE, 0.98, 0.9, 2, 10)
+        detector := init_pitch_detector(SAMPLERATE, FFT_SIZE, 0.98, 0.9, 2, 10, 60)
         defer destroy_pitch_detector(&detector)
-        samples: [FFT_SIZE / 2]f32
-        for &sample, i in samples {
-            for partial in 1 ..= 5 {
-                sample += 0.01 * math.sin(math.TAU * f32(partial) * fundamental * f32(i) / SAMPLERATE)
+        // Half a second a display frame at a time like the app, the high-pass settles from its start
+        FRAME :: SAMPLERATE / DETECTIONS_PER_SECOND
+        info: PitchInfo
+        for start := 0; start < SAMPLERATE / 2; start += FRAME {
+            frame: [FRAME]f32
+            for &sample, i in frame {
+                for partial in 1 ..= 5 {
+                    phase := math.TAU * f64(partial) * f64(fundamental) * f64(start + i) / SAMPLERATE
+                    sample += f32(0.01 * math.sin(phase))
+                }
             }
+            audio_capture_callback(&detector, frame[:])
+            info = run_pitch_detection(&detector, info)
         }
-        audio_capture_callback(&detector, samples[:])
-        return run_pitch_detection(&detector, {})
+        return info
     }
 
     for mains_hz in MAINS_HZ {
