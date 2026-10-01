@@ -45,6 +45,7 @@ PitchInfo :: struct {
     detected_note:   Note,
     clarity:         f32,
     nsdf_peak:       Vec2,
+    shortest_period: bool, // the first NSDF peak, not a guess at a multiple of the period
     rms:             f32,
     rms_dbfs:        f32,
     err_cents:       f32,
@@ -108,6 +109,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.fresh = true
     info.detected_freq, info.nsdf_peak = nsdf_pitch_detect(&self.nsdf, self.samples)
     info.clarity = info.nsdf_peak.y
+    info.shortest_period = self.nsdf.chosen_peak_idx == 0
     info.rms = math.max(calculate_rms(self.samples), MIN_RMS_TRACKABLE)
     info.rms_dbfs = dbfs(info.rms)
 

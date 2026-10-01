@@ -437,8 +437,10 @@ draw_ruler_note :: proc(note: core.Note, pos: [2]f32, name_font, sharp_font: Pix
 
 // The gauge under the ruler's note: a row of ticks, the middle one red, slides with the pitch like an old
 // bathroom scale's dial. The red tick is as far off the note as the pitch, flat on the left like the lower
-// notes on the ruler, and the gauge closes in under the note as it's tuned. It glides after the pitch and
-// is held where it was while there's no pitch. The ticks fade out towards the ends of the gauge's room.
+// notes on the ruler, and the gauge closes in under the note as it's tuned. It's a map of where the pitch
+// is, the strobe does the fine tuning: it steps tick to tick, the middle one within the first tick's cents
+// either side, glides over and is held where it was while there's no pitch. The ticks fade out towards the
+// ends of the gauge's room.
 // The distances are evenly spaced ticks, each a wider range of cents than the one before it, so the last
 // few cents to the middle take as many ticks as the rest.
 // Up to half a semitone, where the next note takes over on the ruler. A string is tuned up from further
@@ -448,33 +450,40 @@ GAUGE_SEMITONE_TICKS :: 3
 GAUGE_SPACING :: 13 // between the ticks, it grows with the ruler
 GAUGE_TICK :: 12 // tall, the red one and every few are GAUGE_HEIGHT
 GAUGE_HEIGHT :: 20
-GAUGE_SLIDE_SPEED :: 6 // per second, how quickly it closes the distance, slow enough to ride over the jitter
-GAUGE_TOLERANCE :: 0.3 // ticks, it only goes after the pitch once it's moved this far
+GAUGE_SLIDE_SPEED :: 6 // per second, how quickly it closes the distance to the next tick
+GAUGE_HYSTERESIS_CENTS :: 1 // past the halfway between two ticks, so it doesn't flicker between them
 
 // Where the red tick is, counted in ticks from under the note, flat is negative
 gauge_position: f32
-gauge_target: f32 // where it's going, within GAUGE_TOLERANCE of the pitch
+gauge_target: f32 // the tick it's going to
 
 // top is the middle of the gauge at its top. Follows the cents from the target while there's a pitch.
 draw_cents_gauge :: proc(top: [2]f32, cents: f32, lit: bool, semitones: bool, color: Color) {
     ticks := GAUGE_CENTS
     per_side := len(ticks) - 1 + (GAUGE_SEMITONE_TICKS if semitones else 0)
 
-    // The cents in ticks, between two ticks in proportion, the outermost for anything further. The gauge
-    // goes after the pitch once it's moved past the tolerance, and to where it is, it doesn't stop short.
-    if lit {
-        distance := abs(cents)
-        tick := f32(per_side)
-        for index in 1 ..= per_side {
-            upper := ticks[index] if index < len(ticks) else 100 * f32(index - len(ticks) + 1)
-            lower := ticks[index - 1] if index - 1 < len(ticks) else 100 * f32(index - len(ticks))
-            if distance <= upper {
-                tick = f32(index - 1) + (distance - lower) / (upper - lower)
-                break
-            }
+    // The tick for the cents: the middle one up to the first tick, further out the nearest, the outermost
+    // for anything further
+    snap :: proc(cents: f32, per_side: int) -> f32 {
+        tick_cents :: proc(index: int) -> f32 {
+            ticks := GAUGE_CENTS
+            return ticks[index] if index < len(ticks) else 100 * f32(index - len(ticks) + 1)
         }
-        pitch := math.sign(cents) * tick
-        if abs(pitch - gauge_target) > GAUGE_TOLERANCE do gauge_target = pitch
+        index := 0
+        for index < per_side {
+            upper := tick_cents(index + 1)
+            halfway := upper if index == 0 else (tick_cents(index) + upper) / 2
+            if abs(cents) < halfway do break
+            index += 1
+        }
+        return math.sign(cents) * f32(index)
+    }
+
+    // It stays on its tick while the pitch is within the hysteresis of it
+    if lit {
+        lowest := snap(cents - GAUGE_HYSTERESIS_CENTS, per_side)
+        highest := snap(cents + GAUGE_HYSTERESIS_CENTS, per_side)
+        if gauge_target < lowest || gauge_target > highest do gauge_target = snap(cents, per_side)
     }
 
     gauge_target = clamp(gauge_target, -f32(per_side), f32(per_side))

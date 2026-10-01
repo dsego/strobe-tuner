@@ -255,3 +255,42 @@ test_autocorrelation :: proc(t: ^testing.T) {
         testing.expectf(t, abs(self.autocorr[lag] - expected) < 1e-3, "lag %v: %v, expected %v", lag, self.autocorr[lag], expected)
     }
 }
+
+
+// The period of the whole wave: exact harmonics don't move it, partials stretched sharp like a stiff
+// string's pull it sharp of the fundamental, towards the loud ones
+@(test)
+test_nsdf_accuracy :: proc(t: ^testing.T) {
+    SAMPLERATE :: 48_000
+    FFT_SIZE :: 8192 // the app's default
+
+    // Cents from the fundamental, partial n is at n * fundamental stretched by stretch_cents * (n² - 1)
+    run :: proc(fundamental: f64, amplitudes: []f64, stretch_cents: f64) -> f32 {
+        self := nsdf_init(FFT_SIZE, SAMPLERATE)
+        defer nsdf_destroy(&self)
+        samples: [FFT_SIZE / 2]f32
+        for &sample, i in samples {
+            for amplitude, partial in amplitudes {
+                n := f64(partial + 1)
+                freq := n * fundamental * math.pow(2, stretch_cents * (n * n - 1) / 1200)
+                sample += f32(amplitude * math.sin(math.TAU * freq * f64(i) / SAMPLERATE + n))
+            }
+        }
+        freq, _ := nsdf_pitch_detect(&self, samples[:])
+        return cents_deviation(freq, f32(fundamental))
+    }
+
+    for fundamental in ([]f64{55, 110, 329.63, 1318.5}) {
+        pure := run(fundamental, {0.5}, 0)
+        testing.expectf(t, abs(pure) < 0.05, "%v Hz sine, %v cents off", fundamental, pure)
+
+        // A weak fundamental under a loud second partial, like a low string
+        harmonic := run(fundamental, {0.1, 0.4, 0.2, 0.1}, 0)
+        testing.expectf(t, abs(harmonic) < 0.2, "%v Hz harmonics, %v cents off", fundamental, harmonic)
+    }
+
+    // The partials 1.5, 4 and 7.5 cents sharp read about 3 cents sharp, where the strobe's first track
+    // stands still on the fundamental
+    stretched := run(110, {0.1, 0.4, 0.2, 0.1}, 0.5)
+    testing.expectf(t, stretched > 1.5, "stretched partials, %v cents off", stretched)
+}

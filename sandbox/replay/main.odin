@@ -63,24 +63,30 @@ main :: proc() {
 
     // The strobe tracks, following the tuner's note like in the app
     intervals := INTERVALS
-    strobe := core.init_phase_comparator(110, SAMPLERATE, intervals[:], .HARMONIC_MODE, NOISE_FLOOR_SNR_DB)
+    strobe := core.init_phase_comparator(110, SAMPLERATE, intervals[:], .HARMONIC, NOISE_FLOOR_SNR_DB)
     defer core.destroy_phase_comparator(strobe)
     retune :: proc(strobe: ^core.PhaseComparator, freq_hz: f32) {
-        core.set_phase_comparator_freq(strobe, freq_hz, 440, STROBE_SPEED, 2, .HARMONIC_MODE)
+        core.set_phase_comparator_freq(strobe, freq_hz, 440, STROBE_SPEED, 2, .HARMONIC)
     }
     retune(strobe, 110)
 
-    fmt.println("   time      Hz  note  clarity     SNR  pitch   tuner   tracks: SNR, cents")
+    fmt.println("   time      Hz  cents  note  clarity     SNR  pitch   tuner   readout   tracks: SNR, cents")
 
     next_print: f32 = 0
     was_active := false
+    readout_track := -1
+    readout_ready := false
     for start := 0; start + FRAME_SAMPLES <= len(samples); start += FRAME_SAMPLES {
         frame := samples[start:start + FRAME_SAMPLES]
         core.audio_capture_callback(&detector, frame)
         core.audio_capture_callback(strobe, frame)
         pitch := core.run_pitch_detection(&detector, tuner.pitch)
-        if core.update_tuner(&tuner, pitch) do retune(strobe, tuner.target_note.frequency)
         core.run_phase_detection(strobe, true, pitch.is_tonal)
+        // Like the app's readout, and a settled track keeps the note lit
+        readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
+        strobe_cents: Maybe(f32)
+        if readout_ready do strobe_cents = strobe.bands[readout_track].err_cents
+        if core.update_tuner(&tuner, pitch, strobe_cents) do retune(strobe, tuner.target_note.frequency)
         if !pitch.fresh do continue
 
         // Every so often, and whenever the tuner lets go of the note or picks it up
@@ -95,17 +101,27 @@ main :: proc() {
             n := pitch.detected_note
             note = fmt.tprintf("%v%v%v", n.name, "#" if n.is_accidental else "", n.octave)
         }
+        // From the strobe's note, to compare with the tracks
+        cents := core.cents_deviation(pitch.detected_freq, tuner.target_note.frequency) if pitch.detected_freq > 0 else 0
         fmt.printf(
-            "%-7v %-7v %-4v  %.3f %-7v  %-6v  %-6v ",
+            "%-7v %-7v %-6v %-4v  %.3f %-7v  %-6v  %-6v ",
             // fmt pads numbers with zeros, the text pads with spaces
             fmt.tprintf("%.2fs", t),
             fmt.tprintf("%.1f", pitch.detected_freq),
+            fmt.tprintf("%+.1f¢", cents),
             note,
             pitch.clarity,
             fmt.tprintf("%.1fdB", pitch.snr_db),
             kind,
             "active" if tuner.active else "-",
         )
+        _, steady := core.tuner_readout(&tuner)
+        readout := fmt.tprintf("%+.1f¢", steady.err_cents)
+        if readout_ready && tuner.active && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS {
+            band := strobe.bands[readout_track]
+            readout = fmt.tprintf("%+.1f¢ %v×", band.err_cents, band.interval)
+        }
+        fmt.printf("%-9v ", readout)
         // The stripes fade out between 16 and 8 dB, see STROBE_FADE_SNR_DB in app/strobe_display.odin
         for band in strobe.bands {
             fmt.printf("  %v× %-7v %-6v", band.interval, fmt.tprintf("%.1fdB", band.snr_db), fmt.tprintf("%+.1f¢", band.err_cents))

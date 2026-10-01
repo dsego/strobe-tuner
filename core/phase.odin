@@ -563,6 +563,54 @@ update_phase_tracker :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
 }
 
 
+// The readout follows a track this loud, where its stripes are fully there (STROBE_FADE_SNR_DB in
+// app/strobe_display.odin)
+READOUT_MIN_SNR_DB :: 16
+READOUT_MAX_SIGMA_CENTS :: 2 // the tracked frequency is known this closely, not just reset or coasting
+READOUT_WEAK_FUNDAMENTAL_DB :: 20 // this far under the loudest partial the fundamental gives way to it
+READOUT_SWITCH_DB :: 6 // another partial takes over once it's this much louder, the fundamental this much nearer
+READOUT_RANGE_CENTS :: 30 // the pitch detection's distance from the note, further out the tracks can't follow
+
+// The track the readout follows, the fundamental. A weak or missing fundamental gives way to the loudest
+// partial, a weak one wanders with the loud partials around it. The partials read a few cents apart, the
+// current one stays until another is clearly louder, and the fundamental takes over again once it's
+// clearly back. -1 for none.
+//
+// ready once its frequency has settled, until then the readout is the pitch detection's. Not another
+// track's that settles sooner, the fundamental's window is the longest and the readout would hop from
+// one to the other after every pluck.
+strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: int, ready: bool) {
+    loud :: proc(band: PhaseBand) -> bool {
+        return band.in_range && band.snr_db >= READOUT_MIN_SNR_DB
+    }
+
+    // Fine mode measures the first track, the others show it at other speeds
+    count := 1 if self.mode == .FINE else len(self.bands)
+    loudest, fundamental := -1, -1
+    for band, i in self.bands[:count] {
+        if !loud(band) do continue
+        if loudest < 0 || band.snr_db > self.bands[loudest].snr_db do loudest = i
+        if band.interval == 1 do fundamental = i
+    }
+    if loudest < 0 do return -1, false
+
+    track = loudest
+    weak_db: f32 = READOUT_WEAK_FUNDAMENTAL_DB
+    if current != fundamental do weak_db -= READOUT_SWITCH_DB
+    if fundamental >= 0 && self.bands[loudest].snr_db - self.bands[fundamental].snr_db < weak_db {
+        track = fundamental
+    } else if current >= 0 && current < count && current != loudest && current != fundamental && loud(self.bands[current]) {
+        if self.bands[loudest].snr_db - self.bands[current].snr_db < READOUT_SWITCH_DB do track = current
+    }
+
+    band := self.bands[track]
+    cent_omega := band.ref_omega * (math.pow(2.0, 1.0 / 1200.0) - 1.0)
+    sigma_cents := math.sqrt(band.tracker.covariance[1, 1]) / cent_omega
+    ready = band.tracker.active && band.onset_hold == 0 && sigma_cents <= READOUT_MAX_SIGMA_CENTS
+    return
+}
+
+
 // Keep an up-to-date estimate of background noise (i.e. when no note is playing)
 update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, band_idx: int, is_tonal: bool) {
     if self.mode == .HARMONIC || band_idx == 0 {

@@ -172,7 +172,7 @@ config_defaults :: Config {
     pitch_detection_clarity_high = 0.98,
     noise_floor_snr_db_threshold = 10, // to determine if it’s safe to update the noise floor
     pitch_detection_min_snr_db   = 2, // dB
-    note_switch_confirmations    = 3, // ~150ms at 20 detections per second, the last one must be strong
+    note_switch_confirmations    = 3, // ~150ms at 20 detections per second, the last one strong or the run steady
     highpass_cutoff_hz           = 60, // below guitar low E (82Hz), lower it for bass
     use_phase_average            = true,
     show_band_cents              = false,

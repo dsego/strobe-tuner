@@ -74,6 +74,7 @@ run_app :: proc(config: ^Config) {
         config.prevent_strobe_octave_jumps,
     )
     tuner.offsets_cents = active_note_offsets(config)
+    tuner.octave_track = config.strobe_mode == .HARMONIC
     core.set_tuner_strings(&tuner, tuning_strings(config))
 
     // Save target note to config when exiting the app
@@ -164,6 +165,8 @@ run_app :: proc(config: ^Config) {
     note_low_state := false
     note_high_state := false
     arrow_pulse_phase: f32 = 0
+    // The strobe track the readout follows, see core.strobe_readout_track
+    readout_track := -1
 
     cents_trace := create_trace()
     defer destroy_trace(&cents_trace)
@@ -263,6 +266,7 @@ run_app :: proc(config: ^Config) {
             core.set_tuner_pitch_standard(&tuner, config.pitch_standard)
             tuner.confirmations = config.note_switch_confirmations
             tuner.prevent_octave_jumps = config.prevent_strobe_octave_jumps
+            tuner.octave_track = config.strobe_mode == .HARMONIC
             tuner.offsets_cents = active_note_offsets(config)
             core.set_tuner_strings(&tuner, tuning_strings(config))
 
@@ -274,18 +278,42 @@ run_app :: proc(config: ^Config) {
 
 
         pitch_info := core.run_pitch_detection(&pitch_detector, tuner.pitch)
-        if core.update_tuner(&tuner, pitch_info) do retune(phase_comparator, core.tuner_target_freq(&tuner), config)
+
+        // Ignore return values - the NSDF provides a steadier Hz/Cents response
+        core.run_phase_detection(phase_comparator, config.use_phase_average, pitch_info.is_tonal)
+
+        // The track the readout follows, while it's settled it keeps the note lit when the pitch detection
+        // loses it
+        readout_ready: bool
+        readout_track, readout_ready = core.strobe_readout_track(phase_comparator, readout_track)
+        strobe_cents: Maybe(f32)
+        if readout_ready do strobe_cents = phase_comparator.bands[readout_track].err_cents
+        if core.update_tuner(&tuner, pitch_info, strobe_cents) {
+            retune(phase_comparator, core.tuner_target_freq(&tuner), config)
+        }
 
         out_of_range := core.tuner_out_of_range(&tuner)
         shown_pitch_info, steady_pitch_info := core.tuner_readout(&tuner)
 
-        // Every detection unaveraged so the vibrato shows, a gap while there's no pitch
+        // Every detection unaveraged so the vibrato shows, a gap while there's no pitch. Not the weak ones of a
+        // note the strobe keeps lit.
         traced_cents := math.nan_f32()
-        if tuner.active && !out_of_range do traced_cents = shown_pitch_info.err_cents
+        if tuner.active && !out_of_range && !pitch_info.is_weak_pitch do traced_cents = shown_pitch_info.err_cents
         record_trace(&cents_trace, traced_cents, pitch_info.fresh, gfx_frame_time())
 
-        // Ignore return values - the NSDF provides a steadier Hz/Cents response
-        core.run_phase_detection(phase_comparator, config.use_phase_average, pitch_info.is_tonal)
+        // Close to the note the readout is the strobe's, 0 where the fundamental's track stands still. The
+        // pitch detection reads the whole wave, a real string's partials are a little sharp and pull it a few
+        // cents off the track you see. The Hz move along with the cents.
+        strobe_readout :=
+            readout_ready &&
+            tuner.active &&
+            !out_of_range &&
+            abs(steady_pitch_info.err_cents) <= core.READOUT_RANGE_CENTS
+        if strobe_readout {
+            cents := phase_comparator.bands[readout_track].err_cents
+            steady_pitch_info.detected_freq = core.cents_to_freq(cents - steady_pitch_info.err_cents, steady_pitch_info.detected_freq)
+            steady_pitch_info.err_cents = cents
+        }
 
         when DEBUG_STATS do scope_keys(config)
 
@@ -415,8 +443,10 @@ run_app :: proc(config: ^Config) {
                 if gui_button(layout.strobe) do gfx_open_url("app-settings:")
             }
 
-            // Only the strong readings, a fading note drifts and would flash the arrows
+            // Only the strong readings, a fading note drifts and would flash the arrows. The strobe's close to
+            // the note, like the readout.
             arrow_cents_err := core.tuner_cents_off(&tuner, tuner.last_good_pitch.detected_freq)
+            if strobe_readout do arrow_cents_err = steady_pitch_info.err_cents
             distance := abs(arrow_cents_err)
             measures_target := core.measures_target(&tuner)
 
@@ -498,9 +528,9 @@ run_app :: proc(config: ^Config) {
                 steady := steady_pitch_info
                 lit := tuner.active && steady.measured && !out_of_range
                 // Further than the gauge reaches from any string, e.g. a guitar's low E on a ukulele, it says
-                // so instead of the gauge stuck at its end
+                // so instead of the gauge stuck at its end, and which way
                 if string_mode && lit && abs(steady.err_cents) > 100 * GAUGE_SEMITONE_TICKS {
-                    label: cstring = "OUT OF RANGE"
+                    label: cstring = "TOO FLAT" if steady.err_cents < 0 else "TOO SHARP"
                     width := measure_label(pixel_fonts.label, label, 1).x
                     label_y := layout.gauge.y + (GAUGE_HEIGHT - LABEL_SIZE) / 2
                     draw_label(pixel_fonts.label, label, {layout.gauge.x - width / 2, label_y}, text_color_light, 1)
