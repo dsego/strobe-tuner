@@ -42,31 +42,32 @@ INSTRUMENT_NAMES :: [Instrument]string {
 
 Tuning :: struct {
     name:    string,
+    short:   string, // in the bottom left corner, none for the standard tuning, the instrument's name shows
     strings: []string, // in the order they're tuned, a guitar's low E first, a ukulele's high G
 }
 
 TUNINGS := [Instrument][]Tuning {
     .CHROMATIC = {},
     .GUITAR = {
-        {"Standard", {"E2", "A2", "D3", "G3", "B3", "E4"}},
-        {"Drop D", {"D2", "A2", "D3", "G3", "B3", "E4"}},
-        {"Half step down", {"D#2", "G#2", "C#3", "F#3", "A#3", "D#4"}},
-        {"Whole step down", {"D2", "G2", "C3", "F3", "A3", "D4"}},
-        {"Drop C", {"C2", "G2", "C3", "F3", "A3", "D4"}},
-        {"DADGAD", {"D2", "A2", "D3", "G3", "A3", "D4"}},
-        {"Open G", {"D2", "G2", "D3", "G3", "B3", "D4"}},
-        {"Open D", {"D2", "A2", "D3", "F#3", "A3", "D4"}},
-        {"Open E", {"E2", "B2", "E3", "G#3", "B3", "E4"}},
+        {"Standard", "", {"E2", "A2", "D3", "G3", "B3", "E4"}},
+        {"Drop D", "Drop D", {"D2", "A2", "D3", "G3", "B3", "E4"}},
+        {"Half step down", "Half down", {"D#2", "G#2", "C#3", "F#3", "A#3", "D#4"}},
+        {"Whole step down", "Whole down", {"D2", "G2", "C3", "F3", "A3", "D4"}},
+        {"Drop C", "Drop C", {"C2", "G2", "C3", "F3", "A3", "D4"}},
+        {"DADGAD", "DADGAD", {"D2", "A2", "D3", "G3", "A3", "D4"}},
+        {"Open G", "Open G", {"D2", "G2", "D3", "G3", "B3", "D4"}},
+        {"Open D", "Open D", {"D2", "A2", "D3", "F#3", "A3", "D4"}},
+        {"Open E", "Open E", {"E2", "B2", "E3", "G#3", "B3", "E4"}},
     },
     .BASS = {
-        {"Standard", {"E1", "A1", "D2", "G2"}},
-        {"Drop D", {"D1", "A1", "D2", "G2"}},
-        {"Half step down", {"D#1", "G#1", "C#2", "F#2"}},
+        {"Standard", "", {"E1", "A1", "D2", "G2"}},
+        {"Drop D", "Drop D", {"D1", "A1", "D2", "G2"}},
+        {"Half step down", "Half down", {"D#1", "G#1", "C#2", "F#2"}},
     },
     .UKULELE = {
-        {"Standard", {"G4", "C4", "E4", "A4"}},
-        {"Low G", {"G3", "C4", "E4", "A4"}},
-        {"Baritone", {"D3", "G3", "B3", "E4"}},
+        {"Standard", "", {"G4", "C4", "E4", "A4"}},
+        {"Low G", "Low G", {"G3", "C4", "E4", "A4"}},
+        {"Baritone", "Baritone", {"D3", "G3", "B3", "E4"}},
     },
 }
 
@@ -92,19 +93,40 @@ capo_fret :: proc(config: ^Config) -> int {
     return clamp(config.capo, 0, CAPO_MAX_FRET)
 }
 
+// The key of a transposing instrument, a Bb instrument sounds a tone below the written note and the note
+// shows 2 semitones up. Down a key is up a semitone.
+TRANSPOSE_KEYS :: [12]string{"C", "B", "Bb", "A", "Ab", "G", "Gb", "F", "E", "Eb", "D", "Db"}
+
+transpose_key :: proc(config: ^Config) -> int {
+    return ((config.transpose % 12) + 12) % 12
+}
+
 // In the bottom left corner, the piano for every note or the guitar for an instrument's strings, and the
-// name after it, the icons alone don't say which. pos is the left edge and the middle. Tapping either opens
-// the sheet.
-gui_instrument_button :: proc(pos: [2]f32, instrument: Instrument) -> bool {
+// name after it, the icons alone don't say which. A tuning other than the standard one shows its name
+// instead, a capo its fret, a transpose its key. pos is the left edge and the middle. Tapping either opens the sheet.
+gui_instrument_button :: proc(pos: [2]f32, config: ^Config) -> bool {
     LABEL_GAP :: 10
     TOUCH_HEIGHT :: 48
 
-    icon := ICON_PIANO_KEYS if instrument == .CHROMATIC else ICON_GUITAR
+    icon := ICON_PIANO_KEYS if config.instrument == .CHROMATIC else ICON_GUITAR
     draw_icon(icon, {pos.x, pos.y - ICON_LARGE_SIZE / 2}, icon_color, large = true)
 
+    // In capitals like the FAST and the OFFSETS labels, the key keeps its flat
     names := INSTRUMENT_NAMES
-    // In capitals like the FAST and the OFFSETS labels
-    label := fmt.ctprintf("%s", strings.to_upper(names[instrument], context.temp_allocator))
+    keys := TRANSPOSE_KEYS
+    tunings := TUNINGS[config.instrument]
+    name := names[config.instrument]
+    if len(tunings) > 0 {
+        // The instrument's initial tells a guitar's Drop D from a bass's
+        short := tunings[clamp(config.tuning, 0, len(tunings) - 1)].short
+        if short != "" do name = fmt.tprintf("%c %s", name[0], short)
+    }
+    label := fmt.ctprintf("%s", strings.to_upper(name, context.temp_allocator))
+    // The capo's fret alone, a C2 would read like a note
+    if capo_fret(config) > 0 do label = fmt.ctprintf("%s · %d", label, capo_fret(config))
+    if config.instrument == .CHROMATIC && transpose_key(config) != 0 {
+        label = fmt.ctprintf("TRANS. %s", keys[transpose_key(config)])
+    }
     label_x := pos.x + ICON_LARGE_SIZE + LABEL_GAP
     label_width := measure_label(pixel_fonts.label, label, 1).x
     draw_label(pixel_fonts.label, label, {label_x, pos.y - LABEL_SIZE / 2}, text_color_light, 1)
@@ -153,13 +175,10 @@ gui_instrument :: proc(sheet_layout: SheetLayout, config: ^Config, menu: ^Settin
             changed = true
         }
     } else {
-        // The key of a transposing instrument, a Bb instrument sounds a tone below the written note and the
-        // note shows 2 semitones up. Down a key is up a semitone.
-        KEYS :: [12]cstring{"C", "B", "Bb", "A", "Ab", "G", "Gb", "F", "E", "Eb", "D", "Db"}
-        keys := KEYS
+        keys := TRANSPOSE_KEYS
         rect := settings_row(sheet_layout, 1, "Transpose", 176)
-        transpose := ((config.transpose % 12) + 12) % 12
-        steps, reset := gui_stepper_buttons(rect, keys[transpose])
+        transpose := transpose_key(config)
+        steps, reset := gui_stepper_buttons(rect, fmt.ctprintf("%s", keys[transpose]))
         if reset do transpose = 0
         transpose = (transpose - int(steps)) %% 12
         if transpose != config.transpose {

@@ -462,7 +462,7 @@ run_app :: proc(config: ^Config) {
             // relative and work the same either way
             // With a capo the strings sound higher and keep the names of the open strings, like the chord
             // shapes played over it
-            transpose := -capo_fret(config) if string_mode else ((config.transpose % 12) + 12) % 12
+            transpose := -capo_fret(config) if string_mode else transpose_key(config)
             shown_note := core.cents_to_note(
                 f32(tuner.target_note.cents + 100 * transpose),
                 tuner.target_note.pitch_standard,
@@ -559,7 +559,7 @@ run_app :: proc(config: ^Config) {
             }
 
             if gui_settings_button(layout.settings) do settings_sheet.open = true
-            if gui_instrument_button(layout.instrument, config.instrument) do instrument_sheet.open = true
+            if gui_instrument_button(layout.instrument, config) do instrument_sheet.open = true
             if gui_note_offsets_indicator(layout.offsets_led, config) do config_changed = true
             if gui_note_offsets_button(layout.note_offsets) do offsets_sheet.open = true
 
