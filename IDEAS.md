@@ -100,14 +100,15 @@ What falls short is around it, in this order:
      track to hold a note, the HMM doesn't.
    - After 8 s the E1 really repeats at E2, both show E2.
 
-   The HMM as a whole isn't a win, its continuity on the octave is. Done in `update_tuner`
-   instead: a detection an octave or two above the followed note is left out while the wave
-   repeats better at the followed note's period, and nothing was plucked in the last 10
-   detections (the level up 3 dB). A string really played an octave up repeats better at its own
-   period, A2 after A1 at 0.975 to 0.993 against 0.948 to 0.984. The bass's E1 reads right from
-   4 to 12 s, 100% instead of 58% and 0%, the ukulele's A4 shows as A5 11% of the time instead
-   of 33%, A1 to A2 still switches in 0.27 s. A string plucked an octave or two up while the old
-   one still rings loud stays the old note, the NSDF itself reads the mix at the longer period.
+   The HMM as a whole isn't a win, its continuity on the octave is.
+
+   Tried and dropped, the smaller version: a detection an octave or two above the followed note
+   left out while the wave repeats better at the followed period and nothing was plucked for
+   half a second. The E1 read right to 12 s, but nothing tells a ringing string from a slur on a
+   trumpet or violin, and the clarities across lags aren't comparable for high notes. A steady
+   sawtooth slurred from A3 to A5 never showed A5, the NSDF read 0.993 at A5's period of 54.5
+   samples and 0.996 at A3's, the parabola misses the sharp peak more at a short lag. A string
+   that reads its octave as it rings out is left as it is.
 
 Dropped: skipping the pitch frames after a pluck, the readout near the note comes from the strobe
 now and it would hold back the first detection. Replacing the broadband SNR gate, clarity does the

@@ -35,9 +35,6 @@ MAINS_CENTS :: 8
 // period, the strobe still gets the whole band.
 PITCH_LOWPASS_HZ :: 5000
 
-// The NSDF peaks a detection keeps, the period and enough of its multiples for two octaves down
-MAX_PERIOD_PEAKS :: 8
-
 
 PitchDetector :: struct {
     using node:                   AudioCaptureNode,
@@ -61,9 +58,6 @@ PitchInfo :: struct {
     clarity:         f32,
     nsdf_peak:       Vec2,
     shortest_period: bool, // the first NSDF peak, not a guess at a multiple of the period
-    // The first NSDF peaks from the shortest period, frequency and clarity, see update_tuner
-    period_peaks:      [MAX_PERIOD_PEAKS]Vec2,
-    period_peak_count: int,
     rms:             f32,
     rms_dbfs:        f32,
     err_cents:       f32,
@@ -133,10 +127,6 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.detected_freq, info.nsdf_peak = nsdf_pitch_detect(&self.nsdf, self.samples)
     info.clarity = info.nsdf_peak.y
     info.shortest_period = self.nsdf.chosen_peak_idx == 0
-    for peak in self.nsdf.nsdf_peaks[:min(len(self.nsdf.nsdf_peaks), MAX_PERIOD_PEAKS)] {
-        info.period_peaks[info.period_peak_count] = {f32(self.nsdf.samplerate) / peak.x, peak.y}
-        info.period_peak_count += 1
-    }
     info.rms = math.max(calculate_rms(self.samples), MIN_RMS_TRACKABLE)
     info.rms_dbfs = dbfs(info.rms)
 

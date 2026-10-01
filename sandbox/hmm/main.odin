@@ -173,11 +173,7 @@ main :: proc() {
         t := f32(start + FRAME_SAMPLES) / SAMPLERATE - LEAD_IN_S
         if verbose {
             chosen := note_name(pitch.detected_note) if pitch.detected_freq > 0 else "-"
-            fmt.printf("%6.2fs  nsdf %-4v %.3f %.1fdB %v %-5v  tuner %-4v  hmm %-4v %.2f  peaks", t, chosen, pitch.clarity, pitch.rms_dbfs, tuner.since_pluck, "weak" if pitch.is_weak_pitch else "strong" if pitch.is_strong_pitch else "-", tuner_shows, hmm_shows, belief[best_state])
-            for peak in detector.nsdf.nsdf_peaks[:min(4, len(detector.nsdf.nsdf_peaks))] {
-                fmt.printf("  %v %.3f", note_name(core.find_note(SAMPLERATE / peak.x)), peak.y)
-            }
-            fmt.println()
+            fmt.printfln("%6.2fs  nsdf %-4v %.3f  tuner %-4v  hmm %-4v %.2f", t, chosen, pitch.clarity, tuner_shows, hmm_shows, belief[best_state])
         }
 
         segment := int(t / SEGMENT_S)
