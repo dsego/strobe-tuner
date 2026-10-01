@@ -62,7 +62,6 @@ App :: struct {
     // The arrows on the strobe, see draw_tuning_arrows
     flat_arrow:         bool,
     sharp_arrow:        bool,
-    arrow_pulse_phase:  f32,
 
     readout_track:      int, // the strobe track the readout follows, see core.strobe_readout_track
     config_changed:     bool, // the tuner and the strobe need the new config, see apply_config
@@ -489,27 +488,14 @@ draw_tuning_arrows :: proc(app: ^App, layout: Layout, reading: Reading) {
     app.flat_arrow = core.schmitt_trigger_neg(app.flat_arrow, cents, -8, -10)
     app.sharp_arrow = core.schmitt_trigger(app.sharp_arrow, cents, 8, 10)
 
-    // Far from a locked note or a string the strobe means nothing, the arrow breathes between half and full
-    // brightness instead: slowly an octave or more away, quicker as the string comes closer, steady within
-    // 50 cents
-    color := accent_color
-    if measures_target && distance > 50 {
-        closeness := clamp((1200 - distance) / (1200 - 50), 0, 1)
-        pulse_hz := math.lerp(f32(0.5), 2.5, closeness)
-        app.arrow_pulse_phase = math.mod(app.arrow_pulse_phase + pulse_hz * gfx_frame_time(), 1)
-        color.a = u8(255 * (0.75 + 0.25 * math.cos(2 * math.PI * app.arrow_pulse_phase)))
-    } else {
-        app.arrow_pulse_phase = 0
-    }
-
     arrow := pixel_fonts.strobe_arrow
     arrow_y := layout.strobe_top + 10
     if app.flat_arrow {
-        draw_text(arrow.font, "▶", snap_to_pixels({layout.strobe.x + 10, arrow_y}), arrow.size, 0, color)
+        draw_text(arrow.font, "▶", snap_to_pixels({layout.strobe.x + 10, arrow_y}), arrow.size, 0, accent_color)
     } else if app.sharp_arrow {
         width := measure_text(arrow.font, "◀", arrow.size, 0).x
         position := snap_to_pixels({layout.strobe.x + layout.strobe.width - 10 - width, arrow_y})
-        draw_text(arrow.font, "◀", position, arrow.size, 0, color)
+        draw_text(arrow.font, "◀", position, arrow.size, 0, accent_color)
     }
 }
 
