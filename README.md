@@ -123,18 +123,20 @@ The config is saved to `$XDG_CONFIG_HOME/Strobie/config.ini`, or `~/.config/Stro
 
 ### How it works
 
-<img src="docs/signal-path.svg" alt="Audio signal path: the audio thread high-passes the input into two ring buffers, the main thread reads one for pitch detection and the other for the strobe bands">
+<img src="docs/signal-path.svg" alt="Audio signal path: the audio thread writes the input into two ring buffers, the main thread filters one for pitch detection and reads the other as it is for the strobe bands">
 
 #### Pitch detection
 
-The pitch detection algorithm uses autocorrelation via FFT, following the method described in _"A Smarter Way to Find Pitch" (Philip McLeod, Geoff Wyvill)_. It analyzes the waveform periodically to accurately identify the fundamental frequency, even in the presence of strong harmonics. A built-in clarity measure provides a confidence score for each detected pitch. Clarity and SNR (signal-to-noise ratio) help determine whether the pitch is strong or weak.
+The pitch detection algorithm uses autocorrelation via FFT, following the method described in _"A Smarter Way to Find Pitch" (Philip McLeod, Geoff Wyvill)_. It analyzes the newest 4096 samples every display frame to accurately identify the fundamental frequency, even in the presence of strong harmonics. Only this path is filtered: a 60 Hz high-pass takes out DC and low frequency rumble, which would lift the NSDF between periods, and a 5 kHz low-pass takes out hiss above the highest note, which blurs the period. A built-in clarity measure provides a confidence score for each detected pitch. Clarity and SNR (signal-to-noise ratio) help determine whether the pitch is strong or weak.
+
+A newly detected note has to hold for 50 ms before the strobe switches to it, as a strong detection or a run of detections steady to a few cents, so a single noisy detection of a decaying note doesn't reset the display.
 
 #### Stroboscopic effect
 
 The strobe effect is driven by a lock-in amplifier (heterodyne) phase comparator built on a single-bin DFT tuned to the target note's reference frequency (e.g., 110 Hz). The idea is to extract the phase of the signal at a specific frequency, relative to a reference oscillator, and map that to a visually intuitive strobe motion.
 
 Core steps:
-- Filtering: The input is high-passed once (60 Hz by default) to remove DC, handling noise and low frequency rumble.
+- Input: The strobe takes the input as it is, unfiltered. Each band's narrow DFT already rejects everything away from its frequency, and a high-pass would weaken a low note's fundamental, e.g. the bass's E1 at 41 Hz.
 - Frequency targeting: Compute a windowed single-bin DFT over the newest samples, precisely tuned to the reference frequency.
 - Demodulation: Rotate the DFT result by the phase of a reference oscillator running on an absolute sample clock. When the input pitch matches the reference, this phase stands still; a detuned signal makes it rotate at the frequency difference.
 - Phase tracking: A small Kalman filter follows the phase and its rate. Each measurement is weighted by the band's signal-to-noise ratio, so a loud note is tracked closely and a fading note coasts on its last good frequency instead of wandering with the noise. Measurements taken while a fresh pluck is still inside the analysis window (when the pitch glides down from sharp) are trusted less.
@@ -143,8 +145,6 @@ Core steps:
 To maintain a consistent amount of visual drift across the frequency spectrum, the window length is based on musical pitch intervals (in cents) rather than absolute frequency, and the strobe phase is rescaled so each note spins at the same rate per cent of detuning.
 
 The single-bin DFT also serves as a narrowband filter, providing a clean strobe signal while still allowing nearby frequencies to influence the display. The amount of visual drift per cent can be scaled directly by multiplying the tracked phase — allowing customizable strobe sensitivity.
-
-In automatic mode a newly detected note has to be seen several times in a row (3 by default) before the strobe switches to it, so a single noisy detection of a decaying note doesn't reset the display.
 
 
 #### Alternative approaches I have tried

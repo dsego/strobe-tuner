@@ -5,7 +5,7 @@
     here with the fonttools pyftsubset command (text-file and flavor woff2 options), new ones need adding.
   -->
   <title id="title">Strobe tuner audio signal path</title>
-  <desc id="desc">On the audio thread the microphone input is converted to mono 48 kHz by miniaudio, high-passed at 60 Hz and written into two lock-free ring buffers. On the main thread the pitch detector reads one about 20 times a second, runs the NSDF and picks the target note after 3 detections, which retunes the strobe bands. The strobe reads the other every display frame: a Blackman windowed single-bin DFT per band, a lock-in rotation on the absolute sample clock and a Kalman tracker drive the strobe shader, with each band's noise floor giving the SNR.</desc>
+  <desc id="desc">On the audio thread the microphone input is converted to mono 48 kHz by miniaudio and written into two lock-free ring buffers. On the main thread the pitch detector reads one every display frame, high-passes it at 60 Hz and low-passes it at 5 kHz, runs the NSDF and picks the target note once it has held for 50 ms, which retunes the strobe bands. The strobe reads the other every display frame: a Blackman windowed single-bin DFT per band, a lock-in rotation on the absolute sample clock and a Kalman tracker drive the strobe shader, with each band's noise floor giving the SNR.</desc>
   <style>
     @font-face {
       font-family: "Virgil";
@@ -60,7 +60,7 @@
   <!-- All the shapes go through the rough filter, the text stays crisp on top -->
   <g filter="url(#rough)">
     <!-- Threads and lanes -->
-    <rect class="thread" x="8" y="10" width="226" height="424" rx="14"/>
+    <rect class="thread" x="8" y="10" width="226" height="328" rx="14"/>
     <rect class="thread" x="248" y="10" width="884" height="580" rx="14"/>
     <rect class="lane" x="262" y="50" width="858" height="128" rx="10"/>
     <rect class="lane" x="262" y="238" width="858" height="340" rx="10"/>
@@ -69,13 +69,13 @@
     <rect class="box audio" x="20" y="52" width="200" height="72" rx="10"/>
     <rect class="box audio" x="20" y="148" width="200" height="72" rx="10"/>
     <rect class="box audio" x="20" y="244" width="200" height="72" rx="10"/>
-    <rect class="box audio" x="20" y="340" width="200" height="72" rx="10"/>
 
     <!-- Pitch lane -->
     <rect class="box pitch" x="276" y="86" width="150" height="76" rx="10"/>
     <rect class="box pitch" x="448" y="86" width="150" height="76" rx="10"/>
     <rect class="box pitch" x="620" y="86" width="150" height="76" rx="10"/>
     <rect class="box pitch" x="792" y="86" width="150" height="76" rx="10"/>
+    <rect class="box pitch" x="964" y="86" width="150" height="76" rx="10"/>
 
     <!-- Strobe lane -->
     <rect class="box strobe" x="276" y="274" width="150" height="76" rx="10"/>
@@ -88,19 +88,19 @@
     <!-- Audio thread flow -->
     <path class="wire" d="M120,124 V146" marker-end="url(#arrow)"/>
     <path class="wire" d="M120,220 V242" marker-end="url(#arrow)"/>
-    <path class="wire" d="M120,316 V338" marker-end="url(#arrow)"/>
 
     <!-- The ring buffers fork into the two readers -->
-    <path class="wire" d="M220,376 H240 V124 H274" marker-end="url(#arrow)"/>
-    <path class="wire" d="M240,312 H274" marker-end="url(#arrow)"/>
+    <path class="wire" d="M220,280 H240 V124 H274" marker-end="url(#arrow)"/>
+    <path class="wire" d="M240,280 V312 H274" marker-end="url(#arrow)"/>
 
     <!-- Pitch flow -->
     <path class="wire" d="M426,124 H446" marker-end="url(#arrow)"/>
     <path class="wire" d="M598,124 H618" marker-end="url(#arrow)"/>
     <path class="wire" d="M770,124 H790" marker-end="url(#arrow)"/>
+    <path class="wire" d="M942,124 H962" marker-end="url(#arrow)"/>
 
     <!-- The target note sets the band frequencies and window sizes -->
-    <path class="wire" d="M867,162 V212 H523 V272" marker-end="url(#arrow)"/>
+    <path class="wire" d="M1039,162 V212 H523 V272" marker-end="url(#arrow)"/>
 
     <!-- Strobe flow -->
     <path class="wire" d="M426,312 H446" marker-end="url(#arrow)"/>
@@ -117,7 +117,7 @@
   <!-- Thread and lane titles -->
   <text class="title" x="24" y="38">Audio thread</text>
   <text class="title" x="264" y="38">Main thread</text>
-  <text class="lane-title pitch-title" x="276" y="74">Pitch, about 20 times a second</text>
+  <text class="lane-title pitch-title" x="276" y="74">Pitch, every display frame</text>
   <text class="lane-title strobe-title" x="276" y="262">Strobe, every display frame</text>
 
   <g text-anchor="middle">
@@ -129,32 +129,32 @@
     <text class="sub" x="120" y="194">system audio, mono f32</text>
     <text class="sub" x="120" y="210">resamples to 48 kHz</text>
 
-    <text class="label" x="120" y="270">High-pass filter</text>
-    <text class="sub" x="120" y="290">60 Hz Butterworth biquad</text>
-    <text class="sub" x="120" y="306">f64, drops DC and rumble</text>
-
-    <text class="label" x="120" y="366">Ring buffers</text>
-    <text class="sub" x="120" y="386">2 × 64k frames, lock-free</text>
-    <text class="sub" x="120" y="402">one for each reader</text>
+    <text class="label" x="120" y="270">Ring buffers</text>
+    <text class="sub" x="120" y="290">2 × 64k frames, lock-free</text>
+    <text class="sub" x="120" y="306">one for each reader</text>
 
     <!-- Pitch lane -->
-    <text class="label" x="351" y="113">Sample window</text>
-    <text class="sub" x="351" y="133">newest 4096</text>
-    <text class="sub" x="351" y="149">every 2400 samples</text>
+    <text class="label" x="351" y="113">Filters</text>
+    <text class="sub" x="351" y="133">60 Hz high-pass</text>
+    <text class="sub" x="351" y="149">5 kHz low-pass</text>
 
-    <text class="label" x="523" y="113">NSDF</text>
-    <text class="sub" x="523" y="133">8192-point pffft</text>
-    <text class="sub" x="523" y="149">autocorrelation</text>
+    <text class="label" x="523" y="113">Sample window</text>
+    <text class="sub" x="523" y="133">newest 4096</text>
+    <text class="sub" x="523" y="149">every 800 samples</text>
 
-    <text class="label" x="695" y="113">Peak pick</text>
-    <text class="sub" x="695" y="133">parabolic peak</text>
-    <text class="sub" x="695" y="149">clarity, RMS, SNR</text>
+    <text class="label" x="695" y="113">NSDF</text>
+    <text class="sub" x="695" y="133">8192-point pffft</text>
+    <text class="sub" x="695" y="149">autocorrelation</text>
 
-    <text class="label" x="867" y="113">Target note</text>
-    <text class="sub" x="867" y="133">after 3 detections</text>
-    <text class="sub" x="867" y="149">or the locked note</text>
+    <text class="label" x="867" y="113">Peak pick</text>
+    <text class="sub" x="867" y="133">parabolic peak</text>
+    <text class="sub" x="867" y="149">clarity, RMS, SNR</text>
 
-    <text class="note" x="695" y="204">retunes the bands, 1× 2× 4× …</text>
+    <text class="label" x="1039" y="113">Target note</text>
+    <text class="sub" x="1039" y="133">held for 50 ms</text>
+    <text class="sub" x="1039" y="149">or the locked note</text>
+
+    <text class="note" x="781" y="204">retunes the bands, 1× 2× 4× …</text>
 
     <!-- Strobe lane -->
     <text class="label" x="351" y="301">Sample window</text>
