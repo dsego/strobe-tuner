@@ -78,8 +78,3 @@ Open:
   concert A, and pick the root key (which note is the scale's 1/1) on the setup?
 - `pitch.odin` measures `err_cents` from the untempered note, check that nothing shown reads it
   once a temperament is set.
-
-## A dot on the offset notes in the ruler
-
-The target note shows its offset under the letter. The neighbours in the ruler don't show which of them
-are tuned off pitch in the selected setup.

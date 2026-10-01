@@ -20,7 +20,9 @@ package core
 import "core:math"
 
 
-MIN_DETECT_FREQ :: 27.5
+// A strong pitch stays strong down to this far under min_snr_db, so a decaying note doesn't flicker
+// between strong and weak around the threshold
+SNR_HYSTERESIS_DB :: 1.5
 
 
 PitchDetector :: struct {
@@ -110,23 +112,31 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.rms_dbfs = dbfs(info.rms)
 
     dt := f32(available) / f32(self.nsdf.samplerate)
+    // Down to A0, flat by up to half a semitone, at the pitch standard
+    min_freq := cents_to_freq(LOWEST_NOTE * 100 - 50, self.pitch_standard)
     // A clear pitch is a note, not the background, even before the floor knows how loud that is
-    info.is_tonal = info.detected_freq >= MIN_DETECT_FREQ && info.clarity >= self.clarity_high
+    info.is_tonal = info.detected_freq >= min_freq && info.clarity >= self.clarity_high
     self.snr_db = update_noise_floor(&self.noise_floor, info.rms, dt, is_tonal = info.is_tonal)
     info.snr_db = self.snr_db
     info.noise_floor = self.noise_floor.level
-    info.detected_note = find_note(info.detected_freq, self.pitch_standard)
-    info.err_cents = cents_deviation(info.detected_freq, info.detected_note.frequency)
+    // No peak gives 0 Hz, which has no note
+    if info.detected_freq > 0 {
+        info.detected_note = find_note(info.detected_freq, self.pitch_standard)
+        info.err_cents = cents_deviation(info.detected_freq, info.detected_note.frequency)
+    }
+
+    weak_snr_db := self.min_snr_db - SNR_HYSTERESIS_DB
+    strong_snr_db := weak_snr_db if prev_info.is_strong_pitch else self.min_snr_db
 
     info.is_strong_pitch =
-        info.detected_freq >= MIN_DETECT_FREQ &&
+        info.detected_freq >= min_freq &&
         info.clarity >= self.clarity_high &&
-        info.snr_db >= self.min_snr_db
+        info.snr_db >= strong_snr_db
 
     info.is_weak_pitch =
-        info.detected_freq < MIN_DETECT_FREQ ||
+        info.detected_freq < min_freq ||
         info.clarity < self.clarity_low ||
-        info.snr_db < self.min_snr_db
+        info.snr_db < weak_snr_db
 
     return info
 }

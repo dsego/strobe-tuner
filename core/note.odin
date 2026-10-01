@@ -20,7 +20,6 @@ package core
 import "core:c/libc"
 import "core:fmt"
 import "core:math"
-import "core:strconv"
 import "core:testing"
 
 
@@ -75,20 +74,16 @@ note_str :: proc(note: Note) -> string {
 
 // new note from string, eg new_note("A#2")
 new_note :: proc(label: string, pitch_standard: f32 = 440.0) -> (Note, bool) {
+    // The name, an optional sharp and a single digit octave
     if len(label) < 2 || len(label) > 3 do return Note{}, false
 
-    octave := 0
     name := rune(label[0])
-    is_accidental := false
+    is_accidental := len(label) == 3
+    if is_accidental && label[1] != '#' do return Note{}, false
 
-    if len(label) == 2 {
-        octave = strconv.parse_int(label[1:]) or_else 0
-    }
-
-    if len(label) == 3 && label[1] == '#' {
-        is_accidental = true
-        octave = strconv.parse_int(label[2:]) or_else 0
-    }
+    digit := label[len(label) - 1]
+    if digit < '0' || digit > '9' do return Note{}, false
+    octave := int(digit - '0')
 
     cents := 0
 
@@ -123,13 +118,13 @@ test_new_note :: proc(t: ^testing.T) {
     testing.expect_value(t, ok, true)
     testing.expect_value(t, note.name, 'C')
     testing.expect_value(t, note.octave, 2)
-    testing.expect(t, note.frequency - 65.41 <= 0.00001)
+    testing.expect(t, abs(note.frequency - 65.41) < 0.01)
 
     note, ok = new_note("A#5")
     testing.expect_value(t, ok, true)
     testing.expect_value(t, note.name, 'A')
     testing.expect_value(t, note.octave, 5)
-    testing.expect(t, note.frequency - 932.33 <= 0.00001)
+    testing.expect(t, abs(note.frequency - 932.33) < 0.01)
 
     // bad notes
     note, ok = new_note("")
@@ -139,6 +134,16 @@ test_new_note :: proc(t: ^testing.T) {
     testing.expect_value(t, ok, false)
 
     note, ok = new_note("A#2#")
+    testing.expect_value(t, ok, false)
+
+    // a flat, a negative octave, no octave
+    note, ok = new_note("Ab2")
+    testing.expect_value(t, ok, false)
+
+    note, ok = new_note("C-1")
+    testing.expect_value(t, ok, false)
+
+    note, ok = new_note("AX")
     testing.expect_value(t, ok, false)
 
 }
@@ -168,18 +173,18 @@ test_cents_to_freq :: proc(t: ^testing.T) {
 }
 
 
-// FIXME: handle negative octaves
 cents_to_octave :: proc(cents: f32) -> (f32, f32) {
     nearest: f32 = math.round(cents / 100.0)
-    octave := math.trunc((nearest / 12.0) + 4.75)
+    // nearest counts semitones from A4, the pitch standard, but octave numbers change at C. The 4 is A4's
+    // octave, the 9 is how far C4 is below A4 (C up to A is 9 semitones), so 4 + 9/12 = 4.75 moves the
+    // octave boundary from A down to C: octave = 4 + floor((nearest + 9) / 12)
+    octave := math.floor((nearest / 12.0) + 4.75)
     return octave, nearest
 }
 
 
 freq_to_octave :: proc(freq: f32) -> f32 {
-    cents := freq_to_cents(freq)
-    nearest: f32 = math.round(cents / 100.0)
-    octave := math.trunc((nearest / 12.0) + 4.75)
+    octave, _ := cents_to_octave(freq_to_cents(freq))
     return octave
 }
 
@@ -232,6 +237,13 @@ test_freq_to_octave :: proc(t: ^testing.T) {
     // C8
     octave = freq_to_octave(4186.0)
     testing.expect_value(t, octave, 8)
+
+    // C0 and B-1, below the piano
+    octave = freq_to_octave(16.35)
+    testing.expect_value(t, octave, 0)
+
+    octave = freq_to_octave(15.43)
+    testing.expect_value(t, octave, -1)
 }
 
 
@@ -299,9 +311,6 @@ test_find_note_g4 :: proc(t: ^testing.T) {
 
 // TODO: test next_in_scale
 next_note_in_scale :: proc(note: Note) -> Note {
-    // C8 is the highest note
-    if note.name == 'C' && note.octave >= 8 do return note
-
     cents := note.cents
     switch note.name {
     case 'B', 'E':
@@ -309,13 +318,12 @@ next_note_in_scale :: proc(note: Note) -> Note {
     case:
         cents += 100 if note.is_accidental else 200
     }
+    // C8 is the highest note
+    cents = min(cents, HIGHEST_NOTE * 100)
     return cents_to_note(f32(cents), note.pitch_standard)
 }
 
 prev_note_in_scale :: proc(note: Note) -> Note {
-    // A0 is the lowest note
-    if note.name == 'A' && note.octave <= 0 do return note
-
     cents := note.cents
     switch note.name {
     case 'C', 'F':
@@ -323,41 +331,53 @@ prev_note_in_scale :: proc(note: Note) -> Note {
     case:
         cents -= 300 if note.is_accidental else 200
     }
+    // A0 is the lowest note
+    cents = max(cents, LOWEST_NOTE * 100)
     return cents_to_note(f32(cents), note.pitch_standard)
 }
 
+// The range is in cents, in Hz it moves with the pitch standard
 next_chromatic_note :: proc(note: Note) -> Note {
     // C8 is the highest note
-    if note.frequency >= 4186.009 do return note
+    if note.cents >= HIGHEST_NOTE * 100 do return note
 
     return cents_to_note(f32(note.cents + 100), note.pitch_standard)
 }
 
 prev_chromatic_note :: proc(note: Note) -> Note {
     // A0 is the lowest note
-    if note.frequency <= 27.5 do return note
+    if note.cents <= LOWEST_NOTE * 100 do return note
 
     return cents_to_note(f32(note.cents - 100), note.pitch_standard)
 }
 
 octave_down :: proc(note: Note) -> Note {
-    cents := note.cents - 1200
-    new_note := cents_to_note(f32(cents), note.pitch_standard)
-
     // lowest we can go is A0
-    if new_note.frequency < 27.5 do return note
+    if note.cents - 1200 < LOWEST_NOTE * 100 do return note
 
-    return new_note
+    return cents_to_note(f32(note.cents - 1200), note.pitch_standard)
 }
 
 octave_up :: proc(note: Note) -> Note {
-    cents := note.cents + 1200
-    new_note := cents_to_note(f32(cents), note.pitch_standard)
-
     // highest we can go is C8
-    if new_note.frequency > 4186.009 do return note
+    if note.cents + 1200 > HIGHEST_NOTE * 100 do return note
 
-    return new_note
+    return cents_to_note(f32(note.cents + 1200), note.pitch_standard)
+}
+
+@(test)
+test_chromatic_range :: proc(t: ^testing.T) {
+    // C8 and A0 stay the ends of the range away from A440
+    for pitch_standard in ([]f32{400, 440, 480}) {
+        c8 := cents_to_note(HIGHEST_NOTE * 100, pitch_standard)
+        testing.expect_value(t, next_chromatic_note(c8).cents, c8.cents)
+        testing.expect_value(t, octave_up(prev_chromatic_note(c8)).cents, prev_chromatic_note(c8).cents)
+
+        a0 := cents_to_note(LOWEST_NOTE * 100, pitch_standard)
+        testing.expect_value(t, prev_chromatic_note(a0).cents, a0.cents)
+        testing.expect_value(t, prev_note_in_scale(next_chromatic_note(a0)).cents, a0.cents)
+        testing.expect_value(t, octave_down(next_chromatic_note(a0)).cents, next_chromatic_note(a0).cents)
+    }
 }
 
 
@@ -369,11 +389,15 @@ octave_apart :: proc(first: Note, second: Note) -> bool {
     return math.abs(first.cents - second.cents) == 1200
 }
 
-// The note with the given name (C = 0 ... B = 11) closest to `note`, within half an octave
+// The note with the given name (C = 0 ... B = 11) closest to `note`, within half an octave, or the other
+// way when that's past A0 or C8
 nearest_note_named :: proc(note: Note, semitone_index: int) -> Note {
     diff := (semitone_index - note.semitone_index) %% 12
     if diff > 6 do diff -= 12
-    return cents_to_note(f32(note.cents + diff * 100), note.pitch_standard)
+    cents := note.cents + diff * 100
+    if cents < LOWEST_NOTE * 100 do cents += 1200
+    if cents > HIGHEST_NOTE * 100 do cents -= 1200
+    return cents_to_note(f32(cents), note.pitch_standard)
 }
 
 @(test)
@@ -386,4 +410,9 @@ test_nearest_note_named :: proc(t: ^testing.T) {
     // E locked, B2 detected: E3 is 5 semitones up
     note = nearest_note_named(find_note(123.47), 4)
     testing.expect_value(t, note.octave, 3)
+
+    // E locked, A0 detected: E0 is below the piano, E1 is up
+    note = nearest_note_named(find_note(27.5), 4)
+    testing.expect_value(t, note.name, 'E')
+    testing.expect_value(t, note.octave, 1)
 }
