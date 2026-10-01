@@ -72,11 +72,13 @@ What falls short is around it, in this order:
      to a few cents. No string is tuned there, 50 Hz is G1 +35 ¢, 60 Hz is A♯1 +50 ¢ and the low B1
      of a seven string or baritone -49 ¢, but a string tuned up or down passes through. Locked or on
      a string the strobe keeps its note. No exception for an onset, plugging a cable in is one too.
-   - A "Mains hum" setting, off, 50 Hz or 60 Hz, off by default everywhere. Narrow notches, 1 to
-     2 Hz, adaptive to follow the grid's drift, on the mains and its harmonics up to about 8, after
-     the high-pass and before both the pitch detection and the strobe. No tempered note is within
-     about 19 ¢ of them, higher ones hit partials, 660 Hz is 11 × 60 and E5 is 2 ¢ off it. The one
-     fix for a note pulled sharp or lost early, which costs bass the most.
+   - Tried and dropped, a "Mains hum" setting, notches on the mains and its harmonics up to the
+     8th, each 0.6 Hz wider than the one below, before the pitch detection and the strobe. The
+     7th of 50 Hz, 350 Hz, is F4 +4 ¢ at A 440, and at A 444 250 Hz is B3 +5 ¢, so the notches
+     skipped harmonics within 15 ¢ of a note. With the rest gone the 7th is the cleanest thing
+     left of a buzz, after the ukulele's A4 died the tuner lit F3 and F4, where the hum alone
+     reads G1 and the rule above keeps it dark. With the rule and the strobe's hold the note
+     shown under hum was already right throughout, the notches only raised the clarity.
    - Not a steady tone taken for background, a bowed or held note is one too.
 2. Done, the pitch detection hears up to 5 kHz, a low-pass on its own samples. With white hiss
    40 dB down the Strat's A2 reads strong 14 times instead of 2, the acoustic's at 35 dB down
