@@ -1,186 +1,193 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 600" width="1140" height="600" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 588" width="1140" height="588" role="img" aria-labelledby="title desc">
   <!--
-    Drawn in the Excalidraw style. The Virgil font (https://github.com/excalidraw/virgil, SIL Open Font
-    License 1.1) is embedded, an image can't load an outside font. It's cut down to the characters used
-    here with the fonttools pyftsubset command (text-file and flavor woff2 options), new ones need adding.
+    Drawn in the app's style: its background, Inter, the LED dots, the cyan accent for the pitch and the red
+    colorway's stripes for the strobe. Inter Medium (https://rsms.me/inter/, SIL Open Font License 1.1) is
+    embedded, an image can't load an outside font. It's cut down to the characters used here with the fonttools
+    pyftsubset command (text-file and flavor woff2 options), new ones need adding.
   -->
   <title id="title">Strobe tuner audio signal path</title>
   <desc id="desc">On the audio thread the microphone input is converted to mono 48 kHz by miniaudio and written into two lock-free ring buffers. On the main thread the pitch detector reads one every display frame, high-passes it at 60 Hz and low-passes it at 5 kHz, runs the NSDF and picks the target note once it has held for 50 ms, which retunes the strobe bands. The strobe reads the other every display frame: a Blackman windowed single-bin DFT per band, a lock-in rotation on the absolute sample clock and a Kalman tracker drive the strobe shader, with each band's noise floor giving the SNR.</desc>
   <style>
     @font-face {
-      font-family: "Virgil";
-      src: url("data:font/woff2;base64,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") format("woff2");
+      font-family: "Inter Diagram";
+      font-weight: 500;
+      src: url("data:font/woff2;base64,d09GMgABAAAAAB+QABEAAAAAQvQAAB8wAAQAQgAAAAAAAAAAAAAAAAAAAAAAAAAAGjQbli4cegZgAIEoCIIECZwMEQgKwhi6HQE2AiQDgjALgRoABCAFgmgHIAyBbxs5PSXsmCGgO/gVBdoLJoL//5rAicig09Bu/ldFlaRBKMbsPmi0dYZhiD6JLksmnCSHoWA+dwfDBqw9joPNsS5iaB6x3LrQNoqO2rtKiqvjj2VlY6eIH5/Va+Wq8g7f957fwk2FKL6U938pL8oIbXuggsVWshxR3+0jJJnl4Wst7PVs98yGeQNoIwyTIiQVDUITCxUWmk7mFKqr/T70btabyZCQQEPQUg8LFUOsUE2NUrqibmfyfV8m9rXstft1v5m7nQsKOQImpjtF21urtH+lTIidCTeBxibAWIQ7DdDN2mr896Dn6If7fSNqak3lSQ1dbW3lQW7mS02P5ocAAqxrq/0ckvAQrNz7u1BavZlwEckKRWlLaeW1Px4UQmMEQlaF82iEJf/5AfofYB/24hxU0vKwNORDsNXmpOd/eD5t6dkzLqqEFfjKD99oA2RAHSVssxSUfOsr6ivq7aqnNfdNusDAGruCxz6Gp0rnfWuvM3c8s3sX0EkZZW2FWwijK91f88GR64vr80SehD54qQro3EpthObMbvCjTzLV/1+n73rvkwPfKcQfaCIuDgvzjMvycmVFepKSSrGTyFbQzs8HtEuBgvLjk4YKCBOx4bMLiMOENBEMY4epY8euc4et1TFwTfD1CUjR7v1+ikHN2OYZKgRPOOAYIhl/7W//EiXQG0CFR2QhcpQiypUjfPyIqCgiJo4goKdqA7F5C9p3R+aOOVPHo2DP1BHjUHBwyPSJKMCA+I8IrzNUB3ZNnQh5oDv48qhLHlYkNJlVIj1KYkEwHOnrnGosKoEpw6Kjc5arSFBQJ6d8IQlJVCJuScatPU5y+QfjBOOFSLyTiteob8HAXyRIZHCw4y1O7zksHk6uDxpvxZ0xw5P1R1UYeAFm4OujvrFTipsyvo0cSIzKeePXOSAsolEzMUZrbN0cPJWJOgKggU+9Nzrj1LcQGAIQ0sXgQba52Du1SI1M4hPbKnmFVWeNJqE7AptLIjMrUqIMdefGKIlIxplG8ogQ4saRsRIOcb8nwhzcaFONQbO/TdFOll7JWPteXyrlxuBWPCQMkmhrIjjsEpkUdicfMaPGp8HguxCc9xI9SPsOcLc8O1CTmvFB1czNvHXEg4j3g6uxxPjPHe4nhfgFxdaP7voq/gRxfyYxZ0a826rxqExqTMjaCzpe6BHC1KPzN2gWduKhzIgMc8d36MwWXD0pVzcgqLl3or2NuFJ8anzG5o3r1Yu2cvf5g3DNhisTRIQQ1IFIKuLPW0S9XzEGCPGpU7SVhNMYv+naDQK3o/h2+seXKG4zrlpIPR7fk8QTtD2DCrpqY0iXzN8ccbLMeDMwVbk/YWuUHBmoXAHqU6vrx09Gi1cKhBh/NhcEknMKYaOV5I7lEjkNUcLUIp80ZtBqKJY+RSbPuU4mBJfgE9fzNZhyRKViEP+Q7lwQpM8iFFv4vl70p1x5T99oysfIoJuENvqCkqrozbXU3OuLKt+/dW836XArwu8fQni18Auj/AeCu4FGjfQbYQT2IlQF0Yk6CjsGzJ3III7cWTYLEyM9qvKIIMngRIlgMKhIfNdOkjQ8jkEWAzOJS6YL+7TDhX3dcXLwH5yO72oIhjyoY9QERIJBG8OGiOBISnCpgj5u2oCnJ7H8JJtRDk4wQjoYKtOhfR8whBVQofw0T/QIoob8o7xF2YE0GDNjAvRGapEhiMpDqtJEVfyCP51KVarVqKWpU68BxZSLQMQCooSQyiNLMWClIH2BDsrMfBs8HE5XfXMgqmP4FrqrsKtww5I1rlnboRseQ+1Maaa7FlDV6R3G8fLm8uXD6TCCCrTAYBwyDDDbJ3ao2LMrVC4qLqFVZz2MMctc32muE+K/5OMp4xdTL6lNV0OMM2fzYK7Ihfjrj+mYMmlCr8jSI2bC112IbheOtp8s0Eh8B9wlt79W3gzdgflLvMlh8aLbU8aKD5JfuAoyq7yqxLPxTMDG++Q/1nS//Pf3sEggzf9X/74c/1rlXfendPrG/+ZncOJsKawf1uuoDqxXZbyo0PXS/9fgt/COF1VHww/3oudf5rJAwHkYRJEvF+g6/gJ/+jMQHqfoOk2k6XEFtXyplxYpx3porAXXgNpv4YTJOwhQs4mDQq1aBwepj7mBax3fw0pJyRc60PMlv55Q7k4Fo4eyl2vY0bSldXVMHlftjh1t28qDM6t3BHob71ur68+l4Cgcxdbh6mYGlsAl7AzMd8GhCD5ZI7Xw+AgWfrZFrpOD8QB+PVg4i9u/wlKiaXornY+eCe1URYyzKHYdpbDmXFNECpfHmF/3K8DjZWQizdrcAkmkga7K6BKHRSHqpBhX1gE1jByDkwB298L6miGWm5y7my8UGUumvdBJEWOdIyRpxRGITxAH1UeHDjIQmOVaELgZELxHLyPG2tV45uD9zhnSgiIUXoTIbtPYQQMHIevN6KKdevKURn297FLxNxosbIW0afJ2DBptFLTTwLqhRzFpRQ4BiOy2qAs36Ncueq8CvM/QYgIpzx0QokOEoO4gc3zBpBCgGFoWRUOp36xOQit2CQf+uU0gMHRNKNMIdu8kKSDMkgwady6116swHpilqONonnPgLGj25xpM2jQ2nm1Etx3IZNkDP07rkPr1zWCN2vjcOkwotG6d4fFmh4KuCaImfp6ozFjgfUTh4omhxA3M3JG9s0a5YFI27hwzkzSDVfNJ0DVa8GU3FFb140PSajodgLVlK3zZOdrGdsk6rQ0Ffb09zaI6QHKPOUXbFlDzxXRCpQ1kSAXOznrxYzLMfLNW529WotX1cp5p5ICWSfkyL2LiqPFUNlxO0FIJZd4C2at9CMFiS5w7v2R2dArq1ncDFu9lgOw9aR4h85LOnSMz0tu50vHeEwG2BwzJi60lsS6NP4gOBwoGuw6URjOElhHoGIWeMRgYh5EJmJiEmSlYmG7Q3UqhccgKn33ZDSoV5L5oeOtdJlTk8D1tsbyowPd8g6nosE7utkDy0yOxLm6iCxXboaIbFT2omI+KBahYiIpFqFiMiiWocS9kOXHBl5hwZtJT2+iFViMX3Zu7lh8hLXUtOjdIACIjiWpM87yu8KlL6oYECAYPsSI3rWdeLgKx6NzgILyMzpohP6UuGw9D3jlQH0GHDbCu+5whCRONhzH0697hwarOl7AbdPkGiUKWZeSGA1i/QI4KVDeWHbFXLEigbK1tHIXK0COpShT4opn3qVm76cWCLOHQVN8H4X0bc27w6nNHJcAQ6c1mdi+LO8UodloDu0eN14ssNzFsRVVYKthWeO+VosLg2tJWOw7HTOfUqAVhbiz6irtQojRuRUeHqZ4doU5Q1Qt+nNIwplrRMde1zLSzYT1VvOWqRrLK1lqCDvO8USQOofYoazvFJJ2uTGhAT0G5ep1ldOBRWDCGmeCUUlE9Olujo5oSIcNqXWCOLs/PFNWEkOS0IWh2imZlrYxsVZBwPtjEWahkWa1Rj7rgq2CCNm9un0+/MMFgdpv1StR0n/q96xBVMmx6+tJZru3loXY0aJzI5HLN6QybZjsGWY5V8buBbmjL9XveNpsDN0CkrHitG0FlmnnZJlCVGvVEuXYqm9grCfCs8G9CcwhDeWqGCDgZ4zHoA7pqujpHKp3Xk5hAkRrMo8dT+x8xymZyjerZlZd13ti8qbYRL7Q0YLZLjki6/FRtdas4pfoCW83B5V/VotC1K+PiaNwmqXltKHCmTQVr7aMi/ggdVoWhgUolw8adk1bVEYlt08FK6IR2U5AomDOh8AuWTKgC0II1Exq/YMtM7HAMaMzYS8JQIjhKwmQoEJxKwqxEcC6pL3RjM1tSAyu/4JoJmwAkccuEnV9wzzQO+LBJOlILpxLBs6RxYcTwKgm3EsG75NIHCkEgjSfXJmm+F6b62/tyg5n2mTCVLeZboPQrEP61UKDgqH0UjY+a9hkqcAgU6BVBCAWAWEsYLCYfw+xjWHwMq8KgFQB6AcRAEcfp47h8HLeP41EY3ALAK0D8x8K34Qd3GfjxltU59x3UGhuj76Kvwc1sTt/af17O7SBIhDVgGeA+YC2UR9D+DfaDk9D7AahwCIo8MOrlqQPSkop811GVYxBdjA4UPWAm7IoGwAt7DpJ0UuuLqRYkgjFxNMbkely/U+Esm2JuilZ2Vx5YHlwNxti8Pmh/tyFf2syZLEum3qX86mrWLLuIZhEEgVozO1nQXDazLE0NU7pKy+SDqKDthKDarbKkNTkgdkACt6OLfv1vo3Me7ErTCyzqZwvaTeOYZdmad5ILJ2ce3jG0f7LGA/m9RYLdOGRe/qjytKC04SAPuaAQmlPC+Zm9mYZ2W74oxJ7yDtEiB7Tz3kWlmzv9guHz4o5sieS7b6hVw+DVI1HtL3PbwZjfYLf+jalTEStmRc2AtqjIyW7F3gYRhHuPNy6yK/b6EgsO+2W4oedtjKmBHTZcGf6grv65rnzYzuEkiILcNuELRe07PYn7yWp/Ep412zUkaqMPTTMpsaaAkLqM2sK3zXjKxOFq5/sE5Djgrwrk2hZKRZgcJ6mT0SpEoL0sWt3jALhIn2bkQ1Wli3AjgDJJaC+HPaoDiigmZApi19SRdRZM2a8z9j1J8vQmuapobUJO2m1LS1X7gVW0I9uNcHwep5xwyRHxttzYFVvKyw9+NLR4cOBR8t61/apIq2Kq291RJtt8kVnHQKlBvj4p2/dtfUGhUwSpsj5vHJqh4pSBW9o1ODJMP6QlmDOczbOO8/rqh6v1abLMAwraIxDrN/QvXR0xJGSfvcNnYQ5yh5+dhMxOXLZ4sRya7TK/MX2zvebbujc0t6Dnzczaa9Wgj1WUXVkh42vMcBxeyMFPwLocROpWtuxSiFjx4fD5vS9H1+uetSVt9dPTZ3COQhu4zrjf+CME5GgQLqw25ulVL5tWImTfhRSlvFpxqPu25tHJiIE88m1IOyCkfPRnZnkcshn+faM4l2XsqaXYmMBzLD/upEaWhywOvaaoLWclTr2XeR5MZxJSglPBx46h+1tXfSn5byyjTNcgCwlOhm6Z+WCRKShpB7PfW/ZX1H38FCwagcN6Y3BwNCZl/N/T4qiWUPnoZeF3JtOBzrxscwX+9aCP9SuDSoNq2Bs1L8NGkC+1qu7isN0R3PwCnMqeFJjXE1kbE0scWMN3+sxZ1bJTAggVRVmO3QbRpQAJSU2mm50yA4VZ46FO+Lv3AoTx0EwlOKF9Q7nyqRpvuZhLvU6N+9E/EPf9OoXKXS5R4z1TzG/ahFCr2E9BvvwsOtXb7PjiZYsztG/r6pe/v1WlhR/NFygyKFvb/JXxgrmCm7fmTZ53rJ4fW0+aSwrT28WeJGwlTNThaclWiY5yofBPZWSoyDxskbhuzDWp0Ma19o66PV0L3GH3Rt+99UXtbRKIXP/88LP0bvKe3s+1KDq5ey/tu6gStYAX8uBeHhMvyba6B0RcPFXF70SPWdEuOav6nJynuoqV2//IEnMGt9LyuLrORC+rlIY1USegyYwoRZKch7o9B/lS+vA0FQerWNecY6GSHPHxaTVNsyPyM6ZDAi+BqTVj7JUi3r9rbzw4fRe4BsR9h/ZDjwao1wFroN/n0I1mSaPY8ZQS/YjNjnmEe+s0lX2n2pDTQKHk1DUpG4g9mMRoIauI8YhhbusLNgpKCqahb9P/O7PTKLl5jcoWJcq/X76SuflUhjwRR+OPZIQF16ESD3eaDJremiqlsaffEYtKXxDpo+Lxa7KYpkiAUZ0caAtHpJrzc7Rs9hWdBYJc+BgK7fK3qDMSJ+T5zPm7IPJTEPno/3W/LHPrxwrhk6ni+bnWltm54qmnwor8jzJMzy1lUptLaHFEoH1yik2Jhot0vpKpfEZyQBiWEJEWiL9zTCuURx48gb5UfDjTw7OU/GypdMeR+ppIRLcvYAOLtsr+P7qO3SPXfyc9hXBLcAuZVMACMDt/i/1dyyBfivR3uhJIAEbIEjLIYoPXE8FC1vBoEBV3sScyAiqgYoL5+YuCrsKHJIJi1ctsmnjnRRrkZXaV4I9At+yemSKCTsRi6ARobxgJ2k0nYPCMCAW/u2a6lX/7zCwUmEJWErj/JllMyGDgAZgN8ujOkp9Bvlzu2m9h5w/ALEe5hQ+7BPmL/GAqBiqIiLzYQ8OR4hUb3/OoYoLzFInneRXAkyj+txsuKhJHzrWxkHTXA853THXSP1e/ajq/Y9n6WoBe0nHG4Amq71e7qH2xb5GKR3KKrH2tUPJ4857Pv9VdYc4OIcG4kdmXPGP0EOKClU2UmR9QnUR7JGdpA6ecx9KFKSmf+nqT/y0wGDgqzM5ffe/gSkR+5ti2Xw6NWzDT0ZIn5Aeno6FtpIaC62mRhUWOPKVH5ywjWnGx7feX715ZbSenMSKi8nN0ClAilEqBfx+Ck/zwivTM5kbK3qQvRCLbXEliYTERp6b7kHv6r3gJI9Hh2SlHIvSipsmJodVwVCvwSSSKSg2F4xMA9K2Hr/xiSL5IJiV5CKE7E0oImkW8ICKh/R4XihbDCIqVr8LDtV1Z5Y2HCC7QxLOMYOlEaDeRBO2NVXEGUZB8TrfdKL8WFDa4PwFMZoZc0s4uB20y4ZB46806kfvOAA6AifD12j+4fLh+JK7v0eAC1FL/zoN9y/AhCqFiwt5L0hrTirgRzS6aioPvKg4W3NE3bLtOSvU5T6xQH9O3gH1ARxTOegADt8s0Uub1HXA+of5k9wsn3WD+8n06prCX2LiKuz5mOpqovvW0S/yL+3EW2l0GbrLau5sr+Nn1ffWyItlTyq4IgShAYYQ/0cyiVdQC6JZkQZjboioa9U6UrGKvk7fffp+dTr6yvSvePH1AR1kKkIEvku8o+louq6SrpFmsKAfAEpF7sZ/FtIAyxWJJCflAXinIo1ZZG8reJvOKaCW0yRVlON5hHXrusd5ML8WEk4dISu6qBaHvRMnK9lrZ+2z32+rkqNhtJL85hP5pntnBZFi67T40v8j3r6zttF+d1UdZ72mTEnsgYh3naf9ecSqB3mSyGWehtoL2GQ9QZnsMk4GGdpCI0K4MAgZLJ0C7CaT6ktHRpgVykLxNYcQj+WDwkW1E0qEcyGx5k94e5aRBeXmz4R5Tc7GR/lL6wdZ/IZxssNhT69dHcxp/ysaSE1tDooqo0Yk8ftJjZtqtR1Ec/nIkeZLsfraiZI7N0TDduf+ZZbpc8SsccwhMfi4R0hyTlN5CD4ts5ZYCo0BKGZWEY6TGhDXGgDEicFLW0AaWnS2MjB4Op3A64g7t2O6oneSmMmfeRrhEHx3W1fjRv5ufnVd/rC72ZH3nNeHOEwPlOA8J1BFI/JpUYCmZBDS0Z/k58xhuPjCGMf3+QY8PJ+aSjKulxzYf92IuAsnrObkZWy9o9nly6FmbiroAudvizPF/pwT0O3ja0N6EDQU/ehypoV/1b3py4AwxgSZMSxXxs2lPX2RWTHllebjwvBGObLo7HM6Au3I8PZ24mXD7DLnKd6SsMTLKuZpJhO+WjlLNHE6KSe5dwbFZy7jU3pgkxnCYqnTX3cyxbtUoMnPsPal8mFXHiIxtK6BltObHRdYy2H0ROTQCgZcWHctJ00+VZo2Rz7xLSB/Zk7glj6QnhNUPqP1LT/afCUtIX0hLwfaGPXuVVSEWIjbVXFkXsO8OmDX+z3TVPTgT4cb1dHfmZMIRXlkezlyEtwOb7m5fJAexbyYRFfPBYLkGIkk+BzJbVqslp1CrXZYcbQU5b5HR/QmeTYyfoDSIvWVCTybYdXGqaOqwrHuNt93bBjvt3cvWKNtt3bdRkYnKtT28zmeAM690XqrQ7hAkMgDJZldAWtwASwsA8dp6Ga+cEuOr2qIVcpp4fHVbRTRrIdWWDWpt/zd+3xi/v58/8K8/OM0fGiiFIZKHNGiKkRuCRvdgwq2/R/Hxm1WgBUzVUk0AjZb8E6A/iNmr4Byke/VunAPyrfLMsv/f5DotRvnjPxSh/YINGscOYlK7eE1P5qV+3eY8z9/xlw6xn36NRVzurX/yPfiR4M+3kWM+doKHYnFOgxsYQcdnAN9tuYLs+QiYz1BRd1sr2uHXMaopq+RQWJ+QifHFYoj6sfDlN/HcPo9DV3lwYDfZDr6OMSBKRf6ItNLfQ+IE8tUWbEyFwGs8Imq6xpbLxbziJJ58BRzQ81VwlLVFMBqsz7bX5s2Bjl3Kr7IMCOTQJ5DoAnaOyexzARra7p4j29G1rSlI4rR7K5TOMSfX4Ug2DyAs+lNQ+LqLDKkXrOsgNFU2sgMAQbupD3K5i2VnB7jhRDMyRUQfyWus99SWE2xmG344MnZEOSeRcFg71K7kmbwUlMZzoQ51BvbO9pgv2eVEaJx0AGrb9iqJgeDgJ59H7zaIMWaxy9g11wWKjgmG+Ak2Wcrk2fb7cokFFhc2YepSv2Y4n7w5UimSKjsON96CAfOx2eR+rTFgyTR/BCMZ3+cZNEF6FcwOtsPPOfuuDqpYuI7XmZXL4Im3gkxJWcbDLhoXmrDQOdarNi+Jvbg3ddYtXl6DZyY3D39WT3rHNg4dJkSMW8H8dJUBcKajMVtkDki9XCjZZR9idZ2Ic5+uT8ucyDGcxbPmJv2XOJzzYCOmU813W2vdcSuhklgCeK2rP5dcHMheWF0oD3mITdsgTs3N2Z6mmM9qwQE8oKzahHfos2aFi4hAyyZ7SbAP1atJFcfxOMe4s24RBFDY1sijIQXmPzFGrCk/qbJ4rApk12KEkqQL0sIy7/jQta6LZXYP4sGA55F2YXo3KmPz8OeKmBM4Zr/ZFuYYjbUYA2mCdPuygCHl/CKVbYglgEPQXucCLlXtWJLxeBZZPKjHXHjO30EUHSkYccXMBIC+I4mpEpiIGVcAzAMpDA4d+ae0u6+M115dH++P69K3ztSx5/Ccnu/hhDlEVi0l00y61jln/ZF03h3eAYBhS+qsZ5VJ9qVdlQhEnq7Rj2XBt2q5V6yWBRZ71rUUT0n/aYWcFtibdZ5Hg2FAXNUUpHs0ZiIiKSRFUj0FhmjynYXj8Ec4D6vb8df/3FT8W+NA2RxsJX/aDrC7oaBm+H/vrVxbHLduh7J7/SDpTOKJicSOUtbV6fVWUHqpZg+AoTtZDggVUHi0no65L6vO/J8PfTi2xiRWEHlanuYD8BIcUiEVSXZAdJSf4UNNAS2o7svIgB1dEgONigXQ6oCEVTwpcZEcauGXCwSGmC3aA+4618WVe+uKyRQ3kMw5M5BVIsuR1luZOI/nN/TOfwhEx2BskM7fRMBFVWJXxVt/ydW39CA0rr99Wdn/7G45PbpfjaWh4a2zplSkj9bZvUhlVpJsFrGrXC27WXq1ZqIhV/DdRulDJyW3Kw59Isf3ZZGUrPUugFlOwGzb1srKqBaekhBo0zF2tm0oTYcokwRJugvgt4MNKO9n3z1jd7/a5WLDiAPcLn8nwP2fxr0OcbRzm9/Sbl6xG3fL2YG3b/FysdK9NjuYH5SJxua4nm7RtuuSHVZRk2IAaZX+cAhyZOHVhSSP3zMzH4PxxeGecNv9DfdsSzqLfwQVYvwIQ7S+ILNOqPUdjDP2eh2n5qFva2fK5bym38NM2+GsGMySxJrB4nir8hVpAG0ZWwPauq3QobtUOWVMcaI9RtnrCBWbAxapzOIR9neFteb48P8xhkyxG3sWz6p1JAJm4QYhK+zM6JIuKtlUldXJ1nF6RVx+1vfb+65xJs/oJ5Npt6FR6194xl9b/KJMZciA+UrV9TfXPHc/vvn+9vtzra+317bcyKhYqjoWmTEz5phSPLFX3TXhtrZPZT2XLoUFAhz8JPbdSdqhuyv72/4C/vG3L9+/GrMJCbAPkhgB4vGHIOcv8f5BHABI9KUAcTKgJKCyBjkJvvskeecbkg41UwQyaDpq0R8B3tF3+BEQ4KBwZoo1XTp5xmeFgKwhpnv/GdfV/+oFPYA/XhcEh4903s9vf9H7zs42QAsFJPjbaWvIydCQb+/6A/Ue7LKipWQ5L1QuOpFrppSXTnihw1BxfrXDWAO12FnF1dkuuyDU49DOThO0NzC2xPUtv0YzcXTLf2O7qwzWPMG1hJYIW/7qJX62PSCYg9LtJlNbXNVoPOQlNX27qt1y0iFdDa3usMm8eKW8dZ14LuPNZPOLYnApMaXV1aD8u40JwfSimZq/wswSphQRUyI+CyR+gedwGY7C/YXLmkJbP9jJgcRlb+1ovbQpTjoaNJ8i3AIqPVbt3uX09iLUAZcQsMxySEYTUF1twwYg9ZWNEBDQ6ItDsghYBWwy4dR5MiUbPZmTMrM3k52sE/VY8OO3+380mmSyOaYaY5TRplMF+QVEqbobbQRVq4mmG2EqVWdTTTLWCMOU2tebYbrRJqHvNAXRQbcfbowZJujqiVEpMt6QsjDMy69NVA3zjzFdubigoIChRqiLUGR+V910kL2r4Ldcjj1J/01hjEkmUq+pgYY4vYPsnncAK176Dq+f+VwhYhvXdZN/ysp/9AqEObPERUcGdWqsKGxAJfx7V6brh7e7t5N1dW3YPtRISX/OM58fX/evO+aGHK61yuZBynNmizmzMjS7ZtFMWi+teUxgqGg/KbQHYvf6HhzMe+6RudrnssbszWdFDbf1oG1sXdaVi/tV3NVTkazdHebVUu8JacpMfmTds07l2mxcHylScsk7/r81857HbPJLHbpG0zwAAA==") format("woff2");
     }
-    text { font-family: "Virgil", "Segoe Print", "Comic Sans MS", cursive; fill: #1e1e1e; }
-    .bg { fill: #ffffff; }
-    .thread { fill: none; stroke: #868e96; stroke-width: 1.6; stroke-dasharray: 9 7; }
-    .lane { fill: #f8f9fa; stroke: #adb5bd; stroke-width: 1.4; }
-    .box { stroke: #1e1e1e; stroke-width: 1.8; }
-    .audio { fill: #e9ecef; }
-    .pitch { fill: #a5d8ff; }
-    .strobe { fill: #ffd8a8; }
-    .wire { fill: none; stroke: #1e1e1e; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-    .head { fill: #1e1e1e; }
-    .title { font-size: 20px; }
-    .lane-title { font-size: 16px; }
-    .pitch-title { fill: #1971c2; }
-    .strobe-title { fill: #e8590c; }
-    .label { font-size: 16px; }
-    .sub { font-size: 12.5px; fill: #495057; }
-    .note { font-size: 13px; fill: #495057; }
-    @media (prefers-color-scheme: dark) {
-      text { fill: #e6e6e6; }
-      .bg { fill: #121212; }
-      .thread { stroke: #6c757d; }
-      .lane { fill: #1a1b1e; stroke: #495057; }
-      .box { stroke: #ced4da; }
-      .audio { fill: #2b2f33; }
-      .pitch { fill: #0f3b5c; }
-      .strobe { fill: #5c3310; }
-      .wire { stroke: #ced4da; }
-      .head { fill: #ced4da; }
-      .pitch-title { fill: #74c0fc; }
-      .strobe-title { fill: #ffa94d; }
-      .sub, .note { fill: #adb5bd; }
-    }
+    text { font-family: "Inter Diagram", Inter, system-ui, sans-serif; font-weight: 500; }
+    .bg { fill: #15161A; }
+    .panel { fill: #1B1C21; stroke: #26272E; stroke-width: 1; }
+    .box { fill: #22232A; stroke: #2D2E35; stroke-width: 1; }
+    .header { font-size: 11px; letter-spacing: 1.6px; fill: #7D7E8F; }
+    .lane-name { font-size: 12px; letter-spacing: 1.6px; }
+    .lane-rate { font-size: 12px; fill: #7D7E8F; }
+    .label { font-size: 15px; fill: #FBFBFB; }
+    .sub { font-size: 12px; fill: #7D7E8F; }
+    .note { font-size: 12px; }
+    .wire { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    .audio-wire { stroke: #5C5D6A; }
+    .pitch-wire { stroke: #82E2FF; stroke-opacity: 0.7; }
+    .strobe-wire { stroke: #FF6767; stroke-opacity: 0.7; }
+    .mint { fill: #61FFCA; }
+    .cyan { fill: #82E2FF; }
+    .coral { fill: #FF6767; }
+    .mauve { fill: #6B4949; }
   </style>
+
   <defs>
-    <!-- Wobbles the lines like a hand drawn sketch -->
-    <filter id="rough" x="-2%" y="-2%" width="104%" height="104%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="2" seed="7"/>
-      <feDisplacementMap in="SourceGraphic" scale="3.5"/>
-    </filter>
-    <marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
-      <path class="wire" d="M1,1.5 L10,6 L1,10.5"/>
+    <marker id="arrow-audio" viewBox="0 0 10 12" refX="8" refY="6" markerWidth="8" markerHeight="10" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M2,2 L8,6 L2,10" fill="none" stroke="#5C5D6A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     </marker>
+    <marker id="arrow-pitch" viewBox="0 0 10 12" refX="8" refY="6" markerWidth="8" markerHeight="10" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M2,2 L8,6 L2,10" fill="none" stroke="#82E2FF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arrow-strobe" viewBox="0 0 10 12" refX="8" refY="6" markerWidth="8" markerHeight="10" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M2,2 L8,6 L2,10" fill="none" stroke="#FF6767" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <!-- The LEDs shine like the indicator lamps next to the app's toggles -->
+    <filter id="glow" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="shader-box"><rect x="952" y="292" width="152" height="76" rx="12"/></clipPath>
   </defs>
 
-  <rect class="bg" width="1140" height="600"/>
+  <rect class="bg" width="1140" height="588" rx="20"/>
 
-  <!-- All the shapes go through the rough filter, the text stays crisp on top -->
-  <g filter="url(#rough)">
-    <!-- Threads and lanes -->
-    <rect class="thread" x="8" y="10" width="226" height="328" rx="14"/>
-    <rect class="thread" x="248" y="10" width="884" height="580" rx="14"/>
-    <rect class="lane" x="262" y="50" width="858" height="128" rx="10"/>
-    <rect class="lane" x="262" y="238" width="858" height="340" rx="10"/>
+  <!-- Threads -->
+  <text class="header" x="28" y="32">AUDIO THREAD</text>
+  <text class="header" x="264" y="32">MAIN THREAD</text>
 
-    <!-- Audio thread -->
-    <rect class="box audio" x="20" y="52" width="200" height="72" rx="10"/>
-    <rect class="box audio" x="20" y="148" width="200" height="72" rx="10"/>
-    <rect class="box audio" x="20" y="244" width="200" height="72" rx="10"/>
+  <rect class="panel" x="16" y="48" width="216" height="336" rx="16"/>
+  <rect class="panel" x="248" y="48" width="876" height="140" rx="16"/>
+  <rect class="panel" x="248" y="248" width="876" height="320" rx="16"/>
 
-    <!-- Pitch lane -->
-    <rect class="box pitch" x="276" y="86" width="150" height="76" rx="10"/>
-    <rect class="box pitch" x="448" y="86" width="150" height="76" rx="10"/>
-    <rect class="box pitch" x="620" y="86" width="150" height="76" rx="10"/>
-    <rect class="box pitch" x="792" y="86" width="150" height="76" rx="10"/>
-    <rect class="box pitch" x="964" y="86" width="150" height="76" rx="10"/>
+  <circle class="mint" cx="32" cy="72" r="4" filter="url(#glow)"/>
+  <text class="lane-name" x="44" y="76" fill="#61FFCA">INPUT</text>
 
-    <!-- Strobe lane -->
-    <rect class="box strobe" x="276" y="274" width="150" height="76" rx="10"/>
-    <rect class="box strobe" x="448" y="274" width="150" height="76" rx="10"/>
-    <rect class="box strobe" x="620" y="274" width="150" height="76" rx="10"/>
-    <rect class="box strobe" x="792" y="274" width="150" height="76" rx="10"/>
-    <rect class="box strobe" x="964" y="274" width="150" height="76" rx="10"/>
-    <rect class="box strobe" x="620" y="468" width="494" height="76" rx="10"/>
+  <circle class="cyan" cx="268" cy="72" r="4" filter="url(#glow)"/>
+  <text class="lane-name" x="280" y="76" fill="#82E2FF">PITCH</text>
+  <text class="lane-rate" x="340" y="76">every display frame</text>
 
-    <!-- Audio thread flow -->
-    <path class="wire" d="M120,124 V146" marker-end="url(#arrow)"/>
-    <path class="wire" d="M120,220 V242" marker-end="url(#arrow)"/>
+  <circle class="coral" cx="268" cy="272" r="4" filter="url(#glow)"/>
+  <text class="lane-name" x="280" y="276" fill="#FF6767">STROBE</text>
+  <text class="lane-rate" x="348" y="276">every display frame</text>
 
-    <!-- The ring buffers fork into the two readers -->
-    <path class="wire" d="M220,280 H240 V124 H274" marker-end="url(#arrow)"/>
-    <path class="wire" d="M240,280 V312 H274" marker-end="url(#arrow)"/>
+  <!-- Boxes -->
+  <rect class="box" x="28" y="92" width="192" height="76" rx="12"/>
+  <rect class="box" x="28" y="188" width="192" height="76" rx="12"/>
+  <rect class="box" x="28" y="284" width="192" height="76" rx="12"/>
 
-    <!-- Pitch flow -->
-    <path class="wire" d="M426,124 H446" marker-end="url(#arrow)"/>
-    <path class="wire" d="M598,124 H618" marker-end="url(#arrow)"/>
-    <path class="wire" d="M770,124 H790" marker-end="url(#arrow)"/>
-    <path class="wire" d="M942,124 H962" marker-end="url(#arrow)"/>
+  <rect class="box" x="264" y="92" width="152" height="76" rx="12"/>
+  <rect class="box" x="436" y="92" width="152" height="76" rx="12"/>
+  <rect class="box" x="608" y="92" width="152" height="76" rx="12"/>
+  <rect class="box" x="780" y="92" width="152" height="76" rx="12"/>
+  <rect class="box" x="952" y="92" width="152" height="76" rx="12"/>
 
-    <!-- The target note sets the band frequencies and window sizes -->
-    <path class="wire" d="M1039,162 V212 H523 V272" marker-end="url(#arrow)"/>
+  <rect class="box" x="264" y="292" width="152" height="76" rx="12"/>
+  <rect class="box" x="436" y="292" width="152" height="76" rx="12"/>
+  <rect class="box" x="608" y="292" width="152" height="76" rx="12"/>
+  <rect class="box" x="780" y="292" width="152" height="76" rx="12"/>
+  <rect class="box" x="952" y="292" width="152" height="76" rx="12"/>
+  <rect class="box" x="608" y="464" width="496" height="76" rx="12"/>
 
-    <!-- Strobe flow -->
-    <path class="wire" d="M426,312 H446" marker-end="url(#arrow)"/>
-    <path class="wire" d="M598,312 H618" marker-end="url(#arrow)"/>
-    <path class="wire" d="M770,312 H790" marker-end="url(#arrow)"/>
-    <path class="wire" d="M942,312 H962" marker-end="url(#arrow)"/>
-
-    <!-- The DFT amplitude feeds the noise floor, its SNR feeds the tracker and the shader -->
-    <path class="wire" d="M523,350 V506 H618" marker-end="url(#arrow)"/>
-    <path class="wire" d="M867,468 V352" marker-end="url(#arrow)"/>
-    <path class="wire" d="M1039,468 V352" marker-end="url(#arrow)"/>
+  <!-- The shader's box ends in a strip of the red colorway's stripes -->
+  <g clip-path="url(#shader-box)">
+    <rect class="coral" x="952" y="363" width="19" height="5"/>
+    <rect class="mauve" x="971" y="363" width="19" height="5"/>
+    <rect class="coral" x="990" y="363" width="19" height="5"/>
+    <rect class="mauve" x="1009" y="363" width="19" height="5"/>
+    <rect class="coral" x="1028" y="363" width="19" height="5"/>
+    <rect class="mauve" x="1047" y="363" width="19" height="5"/>
+    <rect class="coral" x="1066" y="363" width="19" height="5"/>
+    <rect class="mauve" x="1085" y="363" width="19" height="5"/>
   </g>
 
-  <!-- Thread and lane titles -->
-  <text class="title" x="24" y="38">Audio thread</text>
-  <text class="title" x="264" y="38">Main thread</text>
-  <text class="lane-title pitch-title" x="276" y="74">Pitch, every display frame</text>
-  <text class="lane-title strobe-title" x="276" y="262">Strobe, every display frame</text>
+  <!-- Audio thread flow -->
+  <path class="wire audio-wire" d="M124,168 V186" marker-end="url(#arrow-audio)"/>
+  <path class="wire audio-wire" d="M124,264 V282" marker-end="url(#arrow-audio)"/>
+
+  <!-- The ring buffers fork into the two readers -->
+  <path class="wire audio-wire" d="M220,322 H230 Q238,322 238,314 V138 Q238,130 246,130 H262" marker-end="url(#arrow-audio)"/>
+  <path class="wire audio-wire" d="M238,314 V322 Q238,330 246,330 H262" marker-end="url(#arrow-audio)"/>
+
+  <!-- Pitch flow -->
+  <path class="wire pitch-wire" d="M416,130 H434" marker-end="url(#arrow-pitch)"/>
+  <path class="wire pitch-wire" d="M588,130 H606" marker-end="url(#arrow-pitch)"/>
+  <path class="wire pitch-wire" d="M760,130 H778" marker-end="url(#arrow-pitch)"/>
+  <path class="wire pitch-wire" d="M932,130 H950" marker-end="url(#arrow-pitch)"/>
+
+  <!-- The target note sets the band frequencies and window sizes -->
+  <path class="wire pitch-wire" d="M1028,168 V210 Q1028,218 1020,218 H520 Q512,218 512,226 V290" marker-end="url(#arrow-pitch)"/>
+
+  <!-- Strobe flow -->
+  <path class="wire strobe-wire" d="M416,330 H434" marker-end="url(#arrow-strobe)"/>
+  <path class="wire strobe-wire" d="M588,330 H606" marker-end="url(#arrow-strobe)"/>
+  <path class="wire strobe-wire" d="M760,330 H778" marker-end="url(#arrow-strobe)"/>
+  <path class="wire strobe-wire" d="M932,330 H950" marker-end="url(#arrow-strobe)"/>
+
+  <!-- The DFT amplitude feeds the noise floor, its SNR feeds the tracker and the shader -->
+  <path class="wire strobe-wire" d="M512,368 V494 Q512,502 520,502 H606" marker-end="url(#arrow-strobe)"/>
+  <path class="wire strobe-wire" d="M856,464 V370" marker-end="url(#arrow-strobe)"/>
+  <path class="wire strobe-wire" d="M1028,464 V370" marker-end="url(#arrow-strobe)"/>
+
+  <text class="note" x="770" y="208" text-anchor="middle" fill="#82E2FF">retunes the bands, 1× 2× 4× …</text>
+  <text class="note" x="524" y="440" fill="#FF6767" fill-opacity="0.8">amplitude</text>
 
   <g text-anchor="middle">
     <!-- Audio thread -->
-    <text class="label" x="120" y="82">Microphone</text>
-    <text class="sub" x="120" y="102">or audio interface</text>
+    <text class="label" x="124" y="122">Microphone</text>
+    <text class="sub" x="124" y="144">or audio interface</text>
 
-    <text class="label" x="120" y="174">miniaudio</text>
-    <text class="sub" x="120" y="194">system audio, mono f32</text>
-    <text class="sub" x="120" y="210">resamples to 48 kHz</text>
+    <text class="label" x="124" y="218">miniaudio</text>
+    <text class="sub" x="124" y="240">mono f32, 48 kHz</text>
 
-    <text class="label" x="120" y="270">Ring buffers</text>
-    <text class="sub" x="120" y="290">2 × 64k frames, lock-free</text>
-    <text class="sub" x="120" y="306">one for each reader</text>
+    <text class="label" x="124" y="314">Ring buffers</text>
+    <text class="sub" x="124" y="336">2 × 64k frames, lock-free</text>
 
     <!-- Pitch lane -->
-    <text class="label" x="351" y="113">Filters</text>
-    <text class="sub" x="351" y="133">60 Hz high-pass</text>
-    <text class="sub" x="351" y="149">5 kHz low-pass</text>
+    <text class="label" x="340" y="118">Filters</text>
+    <text class="sub" x="340" y="140">60 Hz high-pass</text>
+    <text class="sub" x="340" y="156">5 kHz low-pass</text>
 
-    <text class="label" x="523" y="113">Sample window</text>
-    <text class="sub" x="523" y="133">newest 4096</text>
-    <text class="sub" x="523" y="149">every 800 samples</text>
+    <text class="label" x="512" y="118">Sample window</text>
+    <text class="sub" x="512" y="140">newest 4096</text>
+    <text class="sub" x="512" y="156">every 800 samples</text>
 
-    <text class="label" x="695" y="113">NSDF</text>
-    <text class="sub" x="695" y="133">8192-point pffft</text>
-    <text class="sub" x="695" y="149">autocorrelation</text>
+    <text class="label" x="684" y="118">NSDF</text>
+    <text class="sub" x="684" y="140">8192-point pffft</text>
+    <text class="sub" x="684" y="156">autocorrelation</text>
 
-    <text class="label" x="867" y="113">Peak pick</text>
-    <text class="sub" x="867" y="133">parabolic peak</text>
-    <text class="sub" x="867" y="149">clarity, RMS, SNR</text>
+    <text class="label" x="856" y="118">Peak pick</text>
+    <text class="sub" x="856" y="140">parabolic peak</text>
+    <text class="sub" x="856" y="156">clarity, RMS, SNR</text>
 
-    <text class="label" x="1039" y="113">Target note</text>
-    <text class="sub" x="1039" y="133">held for 50 ms</text>
-    <text class="sub" x="1039" y="149">or the locked note</text>
-
-    <text class="note" x="781" y="204">retunes the bands, 1× 2× 4× …</text>
+    <text class="label" x="1028" y="118">Target note</text>
+    <text class="sub" x="1028" y="140">held for 50 ms</text>
+    <text class="sub" x="1028" y="156">or the locked note</text>
 
     <!-- Strobe lane -->
-    <text class="label" x="351" y="301">Sample window</text>
-    <text class="sub" x="351" y="321">per band, 25 cents</text>
-    <text class="sub" x="351" y="337">30k at 110 Hz</text>
+    <text class="label" x="340" y="318">Sample window</text>
+    <text class="sub" x="340" y="340">per band, 25 cents</text>
+    <text class="sub" x="340" y="356">30k at 110 Hz</text>
 
-    <text class="label" x="523" y="301">Single-bin DFT</text>
-    <text class="sub" x="523" y="321">Blackman window</text>
-    <text class="sub" x="523" y="337">phase average</text>
+    <text class="label" x="512" y="318">Single-bin DFT</text>
+    <text class="sub" x="512" y="340">Blackman window</text>
+    <text class="sub" x="512" y="356">phase average</text>
 
-    <text class="label" x="695" y="301">Lock-in</text>
-    <text class="sub" x="695" y="321">rotate by reference</text>
-    <text class="sub" x="695" y="337">on the sample clock</text>
+    <text class="label" x="684" y="318">Lock-in</text>
+    <text class="sub" x="684" y="340">rotate by reference</text>
+    <text class="sub" x="684" y="356">on the sample clock</text>
 
-    <text class="label" x="867" y="301">Kalman tracker</text>
-    <text class="sub" x="867" y="321">phase and its rate</text>
-    <text class="sub" x="867" y="337">SNR weighted</text>
+    <text class="label" x="856" y="318">Kalman tracker</text>
+    <text class="sub" x="856" y="340">phase and its rate</text>
+    <text class="sub" x="856" y="356">SNR weighted</text>
 
-    <text class="label" x="1039" y="301">Strobe shader</text>
-    <text class="sub" x="1039" y="321">sharpness from σ</text>
-    <text class="sub" x="1039" y="337">glow and bloom</text>
+    <text class="label" x="1028" y="318">Strobe shader</text>
+    <text class="sub" x="1028" y="340">sharpness from σ</text>
+    <text class="sub" x="1028" y="356">glow and bloom</text>
 
-    <text class="label" x="867" y="496">Noise floor per band</text>
-    <text class="sub" x="867" y="516">follows the band level in dB while it's quiet</text>
-    <text class="sub" x="867" y="532">its SNR weights the tracker and fades the stripes</text>
-
-    <text class="note" x="560" y="430">amplitude</text>
+    <text class="label" x="856" y="490">Noise floor per band</text>
+    <text class="sub" x="856" y="512">follows the band level in dB while it's quiet</text>
+    <text class="sub" x="856" y="528">its SNR weights the tracker and fades the stripes</text>
   </g>
 </svg>

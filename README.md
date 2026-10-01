@@ -78,10 +78,6 @@ Public domain or MIT license <br />
 Copyright (c) 2023 Phosphor Icons <br />
 MIT license <br />
 
-- [Virgil](https://github.com/excalidraw/virgil), the hand-drawn font in the signal path diagram <br />
-Copyright (c) 2020 Excalidraw <br />
-SIL Open Font License 1.1 <br />
-
 
 
 ### Development
