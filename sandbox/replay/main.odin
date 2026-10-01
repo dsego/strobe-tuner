@@ -75,8 +75,8 @@ main :: proc() {
     readout_ready := false
     for start := 0; start + FRAME_SAMPLES <= len(samples); start += FRAME_SAMPLES {
         frame := samples[start:start + FRAME_SAMPLES]
-        core.audio_capture_callback(&detector, frame)
-        core.audio_capture_callback(strobe, frame)
+        core.audio_capture_write(&detector, frame)
+        core.audio_capture_write(strobe, frame)
         pitch := core.run_pitch_detection(&detector, tuner.pitch)
         core.run_phase_detection(strobe, true, pitch.is_tonal)
         // Like the app's readout, and a settled track keeps the note lit

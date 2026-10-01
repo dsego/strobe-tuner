@@ -158,7 +158,7 @@ tuning_strings :: proc(config: ^Config) -> []int {
     if len(tuning.strings) == 0 do return nil
     semitones := make([]int, len(tuning.strings), context.temp_allocator)
     for name, i in tuning.strings {
-        note, _ := core.new_note(name)
+        note, _ := core.parse_note(name)
         semitones[i] = note.cents / 100 + capo_fret(setup)
     }
     return semitones
@@ -220,9 +220,6 @@ gui_instrument :: proc(
     close: bool,
     changed: bool,
 ) {
-    sheet, close_area, title_position := sheet_layout.sheet, sheet_layout.close, sheet_layout.title
-    draw_rect({sheet.x, sheet.y}, {sheet.width, sheet.height}, hex(sheet_bg_color))
-
     setup := current_setup(config)
     preset := setup.preset
     tuning, tuning_index := setup_tuning(setup)
@@ -247,17 +244,10 @@ gui_instrument :: proc(
     tuning_row := 2 if preset >= 0 else 1
     options_row := tuning_row + 1 if tunable else tuning_row
 
-    title: cstring = "Instrument"
-    draw_label(pixel_fonts.title, title, title_position, text_color_white, 1)
-    if stringed {
-        details := strings.join(tuning.strings, " ", context.temp_allocator)
-        title_size := measure_label(pixel_fonts.title, title, 1)
-        details_y := title_position.y + (title_size.y - LABEL_SIZE) / 2
-        draw_label(pixel_fonts.label, fmt.ctprintf("%s", details), {title_position.x + title_size.x + 12, details_y}, text_color_light, 1)
-    }
-
-    draw_icon(ICON_X, {close_area.x + (close_area.width - 16) / 2, close_area.y + (close_area.height - 16) / 2}, icon_color)
-    if gui_button(close_area) do close = true
+    // The strings next to the title
+    details: cstring
+    if stringed do details = fmt.ctprintf("%s", strings.join(tuning.strings, " ", context.temp_allocator))
+    close = draw_sheet_header(sheet_layout, "Instrument", details)
 
     if stringed {
         rect := settings_row(sheet_layout, options_row, "Capo", 176)
@@ -316,7 +306,7 @@ gui_instrument :: proc(
             config.note_offset_counts[preset] = 0
             config.note_offset_notes[preset] = {}
             config.note_offset_cents[preset] = {}
-            note_offset_selected = -1
+            reset_note_offsets_editing()
             changed = true
         }
     }
@@ -347,7 +337,7 @@ gui_instrument :: proc(
                 config.instrument = Instrument(selected)
                 config.preset = -1
             }
-            note_offset_selected = -1
+            reset_note_offsets_editing()
             changed = true
         }
     }

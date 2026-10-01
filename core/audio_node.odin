@@ -17,20 +17,18 @@
 package core
 
 
+// The input of one consumer, the pitch detection, the strobe or the scope. The audio thread writes into its
+// ring buffer, the consumer reads from it every frame.
 AudioCaptureNode :: struct {
     name:            string, // debugging info
     ringbuffer:      RingBuffer,
     ringbuffer_data: []u8,
-    stream_callback: proc(ctx: ^AudioCaptureNode, input: []f32),
 }
 
 init_audio_capture_node :: proc(self: ^AudioCaptureNode, name: string) {
-    // NOTE: Needs to be a power of 2 for portaudio ring buffers
-    rb, rb_data := init_ringbuffer(65536)
+    // A power of 2 for the PortAudio ring buffer
     self.name = name
-    self.ringbuffer = rb
-    self.ringbuffer_data = rb_data
-    self.stream_callback = audio_capture_callback
+    self.ringbuffer, self.ringbuffer_data = init_ringbuffer(65536)
 }
 
 flush_audio_capture_ringbuffer :: proc(self: ^AudioCaptureNode) {
@@ -41,8 +39,9 @@ destroy_audio_capture_node :: proc(self: ^AudioCaptureNode) {
     delete(self.ringbuffer_data)
 }
 
-audio_capture_callback :: proc(self: ^AudioCaptureNode, input: []f32) {
-    write_to_ringbuffer(&self.ringbuffer, input)
+// From the audio thread, or a test feeding the samples
+audio_capture_write :: proc(self: ^AudioCaptureNode, input: []f32) {
+    write_ringbuffer(&self.ringbuffer, input)
 }
 
 // Fill the buffer with new audio samples.
@@ -53,23 +52,22 @@ audio_capture_read :: proc(
     audio_buffer: []f32,
     min_available: i32 = 0,
 ) -> i32 {
-    available := frames_available_in_ringbuffer(&self.ringbuffer)
+    available := ringbuffer_available(&self.ringbuffer)
 
     if available <= min_available do return 0
 
     size := len(audio_buffer)
 
     if int(available) >= size {
-        skip := available - i32(size)
-        advance_ringbuffer_read(&self.ringbuffer, skip)
-        read_ringbuffer(&self.ringbuffer, audio_buffer[:], u32(size))
+        skip_ringbuffer(&self.ringbuffer, available - i32(size))
+        read_ringbuffer(&self.ringbuffer, audio_buffer)
     } else {
         // move old samples back to make room for new samples
         copy(audio_buffer, audio_buffer[available:size])
 
         // copy over new samples into the freed space
         offset := size - int(available)
-        read_ringbuffer(&self.ringbuffer, audio_buffer[offset:], u32(available))
+        read_ringbuffer(&self.ringbuffer, audio_buffer[offset:])
     }
 
     return available

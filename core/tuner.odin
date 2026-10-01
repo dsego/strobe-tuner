@@ -23,9 +23,9 @@ import "core:testing"
 // Picks the note the strobe is tuned to from the pitch detections.
 //
 // A new note has to be detected for a moment in a row before the strobe switches to it, otherwise a single
-// noisy detection of a decaying note resets the strobe. A locked note keeps its name and the octave follows
-// the detected note. A note ringing out an octave off, like a harmonic on some guitar and bass strings, can
-// keep the strobe where it is.
+// noisy detection of a decaying note resets the strobe. A locked note stays, another note played is out of
+// range. A note ringing out an octave off, like a harmonic on some guitar and bass strings, can keep the
+// strobe where it is.
 Tuner :: struct {
     target_note:          Note, // what the strobe is tuned to
     detected_note:        Note, // the last confirmed detection, cents -1 before the first
@@ -60,11 +60,11 @@ Tuner :: struct {
     string_index:         int, // the target's
 }
 
-MAX_STRINGS :: 6
+MAX_STRINGS :: 8 // an 8-string guitar, the built-in tunings go up to 7
 
 init_tuner :: proc(target_freq_hz, pitch_standard: f32, confirm_s: f32, prevent_octave_jumps: bool) -> Tuner {
     return {
-        target_note = find_note(target_freq_hz, pitch_standard),
+        target_note = freq_to_note(target_freq_hz, pitch_standard),
         detected_note = {cents = -1},
         candidate_note = {cents = -1},
         confirm_s = confirm_s,
@@ -121,32 +121,39 @@ update_tuner :: proc(self: ^Tuner, pitch: PitchInfo, strobe_cents: Maybe(f32) = 
     steady := seen && self.steady_s >= 0 && self.steady_s >= self.confirm_s
     strong := pitch.is_strong_pitch || (!pitch.is_weak_pitch && steady)
 
-    // Keep the previous measurement while there is no detected note
+    // Keep the previous measurement while there is no detected note. A locked note's readout only follows
+    // that note, a stray detection an octave or a fifth off would swing it from one side to the other.
     if strong {
-        if pitch.fresh do steady_readout(self, pitch.detected_freq, pitch.elapsed_s)
-        self.last_good_pitch = pitch
-        self.strobe_anchor = strobe_cents
+        if !locked_note(self) || pitch.detected_note.cents == self.target_note.cents {
+            if pitch.fresh do steady_readout(self, pitch.detected_freq, pitch.elapsed_s)
+            self.last_good_pitch = pitch
+            self.strobe_anchor = strobe_cents
+        }
         if confirmed && self.detected_note.cents != pitch.detected_note.cents {
             self.detected_note = pitch.detected_note
 
-            new_target := self.detected_note
+            // A locked note stays. A locked string too, and a string tuned an octave off is still that string.
+            new_target := self.target_note
             if self.string_count > 0 {
-                // A locked string stays, a string tuned an octave off is still that string
                 if !self.locked do self.string_index = nearest_string(self, self.detected_note)
                 new_target = string_note(self, self.string_index)
-            } else if self.locked {
-                new_target = nearest_note_named(self.detected_note, self.target_note.semitone_index)
+            } else if !self.locked {
+                new_target = self.detected_note
             }
 
             if new_target.cents != self.target_note.cents {
-                is_octave := octave_apart(self.target_note, new_target)
-                same_offset := note_offset_cents(self, self.target_note) == note_offset_cents(self, new_target)
+                // The strobe stays on the note it's following when it jumps an octave, the note is still shown.
+                // Not when the octave is tuned off by another amount, the strobe would stand still in the wrong
+                // place, and not on strings, another string an octave away is another string.
+                strobe_stays :=
+                    self.prevent_octave_jumps &&
+                    self.octave_track &&
+                    self.active &&
+                    self.string_count == 0 &&
+                    octave_apart(self.target_note, new_target) &&
+                    note_offset_cents(self, self.target_note) == note_offset_cents(self, new_target)
+                retune = !strobe_stays
                 self.target_note = new_target
-
-                // The strobe stays on the note it's following, the note is still shown. Not when the octave
-                // is tuned off by another amount, the strobe would stand still in the wrong place. Another
-                // string an octave away is another string.
-                retune = !(self.prevent_octave_jumps && self.octave_track && is_octave && same_offset && self.active && self.string_count == 0)
             }
         }
         self.active = true
@@ -215,11 +222,12 @@ step_target_note :: proc(self: ^Tuner, steps: int) -> (retune: bool) {
 // An instrument's strings, in semitones from A4, or none to go back to every note. The target moves to the
 // string nearest to it. Returns whether the strobe has to be retuned.
 set_tuner_strings :: proc(self: ^Tuner, strings: []int) -> (retune: bool) {
-    count := min(len(strings), MAX_STRINGS)
+    assert(len(strings) <= MAX_STRINGS, "more strings than MAX_STRINGS")
+    count := len(strings)
     changed := count != self.string_count
-    for i in 0 ..< count {
-        changed ||= self.strings[i] != strings[i]
-        self.strings[i] = strings[i]
+    for semitone, index in strings {
+        changed ||= self.strings[index] != semitone
+        self.strings[index] = semitone
     }
     self.string_count = count
     if !changed do return false
@@ -228,6 +236,7 @@ set_tuner_strings :: proc(self: ^Tuner, strings: []int) -> (retune: bool) {
     self.detected_note = {cents = -1}
     if count == 0 do return false
 
+    // The string nearest to the target from the first one, the previous string may be past the new count
     prev := self.target_note
     self.string_index = 0
     self.string_index = nearest_string(self, self.target_note)
@@ -244,14 +253,15 @@ string_note :: proc(self: ^Tuner, index: int) -> Note {
 // another one is the string ringing an octave high, like a low string's harmonic.
 nearest_string :: proc(self: ^Tuner, note: Note) -> int {
     semitone := note.cents / 100
-    current := abs(semitone - self.strings[self.string_index])
     best := self.string_index
-    for i in 0 ..< self.string_count {
-        if abs(semitone - self.strings[i]) < abs(semitone - self.strings[best]) do best = i
+    for string_semitone, index in self.strings[:self.string_count] {
+        if abs(semitone - string_semitone) < abs(semitone - self.strings[best]) do best = index
     }
-    nearest := abs(semitone - self.strings[best])
-    if self.prevent_octave_jumps && abs(current - 12) <= 1 && nearest > 1 do return self.string_index
-    return best if current - nearest > 1 else self.string_index
+    // In semitones, from the target string and from the nearest one
+    from_target := abs(semitone - self.strings[self.string_index])
+    from_nearest := abs(semitone - self.strings[best])
+    if self.prevent_octave_jumps && abs(from_target - 12) <= 1 && from_nearest > 1 do return self.string_index
+    return best if from_target - from_nearest > 1 else self.string_index
 }
 
 // Cents from what the strobe is tuned to. A string that rings an octave off reads from that octave, see
@@ -283,15 +293,26 @@ tuner_target_freq :: proc(self: ^Tuner) -> f32 {
     return cents_to_freq(note_offset_cents(self, self.target_note), self.target_note.frequency)
 }
 
-// The detected note isn't the target, there's nothing for the readout to measure against. A locked note or
-// a string is expected to differ, it's measured against anyway.
+// Another note is played than the target, a locked note's neighbour. The strobe and the readout have
+// nothing to measure, the gauge points the way, see tuner_out_of_range_side. A string is measured from
+// however far off it is.
 tuner_out_of_range :: proc(self: ^Tuner) -> bool {
-    return !measures_target(self) && self.detected_note.cents != self.target_note.cents
+    return self.string_count == 0 && self.detected_note.cents != -1 && self.detected_note.cents != self.target_note.cents
 }
 
-// A locked note or a string, measured from however far off it is
+// Which way the played note is from the target while out of range, -1 below and 1 above
+tuner_out_of_range_side :: proc(self: ^Tuner) -> f32 {
+    return -1 if self.detected_note.cents < self.target_note.cents else 1
+}
+
+// A locked note or a string, measured from the target instead of the nearest note
 measures_target :: proc(self: ^Tuner) -> bool {
     return self.locked || self.string_count > 0
+}
+
+// A note locked on the chromatic ruler, not a string
+locked_note :: proc(self: ^Tuner) -> bool {
+    return self.locked && self.string_count == 0
 }
 
 // The latest detection as it is, and the strong detections averaged for the readout. A locked note or a
@@ -321,7 +342,7 @@ test_tuner :: proc(t: ^testing.T) {
             fresh = true,
             elapsed_s = 0.05, // 20 detections a second
             detected_freq = freq,
-            detected_note = find_note(freq),
+            detected_note = freq_to_note(freq),
             is_strong_pitch = strong,
             is_weak_pitch = !strong,
             shortest_period = true,
@@ -332,7 +353,7 @@ test_tuner :: proc(t: ^testing.T) {
     A2 :: 110.0
     A3 :: 220.0
 
-    // A new note needs 3 detections in a row
+    // A new note needs to be seen for confirm_s, 0.1 s is 3 detections 0.05 s apart
     tuner := init_tuner(E2, 440, 0.1, true)
     testing.expect(t, !update_tuner(&tuner, detection(A2)))
     testing.expect(t, !update_tuner(&tuner, detection(A2)))
@@ -414,15 +435,27 @@ test_tuner :: proc(t: ^testing.T) {
     update_tuner(&tuner, detection(A2))
     testing.expect(t, update_tuner(&tuner, detection(A3)))
 
-    // A locked note keeps its name, the octave follows
+    // A locked note stays, its octave too. Another note is out of range, the gauge points down to it.
     tuner = init_tuner(E2, 440, 0, false)
+    update_tuner(&tuner, detection(E2))
     toggle_note_lock(&tuner)
+    testing.expect(t, !tuner_out_of_range(&tuner))
+    update_tuner(&tuner, detection(E2 / 2))
+    testing.expect_value(t, tuner.target_note.octave, 2)
+    testing.expect(t, tuner_out_of_range(&tuner))
+    testing.expect_value(t, tuner_out_of_range_side(&tuner), -1)
     update_tuner(&tuner, detection(A3))
     testing.expect_value(t, tuner.target_note.name, 'E')
-    testing.expect_value(t, tuner.target_note.octave, 3)
-    testing.expect(t, !tuner_out_of_range(&tuner))
+    testing.expect_value(t, tuner_out_of_range_side(&tuner), 1)
+
+    // Its readout doesn't follow a stray detection of another note
+    update_tuner(&tuner, detection(E2))
+    update_tuner(&tuner, detection(2 * E2))
+    _, steady := tuner_readout(&tuner)
+    testing.expect(t, abs(steady.err_cents) < 0.1) // E2 is 82.407 Hz
 
     // Unlocking goes back to the detected note
+    update_tuner(&tuner, detection(A3))
     testing.expect(t, toggle_note_lock(&tuner))
     testing.expect_value(t, tuner.target_note.name, 'A')
 
@@ -435,7 +468,7 @@ test_tuner :: proc(t: ^testing.T) {
     tuner = init_tuner(A2, 440, 0, true)
     update_tuner(&tuner, detection(A2))
     update_tuner(&tuner, detection(cents_to_freq(2, A2)))
-    _, steady := tuner_readout(&tuner)
+    _, steady = tuner_readout(&tuner)
     testing.expect(t, steady.err_cents > 0.3 && steady.err_cents < 0.5)
     update_tuner(&tuner, detection(cents_to_freq(20, A2)))
     _, steady = tuner_readout(&tuner)
@@ -511,4 +544,11 @@ test_tuner :: proc(t: ^testing.T) {
     set_tuner_strings(&tuner, nil)
     update_tuner(&tuner, detection(97.999))
     testing.expect_value(t, tuner.target_note.name, 'G')
+
+    // A seven string's high E is a string too
+    seven_string := []int{-34, -29, -24, -19, -14, -10, -5}
+    set_tuner_strings(&tuner, seven_string)
+    testing.expect_value(t, tuner.string_count, 7)
+    step_target_note(&tuner, 10)
+    testing.expect_value(t, tuner.target_note.cents, -500)
 }

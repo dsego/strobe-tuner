@@ -16,11 +16,9 @@
 
 /* -------------------------------------------------------------------------------------------------
 
-
-    Pitch detection based on NSDF (McLeod Pitch Method)
+    Pitch detection based on the NSDF, the normalized square difference function (McLeod Pitch Method)
 
     https://www.researchgate.net/publication/230554927_A_smarter_way_to_find_pitch
-
 
 ------------------------------------------------------------------------------------------------- */
 
@@ -34,215 +32,173 @@ import "core:testing"
 
 import pffft "../external/odin-pffft"
 
-NSDFConfig :: struct {
-    pffft_setup:     rawptr,
-    fft_size:        int,
-    fft:             []complex64,
-    autocorr:        []f32,
-    nsdf:            []f32,
-    samplerate:      int,
-    padded_samples:  []f32,
-    nsdf_peaks:     [dynamic]Vec2,
-    chosen_peak_idx: int,
+// The buffers of the NSDF and the peaks it found last
+NSDF :: struct {
+    pffft_setup:    rawptr,
+    fft_size:       int,
+    spectrum:       []complex64, // the power spectrum once autocorrelated
+    autocorr:       []f32,
+    values:         []f32, // the NSDF of each lag
+    samplerate:     int,
+    padded_samples: []f32,
+    peaks:          [dynamic]Vec2, // lag and NSDF value of each key maximum
+    chosen_peak:    int, // in peaks, -1 for none
 }
 
 
-nsdf_init :: proc(fft_size: int, samplerate: int) -> (self: NSDFConfig = {}) {
+init_nsdf :: proc(fft_size: int, samplerate: int) -> (self: NSDF) {
     self.fft_size = fft_size
     self.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
-    // A real transform of fft_size samples has fft_size / 2 complex bins, see nsdf_process_samples
-    self.fft = runtime.make_aligned([]complex64, fft_size / 2, 16)
+    // A real transform of fft_size samples has fft_size / 2 complex bins, see nsdf_autocorrelate
+    self.spectrum = runtime.make_aligned([]complex64, fft_size / 2, 16)
     self.autocorr = runtime.make_aligned([]f32, fft_size, 16)
-    self.nsdf = make([]f32, fft_size / 2)
+    self.values = make([]f32, fft_size / 2)
     self.samplerate = samplerate
     self.padded_samples = runtime.make_aligned([]f32, fft_size, 16)
     return
 }
 
-nsdf_destroy :: proc(self: ^NSDFConfig) {
+destroy_nsdf :: proc(self: ^NSDF) {
     pffft.destroy_setup(self.pffft_setup)
-    delete(self.fft)
+    delete(self.spectrum)
     delete(self.autocorr)
-    delete(self.nsdf)
+    delete(self.values)
     delete(self.padded_samples)
-    delete(self.nsdf_peaks)
+    delete(self.peaks)
 }
 
-nsdf_pitch_detect :: proc(self: ^NSDFConfig, samples: []f32) -> (f32, Vec2) {
-    nsdf_process_samples(self, samples)
-    nsdf_run_nsdf(self, samples)
+// The frequency of the chosen peak, 0 for none, and the peak, its lag and NSDF value
+run_nsdf :: proc(self: ^NSDF, samples: []f32) -> (freq: f32, peak: Vec2) {
+    nsdf_autocorrelate(self, samples)
+    normalize(self, samples)
+    peak = find_peak(self)
+    if peak.x > 0 do freq = f32(self.samplerate) / peak.x
+    return
 
-    peak := nsdf_find_peak(self)
+    // The NSDF through the autocorrelation, the left-hand sum of the squares runs down as the lag grows
+    normalize :: proc(self: ^NSDF, samples: []f32) {
+        count := len(samples)
+        copy(self.values, self.autocorr[:count])
 
-    estimated_freq: f32 = 0.0
-
-    if peak.x > 0.0 {
-        estimated_freq = f32(self.samplerate) / peak.x
+        squares := 2.0 * self.values[0]
+        for lag in 0 ..< count {
+            if squares > 0.0 {
+                self.values[lag] *= 2.0 / squares
+                squares -= samples[lag] * samples[lag] + samples[count - lag - 1] * samples[count - lag - 1]
+            } else {
+                self.values[lag] = 0.0
+            }
+        }
     }
 
-    // apply windowing?
+    // The key maxima, the highest between two zero crossings, and the first one close to the highest of them
+    find_peak :: proc(self: ^NSDF) -> Vec2 {
+        clear(&self.peaks)
 
-    return estimated_freq, peak
+        // The far lags rest on few samples, their peaks are left out
+        IGNORED_LAGS :: 256
+        // The first of the key maxima this close to the highest is the period, not a multiple of it
+        CHOSEN_RATIO :: 0.95
+
+        end := len(self.values) - IGNORED_LAGS
+        min_peak_value := 0.5 * self.values[0]
+        max_peak: Vec2
+
+        lag := 1
+        for lag < end {
+            // Down the first slope, then past the negative values
+            for lag < end && self.values[lag] > 0.0 do lag += 1
+            for lag < end && self.values[lag] <= 0.0 do lag += 1
+
+            // The highest local maximum while it's positive
+            start := lag
+            highest := lag
+            for lag < end - 1 && self.values[lag] > 0.0 {
+                value := self.values[lag]
+                if value > self.values[highest] && value > self.values[lag + 1] && value > min_peak_value {
+                    highest = lag
+                }
+                lag += 1
+            }
+
+            if highest > start {
+                offset, value := parabolic(self.values[highest - 1], self.values[highest], self.values[highest + 1])
+                peak := Vec2{f32(highest) + offset, value}
+                append(&self.peaks, peak)
+                if value >= max_peak.y do max_peak = peak
+            }
+            lag += 1
+        }
+
+        self.chosen_peak = -1
+        for peak, index in self.peaks {
+            if peak.y >= CHOSEN_RATIO * max_peak.y {
+                self.chosen_peak = index
+                return peak
+            }
+        }
+        return {}
+    }
 }
 
 
-// Generate the auto-correlation
-//   Taking the FFT of the segment of interest, multiplying it by its complex conjugate,
-//    then taking the inverse FFT will give us the cyclic auto-correlation.
-nsdf_process_samples :: proc(self: ^NSDFConfig, samples: []f32) {
+// The cyclic autocorrelation of the zero padded samples: the FFT, times its conjugate, and back
+nsdf_autocorrelate :: proc(self: ^NSDF, samples: []f32) {
     assert(len(samples) <= self.fft_size / 2)
 
-    // pad samples with zeros to avoid cyclic convolution
+    // Zero padded to twice the length, the cyclic correlation doesn't wrap around onto the samples
     mem.zero_slice(self.padded_samples)
     copy(self.padded_samples, samples)
 
-    // FFT transform
     pffft.transform_ordered(
         self.pffft_setup,
         raw_data(self.padded_samples),
-        cast(^f32)raw_data(self.fft),
+        cast(^f32)raw_data(self.spectrum),
         nil,
         pffft.Direction.FORWARD,
     )
 
-    // multiply FFT with conjugate, i.e. the power spectrum
-    // - conjugation in the frequency domain is equivalent to reversal in the time domain
-    // (the difference between cross-correlation and convolution is a time reversal on one of the inputs)
-    //
-    // pffft packs the two real bins, DC and Nyquist, into the first element as (DC, Nyquist),
-    // each is squared on its own and they stay packed for the inverse transform
-    dc_nyquist := self.fft[0]
-    self.fft[0] = complex(real(dc_nyquist) * real(dc_nyquist), imag(dc_nyquist) * imag(dc_nyquist))
-    for &bin in self.fft[1:] {
+    // Times the conjugate, the power spectrum. pffft packs the two real bins, DC and Nyquist, into the first
+    // element as (DC, Nyquist), each is squared on its own and they stay packed for the inverse transform.
+    dc_nyquist := self.spectrum[0]
+    self.spectrum[0] = complex(real(dc_nyquist) * real(dc_nyquist), imag(dc_nyquist) * imag(dc_nyquist))
+    for &bin in self.spectrum[1:] {
         bin = complex(real(bin) * real(bin) + imag(bin) * imag(bin), 0)
     }
 
-    // inverse FFT to produce auto-correlation
     pffft.transform_ordered(
         self.pffft_setup,
-        cast(^f32)raw_data(self.fft),
+        cast(^f32)raw_data(self.spectrum),
         raw_data(self.autocorr),
         nil,
         pffft.Direction.BACKWARD,
     )
 
-    // scale by 1/N
-    for i in 0 ..< len(self.autocorr) {
-        self.autocorr[i] = self.autocorr[i] / f32(self.fft_size)
-    }
+    // pffft doesn't scale the inverse transform
+    for &value in self.autocorr do value /= f32(self.fft_size)
 }
 
-
-nsdf_find_peak :: proc(self: ^NSDFConfig) -> Vec2 {
-    // clear out peaks from the previous run
-    clear(&self.nsdf_peaks)
-
-    // TODO
-    end := len(self.nsdf) - 256
-
-    min_peak_value := 0.5 * self.nsdf[0]
-
-    max_peak := Vec2{0.0, 0.0}
-
-    // enumerate all the candidate peaks
-    i := 1
-    for i < end {
-
-        // go down the first slope
-        for i < end && self.nsdf[i] > 0.0 do i += 1
-
-        // skip all negative values
-        for i < end && self.nsdf[i] <= 0.0 do i += 1
-
-        lag := i
-        start := lag
-
-        // search for a local max peak in the positive area
-        for i < end - 1 && self.nsdf[i] > 0.0 {
-            if self.nsdf[i] > self.nsdf[lag] &&
-               self.nsdf[i] > self.nsdf[i + 1] &&
-               self.nsdf[i] > min_peak_value {
-                lag = i
-            }
-            i += 1
-        }
-
-        if lag > start {
-            peak_location, magnitude := parabolic(
-                self.nsdf[lag - 1],
-                self.nsdf[lag],
-                self.nsdf[lag + 1],
-            )
-
-            improved_lag := f32(lag) + peak_location
-            peak := Vec2{improved_lag, magnitude}
-            append(&self.nsdf_peaks, peak)
-
-            if magnitude >= max_peak.y {
-                max_peak = peak
-            }
-        }
-
-
-        i += 1
-    }
-
-    THRESHOLD :: 0.95
-    chosen_peak: Vec2 = {}
-    self.chosen_peak_idx = -1
-
-    // take the first key maximum above this threshold
-    for peak, idx in self.nsdf_peaks {
-        if peak.y >= THRESHOLD * max_peak.y {
-            chosen_peak = peak
-            self.chosen_peak_idx = idx
-            break
-        }
-    }
-
-    return chosen_peak
-}
-
-// Normalized Square Difference Function (through autocorrelation)
-// http://riogrande.cs.tcu.edu/1516Ribbit/resources/A_Smarter_Way_to_Find_Pitch.pdf
-nsdf_run_nsdf :: proc(self: ^NSDFConfig, samples: []f32) {
-    count := len(samples)
-    copy(self.nsdf, self.autocorr[:count])
-
-    // left-hand summation for zero lag
-    lhsum := 2.0 * self.nsdf[0]
-
-    for i in 0 ..< count {
-        if lhsum > 0.0 {
-            self.nsdf[i] *= 2.0 / lhsum
-            lhsum -= samples[i] * samples[i] + samples[count - i - 1] * samples[count - i - 1]
-        } else {
-            self.nsdf[i] = 0.0
-        }
-    }
-}
-
-// Parabolic interpolation to find the more accurate peak location
+// Parabolic interpolation to find the more accurate peak location, its offset from the middle point and value
 // https://ccrma.stanford.edu/~jos/sasp/Quadratic_Interpolation_Spectral_Peaks.html
-parabolic :: proc(alpha: f32, beta: f32, gamma: f32) -> (f32, f32) {
-    location := 0.5 * (alpha - gamma) / (alpha - 2.0 * beta + gamma)
-    magnitude := beta - 0.25 * (alpha - gamma) * location
-    return location, magnitude
+parabolic :: proc(before: f32, middle: f32, after: f32) -> (offset: f32, value: f32) {
+    offset = 0.5 * (before - after) / (before - 2.0 * middle + after)
+    value = middle - 0.25 * (before - after) * offset
+    return
 }
 
 
 @(test)
 test_autocorrelation :: proc(t: ^testing.T) {
     FFT_SIZE :: 1024
-    self := nsdf_init(FFT_SIZE, 48_000)
-    defer nsdf_destroy(&self)
+    self := init_nsdf(FFT_SIZE, 48_000)
+    defer destroy_nsdf(&self)
 
     // DC and a tone at the Nyquist frequency of the padded transform go through its packed first bin
     samples: [FFT_SIZE / 2]f32
     for &sample, i in samples {
         sample = 0.3 + 0.2 * math.sin(f32(i) * 0.37) + (0.1 if i % 2 == 0 else -0.1)
     }
-    nsdf_process_samples(&self, samples[:])
+    nsdf_autocorrelate(&self, samples[:])
 
     for lag in 0 ..< len(samples) {
         expected: f32
@@ -261,8 +217,8 @@ test_nsdf_accuracy :: proc(t: ^testing.T) {
 
     // Cents from the fundamental, partial n is at n * fundamental stretched by stretch_cents * (n² - 1)
     run :: proc(fundamental: f64, amplitudes: []f64, stretch_cents: f64) -> f32 {
-        self := nsdf_init(FFT_SIZE, SAMPLERATE)
-        defer nsdf_destroy(&self)
+        self := init_nsdf(FFT_SIZE, SAMPLERATE)
+        defer destroy_nsdf(&self)
         samples: [FFT_SIZE / 2]f32
         for &sample, i in samples {
             for amplitude, partial in amplitudes {
@@ -271,7 +227,7 @@ test_nsdf_accuracy :: proc(t: ^testing.T) {
                 sample += f32(amplitude * math.sin(math.TAU * freq * f64(i) / SAMPLERATE + n))
             }
         }
-        freq, _ := nsdf_pitch_detect(&self, samples[:])
+        freq, _ := run_nsdf(&self, samples[:])
         return cents_deviation(freq, f32(fundamental))
     }
 

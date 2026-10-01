@@ -36,7 +36,6 @@ StrobeDisplay :: struct {
     shadow_tex:      Texture,
     colors:          [2]Color,
     background:      Color,
-    display_type:    StrobeDisplayType,
 
     // bloom for the strobe glow, the strobe is rendered into scene_rt and blurred through bloom_rt
     scene_rt:        RenderTarget,
@@ -146,26 +145,15 @@ strobe_track_at :: proc(
 }
 
 
-init_strobe_display :: proc(
-    colors: [2]u32,
-    background: u32,
-    display_type: StrobeDisplayType,
-) -> (
-    self: StrobeDisplay,
-) {
+init_strobe_display :: proc(colors: [2]u32, background: u32) -> (self: StrobeDisplay) {
     self.colors = {hex(colors.x), hex(colors.y)}
     self.background = hex(background)
-    self.display_type = display_type
 
     self.strobe_shader = gfx_load_shader(.STROBE)
     self.bloom_shader = gfx_load_shader(.BLOOM)
     self.shadow_tex = gfx_load_texture(shadow_data)
 
     return
-}
-
-setup_strobe_display :: proc(self: ^StrobeDisplay, display_type: StrobeDisplayType) {
-    self.display_type = display_type
 }
 
 destroy_strobe_display :: proc(self: ^StrobeDisplay) {
@@ -279,10 +267,6 @@ render_bloom :: proc(self: ^StrobeDisplay) {
     blur_render_targets(self, self.bloom_rt, BLOOM_ITERATIONS, BLOOM_TAP_SPACING)
 }
 
-set_display_type :: proc(self: ^StrobeDisplay, display_type: StrobeDisplayType) {
-    self.display_type = display_type
-}
-
 set_strobe_colors :: proc(self: ^StrobeDisplay, colors: [2]u32) {
     self.colors = {hex(colors.x), hex(colors.y)}
 }
@@ -292,17 +276,14 @@ draw_strobe_display :: proc(
     self: ^StrobeDisplay,
     rect: Rect,
     scale: f32,
-    phase_info: ^core.PhaseComparator,
-    out_of_range: bool,
+    comparator: ^core.PhaseComparator,
     config: ^Config,
 ) {
-    // The trace is drawn by draw_cents_trace instead
-    geometry, ok := strobe_geometry(self.display_type, rect, scale, len(phase_info.bands))
+    // The trace and the scope's views are drawn by draw_cents_trace and draw_scope_display instead
+    display_type := config.strobe_display_type
+    geometry, ok := strobe_geometry(display_type, rect, scale, len(comparator.bands))
     if !ok do return
-    y := geometry.y
-    curvature_radius := geometry.curvature_radius
     band_height := geometry.band_height
-    period_count := geometry.period_count
 
     glow_enabled := config.strobe_glow
     glow := glow_params(config)
@@ -314,20 +295,18 @@ draw_strobe_display :: proc(
         motion_blur     = i32(config.motion_blur),
         glow            = i32(glow_enabled),
         // The wheel is lit evenly all around, the tracks only show the top of the disc
-        lamp_spread     = 1000.0 if self.display_type == .SPINNING_WHEEL else 0.45,
+        lamp_spread     = 1000.0 if display_type == .SPINNING_WHEEL else 0.45,
         glow_exposure   = glow.exposure,
         glow_saturation = glow.saturation,
         color_a         = normalize_color(self.colors.x),
         color_b         = normalize_color(self.colors.y),
-        // most inner radius
-        min_radius      = curvature_radius - band_height,
-        // most outer radius
-        max_radius      = curvature_radius + band_height * f32(len(phase_info.bands) - 1),
+        // The inner edge of the innermost track and the outer edge of the outermost
+        min_radius      = geometry.curvature_radius - band_height,
+        max_radius      = geometry.curvature_radius + band_height * f32(len(comparator.bands) - 1),
     }
     uniforms.glow_filter.rgb = glow_filter(glow.color)
     uniforms.glow_dark_filter.rgb = glow_filter(glow.dark_color) * glow.dark_level
-    uniforms.highlight_color = normalize_color(hex(0x82E2FFFF))
-    min_radius := uniforms.min_radius
+    uniforms.highlight_color = normalize_color(accent_color)
 
     if glow_enabled {
         // Render the strobe offscreen so the bright parts can bloom over the surroundings
@@ -339,7 +318,7 @@ draw_strobe_display :: proc(
             {rect.x, rect.y},
             self.glow_scale,
         )
-        draw_strobe_bands(self, rect, phase_info, &uniforms, y, curvature_radius, band_height, period_count, geometry.density)
+        draw_strobe_bands(self, rect, comparator, &uniforms, geometry)
         end_render_target()
 
         render_bloom(self)
@@ -359,20 +338,19 @@ draw_strobe_display :: proc(
         set_blend_mode(.ALPHA)
     } else {
         draw_rect({rect.x, rect.y}, {rect.width, rect.height}, self.background)
-        draw_strobe_bands(self, rect, phase_info, &uniforms, y, curvature_radius, band_height, period_count, geometry.density)
+        draw_strobe_bands(self, rect, comparator, &uniforms, geometry)
     }
 
-    // Draw labels for partials
-    if config.strobe_mode == .HARMONIC &&
-       self.display_type == .CURVED_TRACKS &&
-       config.partial_labels != .NONE {
-        radius := min_radius
-
-        for &band, band_idx in phase_info.bands {
-            order := len(phase_info.bands) - 1 - band_idx
-            cos := 0.5 * rect.width - 28
+    // The partial of each track on the right, e.g. 1×, 2×, on the curve of the track a little in from the edge
+    if config.strobe_mode == .HARMONIC && display_type == .CURVED_TRACKS && config.partial_labels != .NONE {
+        radius := uniforms.min_radius
+        for &band, band_index in comparator.bands {
+            order := len(comparator.bands) - 1 - band_index
             radius += band_height
-            sin := math.sqrt(radius * radius - cos * cos)
+            // From the centre of the circles across to the label, and up to the track there
+            across := 0.5 * rect.width - 28
+            up := math.sqrt(radius * radius - across * across)
+            label_y := geometry.y + band_height * (f32(order) + 0.6) + radius - up
 
             // Hidden, too high for the sample rate
             if !band.in_range do continue
@@ -383,15 +361,10 @@ draw_strobe_display :: proc(
                 font := pixel_fonts.label_large
                 right := rect.x + 16 + measure_label(font, "-00.0").x
                 text := fmt.ctprintf("%+.1f", band.err_cents)
-                draw_text_right(font.font, text, {right, y + band_height * (f32(order) + 0.6) + radius - sin}, font.size, 0, hex(0x82E2FFFF))
+                draw_text_right(font.font, text, {right, label_y}, font.size, 0, accent_color)
             }
 
-            // Partial order, e.g. 1x, 2x, etc
-            draw_strobe_partial(
-                {rect.x + rect.width - 12, y + band_height * (f32(order) + 0.6) + radius - sin},
-                config.partial_labels,
-                band,
-            )
+            draw_strobe_partial({rect.x + rect.width - 12, label_y}, config.partial_labels, band)
         }
     }
 
@@ -422,7 +395,6 @@ draw_strobe_bottom_shadow :: proc(self: ^StrobeDisplay, strobe: Rect, bottom: f3
     )
 }
 
-// Draw circular bands from the center outwards, so the lowest frequency is the bottom one
 // The stripe edges are as sharp as the phase is certain: a sharp edge on a jittery phase twitches,
 // a soft edge on a clean one looks washed out. The shader draws amp * sin(phase), so an edge spans
 // about 2 / amp radians of the strobe phase, keep that a few standard deviations of the phase wide.
@@ -432,10 +404,11 @@ STROBE_MAX_AMP :: 50.0 // limit, to avoid jagged edges in the strobe display
 STROBE_FADE_SNR_DB :: [2]f32{8, 16}
 STROBE_LOOK_TIME_S :: 0.05
 
+// The sharpness and visibility of a band's stripes, smoothed so they don't flicker
 update_band_look :: proc(
     self: ^StrobeDisplay,
     band: ^core.PhaseBand,
-    band_idx: int,
+    band_index: int,
     period_count: f32,
 ) -> (
     amp: f32,
@@ -449,35 +422,34 @@ update_band_look :: proc(
     target_visibility := math.smoothstep(fade[0], fade[1], band.snr_db)
 
     alpha := 1.0 - math.exp(-gfx_frame_time() / STROBE_LOOK_TIME_S)
-    self.band_amp[band_idx] += alpha * (target_amp - self.band_amp[band_idx])
-    self.band_visibility[band_idx] += alpha * (target_visibility - self.band_visibility[band_idx])
+    self.band_amp[band_index] += alpha * (target_amp - self.band_amp[band_index])
+    self.band_visibility[band_index] += alpha * (target_visibility - self.band_visibility[band_index])
 
-    return self.band_amp[band_idx], self.band_visibility[band_idx]
+    return self.band_amp[band_index], self.band_visibility[band_index]
 }
 
+// The circular bands from the centre outwards, the lowest frequency is the bottom one
 draw_strobe_bands :: proc(
     self: ^StrobeDisplay,
     strobe_rect: Rect,
-    phase_info: ^core.PhaseComparator,
+    comparator: ^core.PhaseComparator,
     uniforms: ^StrobeUniforms,
-    y: f32,
-    curvature_radius: f32,
-    band_height: f32,
-    period_count: f32,
-    density: f32,
+    geometry: StrobeGeometry,
 ) {
-    curvature_radius := curvature_radius
-    period_count := period_count
+    curvature_radius := geometry.curvature_radius
+    band_height := geometry.band_height
+    period_count := geometry.period_count
+    density := geometry.density
 
     begin_shader(self.strobe_shader)
     defer end_shader()
 
-    for &band, band_idx in phase_info.bands {
-        order := len(phase_info.bands) - 1 - band_idx
+    for &band, band_index in comparator.bands {
+        order := len(comparator.bands) - 1 - band_index
 
         // Down to where the arc ends, it drops towards the sides. The inner edge meets the sides of the strobe
         // on a wide arc, a narrow one like the wheel is a whole ring.
-        band_y := y + band_height * f32(order)
+        band_y := geometry.y + band_height * f32(order)
         half_width := strobe_rect.width / 2
         inner_radius := curvature_radius - band_height
         arc_height := 2 * curvature_radius
@@ -502,11 +474,11 @@ draw_strobe_bands :: proc(
         // How far the strobe moved this frame, see determine_band_phase
         uniforms.phase_step = -band.phase_diff * band.speed / density
 
-        uniforms.amp, uniforms.visibility = update_band_look(self, &band, band_idx, period_count / density)
+        uniforms.amp, uniforms.visibility = update_band_look(self, &band, band_index, period_count / density)
         uniforms.norm_freq = band.norm_freq
         uniforms.err_cents = band.err_cents
 
-        selected := band_idx == self.selected_track
+        selected := band_index == self.selected_track
         uniforms.highlight = self.selection if selected else 0
         uniforms.dim = 0 if selected else self.selection
 
@@ -516,8 +488,7 @@ draw_strobe_bands :: proc(
             draw_shader_quad({rect.x, rect.y + 10, rect.width, rect.height})
         }
 
-        if phase_info.mode == .FINE {
-            period_count *= 2.0
-        }
+        // Each fine track turns faster, its stripes are packed twice as tight
+        if comparator.mode == .FINE do period_count *= 2.0
     }
 }

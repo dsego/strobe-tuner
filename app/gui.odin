@@ -41,6 +41,7 @@ text_color_white := hex(0xFBFBFBFF) // the note and readout while there's a pitc
 text_color_muted := hex(0x7D7E8FFF) // the note and readout without a pitch, the ruler's neighbours
 text_color_disabled := hex(0x5C5D6AFF) // a control that does nothing right now, on a dark pill
 icon_color := hex(0x9A9BAAFF)
+accent_color := hex(0x82E2FFFF) // the input level, the arrows, the partial labels and the note offsets
 
 // Buttons
 pill_gray := text_color_muted
@@ -117,12 +118,7 @@ draw_strobe_partial :: proc(position: [2]f32, type: PartialLabelType, band: core
         text = fmt.ctprintf("%.1fHz", band.freq_hz)
     } else if type == .NOTE_NAMES {
         // Inter has no ♯, a plain # reads fine at this size
-        text = fmt.ctprintf(
-            "%v%v%v",
-            band.note.name,
-            "#" if band.note.is_accidental else "",
-            band.note.octave,
-        )
+        text = fmt.ctprintf("%s", core.note_name(band.note))
     } else {
         text = fmt.ctprintf("%v×", partial_text(band.interval))
     }
@@ -130,14 +126,14 @@ draw_strobe_partial :: proc(position: [2]f32, type: PartialLabelType, band: core
     text_size := measure_label(font, text)
     bounds: Rect = {position.x - text_size.x, position.y, text_size.x, text_size.y}
 
-    draw_label(font, text, {bounds.x, bounds.y}, hex(0x82E2FFFF))
+    draw_label(font, text, {bounds.x, bounds.y}, accent_color)
 
     if band.offset_cents != 0 {
         offset_font := pixel_fonts.label
         offset := fmt.ctprintf("%+.1f¢", band.offset_cents)
         offset_size := measure_label(offset_font, offset)
         center_y := bounds.y + text_size.y / 2
-        draw_label(offset_font, offset, {bounds.x - 6 - offset_size.x, center_y - offset_size.y / 2}, hex(0x82E2FFFF))
+        draw_label(offset_font, offset, {bounds.x - 6 - offset_size.x, center_y - offset_size.y / 2}, accent_color)
     }
 }
 
@@ -150,10 +146,11 @@ NOTE_BASELINE :: 98 // bottom of the letter, from the top of the note
 // The octave number ends short of NOTE_WIDTH, the right arrow moves in to be as far from it as the left one
 NOTE_RIGHT_ARROW_INSET :: 13
 
-draw_note :: proc(note: core.Note, pos: [2]f32, freq_estimation_active: bool) {
+// White while there's a pitch
+draw_note :: proc(note: core.Note, pos: [2]f32, active: bool) {
     if note.frequency == 0 do return
 
-    color := text_color_white if freq_estimation_active else text_color_muted
+    color := text_color_white if active else text_color_muted
 
     // Note name
     draw_label(pixel_fonts.note_name, fmt.ctprintf("%v", note.name), pos, color)
@@ -435,16 +432,11 @@ draw_ruler_note :: proc(note: core.Note, pos: [2]f32, name_font, sharp_font: Pix
 }
 
 
-// The gauge under the ruler's note: a row of ticks, the middle one red, slides with the pitch like an old
-// bathroom scale's dial. The red tick is as far off the note as the pitch, flat on the left like the lower
-// notes on the ruler, and the gauge closes in under the note as it's tuned. It's a map of where the pitch
-// is, the strobe does the fine tuning: it steps tick to tick, the middle one within the first tick's cents
-// either side, glides over and is held where it was while there's no pitch. The ticks fade out towards the
-// ends of the gauge's room.
-// The distances are evenly spaced ticks, each a wider range of cents than the one before it, so the last
-// few cents to the middle take as many ticks as the rest.
-// Up to half a semitone, where the next note takes over on the ruler. A string is tuned up from further
-// away, past half a semitone its longer ticks go on a semitone each.
+// The gauge under the ruler's note, a row of ticks that slides like an old bathroom scale's dial. The red
+// tick is as far off the note as the pitch, flat on the left like the lower notes on the ruler. It's a map,
+// the strobe does the fine tuning: it steps tick to tick, glides over, and holds while there's no pitch.
+// Each tick out from the middle is a wider range of cents than the one before, up to half a semitone where
+// the next note takes over. A string is tuned up from further away, its ticks go on a semitone each.
 GAUGE_CENTS :: [?]f32{0, 5, 10, 20, 35, 50} // the distances in ticks from the middle outwards
 GAUGE_SEMITONE_TICKS :: 3
 GAUGE_SPACING :: 13 // between the ticks, it grows with the ruler
@@ -588,15 +580,15 @@ gui_dropdown :: proc(
     edit_mode := edit_mode
     btn_bounds := Rect{position.x, position.y, width, height}
 
-    // TODO: make it either a prop or depend on actual width
-    max_text_len := 25
+    // Characters of a label, a long device name is cut off
+    MAX_LABEL_LENGTH :: 25
 
     // Draw the button
     draw_pill(btn_bounds, pill_dark)
     draw_icon(ICON_CARET_DOWN, {position.x + width - 22, position.y + (height - 16) / 2}, icon_color)
 
     if selected_idx != nil {
-        label := strings.cut(options[selected_idx^].label, 0, max_text_len)
+        label := strings.cut(options[selected_idx^].label, 0, MAX_LABEL_LENGTH)
         draw_label(
             pixel_fonts.label,
             fmt.ctprintf("%s", label),
@@ -639,44 +631,31 @@ gui_dropdown :: proc(
         }
     }
 
-    // Draw the dropdown menu
     if edit_mode {
         menu_position := [2]f32{menu_bounds.x, menu_bounds.y + (f32(6) if down else 0)}
-
         draw_rounded_rect({menu_position.x, menu_position.y, width, menu_height}, MENU_RADIUS, pill_dark)
-        // debug
-        // draw_rect_lines(menu_bounds, 1.0, ORANGE)
 
         spaced: f32 = 0 // by the dividers above
-        for opt, i in options {
-            first, last := i == 0, i == len(options) - 1
-            divider := is_divider(dividers, i, len(options))
+        for option, index in options {
+            first, last := index == 0, index == len(options) - 1
+            divider := is_divider(dividers, index, len(options))
             if divider do spaced += DIVIDER_SPACE
-            text_y := menu_position.y + MENU_PAD + f32(i * 24) + spaced + 4
+            option_y := menu_position.y + MENU_PAD + f32(index * 24) + spaced
+            text_y := option_y + 4
 
-            option_bounds := Rect {
-                menu_position.x,
-                menu_position.y + MENU_PAD + f32(i * 24) + spaced,
-                width,
-                24,
-            }
+            // The first and the last reach over the padding to the menu's edge
+            option_bounds := Rect{menu_position.x, option_y, width, 24}
             if first {
                 option_bounds.y -= MENU_PAD
                 option_bounds.height += MENU_PAD
             }
-            if last {
-                option_bounds.height += MENU_PAD
-            }
+            if last do option_bounds.height += MENU_PAD
 
-            hover := false
-
-            if edit_mode && point_in_rect(mouse_point, option_bounds) {
-                hover = true
-                if mouse_pressed() {
-                    edit_mode = false
-                    exclusive_control_mode = false
-                    selected_idx^ = i
-                }
+            hover := point_in_rect(mouse_point, option_bounds)
+            if hover && mouse_pressed() {
+                edit_mode = false
+                exclusive_control_mode = false
+                selected_idx^ = index
             }
 
             if hover {
@@ -697,7 +676,7 @@ gui_dropdown :: proc(
             }
 
             text_pos := [2]f32{option_bounds.x + 12, text_y}
-            label := strings.cut(opt.label, 0, max_text_len)
+            label := strings.cut(option.label, 0, MAX_LABEL_LENGTH)
             draw_label(pixel_fonts.label, fmt.ctprintf("%s", label), text_pos, hex(0xFFFFFFFF) if hover else text_color_light, 1)
 
             // A line in the sheet's colour, a little in from the edges of the menu
@@ -717,29 +696,20 @@ ReadoutAlign :: enum {
     CENTER, // pos is the top middle of the gutter, Hz right aligned before it and cents left aligned after it
 }
 
-// Two columns, Hz and cents. Centred, the sign of the cents hangs into the gutter so the pair looks centred
-// whatever the digits.
-draw_measurements :: proc(
-    pos: [2]f32,
-    align: ReadoutAlign,
-    steady_pitch: core.PitchInfo, // the strong detections averaged, a raw one each frame is too jumpy to read
-    freq_estimation_active: bool,
-) {
-    hz := steady_pitch.detected_freq
-    cents := steady_pitch.err_cents
-    show_placeholder := !steady_pitch.measured
-
-    color := text_color_white if freq_estimation_active else text_color_muted
+// Two columns, Hz and cents, dashes when there's nothing to show. Centred, the sign of the cents hangs into
+// the gutter so the pair looks centred whatever the digits.
+draw_measurements :: proc(pos: [2]f32, align: ReadoutAlign, hz, cents: f32, shown: bool, active: bool) {
+    color := text_color_white if active else text_color_muted
     value := pixel_fonts.readout
 
     // The labels stay in the background, the values and the note are what's read
     VALUE_Y :: READOUT_VALUE_Y
     label_font := pixel_fonts.label.font
-    hz_str := "-" if show_placeholder else fmt.ctprintf("%.1f", hz)
-    cents_str := "-" if show_placeholder else fmt.ctprintf("%.1f", math.abs(cents))
+    hz_str := fmt.ctprintf("%.1f", hz) if shown else "-"
+    cents_str := fmt.ctprintf("%.1f", abs(cents)) if shown else "-"
     // No sign on a rounded zero
     sign: cstring = "-" if cents < 0 else "+"
-    signed := !show_placeholder && cents_str != "0.0"
+    signed := shown && cents_str != "0.0"
 
     switch align {
     case .CENTER:

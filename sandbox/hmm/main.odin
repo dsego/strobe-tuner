@@ -75,7 +75,7 @@ hmm_step :: proc(belief: ^Belief, peaks: []core.Vec2, snr_db: f32) {
             if abs(core.cents_deviation(freq, mains_hz)) <= core.MAINS_CENTS do mains = true
         }
         if mains do continue
-        index, ok := core.note_index(core.find_note(freq))
+        index, ok := core.note_index(core.freq_to_note(freq))
         if !ok do continue
         likelihood := math.pow(f64(clamp(peak.y, 0, 1)), sharpness)
         emission[index] = max(emission[index], weight_now * likelihood)
@@ -92,10 +92,6 @@ hmm_step :: proc(belief: ^Belief, peaks: []core.Vec2, snr_db: f32) {
         total += belief[state]
     }
     for &value in belief do value /= total
-}
-
-note_name :: proc(note: core.Note) -> string {
-    return fmt.tprintf("%v%v%v", note.name, "#" if note.is_accidental else "", note.octave)
 }
 
 Score :: struct {
@@ -147,8 +143,8 @@ main :: proc() {
     readout_ready := false
     for start := 0; start + FRAME_SAMPLES <= len(samples); start += FRAME_SAMPLES {
         frame := samples[start:start + FRAME_SAMPLES]
-        core.audio_capture_callback(&detector, frame)
-        core.audio_capture_callback(strobe, frame)
+        core.audio_capture_write(&detector, frame)
+        core.audio_capture_write(strobe, frame)
         pitch := core.run_pitch_detection(&detector, tuner.pitch)
         core.run_phase_detection(strobe, true, pitch.is_tonal)
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
@@ -157,21 +153,21 @@ main :: proc() {
         if core.update_tuner(&tuner, pitch, strobe_cents) do retune(strobe, tuner.target_note.frequency)
         if !pitch.fresh do continue
 
-        hmm_step(&belief, detector.nsdf.nsdf_peaks[:], pitch.snr_db)
+        hmm_step(&belief, detector.nsdf.peaks[:], pitch.snr_db)
 
-        tuner_shows := note_name(tuner.detected_note) if tuner.active else "-"
+        tuner_shows := core.note_name(tuner.detected_note) if tuner.active else "-"
         best_state := UNVOICED
         for state in 0 ..< core.NOTE_COUNT {
             if belief[state] > belief[best_state] do best_state = state
         }
         hmm_shows := "-"
         if best_state != UNVOICED && belief[best_state] > 0.5 {
-            hmm_shows = note_name(core.find_note(core.cents_to_freq(f32((best_state + core.LOWEST_NOTE) * 100))))
+            hmm_shows = core.note_name(core.cents_to_note(f32((best_state + core.LOWEST_NOTE) * 100)))
         }
 
         t := f32(start + FRAME_SAMPLES) / SAMPLERATE - LEAD_IN_S
         if verbose {
-            chosen := note_name(pitch.detected_note) if pitch.detected_freq > 0 else "-"
+            chosen := core.note_name(pitch.detected_note) if pitch.detected_freq > 0 else "-"
             fmt.printfln("%6.2fs  nsdf %-4v %.3f  tuner %-4v  hmm %-4v %.2f", t, chosen, pitch.clarity, tuner_shows, hmm_shows, belief[best_state])
         }
 

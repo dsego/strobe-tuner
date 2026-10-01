@@ -15,13 +15,13 @@ Strobie is on the App Store for Mac and iPhone. The source is here to read and b
 
 - Automatic pitch detection based on NSDF (McLeod Pitch Method).
 - Smooth and responsive strobe display, the stripe sharpness adapts to the signal quality, no contrast or gain to set.
-- Note lock: keeps the strobe on a note name, the octave still follows the detected pitch.
+- Note lock: keeps the strobe on the note, another note played pins the gauge at the end on its side.
 - Harmonic mode: shows the partials of the detected note on up to 5 strobe tracks.
 - Track settings: tap a track to choose its partial (1× to 8×, or the fifth at 1½×), move its target by up to ±50 cents (e.g. for a stretched octave) and change its speed.
 - Fine mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity.
 - Fast toggle: the strobe spins 4× faster per cent of detuning, for the final adjustment.
 - Five displays: curved tracks, a spinning wheel, a trace of the cents over the last few seconds, a scope that draws the waveform synced to the strobe's frequency, and a ribbon, the classic strobe with stripes lit by the wave.
-- Note offsets: tune a note up to ±25 cents off pitch, e.g. a ukulele's E a little flat or a guitar's B string a touch low, the strobe stands still at the offset note. Three slots hold a tuning each.
+- Note offsets: tune a note up to ±25 cents off pitch, e.g. a ukulele's E a little flat or a guitar's B string a touch low, the strobe stands still at the offset note. Four preset slots hold a tuning each.
 - Transpose for B♭, E♭, F and other transposing instruments.
 - Guitar, bass and ukulele: the ruler shows only the strings of a named tuning (standard, drop D, DADGAD, open G and others) with an optional capo, the nearest string is picked as it's tuned up, and a gauge of ticks under the note shows how many semitones are left to go.
 - Concert A from 400 to 480 Hz.

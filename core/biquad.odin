@@ -33,41 +33,30 @@ Biquad :: struct {
 }
 
 
-// 2nd order Butterworth high-pass (RBJ cookbook, Q = 1/√2).
-// Removes DC, handling noise and low frequency rumble before pitch detection.
-// A cutoff of 0 disables the filter (pass-through).
-init_highpass :: proc(cutoff_hz: f32, samplerate: f32) -> (bq: Biquad) {
-    if cutoff_hz <= 0 || cutoff_hz >= samplerate / 2 do return
-
-    omega := math.TAU * f64(cutoff_hz) / f64(samplerate)
-    cos_omega := math.cos(omega)
-    alpha := math.sin(omega) / math.SQRT_TWO // sin(omega) / (2Q), Q = 1/√2
-    a0 := 1.0 + alpha
-
-    bq.enabled = true
-    bq.b0 = (1.0 + cos_omega) / 2.0 / a0
-    bq.b1 = -(1.0 + cos_omega) / a0
-    bq.b2 = (1.0 + cos_omega) / 2.0 / a0
-    bq.a1 = -2.0 * cos_omega / a0
-    bq.a2 = (1.0 - alpha) / a0
-    return
+// 2nd order Butterworth high-pass, takes out DC and low frequency rumble. A cutoff of 0 passes the signal through.
+init_highpass :: proc(cutoff_hz: f32, samplerate: f32) -> Biquad {
+    return init_butterworth(cutoff_hz, samplerate, highpass = true)
 }
 
+// 2nd order Butterworth low-pass. A cutoff of 0 passes the signal through.
+init_lowpass :: proc(cutoff_hz: f32, samplerate: f32) -> Biquad {
+    return init_butterworth(cutoff_hz, samplerate, highpass = false)
+}
 
-// 2nd order Butterworth low-pass (RBJ cookbook, Q = 1/√2).
-// A cutoff of 0 disables the filter (pass-through).
-init_lowpass :: proc(cutoff_hz: f32, samplerate: f32) -> (bq: Biquad) {
+// RBJ cookbook, Q = 1/√2. The two differ only in the numerator, 1 ± cos(omega).
+init_butterworth :: proc(cutoff_hz: f32, samplerate: f32, highpass: bool) -> (bq: Biquad) {
     if cutoff_hz <= 0 || cutoff_hz >= samplerate / 2 do return
 
     omega := math.TAU * f64(cutoff_hz) / f64(samplerate)
     cos_omega := math.cos(omega)
     alpha := math.sin(omega) / math.SQRT_TWO // sin(omega) / (2Q), Q = 1/√2
     a0 := 1.0 + alpha
+    numerator := 1.0 + cos_omega if highpass else 1.0 - cos_omega
 
     bq.enabled = true
-    bq.b0 = (1.0 - cos_omega) / 2.0 / a0
-    bq.b1 = (1.0 - cos_omega) / a0
-    bq.b2 = (1.0 - cos_omega) / 2.0 / a0
+    bq.b0 = numerator / 2.0 / a0
+    bq.b1 = (-numerator if highpass else numerator) / a0
+    bq.b2 = numerator / 2.0 / a0
     bq.a1 = -2.0 * cos_omega / a0
     bq.a2 = (1.0 - alpha) / a0
     return

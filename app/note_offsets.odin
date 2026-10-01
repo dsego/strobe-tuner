@@ -18,6 +18,7 @@ package app
 
 import "core:fmt"
 import "core:math"
+import "core:slice"
 
 import "../core"
 
@@ -28,9 +29,8 @@ import "../core"
 //
 // On the main screen the offset of the note being tuned is under its letter. On the instrument's sheet the
 // rows of the selected preset are under its instrument, each a note, its octave and the cents, on a
-// stringed instrument a string and its cents. Tapping a row shows its controls. With a finger the controls
-// are in a popup over the row instead, see gui_note_offsets. The rows are kept as they are, in their order
-// and at 0 cents too, see Config.note_offset_notes.
+// stringed instrument a string and its cents. The rows are kept as they are, in their order and at 0 cents
+// too, see Config.note_offset_notes.
 
 NOTE_OFFSET_STEP_CENTS :: 0.5
 // A string this far from its note is still detected as that note once it's nearly in tune
@@ -60,10 +60,138 @@ active_note_offsets :: proc(config: ^Config) -> (offsets: [core.NOTE_COUNT]f32) 
 }
 
 
-// The selected preset's offsets on the instrument's sheet, under its first rows rows: a row with the title
-// and the buttons, then a row an offset. target is the note the tuner is on counted from A0, a new row starts
+// What the popup steps in the selected row, only with a finger
+NoteOffsetPopup :: enum {
+    NONE,
+    NOTE, // and its octave
+    CENTS,
+}
+
+// The editing on the instrument's sheet, kept from one frame to the next
+NoteOffsetsEditing :: struct {
+    selected: int, // the row, -1 for none
+    popup:    NoteOffsetPopup,
+    clearing: bool, // CLEAR was tapped once, it asks
+}
+
+note_offsets_editing := NoteOffsetsEditing {
+    selected = -1,
+}
+
+// Nothing selected, e.g. when the sheet closes or another preset is picked
+reset_note_offsets_editing :: proc() {
+    note_offsets_editing = {
+        selected = -1,
+    }
+}
+
+note_offset_selected_color := hex(0x4D4E58FF)
+
+
+// The selected preset's offsets on the instrument's sheet, under its first_row rows: a row with the title and
+// the buttons, then a row an offset. target is the note the tuner is on counted from A0, a new row starts
 // there, or -1. Returns true when the rows changed.
-gui_note_offsets :: proc(sheet_layout: SheetLayout, rows: int, config: ^Config, target: int) -> (changed: bool) {
+//
+// With a mouse the selected row is lighter and its values are steppers, one row at a time, the rows stay
+// where they are. A finger would cover what it steps, tapped the note or the cents open a popup over the row
+// with the steppers large.
+gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Config, target: int) -> (changed: bool) {
+    NAMES :: [12]cstring{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
+    // From C0 as it's shown, the octave changes at C
+    FROM_C0 :: 57 + core.LOWEST_NOTE
+    MIDDLE_C :: 39 // from A0
+
+    // The columns of a row: the note and its octave, the bar, the cents
+    GAP :: 8
+    NOTE_COLUMN :: 74
+    OCTAVE_COLUMN :: 58
+    NAME_COLUMN :: NOTE_COLUMN + GAP + OCTAVE_COLUMN // the note and octave together, over their steppers
+    BAR_GAP :: 12 // either side of the bar
+    BAR_HEIGHT :: 8
+    CENTS_COLUMN :: 96
+    BUTTONS_HEIGHT :: 26 // as tall as the small buttons
+    ROW_HEIGHT_MIN :: 32
+    ROW_HEIGHT_MAX :: 60
+
+    // The popup, one line like the row
+    POPUP_HEIGHT :: 64
+    POPUP_PAD :: 8
+    POPUP_GAP :: 4 // between the note and the octave
+    POPUP_NOTE_WIDTH :: 140
+    POPUP_OCTAVE_WIDTH :: 116
+    POPUP_CENTS_WIDTH :: 200
+    POPUP_RADIUS :: 14
+
+    // The selected preset's rows in the config. A stringed instrument has a row a string, only the cents change.
+    Rows :: struct {
+        notes:     ^[MAX_NOTE_OFFSETS]int, // counted from A0
+        cents:     ^[MAX_NOTE_OFFSETS]f32,
+        count:     ^int, // chromatic only
+        strings:   []string, // a stringed instrument's names, in the order they're tuned
+        transpose: int, // offsets are kept by the sounding note, a transposing instrument shows the written one
+    }
+
+    // Where the title's row, the rows and their columns are
+    Grid :: struct {
+        sheet:      Rect,
+        left:       f32, // of the contents, the rows' backgrounds reach to the edges of the sheet
+        right:      f32,
+        top:        f32, // of the title's row
+        rows_top:   f32,
+        row_height: f32,
+        bar_x:      f32,
+        cents_x:    f32,
+    }
+
+    row_count :: proc(rows: Rows) -> int {
+        return len(rows.strings) if len(rows.strings) > 0 else clamp(rows.count^, 0, MAX_NOTE_OFFSETS)
+    }
+
+    row_y :: proc(grid: Grid, row: int) -> f32 {
+        return grid.rows_top + f32(row) * grid.row_height
+    }
+
+    // Counted from A0, one the config file put out of range at the end of it
+    row_note :: proc(rows: Rows, row: int) -> int {
+        return clamp(rows.notes[row], 0, core.NOTE_COUNT - 1)
+    }
+
+    // The row's note from C0 as it's shown
+    shown_semitone :: proc(rows: Rows, row: int) -> int {
+        return row_note(rows, row) + FROM_C0 + rows.transpose
+    }
+
+    // A string by its name in the tuning, like the ruler with a capo on
+    row_name :: proc(rows: Rows, row: int) -> cstring {
+        if len(rows.strings) > 0 do return fmt.ctprintf("%s", rows.strings[row])
+        names, shown := NAMES, shown_semitone(rows, row)
+        return fmt.ctprintf("%s%d", names[shown %% 12], shown / 12)
+    }
+
+    // No sign on a note that's tuned as usual
+    cents_text :: proc(cents: f32) -> cstring {
+        return fmt.ctprintf("%+.1f¢", cents) if cents != 0 else "0¢"
+    }
+
+    // Around the octave, past the notes that are out of A0 to C8
+    step_note :: proc(rows: Rows, row: int, step: int) -> int {
+        shown := shown_semitone(rows, row)
+        for try in 1 ..< 12 {
+            candidate := shown - shown %% 12 + (shown + try * step) %% 12 - FROM_C0 - rows.transpose
+            if candidate >= 0 && candidate < core.NOTE_COUNT do return candidate
+        }
+        return row_note(rows, row)
+    }
+
+    step_octave :: proc(rows: Rows, row: int, step: int) -> int {
+        candidate := row_note(rows, row) + 12 * step
+        return candidate if candidate >= 0 && candidate < core.NOTE_COUNT else row_note(rows, row)
+    }
+
+    step_cents :: proc(cents: f32, step: int) -> f32 {
+        return clamp(cents + f32(step) * NOTE_OFFSET_STEP_CENTS, -NOTE_OFFSET_MAX_CENTS, NOTE_OFFSET_MAX_CENTS)
+    }
+
     // A value with a button either side that steps it, down on the left. No pill, the icons and the value on
     // the sheet. The touch areas are halves of reach from its left to its right, split at the middle of rect,
     // wider than the icons for a finger. Large in the popup.
@@ -87,7 +215,7 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, rows: int, config: ^Config, 
     }
 
     // How far the note is off pitch along a line, flat to the left of the middle and sharp to the right,
-    // the whole half is NOTE_OFFSET_MAX_CENTS. Like the input level: the rounded line again in the light
+    // the whole half is NOTE_OFFSET_MAX_CENTS. Like the input level: the rounded line again in the accent
     // colour, cut off flat where the bar ends. The background shows through in the middle, on pitch.
     draw_offset_bar :: proc(line: Rect, offset: f32, background: Color) {
         SPLIT :: 2
@@ -98,342 +226,288 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, rows: int, config: ^Config, 
         length := abs(offset) / NOTE_OFFSET_MAX_CENTS * line.width / 2
         start := middle if offset > 0 else middle - length
         begin_scissor({start, line.y, length, line.height})
-        draw_rounded_rect(line, radius, hex(0x82E2FFFF))
+        draw_rounded_rect(line, radius, accent_color)
         end_scissor()
 
         draw_rect({middle - SPLIT / 2, line.y}, {SPLIT, line.height}, background)
     }
 
-    sheet := sheet_layout.sheet
-    left := sheet_layout.rows.x
-    right := left + sheet_layout.width
-    sheet_left, sheet_right := sheet.x, sheet.x + sheet.width
-
-    preset := selected_preset(config)
-    setup := preset_setup(config, preset)
-    transpose := transpose_key(setup)
-    // A stringed instrument's rows are its strings, only their cents change
-    tuning, _ := setup_tuning(setup)
-    stringed := len(tuning.strings) > 0
-    count := len(tuning.strings) if stringed else clamp(config.note_offset_counts[preset], 0, MAX_NOTE_OFFSETS)
-    notes := &config.note_offset_notes[preset]
-    cents := &config.note_offset_cents[preset]
-
-    header := settings_row(sheet_layout, rows, "Note offsets", 0)
-    top := header.y - SHEET_CONTROL_MARGIN
-
-    // A row an offset: the note and its octave, the bar, the cents. With a mouse the selected row is lighter
-    // and they're steppers, one row at a time, the rows stay where they are. A finger would cover what it
-    // steps, tapped the note or the cents open a popup over the row with the steppers large.
-    NAMES :: [12]cstring{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
-    GAP :: 8
-    NOTE_WIDTH :: 74
-    OCTAVE_WIDTH :: 58
-    BAR_GAP :: 12 // either side of the bar
-    CENTS_WIDTH :: 96
-    BAR_HEIGHT :: 8
-    BUTTONS_HEIGHT :: 26 // as tall as the small buttons
-    // From C0 as it's shown, the octave changes at C. Offsets are kept by the sounding note, a transposing
-    // instrument reads the written one.
-    FROM_C0 :: 57 + core.LOWEST_NOTE
-
-    // No sign on a note that's tuned as usual
-    cents_text :: proc(cents: f32) -> cstring {
-        return fmt.ctprintf("%+.1f¢", cents) if cents != 0 else "0¢"
-    }
-
-    // Around the octave, past the notes that are out of A0 to C8
-    step_note :: proc(index, step, transpose: int) -> int {
-        shown := index + FROM_C0 + transpose
-        for try in 1 ..< 12 {
-            candidate := shown - shown %% 12 + (shown + try * step) %% 12 - FROM_C0 - transpose
-            if candidate >= 0 && candidate < core.NOTE_COUNT do return candidate
+    // What the popup points at, the middle of the note and octave or of the cents
+    popup_anchor :: proc(grid: Grid, popup: NoteOffsetPopup) -> f32 {
+        switch popup {
+        case .NOTE: return grid.left + NAME_COLUMN / 2
+        case .CENTS: return grid.cents_x + CENTS_COLUMN / 2
+        case .NONE:
         }
-        return index
+        return 0
     }
 
-    step_octave :: proc(index, step: int) -> int {
-        candidate := index + 12 * step
-        return candidate if candidate >= 0 && candidate < core.NOTE_COUNT else index
-    }
-
-    step_cents :: proc(cents: f32, step: int) -> f32 {
-        return clamp(cents + f32(step) * NOTE_OFFSET_STEP_CENTS, -NOTE_OFFSET_MAX_CENTS, NOTE_OFFSET_MAX_CENTS)
-    }
-
-    // Taller rows where all of them fit, on a phone, shorter ones for the mouse on the desktop. As tall as
-    // the most rows there can be, a row added doesn't move the others.
-    ROW_HEIGHT_MIN :: 32
-    ROW_HEIGHT_MAX :: 60
-    rows_top := top + sheet_layout.row_height
-    room := sheet_layout.bottom - rows_top
-    most := count if stringed else MAX_NOTE_OFFSETS
-    row_height := clamp(math.floor(room / f32(max(most, 1))), ROW_HEIGHT_MIN, ROW_HEIGHT_MAX)
-    name_width: f32 = NOTE_WIDTH + GAP + OCTAVE_WIDTH // the note and octave together, over their steppers
-    bar_x := left + name_width + BAR_GAP
-    cents_x := right - CENTS_WIDTH
-
-    // The popup over the row, on what was tapped, or under the row near the top of the sheet. One line like
-    // the row, the steppers large: the note and the octave, or the cents.
-    POPUP_HEIGHT :: 64
-    POPUP_PAD :: 8
-    POPUP_GAP :: 4 // between the note and the octave
-    POPUP_NOTE_WIDTH :: 140
-    POPUP_OCTAVE_WIDTH :: 116
-    POPUP_CENTS_WIDTH :: 200
-    popup_rect :: proc(width, anchor_x, row_y, row_height, min_y: f32, sheet: Rect) -> Rect {
+    // Over the row, or under it near the top of the sheet, centred on what was tapped and inside the sheet
+    popup_rect :: proc(grid: Grid, popup: NoteOffsetPopup, row: int) -> Rect {
         GAP :: 10 // from the row, the balloon's point reaches most of the way
-        x := clamp(anchor_x - width / 2, sheet.x + POPUP_PAD, sheet.x + sheet.width - POPUP_PAD - width)
-        y := row_y - GAP - POPUP_HEIGHT
-        if y < min_y do y = row_y + row_height + GAP
+        widths := [NoteOffsetPopup]f32 {
+            .NONE  = 0,
+            .NOTE  = 2 * POPUP_PAD + POPUP_NOTE_WIDTH + POPUP_GAP + POPUP_OCTAVE_WIDTH,
+            .CENTS = 2 * POPUP_PAD + POPUP_CENTS_WIDTH,
+        }
+        width := widths[popup]
+        sheet := grid.sheet
+        x := clamp(popup_anchor(grid, popup) - width / 2, sheet.x + POPUP_PAD, sheet.x + sheet.width - POPUP_PAD - width)
+        y := row_y(grid, row) - GAP - POPUP_HEIGHT
+        if y < grid.top do y = row_y(grid, row) + grid.row_height + GAP
         return {x, y, width, POPUP_HEIGHT}
     }
-    popup_widths := [NoteOffsetPopup]f32 {
-        .NONE  = 0,
-        .NOTE  = 2 * POPUP_PAD + POPUP_NOTE_WIDTH + POPUP_GAP + POPUP_OCTAVE_WIDTH,
-        .CENTS = 2 * POPUP_PAD + POPUP_CENTS_WIDTH,
-    }
-    anchors := [NoteOffsetPopup]f32 {
-        .NONE  = 0,
-        .NOTE  = left + name_width / 2,
-        .CENTS = cents_x + CENTS_WIDTH / 2,
-    }
 
-    touch := touch_input()
-    selected := &note_offset_selected
-    popup := &note_offset_popup
-    if selected^ >= count do selected^ = -1
-    if selected^ < 0 || !touch do popup^ = .NONE
+    // A row's note, octave, bar and cents. Tapped it's selected for REMOVE, and with a finger the note or the
+    // cents open their popup, a string's note stays.
+    gui_row :: proc(rows: Rows, grid: Grid, row: int, editing: ^NoteOffsetsEditing, touch: bool) -> (changed: bool) {
+        stringed := len(rows.strings) > 0
+        selected := row == editing.selected
+        sheet := grid.sheet
+        y := row_y(grid, row)
+        name_rect := Rect{grid.left, y, NAME_COLUMN, grid.row_height}
+        bar := Rect{grid.bar_x, y + (grid.row_height - BAR_HEIGHT) / 2, grid.cents_x - BAR_GAP - grid.bar_x, BAR_HEIGHT}
+        cents_rect := Rect{grid.cents_x, y, CENTS_COLUMN, grid.row_height}
+        cents := &rows.cents[row]
 
-    // A tap on the popup is its own, the controls under it don't see it. A tap anywhere else puts it away and
-    // goes on to what's there, on the other value it opens that one's popup.
-    was_disabled := gui_disabled
-    if popup^ != .NONE {
-        rect := popup_rect(popup_widths[popup^], anchors[popup^], rows_top + f32(selected^) * row_height, row_height, top, sheet)
-        if point_in_rect(mouse_position(), rect) {
-            if mouse_pressed() do gui_press_taken = true
-            gui_disabled = true
-        } else if gui_background_pressed(sheet) {
-            popup^ = .NONE
-        }
-    }
+        background := note_offset_selected_color if selected else hex(sheet_bg_color)
+        if selected do draw_rect({sheet.x, y}, {sheet.width, grid.row_height}, background)
 
-    selected_color := hex(0x4D4E58FF)
-    rows_rect := Rect{sheet_left, rows_top, sheet.width, f32(count) * row_height}
+        if !selected || touch {
+            draw_centered_label(row_name(rows, row), name_rect, text_color_white)
+            draw_offset_bar(bar, cents^, background)
+            draw_centered_label(cents_text(cents^), cents_rect, text_color_white)
 
-    names := NAMES
-    for row in 0 ..< count {
-        index := clamp(notes[row], 0, core.NOTE_COUNT - 1)
-        shown := index + FROM_C0 + transpose
-        // A string by its name in the tuning, like the ruler with a capo on
-        name := fmt.ctprintf("%s", tuning.strings[row]) if stringed else fmt.ctprintf("%s%d", names[shown %% 12], shown / 12)
-        y := rows_top + f32(row) * row_height
-        bar := Rect{bar_x, y + (row_height - BAR_HEIGHT) / 2, cents_x - BAR_GAP - bar_x, BAR_HEIGHT}
-        cents_rect := Rect{cents_x, y, CENTS_WIDTH, row_height}
-        // Out to the edges of the sheet, a finger that misses the outer steppers doesn't put the controls away
-        row_rect := Rect{sheet_left, y, sheet.width, row_height}
-
-        if row != selected^ || touch {
-            background := hex(sheet_bg_color)
-            if row == selected^ {
-                background = selected_color
-                draw_rect({sheet_left, y}, {sheet.width, row_height}, background)
-            }
-            draw_centered_label(name, {left, y, name_width, row_height}, text_color_white)
-            draw_offset_bar(bar, cents[row], background)
-            draw_centered_label(cents_text(cents[row]), cents_rect, text_color_white)
-
-            // Selected for REMOVE, and with a finger the note or the cents open their popup, a string's
-            // note stays
-            if gui_button(row_rect) {
-                selected^ = row
-                popup^ = .NONE
+            // Out to the edges of the sheet, a finger that misses the outer steppers doesn't put the controls away
+            if gui_button({sheet.x, y, sheet.width, grid.row_height}) {
+                editing.selected = row
+                editing.popup = .NONE
                 if touch {
-                    position := mouse_position()
-                    if !stringed && position.x < bar.x - BAR_GAP / 2 do popup^ = .NOTE
-                    if position.x >= cents_x - BAR_GAP / 2 do popup^ = .CENTS
+                    x := mouse_position().x
+                    if !stringed && x < bar.x - BAR_GAP / 2 do editing.popup = .NOTE
+                    if x >= grid.cents_x - BAR_GAP / 2 do editing.popup = .CENTS
                 }
             }
-            continue
+            return
         }
 
-        draw_rect({sheet_left, y}, {sheet.width, row_height}, selected_color)
-
-        // Each stepper reaches halfway into the gaps beside it, the outer ones to the edges of the sheet
+        // The selected row with a mouse, steppers. Each reaches halfway into the gaps beside it, the outer ones
+        // to the edges of the sheet.
         if stringed {
-            draw_centered_label(name, {left, y, name_width, row_height}, text_color_white)
+            draw_centered_label(row_name(rows, row), name_rect, text_color_white)
         } else {
-            x := left
-            note_reach := [2]f32{sheet_left, x + NOTE_WIDTH + GAP / 2}
-            if step := gui_spin({x, y, NOTE_WIDTH, row_height}, note_reach, names[shown %% 12], ICON_CARET_DOWN, ICON_CARET_UP);
-               step != 0 {
-                notes[row] = step_note(index, step, transpose)
+            names, shown := NAMES, shown_semitone(rows, row)
+            note_rect := Rect{grid.left, y, NOTE_COLUMN, grid.row_height}
+            note_reach := [2]f32{sheet.x, note_rect.x + NOTE_COLUMN + GAP / 2}
+            if step := gui_spin(note_rect, note_reach, names[shown %% 12], ICON_CARET_DOWN, ICON_CARET_UP); step != 0 {
+                rows.notes[row] = step_note(rows, row, step)
                 changed = true
             }
-            x += NOTE_WIDTH + GAP
 
-            octave_reach := [2]f32{x - GAP / 2, x + OCTAVE_WIDTH + BAR_GAP / 2}
+            octave_rect := Rect{note_rect.x + NOTE_COLUMN + GAP, y, OCTAVE_COLUMN, grid.row_height}
+            octave_reach := [2]f32{octave_rect.x - GAP / 2, octave_rect.x + OCTAVE_COLUMN + BAR_GAP / 2}
             octave := fmt.ctprintf("%d", shown / 12)
-            if step := gui_spin({x, y, OCTAVE_WIDTH, row_height}, octave_reach, octave, ICON_CARET_DOWN, ICON_CARET_UP);
-               step != 0 {
-                notes[row] = step_octave(index, step)
+            if step := gui_spin(octave_rect, octave_reach, octave, ICON_CARET_DOWN, ICON_CARET_UP); step != 0 {
+                rows.notes[row] = step_octave(rows, row, step)
                 changed = true
             }
         }
 
-        draw_offset_bar(bar, cents[row], selected_color)
-        cents_reach := [2]f32{cents_x - BAR_GAP / 2, sheet_right}
-        if step := gui_spin(cents_rect, cents_reach, cents_text(cents[row]), ICON_MINUS, ICON_PLUS); step != 0 {
-            cents[row] = step_cents(cents[row], step)
+        draw_offset_bar(bar, cents^, background)
+        cents_reach := [2]f32{grid.cents_x - BAR_GAP / 2, sheet.x + sheet.width}
+        if step := gui_spin(cents_rect, cents_reach, cents_text(cents^), ICON_MINUS, ICON_PLUS); step != 0 {
+            cents^ = step_cents(cents^, step)
             changed = true
         }
+        return
     }
 
-    // Right in the title's row, chromatic only, a stringed instrument has a row a string: a new one on the
-    // right, on the note the tuner is on or the closest one above it that has no row. Left of it the button
-    // that removes the selected row.
-    header_strip := Rect{sheet_left, top, sheet.width, sheet_layout.row_height}
-    middle := header.y + header.height / 2
-    add_x := right - icon_button_width("Add")
-
-    // Every offset of the preset at once, rightmost or left of REMOVE. The first tap asks, the second
-    // clears, a tap anywhere else leaves them.
-    clear_right := right if stringed else add_x - 12 - small_button_width("REMOVE") - 8
-    clearable := !stringed && count > 0
-    for row in 0 ..< count do if cents[row] != 0 do clearable = true
-    if gui_small_button(clear_right, middle, "SURE?" if note_offsets_clearing else "CLEAR", clearable) {
-        if note_offsets_clearing {
-            config.note_offset_counts[preset] = 0
-            notes^, cents^ = {}, {}
-            selected^ = -1
-            popup^ = .NONE
-            changed = true
+    // The note for a new row: the one the tuner is on, or after the last row, or middle C in an empty preset
+    // when the tuner has no note. From there up to C8 the first one without a row, then down from where it
+    // started.
+    new_row_note :: proc(rows: Rows, target: int) -> int {
+        count := row_count(rows)
+        start := MIDDLE_C
+        if count > 0 do start = rows.notes[count - 1]
+        if target >= 0 do start = target
+        for try in 0 ..< core.NOTE_COUNT {
+            candidate := start + try if start + try < core.NOTE_COUNT else start - (start + try - core.NOTE_COUNT + 1)
+            if !slice.contains(rows.notes[:count], candidate) do return candidate
         }
-        note_offsets_clearing = !note_offsets_clearing
-    } else if mouse_pressed() || !clearable {
-        note_offsets_clearing = false
+        return start
     }
-    // Cleared, the chromatic rows are gone, a string's are at 0
-    if !stringed do count = config.note_offset_counts[preset]
 
-    if !stringed {
+    // Right in the title's row. CLEAR sets every offset of the preset at once, the first tap asks, the second
+    // clears, a tap anywhere else leaves them. Cleared, the chromatic rows are gone, a string's are at 0.
+    // Chromatic only, as a stringed instrument has a row a string: Add a row on the right, REMOVE the selected
+    // one left of it.
+    gui_buttons :: proc(rows: Rows, grid: Grid, header: Rect, editing: ^NoteOffsetsEditing, target: int) -> (changed: bool) {
+        stringed := len(rows.strings) > 0
+        count := row_count(rows)
+        middle := header.y + header.height / 2
+        add_x := grid.right - icon_button_width("Add")
 
-        if gui_small_button(add_x - 12, middle, "REMOVE", selected^ >= 0) {
-            for row in selected^ ..< count - 1 {
-                notes[row] = notes[row + 1]
-                cents[row] = cents[row + 1]
+        clear_right := grid.right if stringed else add_x - 12 - small_button_width("REMOVE") - 8
+        clearable := !stringed && count > 0
+        for cents in rows.cents[:count] do if cents != 0 do clearable = true
+        if gui_small_button(clear_right, middle, "SURE?" if editing.clearing else "CLEAR", clearable) {
+            if editing.clearing {
+                rows.count^ = 0
+                rows.notes^, rows.cents^ = {}, {}
+                editing.selected = -1
+                editing.popup = .NONE
+                changed = true
+            }
+            editing.clearing = !editing.clearing
+        } else if mouse_pressed() || !clearable {
+            editing.clearing = false
+        }
+        if stringed do return
+
+        count = row_count(rows)
+        if gui_small_button(add_x - 12, middle, "REMOVE", editing.selected >= 0) {
+            for row in editing.selected ..< count - 1 {
+                rows.notes[row] = rows.notes[row + 1]
+                rows.cents[row] = rows.cents[row + 1]
             }
             count -= 1
-            config.note_offset_counts[preset] = count
-            selected^ = -1
-            popup^ = .NONE
+            rows.count^ = count
+            editing.selected = -1
+            editing.popup = .NONE
             changed = true
         }
 
-        if gui_icon_button({add_x, middle - BUTTONS_HEIGHT / 2}, BUTTONS_HEIGHT, ICON_PLUS, "Add", count < MAX_NOTE_OFFSETS) {
-            // Middle C in an empty preset when the tuner has no note, otherwise after the last row
-            start := 39
-            if count > 0 do start = notes[count - 1]
-            if target >= 0 do start = target
-
-            added := start
-            for try in 0 ..< core.NOTE_COUNT {
-                // Up to C8, then down from where it started
-                candidate := start + try if start + try < core.NOTE_COUNT else start - (start + try - core.NOTE_COUNT + 1)
-                taken := false
-                for row in 0 ..< count {
-                    if notes[row] == candidate do taken = true
-                }
-                if !taken {
-                    added = candidate
-                    break
-                }
-            }
-            notes[count] = added
-            cents[count] = 0
+        add_rect := [2]f32{add_x, middle - BUTTONS_HEIGHT / 2}
+        if gui_icon_button(add_rect, BUTTONS_HEIGHT, ICON_PLUS, "Add", count < MAX_NOTE_OFFSETS) {
+            rows.notes[count] = new_row_note(rows, target)
+            rows.cents[count] = 0
+            rows.count^ = count + 1
             // Selected, it's set next
-            selected^ = count
-            popup^ = .NONE
-            count += 1
-            config.note_offset_counts[preset] = count
+            editing.selected = count
+            editing.popup = .NONE
             changed = true
         }
+        return
     }
 
-    // A tap on the sheet away from the rows and the buttons above them unselects the row
-    if gui_background_pressed(sheet) && !point_in_rect(mouse_position(), rows_rect) && !point_in_rect(mouse_position(), header_strip) {
-        selected^ = -1
-        popup^ = .NONE
-    }
+    // The selected row's values with large steppers, in a balloon that points at what was tapped
+    gui_popup :: proc(rows: Rows, grid: Grid, editing: NoteOffsetsEditing) -> (changed: bool) {
+        row := editing.selected
+        rect := popup_rect(grid, editing.popup, row)
+        draw_rounded_rect(rect, POPUP_RADIUS, pill_dark)
 
-    gui_disabled = was_disabled
-
-    // The popup, over everything
-    if popup^ != .NONE {
-        row := selected^
-        index := clamp(notes[row], 0, core.NOTE_COUNT - 1)
-        shown := index + FROM_C0 + transpose
-        row_y := rows_top + f32(row) * row_height
-        rect := popup_rect(popup_widths[popup^], anchors[popup^], row_y, row_height, top, sheet)
-        RADIUS :: 14
-        draw_rounded_rect(rect, RADIUS, pill_dark)
-
-        // A balloon, it points at what was tapped. Line by line, it's slanted.
-        {
-            POINT_WIDTH :: 16
-            POINT_HEIGHT :: 8
-            inset: f32 = RADIUS + POINT_WIDTH / 2 // off the round corners
-            tip_x := clamp(anchors[popup^], rect.x + inset, rect.x + rect.width - inset)
-            under := rect.y > row_y
-            line_height := 1 / pixel_fonts.scale
-            for offset: f32 = 0; offset < POINT_HEIGHT; offset += line_height {
-                half := POINT_WIDTH / 2 * (1 - offset / POINT_HEIGHT)
-                y := rect.y - offset - line_height if under else rect.y + rect.height + offset
-                draw_rect({tip_x - half, y}, {2 * half, line_height}, pill_dark)
-            }
+        // The balloon's point, line by line, it's slanted
+        POINT_WIDTH :: 16
+        POINT_HEIGHT :: 8
+        inset: f32 = POPUP_RADIUS + POINT_WIDTH / 2 // off the round corners
+        tip_x := clamp(popup_anchor(grid, editing.popup), rect.x + inset, rect.x + rect.width - inset)
+        under := rect.y > row_y(grid, row)
+        line_height := 1 / pixel_fonts.scale
+        for offset: f32 = 0; offset < POINT_HEIGHT; offset += line_height {
+            half := POINT_WIDTH / 2 * (1 - offset / POINT_HEIGHT)
+            y := rect.y - offset - line_height if under else rect.y + rect.height + offset
+            draw_rect({tip_x - half, y}, {2 * half, line_height}, pill_dark)
         }
 
         // Each stepper reaches halfway into the gap beside it, the outer ones to the edges of the popup
         x := rect.x + POPUP_PAD
-        switch popup^ {
+        switch editing.popup {
         case .NOTE:
-            note_reach := [2]f32{rect.x, x + POPUP_NOTE_WIDTH + POPUP_GAP / 2}
+            names, shown := NAMES, shown_semitone(rows, row)
             note_rect := Rect{x, rect.y, POPUP_NOTE_WIDTH, rect.height}
+            note_reach := [2]f32{rect.x, x + POPUP_NOTE_WIDTH + POPUP_GAP / 2}
             if step := gui_spin(note_rect, note_reach, names[shown %% 12], ICON_CARET_DOWN, ICON_CARET_UP, large = true);
                step != 0 {
-                notes[row] = step_note(index, step, transpose)
+                rows.notes[row] = step_note(rows, row, step)
                 changed = true
             }
-            x += POPUP_NOTE_WIDTH + POPUP_GAP
 
-            octave_reach := [2]f32{x - POPUP_GAP / 2, rect.x + rect.width}
+            x += POPUP_NOTE_WIDTH + POPUP_GAP
             octave_rect := Rect{x, rect.y, POPUP_OCTAVE_WIDTH, rect.height}
+            octave_reach := [2]f32{x - POPUP_GAP / 2, rect.x + rect.width}
             octave := fmt.ctprintf("%d", shown / 12)
             if step := gui_spin(octave_rect, octave_reach, octave, ICON_CARET_DOWN, ICON_CARET_UP, large = true); step != 0 {
-                notes[row] = step_octave(index, step)
+                rows.notes[row] = step_octave(rows, row, step)
                 changed = true
             }
         case .CENTS:
+            cents := &rows.cents[row]
             cents_rect := Rect{x, rect.y, POPUP_CENTS_WIDTH, rect.height}
             reach := [2]f32{rect.x, rect.x + rect.width}
-            if step := gui_spin(cents_rect, reach, cents_text(cents[row]), ICON_MINUS, ICON_PLUS, large = true); step != 0 {
-                cents[row] = step_cents(cents[row], step)
+            if step := gui_spin(cents_rect, reach, cents_text(cents^), ICON_MINUS, ICON_PLUS, large = true); step != 0 {
+                cents^ = step_cents(cents^, step)
                 changed = true
             }
         case .NONE:
         }
+        return
     }
 
+
+    preset := selected_preset(config)
+    setup := preset_setup(config, preset)
+    tuning, _ := setup_tuning(setup)
+    rows := Rows {
+        notes     = &config.note_offset_notes[preset],
+        cents     = &config.note_offset_cents[preset],
+        count     = &config.note_offset_counts[preset],
+        strings   = tuning.strings,
+        transpose = transpose_key(setup),
+    }
+    count := row_count(rows)
+
+    // Taller rows where all of them fit, on a phone, shorter ones for the mouse on the desktop. As tall as the
+    // most rows there can be, a row added doesn't move the others.
+    header := settings_row(sheet_layout, first_row, "Note offsets", 0)
+    top := header.y - SHEET_CONTROL_MARGIN
+    rows_top := top + sheet_layout.row_height
+    most := count if len(rows.strings) > 0 else MAX_NOTE_OFFSETS
+    left := sheet_layout.rows.x
+    right := left + sheet_layout.width
+    grid := Grid {
+        sheet      = sheet_layout.sheet,
+        left       = left,
+        right      = right,
+        top        = top,
+        rows_top   = rows_top,
+        row_height = clamp(math.floor((sheet_layout.bottom - rows_top) / f32(max(most, 1))), ROW_HEIGHT_MIN, ROW_HEIGHT_MAX),
+        bar_x      = left + NAME_COLUMN + BAR_GAP,
+        cents_x    = right - CENTS_COLUMN,
+    }
+
+    editing := &note_offsets_editing
+    touch := touch_input()
+    if editing.selected >= count do editing.selected = -1
+    if editing.selected < 0 || !touch do editing.popup = .NONE
+
+    // A tap on the popup is its own, the controls under it don't see it. A tap anywhere else puts it away and
+    // goes on to what's there, on the other value it opens that one's popup.
+    was_disabled := gui_disabled
+    if editing.popup != .NONE {
+        if point_in_rect(mouse_position(), popup_rect(grid, editing.popup, editing.selected)) {
+            if mouse_pressed() do gui_press_taken = true
+            gui_disabled = true
+        } else if gui_background_pressed(grid.sheet) {
+            editing.popup = .NONE
+        }
+    }
+
+    for row in 0 ..< count {
+        if gui_row(rows, grid, row, editing, touch) do changed = true
+    }
+    rows_rect := Rect{grid.sheet.x, rows_top, grid.sheet.width, f32(count) * grid.row_height}
+    if gui_buttons(rows, grid, header, editing, target) do changed = true
+
+    // A tap on the sheet away from the rows and the buttons above them unselects the row
+    title_row := Rect{grid.sheet.x, top, grid.sheet.width, sheet_layout.row_height}
+    mouse := mouse_position()
+    if gui_background_pressed(grid.sheet) && !point_in_rect(mouse, rows_rect) && !point_in_rect(mouse, title_row) {
+        editing.selected = -1
+        editing.popup = .NONE
+    }
+    gui_disabled = was_disabled
+
+    // The popup, over everything
+    if editing.popup != .NONE && gui_popup(rows, grid, editing^) do changed = true
     return
 }
-
-// What the popup on the sheet steps in the selected row, only with a finger
-NoteOffsetPopup :: enum {
-    NONE,
-    NOTE, // and its octave
-    CENTS,
-}
-
-note_offset_selected := -1 // the row selected on the sheet, -1 for none
-note_offset_popup: NoteOffsetPopup
-note_offsets_clearing: bool // CLEAR was tapped once, it asks

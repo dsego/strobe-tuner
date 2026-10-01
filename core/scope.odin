@@ -22,9 +22,7 @@
 
     The sweep: a sample's place across the screen is its index on the sample clock times the reference
     frequency, only the fraction. It starts over every couple of reference periods, so an in tune note
-    is drawn over itself and stands still, a detuned one drifts sideways by the phase it slips. This is
-    the fractional frame counter of the framerate method (app/deprecated/framerate.odin, removed in
-    f1912e9), worked out for every sample instead of once per read.
+    is drawn over itself and stands still, a detuned one drifts sideways by the phase it slips.
 
     The screen: cells that keep how long the beam stayed in them and fade, like phosphor. A slow drift
     stays sharp and a fast one smears, which is what the eye does with a real one.
@@ -162,7 +160,7 @@ scope_width :: proc(self: ^Scope) -> int {
 
 // Draws what came in since the previous frame
 update_scope :: proc(self: ^Scope) {
-    available := int(frames_available_in_ringbuffer(&self.ringbuffer))
+    available := int(ringbuffer_available(&self.ringbuffer))
     if available == 0 do return
 
     if self.persistence_seconds <= 0 do clear_scope(self)
@@ -172,7 +170,7 @@ update_scope :: proc(self: ^Scope) {
 
     for available > 0 {
         count := min(available, len(self.chunk))
-        read_ringbuffer(&self.ringbuffer, self.chunk, u32(count))
+        read_ringbuffer(&self.ringbuffer, self.chunk[:count])
         for &sample in self.chunk[:count] {
             input := sample
             sample = input - self.coupling[0] + pole * self.coupling[1]

@@ -94,7 +94,7 @@ What falls short is around it, in this order:
    under louder partials, the window stays.
 5. Octaves by continuity. The decay of a string can repeat at half its period, the bass's E1
    reads E2 from about 4 s and the ukulele's A4 reads A5, and the tuner shows the octave. Both
-   peaks are in `nsdf_peaks`. `sandbox/hmm` picks the note with an HMM over all of them, like
+   peaks are in `NSDF.peaks`. `sandbox/hmm` picks the note with an HMM over all of them, like
    pYIN, a causal forward pass, clarity^8 as the likelihood, later peaks counting half, a note
    staying 0.97. Against the tuner on the recordings:
    - E1 between 4 and 8 s, right 100% instead of 58%, the ukulele's A4 never shown as A5.

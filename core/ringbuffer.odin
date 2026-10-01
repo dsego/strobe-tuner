@@ -37,27 +37,23 @@ init_ringbuffer :: proc(size: int) -> (RingBuffer, []u8) {
 }
 
 
-advance_ringbuffer_read :: proc(self: ^RingBuffer, frames_to_skip: i32) -> i32 {
-    return pa_rb.AdvanceRingBufferReadIndex(self, frames_to_skip)
+skip_ringbuffer :: proc(self: ^RingBuffer, frame_count: i32) {
+    pa_rb.AdvanceRingBufferReadIndex(self, frame_count)
 }
 
-frames_available_in_ringbuffer :: proc(self: ^RingBuffer) -> i32 {
+ringbuffer_available :: proc(self: ^RingBuffer) -> i32 {
     return pa_rb.GetRingBufferReadAvailable(self)
 }
-
 
 flush_ringbuffer :: proc(self: ^RingBuffer) {
     pa_rb.FlushRingBuffer(self)
 }
 
-write_to_ringbuffer :: proc(self: ^RingBuffer, input: []f32) {
+write_ringbuffer :: proc(self: ^RingBuffer, input: []f32) {
     pa_rb.WriteRingBuffer(self, raw_data(input), i32(len(input)))
 }
 
-
-read_ringbuffer :: proc(self: ^RingBuffer, buffer: []f32, frame_count: u32) -> u32 {
-    assert(len(buffer) >= int(frame_count), "frame_count larger than buffer size")
-
-    frames_read := pa_rb.ReadRingBuffer(self, raw_data(buffer), i32(frame_count))
-    return u32(frames_read)
+// Fills the buffer, or as much of it as there is, returns how many frames were read
+read_ringbuffer :: proc(self: ^RingBuffer, buffer: []f32) -> int {
+    return int(pa_rb.ReadRingBuffer(self, raw_data(buffer), i32(len(buffer))))
 }

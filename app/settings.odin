@@ -76,17 +76,7 @@ gui_settings :: proc(
     close: bool,
     changed: bool,
 ) {
-    sheet, close_area := sheet_layout.sheet, sheet_layout.close
-
-    // Over the main screen
-    draw_rect({sheet.x, sheet.y}, {sheet.width, sheet.height}, hex(sheet_bg_color))
-
-    draw_label(pixel_fonts.title, "Settings", sheet_layout.title, text_color_white, 1)
-
-    // 16pt icon in the middle of a larger touch area
-    draw_icon(ICON_X, {close_area.x + (close_area.width - 16) / 2, close_area.y + (close_area.height - 16) / 2}, icon_color)
-    if gui_button(close_area) do close = true
-
+    close = draw_sheet_header(sheet_layout, "Settings")
     row := 0
 
     {
@@ -211,26 +201,11 @@ gui_track_settings :: proc(
     close: bool,
     changed: bool,
 ) {
-    sheet, close_area, title_position := sheet_layout.sheet, sheet_layout.close, sheet_layout.title
-    draw_rect({sheet.x, sheet.y}, {sheet.width, sheet.height}, hex(sheet_bg_color))
-
     // The title, then the note the track follows and its target
     title := fmt.ctprintf("Track %d", track + 1)
-    draw_label(pixel_fonts.title, title, title_position, text_color_white, 1)
-    details := fmt.ctprintf(
-        "%v%v%v · %.1f Hz%v",
-        band.note.name,
-        "#" if band.note.is_accidental else "",
-        band.note.octave,
-        band.freq_hz,
-        "" if band.in_range else " · too high to show",
-    )
-    title_size := measure_label(pixel_fonts.title, title, 1)
-    details_y := title_position.y + (title_size.y - LABEL_SIZE) / 2
-    draw_label(pixel_fonts.label, details, {title_position.x + title_size.x + 12, details_y}, text_color_light, 1)
-
-    draw_icon(ICON_X, {close_area.x + (close_area.width - 16) / 2, close_area.y + (close_area.height - 16) / 2}, icon_color)
-    if gui_button(close_area) do close = true
+    in_range := "" if band.in_range else " · too high to show"
+    details := fmt.ctprintf("%s · %.1f Hz%s", core.note_name(band.note), band.freq_hz, in_range)
+    close = draw_sheet_header(sheet_layout, title, details)
 
     slot := track_slot(config, track)
     if slot < 0 do return

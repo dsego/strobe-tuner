@@ -48,37 +48,35 @@ StrobeDisplayType :: enum {
 
 
 Config :: struct {
-    // Initial target frequency for the strobe
+    // The strobe's note at the start, the one it was on at the end
     target_freq_hz:               f32,
 
-    // eg A 440Hz
+    // Concert A, e.g. 440 Hz
     pitch_standard:               f32,
 
-    // how many spinning bands to show
+    // The partial of each track, harmonic mode, the tracks are the ones of 1 and more, 0 is no track
     strobe_intervals:             [MAX_INTERVALS]f32,
-    strobe_intervals_index:       int,
+    strobe_intervals_index:       int, // the last of INTERVAL_OPTIONS picked with the I key
     // per track, harmonic mode: the target this many cents off the exact partial, eg a stretched octave
     strobe_offsets_cents:         [MAX_INTERVALS]f32,
     // per track, harmonic mode: on top of strobe_speed, 1 leaves it as is
     strobe_speeds:                [MAX_INTERVALS]f32,
 
-    // FFT length for the pitch detector, e.g. 4096 samples
+    // FFT length for the pitch detection, the window is half of it, e.g. 8192 for 4096 samples
     pitch_detect_fft_size:        int,
 
-    // audio card sampling rate, e.g. 44.100 Hz
+    // The input's sample rate, e.g. 48000 Hz
     samplerate:                   int,
 
-    // harmonic to track multiple frequencies or "fine" to track one pitch at different sensitivities
+    // A track per partial, or every track on the fundamental at more and more speed
     strobe_mode:                  core.StrobeMode,
 
-    // the sensitivity or speed of the base strobe band,
-    // i.e. how fast should the spinning effect be in response to the phase difference
+    // How fast the strobe turns per cent of detuning, the FAST toggle steps through RESPONSE_SPEEDS
     strobe_speed:                 f32,
 
-    // if multiple strobe bands, this sensitivity multiplier will be applied to subsequent spinning bands
+    // Fine mode, each track turns this much faster than the one under it
     speed_multiplier:             f32,
 
-    // How to render the strobe effect
     strobe_display_type:          StrobeDisplayType,
 
     strobe_colorway:              StrobeColorway,
@@ -89,7 +87,7 @@ Config :: struct {
     strobe_glow:                  bool,
     prevent_strobe_octave_jumps:  bool,
 
-    // show different type of partial labels, eg partial number 1x, note name A2, or frequency 110Hz
+    // The label of each track, e.g. its partial 1×, its note A2 or its frequency 110 Hz
     partial_labels:               PartialLabelType,
 
     // all the notes in a sliding row, off shows just the note with arrows either side to step it
@@ -118,22 +116,23 @@ Config :: struct {
     note_offset_notes:            [PRESET_SLOTS][MAX_NOTE_OFFSETS]int,
     note_offset_cents:            [PRESET_SLOTS][MAX_NOTE_OFFSETS]f32,
 
-    // pitch detection settings
+    // The pitch detection: a strong pitch is this clear at least and this far over the noise floor, a weak one
+    // less clear than clarity_low. The noise floors don't learn the level over their threshold.
     pitch_detection_clarity_low:  f32,
     pitch_detection_clarity_high: f32,
     noise_floor_snr_db_threshold: f32,
     pitch_detection_min_snr_db:   f32,
 
-    // how long a new note is detected in a row before the strobe switches to it
+    // How long a new note is detected in a row before the strobe switches to it
     note_switch_s:                f32,
 
-    // high-pass filter before the pitch detection to remove DC and low frequency rumble, 0 to disable
+    // The high-pass before the pitch detection, it takes out DC and low frequency rumble, 0 for none
     highpass_cutoff_hz:           f32,
 
     // Add in the DFT bins 5 cents either side, a slightly detuned note keeps its level, see set_dft_freq
     use_phase_average:            bool,
 
-    // Show cents offset for each strobe band
+    // How far off each track's partial is, next to the track
     show_band_cents:              bool,
 
     // Scope and ribbon displays: how long the beam stays on the screen, 0 shows only what came in since
@@ -148,7 +147,7 @@ Config :: struct {
 config_defaults :: Config {
     target_freq_hz               = 110.0,
     pitch_standard               = 440.0,
-    strobe_intervals             = {1, 2, 4, 0, 0, 0, 0, 0},
+    strobe_intervals             = INTERVAL_OPTIONS[0],
     strobe_intervals_index       = 0,
     strobe_offsets_cents         = {0, 0, 0, 0, 0, 0, 0, 0},
     strobe_speeds                = {1, 1, 1, 1, 1, 1, 1, 1},
@@ -170,8 +169,8 @@ config_defaults :: Config {
     transpose                    = 0,
     pitch_detection_clarity_low  = 0.9,
     pitch_detection_clarity_high = 0.98,
-    noise_floor_snr_db_threshold = 10, // to determine if it’s safe to update the noise floor
-    pitch_detection_min_snr_db   = 2, // dB
+    noise_floor_snr_db_threshold = 10,
+    pitch_detection_min_snr_db   = 2,
     note_switch_s                = 0.05, // the last detection strong or the run steady, at 0 a note under hum flickers
     highpass_cutoff_hz           = 60, // below guitar low E (82Hz), lower notes read from their harmonics
     use_phase_average            = true,
@@ -193,9 +192,9 @@ reset_config :: proc(config: ^Config) {
     config.note_offset_cents = kept.note_offset_cents
 }
 
-// Load config from the standard OS path, eg ~/Library/Application Support/<APP_NAME>/config.ini on MacOS, see config_directory.
+// From the standard OS path, e.g. ~/Library/Application Support/<APP_NAME>/config.ini on macOS, see
+// config_directory. What's missing or doesn't parse keeps its default.
 load_config :: proc() -> Config {
-
     config := config_defaults
 
     ini_map, loaded := load_ini()

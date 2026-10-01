@@ -72,7 +72,7 @@ open_stream_on_active_device :: proc(self: ^AudioCapture) -> bool {
     config.capture.channels = 1
     config.sampleRate = self.samplerate
     config.performanceProfile = .low_latency
-    config.noFixedSizedCallback = true // callback chunks are handled in stream_callback
+    config.noFixedSizedCallback = true // the nodes' ring buffers take chunks of any size
     config.dataCallback = stream_callback
     config.notificationCallback = notification_callback
     config.pUserData = self
@@ -90,7 +90,7 @@ open_stream_on_active_device :: proc(self: ^AudioCapture) -> bool {
         config.capture.pDeviceID = &info.id
     }
 
-    if check(ma.device_init(&self.ctx, &config, &self.device)) do return false
+    if failed(ma.device_init(&self.ctx, &config, &self.device)) do return false
     self.device_open = true
 
     fmt.println("Opened input stream")
@@ -99,44 +99,45 @@ open_stream_on_active_device :: proc(self: ^AudioCapture) -> bool {
 }
 
 
-init_audio_capture :: proc(samplerate: u32) -> (bool, ^AudioCapture) {
-    self := new(AudioCapture)
+// Opens the default input, nil when there's none or it can't be opened
+init_audio_capture :: proc(samplerate: u32) -> (self: ^AudioCapture, ok: bool) {
+    self = new(AudioCapture)
     self.samplerate = samplerate
 
-    if check(ma.context_init(nil, 0, nil, &self.ctx)) do return false, self
-
+    if failed(ma.context_init(nil, 0, nil, &self.ctx)) {
+        free(self)
+        return nil, false
+    }
     fmt.println("Initialized miniaudio, backend:", self.ctx.backend)
 
     infos: [^]ma.device_info
     count: u32
-    if check(ma.context_get_devices(&self.ctx, nil, nil, &infos, &count)) do return false, self
-    if count == 0 {
+    if failed(ma.context_get_devices(&self.ctx, nil, nil, &infos, &count)) || count == 0 {
         fmt.println("No audio input devices found")
-        return false, self
+        destroy_audio_capture(self)
+        return nil, false
     }
     self.capture_infos = infos[:count]
 
-    for &info, i in self.capture_infos {
-        if info.isDefault do self.active_device = i32(i)
+    for &info, index in self.capture_infos {
+        if info.isDefault do self.active_device = i32(index)
+    }
+    for index in 0 ..< audio_device_count(self) {
+        marker := "[‣]" if index == self.active_device else " ‣ "
+        fmt.printfln("  %v %s %s", index, marker, audio_device_name(self, index))
     }
 
-    for i in 0 ..< audio_device_count(self) {
-        str := "  %v  ‣  %s\n"
-        if i == self.active_device {
-            str = "  %v [‣] %s\n"
-        }
-        fmt.printf(str, i, audio_device_name(self, i))
+    if !open_stream_on_active_device(self) {
+        destroy_audio_capture(self)
+        return nil, false
     }
-
-    ok := open_stream_on_active_device(self)
-
-    return ok, self
+    return self, true
 }
 
 
 start_audio_capture :: proc(self: ^AudioCapture) -> bool {
     if !self.device_open do return false
-    if check(ma.device_start(&self.device)) do return false
+    if failed(ma.device_start(&self.device)) do return false
 
     fmt.println("Started input stream")
     return true
@@ -144,7 +145,7 @@ start_audio_capture :: proc(self: ^AudioCapture) -> bool {
 
 stop_audio_capture :: proc(self: ^AudioCapture) {
     if !self.device_open do return
-    if check(ma.device_stop(&self.device)) do return
+    if failed(ma.device_stop(&self.device)) do return
 
     fmt.println("Stopped input stream")
 }
@@ -157,9 +158,6 @@ audio_interruption_ended :: proc(self: ^AudioCapture) -> bool {
 register_audio_node :: proc(self: ^AudioCapture, node: ^core.AudioCaptureNode) {
     append(&self.nodes, node)
 }
-
-
-// TODO: remove node?
 
 close_device :: proc(self: ^AudioCapture) {
     if !self.device_open do return
@@ -181,15 +179,11 @@ destroy_audio_capture :: proc(self: ^AudioCapture) {
 
 stream_callback :: proc "c" (device: ^ma.device, output, input: rawptr, frame_count: u32) {
     context = runtime.default_context()
-
-    input_slice: []f32 = slice.from_ptr(cast([^]f32)input, int(frame_count))
-
     self := cast(^AudioCapture)device.pUserData
+    samples := slice.from_ptr(cast([^]f32)input, int(frame_count))
 
     // The input as it is to every node, the pitch detection filters its own
-    for node in self.nodes {
-        if node.stream_callback != nil do node.stream_callback(node, input_slice)
-    }
+    for node in self.nodes do core.audio_capture_write(node, samples)
 }
 
 notification_callback :: proc "c" (notification: ^ma.device_notification) {
@@ -236,10 +230,9 @@ when IOS {
     }
 }
 
-check :: proc(res: ma.result) -> bool {
-    if res != .SUCCESS {
-        fmt.println("miniaudio error: ", ma.result_description(res))
-        return true
-    }
-    return false
+// Prints what went wrong
+failed :: proc(result: ma.result) -> bool {
+    if result == .SUCCESS do return false
+    fmt.println("miniaudio error:", ma.result_description(result))
+    return true
 }

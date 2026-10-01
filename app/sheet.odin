@@ -167,6 +167,24 @@ grab_sheet :: proc(sheet: ^Sheet, sheet_layout: SheetLayout) {
     }
 }
 
+// The sheet's background, its title with the lighter details after it, and the ✕. Returns true when the ✕
+// is tapped.
+draw_sheet_header :: proc(sheet_layout: SheetLayout, title: cstring, details: cstring = nil) -> (close: bool) {
+    sheet, close_area, title_position := sheet_layout.sheet, sheet_layout.close, sheet_layout.title
+    draw_rect({sheet.x, sheet.y}, {sheet.width, sheet.height}, hex(sheet_bg_color))
+    draw_label(pixel_fonts.title, title, title_position, text_color_white, 1)
+
+    if details != nil {
+        title_size := measure_label(pixel_fonts.title, title, 1)
+        details_y := title_position.y + (title_size.y - LABEL_SIZE) / 2
+        draw_label(pixel_fonts.label, details, {title_position.x + title_size.x + 12, details_y}, text_color_light, 1)
+    }
+
+    // A 16pt icon in the middle of a larger touch area
+    draw_icon(ICON_X, {close_area.x + (close_area.width - 16) / 2, close_area.y + (close_area.height - 16) / 2}, icon_color)
+    return gui_button(close_area)
+}
+
 // The strobe above the sheet, a tap there closes it
 above_sheet :: proc(sheet_layout: SheetLayout) -> Rect {
     return {0, 0, sheet_layout.sheet.width, sheet_layout.sheet.y}

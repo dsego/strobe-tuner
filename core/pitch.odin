@@ -41,19 +41,19 @@ PITCH_LOWPASS_HZ :: 5000
 
 
 PitchDetector :: struct {
-    using node:                   AudioCaptureNode,
-    nsdf:                         NSDFConfig,
-    samples:                      []f32,
+    using node:     AudioCaptureNode,
+    nsdf:           NSDF,
+    samples:        []f32,
     // DC and rumble lift the NSDF so it doesn't dip between periods, hiss blurs it, see PITCH_LOWPASS_HZ.
     // Only here, the strobe's tracks are narrow and the scope wants the wave as it is.
-    highpass:                     Biquad,
-    lowpass:                      Biquad,
-    clarity_high:                f32,
-    clarity_low:                  f32,
-    noise_floor:                  NoiseFloor, // of the RMS
-    min_snr_db:                   f32,
-    snr_db:                       f32,
-    pitch_standard:               f32, // A4, detected notes are named against it
+    highpass:       Biquad,
+    lowpass:        Biquad,
+    clarity_high:   f32,
+    clarity_low:    f32,
+    noise_floor:    NoiseFloor, // of the RMS
+    min_snr_db:     f32,
+    snr_db:         f32,
+    pitch_standard: f32, // A4, detected notes are named against it
 }
 
 
@@ -91,7 +91,7 @@ init_pitch_detector :: proc(
     self.samples = make([]f32, fft_size / 2)
     self.highpass = init_highpass(highpass_cutoff_hz, f32(samplerate))
     self.lowpass = init_lowpass(PITCH_LOWPASS_HZ, f32(samplerate))
-    self.nsdf = nsdf_init(fft_size, samplerate)
+    self.nsdf = init_nsdf(fft_size, samplerate)
     self.clarity_high = clarity_high
     self.clarity_low = clarity_low
     self.min_snr_db = min_snr_db
@@ -103,7 +103,7 @@ init_pitch_detector :: proc(
 }
 
 destroy_pitch_detector :: proc(self: ^PitchDetector) {
-    nsdf_destroy(&self.nsdf)
+    destroy_nsdf(&self.nsdf)
     destroy_audio_capture_node(self)
     delete(self.samples)
 }
@@ -121,7 +121,6 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     // Once a display frame's worth of new samples is in, the read wants more than its minimum
     available := audio_capture_read(self, self.samples, i32(self.nsdf.samplerate / DETECTIONS_PER_SECOND) - 1)
 
-    // no new audio samples available, skip pitch detection
     if available <= 0 {
         stale := prev_info
         stale.fresh = false
@@ -135,10 +134,10 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
 
     info.measured = true
     info.fresh = true
-    info.detected_freq, info.nsdf_peak = nsdf_pitch_detect(&self.nsdf, self.samples)
+    info.detected_freq, info.nsdf_peak = run_nsdf(&self.nsdf, self.samples)
     info.clarity = info.nsdf_peak.y
-    info.shortest_period = self.nsdf.chosen_peak_idx == 0
-    info.rms = math.max(calculate_rms(self.samples), MIN_RMS_TRACKABLE)
+    info.shortest_period = self.nsdf.chosen_peak == 0
+    info.rms = max(calculate_rms(self.samples), MIN_RMS_TRACKABLE)
     info.rms_dbfs = dbfs(info.rms)
 
     dt := f32(available) / f32(self.nsdf.samplerate)
@@ -156,19 +155,14 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.noise_floor = self.noise_floor.level
     // No peak gives 0 Hz, which has no note
     if info.detected_freq > 0 {
-        info.detected_note = find_note(info.detected_freq, self.pitch_standard)
+        info.detected_note = freq_to_note(info.detected_freq, self.pitch_standard)
         info.err_cents = cents_deviation(info.detected_freq, info.detected_note.frequency)
     }
 
     weak_snr_db := self.min_snr_db - SNR_HYSTERESIS_DB
     strong_snr_db := weak_snr_db if prev_info.is_strong_pitch else self.min_snr_db
 
-    info.is_strong_pitch =
-        info.detected_freq >= min_freq &&
-        info.clarity >= self.clarity_high &&
-        info.snr_db >= strong_snr_db &&
-        !mains
-
+    info.is_strong_pitch = info.is_tonal && info.snr_db >= strong_snr_db
     info.is_weak_pitch =
         mains ||
         info.detected_freq < min_freq ||
@@ -180,10 +174,11 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
 
 calculate_rms :: proc(samples: []f32) -> f32 {
     square_sum: f32 = 0
-    for s in samples do square_sum += s * s
+    for sample in samples do square_sum += sample * sample
     return math.sqrt(square_sum / f32(len(samples)))
 }
 
+// Of an RMS level, against a full scale sine's RMS so a full scale sine is 0 dBFS
 dbfs :: proc(signal: $T) -> T {
     return 20.0 * math.log10(signal * math.sqrt(cast(T)2.0))
 }
@@ -209,7 +204,7 @@ test_mains_hum :: proc(t: ^testing.T) {
                     sample += f32(0.01 * math.sin(phase))
                 }
             }
-            audio_capture_callback(&detector, frame[:])
+            audio_capture_write(&detector, frame[:])
             info = run_pitch_detection(&detector, info)
         }
         return info
