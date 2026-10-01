@@ -213,15 +213,21 @@ ruler_initialized: bool
 // A press on the ruler. Let go where it was, a tap on a neighbour selects it. Moved sideways it's a swipe,
 // the row follows the finger, and let go it coasts on with the finger's speed and slows down. Only the
 // note it settles on becomes the target.
+RulerGesture :: enum {
+    NONE,
+    PRESSED, // let go where it was it's a tap
+    CAUGHT, // pressed while it coasted, let go without swiping it settles where it is
+    SWIPING, // the row follows the finger
+    COASTING, // let go, it slows down to a stop on a note
+}
+
 RulerSwipe :: struct {
-    pressed:  bool,
-    swiping:  bool,
+    gesture:  RulerGesture,
     press_x:  f32, // where the finger was when the row started following it
     grab:     f32, // ruler_position then
     last_x:   f32,
     velocity: f32, // points per second, right is positive
-    caught:   bool, // pressed while it coasted, let go without swiping it settles where it is
-    coast:    f32, // seconds the coast takes, 0 unless coasting
+    coast:    f32, // seconds the coast takes
     coasted:  f32, // seconds so far
     from:     f32, // ruler_position when let go
     stop_at:  f32, // the note it coasts to
@@ -232,12 +238,95 @@ ruler_swipe: RulerSwipe
 // notes[target] is the target note, none hides the ruler. Returns how many notes to step when another note is
 // tapped or a swipe lands, and while swiping how far the note in the middle is from the target.
 gui_note_ruler :: proc(rect: Rect, notes: []core.Note, target: int, active: bool) -> (step: int, browse: int) {
+    // Moves the row with the finger and the coast. settle is where it settles, the nearest note or the next one
+    // on the way, land a swipe or a coast that's over, tapped a press let go where it was.
+    follow_finger :: proc(swipe: ^RulerSwipe, rect: Rect, spacing, highest: f32) -> (settle: f32, land, tapped: bool) {
+        mouse := mouse_position()
+        dt := gfx_frame_time()
+        settle = math.round(ruler_position)
+
+        switch {
+        case gui_disabled:
+            // A sheet opened over it, a swipe on the way lands
+            land = swipe.gesture == .SWIPING || swipe.gesture == .COASTING || swipe.gesture == .CAUGHT
+            if !land do swipe^ = {}
+        case swipe.gesture == .COASTING && mouse_pressed():
+            // Caught on the ruler it stops there and can be swiped on, a press anywhere else settles it
+            if gui_background_pressed(rect) {
+                swipe^ = {
+                    gesture = .CAUGHT,
+                    press_x = mouse.x,
+                    last_x  = mouse.x,
+                }
+            } else {
+                land = true
+            }
+        case swipe.gesture == .COASTING:
+            // Slowing down steadily to a stop on the note, from the finger's speed
+            swipe.coasted += dt
+            left := max(1 - swipe.coasted / swipe.coast, 0)
+            ruler_position = swipe.stop_at + (swipe.from - swipe.stop_at) * left * left
+            settle = math.round(ruler_position)
+            land = left == 0
+        case swipe.gesture == .NONE:
+            if gui_background_pressed(rect) {
+                swipe^ = {
+                    gesture = .PRESSED,
+                    press_x = mouse.x,
+                    last_x  = mouse.x,
+                }
+            }
+        case mouse_down():
+            // Smoothed, a finger stops for a frame or two before it lets go
+            if dt > 0 do swipe.velocity += ((mouse.x - swipe.last_x) / dt - swipe.velocity) * 0.5
+            swipe.last_x = mouse.x
+            if swipe.gesture != .SWIPING && abs(mouse.x - swipe.press_x) > RULER_SWIPE_START {
+                // From here, the few points it took don't make the row jump
+                swipe.gesture = .SWIPING
+                swipe.press_x = mouse.x
+                swipe.grab = ruler_position
+            }
+            // The row under the finger, to the left brings in the notes on the right
+            if swipe.gesture == .SWIPING do ruler_position = swipe.grab + (swipe.press_x - mouse.x) / spacing
+            settle = math.round(ruler_position)
+        case swipe.gesture == .SWIPING:
+            // Let go, it coasts to where friction would stop it, rounded to a note on the way. Slowing down
+            // evenly from the finger's speed it takes twice as long as at that speed.
+            speed := clamp(-swipe.velocity / spacing, -RULER_COAST_MAX, RULER_COAST_MAX)
+            stop := ruler_position + speed / RULER_COAST_FRICTION
+            swipe.stop_at = clamp(math.round(stop), 0, highest)
+            if speed > 0 do swipe.stop_at = max(swipe.stop_at, math.ceil(ruler_position))
+            if speed < 0 do swipe.stop_at = min(swipe.stop_at, math.floor(ruler_position))
+            distance := swipe.stop_at - ruler_position
+            if abs(speed) < RULER_COAST_MIN || abs(distance) < 0.002 {
+                land = true
+            } else {
+                swipe.gesture = .COASTING
+                swipe.coast = 2 * distance / speed
+                swipe.coasted = 0
+                swipe.from = ruler_position
+            }
+        case swipe.gesture == .CAUGHT:
+            land = true
+        case:
+            tapped = true
+            swipe^ = {}
+        }
+
+        // Not past the ends
+        if ruler_position <= 0 || ruler_position >= highest {
+            ruler_position = clamp(ruler_position, 0, highest)
+            settle = math.round(ruler_position)
+            if swipe.gesture == .COASTING do land = true
+        }
+        return
+    }
+
     swipe := &ruler_swipe
     if len(notes) == 0 {
         swipe^ = {}
         return
     }
-    highest := f32(len(notes) - 1)
 
     // The gaps grow with the letters, the fonts were loaded at the layout's size
     scale := pixel_fonts.ruler_scale
@@ -253,88 +342,9 @@ gui_note_ruler :: proc(rect: Rect, notes: []core.Note, target: int, active: bool
         ruler_initialized = true
     }
 
-    mouse := mouse_position()
-    dt := gfx_frame_time()
-    tapped := false
-    // Where it settles, the nearest note or the next one on the way
-    settle := math.round(ruler_position)
-    land := false
-    if gui_disabled {
-        // A sheet opened over it
-        land = swipe.swiping || swipe.coast != 0 || swipe.caught
-        if !land do swipe^ = {}
-    } else if swipe.coast != 0 && mouse_pressed() {
-        // Caught on the ruler it stops there and can be swiped on, a press anywhere else settles it
-        caught := gui_background_pressed(rect)
-        swipe^ = {
-            pressed = caught,
-            caught  = caught,
-            press_x = mouse.x,
-            last_x  = mouse.x,
-        }
-        land = !caught
-    } else if swipe.coast != 0 {
-        // Slowing down steadily to a stop on the note, from the finger's speed
-        swipe.coasted += dt
-        left := max(1 - swipe.coasted / swipe.coast, 0)
-        ruler_position = swipe.stop_at + (swipe.from - swipe.stop_at) * left * left
-        settle = math.round(ruler_position)
-        land = left == 0
-    } else if !swipe.pressed {
-        if gui_background_pressed(rect) {
-            swipe^ = {
-                pressed = true,
-                press_x = mouse.x,
-                last_x  = mouse.x,
-            }
-        }
-    } else if mouse_down() {
-        // Smoothed, a finger stops for a frame or two before it lets go
-        if dt > 0 do swipe.velocity += ((mouse.x - swipe.last_x) / dt - swipe.velocity) * 0.5
-        swipe.last_x = mouse.x
-        if !swipe.swiping && abs(mouse.x - swipe.press_x) > RULER_SWIPE_START {
-            // From here, the few points it took don't make the row jump
-            swipe.swiping = true
-            swipe.press_x = mouse.x
-            swipe.grab = ruler_position
-        }
-        // The row under the finger, to the left brings in the notes on the right
-        if swipe.swiping do ruler_position = swipe.grab + (swipe.press_x - mouse.x) / spacing
-        settle = math.round(ruler_position)
-    } else if swipe.swiping {
-        swipe.pressed = false
-        swipe.swiping = false
-        swipe.caught = false
-        // Where friction would stop it, rounded to a note on the way, and slowing down evenly from the
-        // finger's speed it takes twice as long as at that speed
-        speed := clamp(-swipe.velocity / spacing, -RULER_COAST_MAX, RULER_COAST_MAX)
-        stop := ruler_position + speed / RULER_COAST_FRICTION
-        swipe.stop_at = clamp(math.round(stop), 0, highest)
-        if speed > 0 do swipe.stop_at = max(swipe.stop_at, math.ceil(ruler_position))
-        if speed < 0 do swipe.stop_at = min(swipe.stop_at, math.floor(ruler_position))
-        distance := swipe.stop_at - ruler_position
-        if abs(speed) < RULER_COAST_MIN || abs(distance) < 0.002 {
-            land = true
-        } else {
-            swipe.coast = 2 * distance / speed
-            swipe.coasted = 0
-            swipe.from = ruler_position
-        }
-    } else if swipe.caught {
-        land = true
-    } else {
-        tapped = true
-        swipe^ = {}
-    }
+    settle, land, tapped := follow_finger(swipe, rect, spacing, f32(len(notes) - 1))
+    moving := swipe.gesture == .SWIPING || swipe.gesture == .COASTING || swipe.gesture == .CAUGHT
 
-    // Not past the ends
-    if ruler_position <= 0 || ruler_position >= highest {
-        ruler_position = clamp(ruler_position, 0, highest)
-        settle = math.round(ruler_position)
-        if swipe.coast != 0 do land = true
-    }
-
-    moving := swipe.swiping || swipe.coast != 0 || swipe.caught
     // Settled, the note becomes the target and the ruler eases onto it from where it is
     if land {
         step = int(settle) - target
@@ -346,9 +356,10 @@ gui_note_ruler :: proc(rect: Rect, notes: []core.Note, target: int, active: bool
         // Slide to the next note, and settle exactly on it, a jump further snaps
         shown := target + step
         if abs(f32(shown) - ruler_position) > 1 && step == 0 do ruler_position = f32(shown)
-        ruler_position += (f32(shown) - ruler_position) * min(1, RULER_SLIDE_SPEED * dt)
+        ruler_position += (f32(shown) - ruler_position) * min(1, RULER_SLIDE_SPEED * gfx_frame_time())
         if abs(f32(shown) - ruler_position) < 0.002 do ruler_position = f32(shown)
     }
+    mouse := mouse_position()
 
     center := [2]f32{rect.x + rect.width / 2, rect.y + rect.height / 2}
 

@@ -28,8 +28,6 @@ import "core:strings"
 
 import "../core"
 
-MAX_INTERVALS :: 8
-
 
 PartialLabelType :: enum {
     NONE,
@@ -55,12 +53,12 @@ Config :: struct {
     pitch_standard:               f32,
 
     // The partial of each track, harmonic mode, the tracks are the ones of 1 and more, 0 is no track
-    strobe_intervals:             [MAX_INTERVALS]f32,
+    strobe_intervals:             [core.MAX_BANDS]f32,
     strobe_intervals_index:       int, // the last of INTERVAL_OPTIONS picked with the I key
     // per track, harmonic mode: the target this many cents off the exact partial, eg a stretched octave
-    strobe_offsets_cents:         [MAX_INTERVALS]f32,
+    strobe_offsets_cents:         [core.MAX_BANDS]f32,
     // per track, harmonic mode: on top of strobe_speed, 1 leaves it as is
-    strobe_speeds:                [MAX_INTERVALS]f32,
+    strobe_speeds:                [core.MAX_BANDS]f32,
 
     // FFT length for the pitch detection, the window is half of it, e.g. 8192 for 4096 samples
     pitch_detect_fft_size:        int,
@@ -149,8 +147,8 @@ config_defaults :: Config {
     pitch_standard               = 440.0,
     strobe_intervals             = INTERVAL_OPTIONS[0],
     strobe_intervals_index       = 0,
-    strobe_offsets_cents         = {0, 0, 0, 0, 0, 0, 0, 0},
-    strobe_speeds                = {1, 1, 1, 1, 1, 1, 1, 1},
+    strobe_offsets_cents         = {0, 0, 0, 0, 0},
+    strobe_speeds                = {1, 1, 1, 1, 1},
     pitch_detect_fft_size        = 8192,
     samplerate                   = 48_000,
     strobe_mode                  = .HARMONIC,

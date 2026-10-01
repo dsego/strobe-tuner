@@ -29,10 +29,10 @@ strobe_bg_color: u32 = 0x15161AFF
 DEBUG_STATS :: #config(DEBUG_STATS, false)
 
 // The track presets the I key steps through
-INTERVAL_OPTIONS: [3][MAX_INTERVALS]f32 : {
-    {1, 2, 4, 0, 0, 0, 0, 0},
-    {1, 1.5, 2, 0, 0, 0, 0, 0},
-    {1, 2, 3, 0, 0, 0, 0, 0},
+INTERVAL_OPTIONS: [3][core.MAX_BANDS]f32 : {
+    {1, 2, 4, 0, 0},
+    {1, 1.5, 2, 0, 0},
+    {1, 2, 3, 0, 0},
 }
 
 // With nothing to show the screen updates less often, it saves the battery of a tuner left open, see App.quiet_time
@@ -695,7 +695,7 @@ limit_frame_rate :: proc(app: ^App) {
         if band.snr_db > STROBE_FADE_SNR_DB[0] do signal = true
     }
     touched := mouse_down() || mouse_pressed() || mouse_wheel() != 0
-    sliding := ruler_swipe.coast != 0
+    sliding := ruler_swipe.gesture == .COASTING
     for sheet in ([]Sheet{app.settings_sheet, app.track_sheet, app.instrument_sheet}) {
         if sheet.slide != f32(int(sheet.open)) do sliding = true
     }

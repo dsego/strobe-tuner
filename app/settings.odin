@@ -188,7 +188,6 @@ TRACK_SETTINGS_ROWS :: 5 // the last is room for the buttons that add and remove
 
 // The partials a track can follow, 1½ is the fifth above the fundamental like in the 1 1½ 2 preset
 TRACK_PARTIALS :: [?]f32{1, 1.5, 2, 3, 4, 5, 6, 7, 8}
-MAX_TRACKS :: 5
 TRACK_OFFSET_MAX_CENTS :: 50
 TRACK_OFFSET_STEP_CENTS :: 0.5
 
@@ -282,10 +281,10 @@ gui_track_settings :: proc(
         // controls, these change the strobe and not the track above. Added and removed on top, a new track
         // follows the next whole partial above the one under it, the 1½ fifth is only for picking by hand
         count, top := 0, 0
-        for interval, i in config.strobe_intervals {
+        for interval, slot in config.strobe_intervals {
             if interval < 1 do continue
             count += 1
-            top = i
+            top = slot
         }
         GAP :: 8
         height: f32 = 28
@@ -294,7 +293,7 @@ gui_track_settings :: proc(
         pos := [2]f32{sheet_layout.rows.x + math.round((sheet_layout.width - width) / 2), sheet_layout.bottom - height}
         remove := gui_icon_button(pos, height, ICON_MINUS, "Remove", count > 1)
         pos.x += remove_width + GAP
-        add := gui_icon_button(pos, height, ICON_PLUS, "Add", count < MAX_TRACKS && top + 1 < MAX_INTERVALS)
+        add := gui_icon_button(pos, height, ICON_PLUS, "Add", top + 1 < core.MAX_BANDS)
         if add {
             partials := TRACK_PARTIALS
             config.strobe_intervals[top + 1] = min(math.floor(config.strobe_intervals[top]) + 1, partials[len(partials) - 1])

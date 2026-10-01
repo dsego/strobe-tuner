@@ -38,7 +38,7 @@ import "core:testing"
 
 
 MIN_STROBE_FREQ_HZ :: 16.0
-MAX_BANDS :: 8
+MAX_BANDS :: 5 // the strobe's tracks, the config holds as many
 MAX_WINDOW_SIZE :: 262_144 // the sample buffer, the window for the lowest note fits in it
 PHASE_AVERAGE_SPREAD_CENTS :: 5
 // A band goes up to 90% of Nyquist (21.6 kHz at 48 kHz), above it the audio can't hold the frequency and
@@ -173,6 +173,7 @@ measures_band :: proc(self: ^PhaseComparator, band_index: int) -> bool {
 
 // A new band on top, set_phase_comparator_freq tunes it
 append_phase_band :: proc(self: ^PhaseComparator, interval: f32) {
+    assert(len(self.bands) < MAX_BANDS, "more tracks than MAX_BANDS")
     band := PhaseBand{}
     band.interval = interval
     band.speed_scale = 1
