@@ -16,9 +16,9 @@
 
 package app
 
-// The sheets that slide up over the main screen: the settings, a track's and the note offsets'. The main
+// The sheets that slide up over the main screen: the settings, a track's and the instrument's. The main
 // screen keeps running under them and ignores taps until they're all the way down again. What's on them is
-// in settings.odin and note_offsets.odin.
+// in settings.odin, instrument.odin and note_offsets.odin.
 
 // A sheet up from the bottom as tall as its rows, the strobe above it stays in sight to show the changes
 SheetLayout :: struct {
@@ -38,7 +38,7 @@ SHEET_TITLE_HEIGHT :: 36 // from the top of the title to the first row
 // open is how far the sheet has slid up, 0 is hidden below the window and 1 is all the way. The settings
 // have SETTINGS_ROWS, a track's sheet fewer. Either covers the whole panel under the strobe at least, a
 // short sheet would leave half the panel peeking out above it. extra is more room under the rows for what
-// isn't a row, the note offsets ask for the whole window.
+// isn't a row, the instrument's with its note offsets asks for the whole window.
 compute_sheet_layout :: proc(
     window: [2]f32,
     safe: Rect,

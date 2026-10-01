@@ -42,6 +42,7 @@ SettingsMenu :: enum {
     NONE,
     DISPLAY,
     INPUT,
+    PICK, // the instrument's sheet, what's tuned to
     INSTRUMENT,
     TUNING,
 }
@@ -55,8 +56,9 @@ gui_settings_dropdown :: proc(
     selected: ^int,
     left_pad: f32 = 12,
     down := false,
+    dividers: []int = nil,
 ) {
-    if gui_dropdown({rect.x, rect.y}, rect.width, options, selected, open^ == menu, left_pad, rect.height, down) {
+    if gui_dropdown({rect.x, rect.y}, rect.width, options, selected, open^ == menu, left_pad, rect.height, down, dividers) {
         open^ = menu
     } else if open^ == menu {
         open^ = .NONE

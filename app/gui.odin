@@ -18,6 +18,7 @@ package app
 
 import "core:fmt"
 import "core:math"
+import "core:slice"
 import "core:strings"
 import "core:time"
 
@@ -573,6 +574,7 @@ gui_dropdown :: proc(
     left_pad: f32 = 12,
     height: f32 = 24,
     down := false, // the menu opens under the button, it's drawn after the controls below it
+    dividers: []int = nil, // the options with a line above them, each starts a group
 ) -> bool {
     edit_mode := edit_mode
     btn_bounds := Rect{position.x, position.y, width, height}
@@ -598,7 +600,14 @@ gui_dropdown :: proc(
     // The menu sits 6pt above the button, or below it, the gap counts as part of it for the clicks
     MENU_RADIUS :: 12
     MENU_PAD :: 4 // above the first option and below the last one, part of them and their highlight
+    DIVIDER_SPACE :: 8 // between the groups, the line in the middle
+    is_divider :: proc(dividers: []int, option, count: int) -> bool {
+        return option > 0 && option < count && slice.contains(dividers, option)
+    }
     menu_height := f32(len(options) * 24) + 2 * MENU_PAD
+    for option in 0 ..< len(options) {
+        if is_divider(dividers, option, len(options)) do menu_height += DIVIDER_SPACE
+    }
     menu_bounds := Rect{position.x, position.y - menu_height - 6, width, menu_height + 6}
     if down do menu_bounds.y = position.y + height
 
@@ -629,13 +638,16 @@ gui_dropdown :: proc(
         // debug
         // draw_rect_lines(menu_bounds, 1.0, ORANGE)
 
+        spaced: f32 = 0 // by the dividers above
         for opt, i in options {
             first, last := i == 0, i == len(options) - 1
-            text_y := menu_position.y + MENU_PAD + f32(i * 24) + 4
+            divider := is_divider(dividers, i, len(options))
+            if divider do spaced += DIVIDER_SPACE
+            text_y := menu_position.y + MENU_PAD + f32(i * 24) + spaced + 4
 
             option_bounds := Rect {
                 menu_position.x,
-                menu_position.y + MENU_PAD + f32(i * 24),
+                menu_position.y + MENU_PAD + f32(i * 24) + spaced,
                 width,
                 24,
             }
@@ -678,6 +690,12 @@ gui_dropdown :: proc(
             text_pos := [2]f32{option_bounds.x + 12, text_y}
             label := strings.cut(opt.label, 0, max_text_len)
             draw_label(pixel_fonts.label, fmt.ctprintf("%s", label), text_pos, hex(0xFFFFFFFF) if hover else text_color_light, 1)
+
+            // A line in the sheet's colour, a little in from the edges of the menu
+            if divider {
+                INSET :: 6
+                draw_rect({option_bounds.x + INSET, option_bounds.y - DIVIDER_SPACE / 2 - 1}, {width - 2 * INSET, 2}, hex(sheet_bg_color))
+            }
         }
     }
 

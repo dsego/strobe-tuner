@@ -44,11 +44,4 @@ every octave, and would be picked in the settings.
 ## A dot on the offset notes in the ruler
 
 The target note shows its offset under the letter. The neighbours in the ruler don't show which of them
-are tuned off pitch in the slot that's on.
-
-## Recent instruments
-
-The instrument sheet remembers the last 3 or 4 setups tuned, each an instrument, its tuning and capo, or
-chromatic with its transpose. They show as chips at the top of the sheet with the same labels as the
-corner, e.g. UKULELE, G DROP D, G OPEN G · 2. Tapping one switches to it and closes the sheet, nothing to
-save, name or delete. Saved presets cover what it can't, two guitars in the same tuning.
+are tuned off pitch in the selected setup.

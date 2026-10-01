@@ -95,23 +95,30 @@ Config :: struct {
     // all the notes in a sliding row, off shows just the note with arrows either side to step it
     chromatic_ruler:              bool,
 
-    // semitones the note is shown above the sounding pitch, 0 to 11, a Bb instrument reads 2, see gui_instrument
+    // What's tuned to: the built-in instrument, or a preset counted from 0, -1 for none. See gui_instrument.
+    // Every note, or only an instrument's strings in one of its TUNINGS.
+    instrument:                   Instrument,
+    preset:                       int,
+    // per built-in instrument, by its value: the tuning counted from 0 in its TUNINGS, and the fret a capo
+    // is on, the strings sound that many semitones up, 0 is none
+    instrument_tunings:           [len(Instrument)]int,
+    instrument_capos:             [len(Instrument)]int,
+    // chromatic, semitones the note is shown above the sounding pitch, 0 to 11, a Bb instrument reads 2
     transpose:                    int,
 
-    // every note, or only an instrument's strings in one of its TUNINGS, counted from 0 in its list
-    instrument:                   Instrument,
-    tuning:                       int,
-    // the fret a capo is on, the strings sound that many semitones up, 0 is none
-    capo:                         int,
-
-    // notes are tuned off equal temperament by the note offsets of the selected slot, 0 is the first
-    note_offsets_on:              bool,
-    note_offset_slot:             int,
-    // per slot, the rows of the note offsets' sheet: how many there are, the note of each counted from A0,
-    // and the cents it's tuned off equal temperament. A row at 0 cents is kept. See gui_note_offsets.
-    note_offset_counts:           [NOTE_OFFSET_SLOTS]int,
-    note_offset_notes:            [NOTE_OFFSET_SLOTS][MAX_NOTE_OFFSETS]int,
-    note_offset_cents:            [NOTE_OFFSET_SLOTS][MAX_NOTE_OFFSETS]f32,
+    // The bank of presets, how many there are, and per preset like the built-ins: its Instrument, tuning,
+    // capo and transpose
+    preset_count:                 int,
+    preset_instruments:           [MAX_PRESETS]int,
+    preset_tunings:               [MAX_PRESETS]int,
+    preset_capos:                 [MAX_PRESETS]int,
+    preset_transposes:            [MAX_PRESETS]int,
+    // per preset, the rows of the note offsets: how many there are, the note of each counted from A0, and
+    // the cents it's tuned off equal temperament. A row at 0 cents is kept. On a stringed instrument the
+    // rows are its strings in the order they're tuned, only the cents are kept. See gui_note_offsets.
+    note_offset_counts:           [MAX_PRESETS]int,
+    note_offset_notes:            [MAX_PRESETS][MAX_NOTE_OFFSETS]int,
+    note_offset_cents:            [MAX_PRESETS][MAX_NOTE_OFFSETS]f32,
 
     // pitch detection settings
     pitch_detection_clarity_low:  f32,
@@ -160,12 +167,10 @@ config_defaults :: Config {
     prevent_strobe_octave_jumps  = true,
     partial_labels               = .MULTIPLES,
     chromatic_ruler              = true,
-    transpose                    = 0,
     instrument                   = .CHROMATIC,
-    tuning                       = 0,
-    capo                         = 0,
-    note_offsets_on              = false,
-    note_offset_slot             = 0,
+    preset                       = -1,
+    transpose                    = 0,
+    preset_count                 = 0,
     pitch_detection_clarity_low  = 0.9,
     pitch_detection_clarity_high = 0.98,
     noise_floor_snr_db_threshold = 10, // to determine if it’s safe to update the noise floor
@@ -180,12 +185,16 @@ config_defaults :: Config {
 }
 
 
-// Back to the defaults. The note offsets are switched off but stay in their slots, they're tuned in by hand
-// and have their own button to clear them.
+// Back to the defaults, on chromatic. The presets stay, their note offsets are tuned in by hand and they
+// have their own button to delete them.
 reset_config :: proc(config: ^Config) {
-    counts, notes, cents := config.note_offset_counts, config.note_offset_notes, config.note_offset_cents
+    kept := config^
     config^ = config_defaults
-    config.note_offset_counts, config.note_offset_notes, config.note_offset_cents = counts, notes, cents
+    config.preset_count, config.preset_instruments = kept.preset_count, kept.preset_instruments
+    config.preset_tunings, config.preset_capos = kept.preset_tunings, kept.preset_capos
+    config.preset_transposes = kept.preset_transposes
+    config.note_offset_counts, config.note_offset_notes = kept.note_offset_counts, kept.note_offset_notes
+    config.note_offset_cents = kept.note_offset_cents
 }
 
 // Load config from the standard OS path, eg ~/Library/Application Support/<APP_NAME>/config.ini on MacOS, see config_directory.

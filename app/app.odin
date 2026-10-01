@@ -157,11 +157,9 @@ run_app :: proc(config: ^Config) {
     // A track's own sheet, opened by tapping the track
     track_sheet: Sheet
     selected_track := 0
-    // The note offsets' sheet, opened from the slot next to the settings
-    offsets_sheet: Sheet
-    // The instrument and its tuning, opened from the icon above the settings
+    // The built-in instruments and the presets with their note offsets, opened from the bottom left corner
     instrument_sheet: Sheet
-    sheets := [?]^Sheet{&settings_sheet, &track_sheet, &offsets_sheet, &instrument_sheet}
+    sheets := [?]^Sheet{&settings_sheet, &track_sheet, &instrument_sheet}
 
     note_low_state := false
     note_high_state := false
@@ -320,9 +318,9 @@ run_app :: proc(config: ^Config) {
             safe.width = STROBE_WIDTH
         }
         // An instrument's strings are on the ruler
-        string_mode := config.instrument != .CHROMATIC
+        string_mode := current_setup(config).instrument != .CHROMATIC
         ruler := config.chromatic_ruler || string_mode
-        layout := compute_layout(window, safe, ruler)
+        layout := compute_layout(window, safe, ruler, selected_preset(config) >= 0)
         update_pixel_fonts(layout.ruler_scale)
 
         // Draw the GUI controls
@@ -462,7 +460,8 @@ run_app :: proc(config: ^Config) {
             // relative and work the same either way
             // With a capo the strings sound higher and keep the names of the open strings, like the chord
             // shapes played over it
-            transpose := -capo_fret(config) if string_mode else transpose_key(config)
+            setup := current_setup(config)
+            transpose := -capo_fret(setup) if string_mode else transpose_key(setup)
             shown_note := core.cents_to_note(
                 f32(tuner.target_note.cents + 100 * transpose),
                 tuner.target_note.pitch_standard,
@@ -560,8 +559,6 @@ run_app :: proc(config: ^Config) {
 
             if gui_settings_button(layout.settings) do settings_sheet.open = true
             if gui_instrument_button(layout.instrument, config) do instrument_sheet.open = true
-            if gui_note_offsets_indicator(layout.offsets_led, config) do config_changed = true
-            if gui_note_offsets_button(layout.note_offsets) do offsets_sheet.open = true
 
 
             // Draw input level, the microphone icon marks it as the input
@@ -727,43 +724,16 @@ run_app :: proc(config: ^Config) {
             if close do close_sheet(&track_sheet)
         }
 
-        if offsets_sheet.slide > 0 {
-            // Over the whole window, room for every offset of a slot
-            sheet_layout, swiped := begin_sheet(
-                &offsets_sheet,
-                NOTE_OFFSET_ROWS,
-                &strobe_display,
-                layout.strobe,
-                gfx_window_size().y,
-            )
+        if instrument_sheet.slide > 0 {
+            // Over the whole window, room for every note offset of a preset
+            sheet_layout, swiped := begin_sheet(&instrument_sheet, 0, &strobe_display, layout.strobe, gfx_window_size().y)
 
             // A new offset starts on the note the tuner is on
             target := -1
             if index, in_range := core.note_index(tuner.target_note); in_range && tuner.target_note.frequency != 0 {
                 target = index
             }
-            close, changed := gui_note_offsets(sheet_layout, config, target)
-            if changed do config_changed = true
-            grab_sheet(&offsets_sheet, sheet_layout)
-
-            // Tapping the strobe above the sheet closes it too
-            if gui_button(above_sheet(sheet_layout)) || key_pressed(.ESCAPE) || swiped do close = true
-
-            if close {
-                close_sheet(&offsets_sheet)
-                note_offset_selected = -1
-            }
-        }
-
-        if instrument_sheet.slide > 0 {
-            sheet_layout, swiped := begin_sheet(
-                &instrument_sheet,
-                INSTRUMENT_ROWS,
-                &strobe_display,
-                layout.strobe,
-                instrument_sheet_extra(),
-            )
-            close, changed := gui_instrument(sheet_layout, config, &settings_menu)
+            close, changed := gui_instrument(sheet_layout, config, &settings_menu, target)
             if changed {
                 config_changed = true
                 // Other notes on the ruler, it starts again on the target
@@ -778,6 +748,7 @@ run_app :: proc(config: ^Config) {
                 close_sheet(&instrument_sheet)
                 settings_menu = .NONE
                 exclusive_control_mode = false
+                note_offset_selected = -1
             }
         }
 
