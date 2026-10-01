@@ -135,8 +135,8 @@ Core steps:
 - Input: The strobe takes the input as it is, unfiltered. Each band's narrow DFT rejects everything away from its frequency.
 - Frequency targeting: Compute a windowed single-bin DFT over the newest samples, precisely tuned to the reference frequency.
 - Demodulation: Rotate the DFT result by the phase of a reference oscillator running on an absolute sample clock. When the input pitch matches the reference, this phase stands still; a detuned signal makes it rotate at the frequency difference.
-- Phase tracking: A small Kalman filter follows the phase and its rate. Each measurement is weighted by the band's signal-to-noise ratio, so a loud note is tracked closely and a fading note coasts on its last good frequency instead of wandering with the noise.
-- Stripe sharpness: The stripe edges are as sharp as the tracked phase is certain. A sharp edge on a jittery phase twitches and a soft edge on a clean one looks washed out, so the edge width follows the tracker's phase uncertainty. The stripes fade out as the band's SNR drops into the background noise.
+- Strobe motion: The stripes turn by the measured phase. A small Kalman filter tracks it only for the cents of each track.
+- Stripe sharpness: The stripe edges are as sharp as the band's SNR allows, and the stripes fade out as it drops into the background noise.
 
 To maintain a consistent amount of visual drift across the frequency spectrum, the window length is based on musical pitch intervals (in cents) rather than absolute frequency, and the strobe phase is rescaled so each note spins at the same rate per cent of detuning.
 
@@ -153,10 +153,10 @@ Before the lock-in, I drew the strobe from the waveform itself, like an untrigge
 Both ran into the same problems, which the lock-in doesn't have:
 
 - Sensitivity: the drift is the actual phase the signal slips against the reference, so it can't be made slower or faster. The lock-in measures that phase, and the strobe turns by the phase times any factor, which is what the strobe response setting and the fine mode are built on.
-- Shimmer: rounding each frame to whole samples moves the pattern by up to half a sample per frame. High notes have few samples per period, 12 at 4 kHz, so that's 15° of jitter. Resampling avoided the rounding, but with few samples per period the motion was blocky. The lock-in phase is continuous and the phase tracker smooths it, so the stripes move smoothly at any pitch.
-- Band filters: each band needed an IIR bandpass, otherwise the other harmonics bled into its pattern. A narrow IIR shifts the phase steeply around its centre frequency, differently in each band, so the tracks were offset from each other and reacted at different speeds when the pitch moved, e.g. a pluck gliding down from sharp. The single-bin DFT is just as narrow a bandpass, but its window is symmetric, so its phase is linear, a plain delay with no phase distortion in any band.
+- Shimmer: rounding each frame to whole samples moves the pattern by up to half a sample per frame. High notes have few samples per period, 12 at 4 kHz, so that's 15° of jitter. Resampling avoided the rounding, but with few samples per period the motion was blocky. The lock-in phase is continuous, so the stripes move smoothly at any pitch.
+- Band filters: each band needed an IIR bandpass, otherwise the other harmonics bled into its pattern. A narrow IIR shifts the phase steeply around its centre frequency, differently in each band, so the tracks were offset from each other and reacted at different speeds when the pitch moved, e.g. a pluck gliding down from sharp. The single-bin DFT is just as narrow a bandpass, and its phase shifts alike in every band.
 
-A narrow filter takes time either way: the DFT window is about 0.6 s at 110 Hz, so the phase shown is from about 0.3 s ago. The phase tracker and the onset handling make up for most of it.
+A narrow filter needs a long look at the signal: the DFT window is about 0.6 s at 110 Hz, weighted toward the newest samples, so the phase is measured as of about 0.17 s ago.
 
 
 #### Noise floor

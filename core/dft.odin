@@ -33,7 +33,15 @@ SingleFreqDFT :: struct {
 // With spread_cents the bins that far below and above are added in, which flattens the top of the peak
 // ("phase average"): a slightly detuned note keeps its level and the in tune phase is the same. The sum of
 // the three DFTs is the DFT with the sum of their twiddles, so it costs no more than one.
-set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32, window_size: int, spread_cents: f32 = 0) {
+//
+// low_latency takes the gamma window instead of the Blackman, see gamma_window.
+set_dft_freq :: proc(
+    self: ^SingleFreqDFT,
+    norm_freq: f32,
+    window_size: int,
+    spread_cents: f32 = 0,
+    low_latency := false,
+) {
     if len(self.twiddles) != window_size {
         delete(self.twiddles)
         self.twiddles = make([]complex64, window_size)
@@ -58,7 +66,8 @@ set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32, window_size: int, spr
         twiddle := rotation
         if spread_cents != 0 do twiddle *= 1 + below + above
 
-        window := f64(blackman_window(f32(i), f32(window_size)))
+        window_fn := gamma_window if low_latency else blackman_window
+        window := f64(window_fn(f32(i), f32(window_size)))
         self.twiddles[i] = complex64(complex(window, 0) * twiddle)
 
         rotation *= step

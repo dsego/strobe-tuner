@@ -21,7 +21,8 @@
     Lock-in amplifier: runs a single bin DFT over the newest samples and demodulates it against a
     reference oscillator running at the target frequency on an absolute sample clock. In tune, the
     resulting phase stands still; a detuned signal makes it rotate at the frequency difference.
-    A small Kalman filter tracks that phase and its rate, weighting each measurement by the band SNR.
+    The strobe turns by that phase as measured. A small Kalman filter tracks the phase and its rate,
+    weighting each measurement by the band SNR, for the cents of each track.
 
  -------------------------------------------------------------------------------------------------*/
 
@@ -122,6 +123,8 @@ PhaseComparator :: struct {
     mode:             StrobeMode,
     available:        int, // the new samples of the latest run_phase_detection
     snr_threshold_db: f32, // for the noise floor of a track added later
+    low_latency:      bool, // the gamma window, off for the Blackman to compare, takes a retune
+    kalman_motion:    bool, // the strobe turns by the tracked phase instead of the measured one, to compare
 
     // Absolute index of the sample just past the end of the newest window, i.e. the lock-in clock
     sample_clock:     i64,
@@ -145,6 +148,7 @@ init_phase_comparator :: proc(
     self.mode = mode
     self.base_freq_hz = base_freq_hz
     self.snr_threshold_db = noise_floor_snr_db_threshold
+    self.low_latency = true
 
     for interval in strobe_intervals {
         if interval >= 1.0 do append_phase_band(self, interval)
@@ -272,8 +276,14 @@ set_phase_comparator_freq :: proc(
 
         if measures_band(self, band_index) {
             window_size := dft_window_size(band.freq_hz, self.samplerate, DFT_RESOLUTION_CENTS)
-            set_dft_freq(&band.dft, band.norm_freq, window_size)
-            set_dft_freq(&band.averaged_dft, band.norm_freq, window_size, PHASE_AVERAGE_SPREAD_CENTS)
+            set_dft_freq(&band.dft, band.norm_freq, window_size, low_latency = self.low_latency)
+            set_dft_freq(
+                &band.averaged_dft,
+                band.norm_freq,
+                window_size,
+                PHASE_AVERAGE_SPREAD_CENTS,
+                low_latency = self.low_latency,
+            )
         }
     }
     set_phase_comparator_speed(self, base_speed)
@@ -420,19 +430,33 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, use_phase
     window_start := self.sample_clock - i64(window_size)
     ref_phase := math.mod(f64(window_start) * band.ref_omega, math.TAU)
     lock_in := complex128(dft) * complex(math.cos(ref_phase), -math.sin(ref_phase))
+    prev_measured := band.phase
     band.phase = f32(cmplx.phase(lock_in))
 
     update_onset(self, band, window_size)
 
     was_active := band.tracker.active
-    prev_phase := band.tracker.phase
+    prev_tracked := band.tracker.phase
+    predicted_advance := band.tracker.omega * f64(self.available)
     update_phase_tracker(self, band)
 
-    // Strobe phase follows the tracked phase, rescaled so all notes spin at the same rate per cent.
+    // The strobe turns by the measured phase, unwrapped around the advance of the tracked frequency, the
+    // tracker only picks the turn when the phase moves more than half of one between frames. Its edges are
+    // as sharp as the measurement's noise. kalman_motion turns it by the tracked phase instead.
+    phase_advance, phase_sigma: f64
+    if self.kalman_motion {
+        phase_advance = band.tracker.phase - prev_tracked
+        phase_sigma = math.sqrt(band.tracker.covariance[0, 0])
+    } else {
+        phase_advance = predicted_advance + wrap_phase(f64(band.phase - prev_measured) - predicted_advance)
+        phase_sigma = math.sqrt(phase_measurement_var(band^))
+    }
     // No advance on the first frame after a reset, the initial phase is arbitrary.
-    phase_advance := band.tracker.phase - prev_phase if was_active else 0
+    if !was_active do phase_advance = 0
+
+    // Rescaled so all notes spin at the same rate per cent
     band.phase_diff = f32(phase_advance * STROBE_REFERENCE_HZ / f64(band.freq_hz))
-    band.phase_sigma = f32(math.sqrt(band.tracker.covariance[0, 0]) * STROBE_REFERENCE_HZ / f64(band.freq_hz))
+    band.phase_sigma = f32(phase_sigma * STROBE_REFERENCE_HZ / f64(band.freq_hz))
 
     // The tracked frequency offset in cents
     freq_diff_hz := f32(band.tracker.omega * f64(self.samplerate) / math.TAU)
@@ -449,14 +473,22 @@ update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand, window_size: int)
 
     is_loud := band.snr_db > band.noise_floor.snr_threshold_db
     if is_loud && band.amp > ONSET_RATIO * band.envelope {
-        // The attack affects the phase until it has passed the window centre
-        band.onset_hold = window_size / 2 + int(ONSET_HOLD_S * self.samplerate)
+        // The attack affects the phase until it has passed the window centre, the gamma window's is nearer
+        delay := int(GAMMA_WINDOW_DELAY * f32(window_size)) if self.low_latency else window_size / 2
+        band.onset_hold = delay + int(ONSET_HOLD_S * self.samplerate)
     }
 
     alpha := 1.0 - math.exp(-f32(self.available) / (ONSET_ENVELOPE_TIME_S * self.samplerate))
     band.envelope += alpha * (band.amp - band.envelope)
 }
 
+
+// Phase noise variance of a phasor in noise ≈ 1 / (2 SNR), in rad²
+phase_measurement_var :: proc(band: PhaseBand) -> f64 {
+    EPS :: 1e-12
+    noise_ratio := f64(band.noise_floor.level) / (f64(band.amp) + EPS)
+    return clamp(0.5 * noise_ratio * noise_ratio, 1e-9, TRACKER_MAX_MEASUREMENT_VAR)
+}
 
 // Kalman filter over [phase, frequency offset], the measurement is the wrapped lock-in phase.
 // The measurement noise follows the band SNR: a loud note is tracked closely, a decaying note
@@ -486,10 +518,7 @@ update_phase_tracker :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
     tracker.phase += tracker.omega * dt
     tracker.covariance = transition * tracker.covariance * linalg.transpose(transition) + process_noise
 
-    // Phase noise variance of a phasor in noise ≈ 1 / (2 SNR)
-    EPS :: 1e-12
-    noise_ratio := f64(band.noise_floor.level) / (f64(band.amp) + EPS)
-    measurement_var := clamp(0.5 * noise_ratio * noise_ratio, 1e-9, TRACKER_MAX_MEASUREMENT_VAR)
+    measurement_var := phase_measurement_var(band^)
     if band.onset_hold > 0 do measurement_var = max(measurement_var, ONSET_MIN_MEASUREMENT_VAR)
 
     // Update, unwrapping the measurement around the prediction
@@ -586,10 +615,19 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
     FRAME :: 400 // samples per display frame at 120 FPS
     target_hz: f32 = 261.63
 
-    run :: proc(target_hz: f32, detune_cents: f32, use_phase_average: bool) -> (err_cents: [2]f32, phase_diff: f32) {
+    run :: proc(
+        target_hz: f32,
+        detune_cents: f32,
+        use_phase_average: bool,
+        low_latency: bool,
+    ) -> (
+        err_cents: [2]f32,
+        phase_diff: f32,
+    ) {
         intervals := []f32{1, 2}
         pc := init_phase_comparator(target_hz, SAMPLERATE, intervals, .HARMONIC, 10)
         defer destroy_phase_comparator(pc)
+        pc.low_latency = low_latency
         set_phase_comparator_freq(pc, target_hz, 440, 0.025, 2, .HARMONIC)
 
         freq := f64(cents_to_freq(detune_cents, target_hz))
@@ -607,21 +645,23 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
         return {pc.bands[0].err_cents, pc.bands[1].err_cents}, pc.bands[0].phase_diff
     }
 
-    for average in ([]bool{false, true}) {
-        // In tune: the strobe stands still
-        err, diff := run(target_hz, 0, average)
-        testing.expectf(t, abs(err[0]) < 0.05 && abs(err[1]) < 0.05, "in tune, got %v cents", err)
-        testing.expectf(t, abs(diff) < 1e-4, "in tune, got phase advance %v", diff)
+    for low_latency in ([]bool{false, true}) {
+        for average in ([]bool{false, true}) {
+            // In tune: the strobe stands still
+            err, diff := run(target_hz, 0, average, low_latency)
+            testing.expectf(t, abs(err[0]) < 0.05 && abs(err[1]) < 0.05, "in tune, got %v cents", err)
+            testing.expectf(t, abs(diff) < 1e-4, "in tune, got phase advance %v", diff)
 
-        // Sharp: both bands report the detuning, the strobe phase advances
-        err, diff = run(target_hz, 3, average)
-        testing.expectf(t, abs(err[0] - 3) < 0.1 && abs(err[1] - 3) < 0.1, "+3 cents, got %v cents", err)
-        testing.expect(t, diff > 0)
+            // Sharp: both bands report the detuning, the strobe phase advances
+            err, diff = run(target_hz, 3, average, low_latency)
+            testing.expectf(t, abs(err[0] - 3) < 0.1 && abs(err[1] - 3) < 0.1, "+3 cents, got %v cents", err)
+            testing.expect(t, diff > 0)
 
-        // Flat
-        err, diff = run(target_hz, -7, average)
-        testing.expectf(t, abs(err[0] + 7) < 0.1 && abs(err[1] + 7) < 0.1, "-7 cents, got %v cents", err)
-        testing.expect(t, diff < 0)
+            // Flat
+            err, diff = run(target_hz, -7, average, low_latency)
+            testing.expectf(t, abs(err[0] + 7) < 0.1 && abs(err[1] + 7) < 0.1, "-7 cents, got %v cents", err)
+            testing.expect(t, diff < 0)
+        }
     }
 }
 

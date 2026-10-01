@@ -111,6 +111,8 @@ when RENDERER == "sdl" {
         .G           = .G,
         .H           = .H,
         .I           = .I,
+        .K           = .K,
+        .L           = .L,
         .R           = .R,
         .X           = .X,
         .LEFT_SHIFT  = .LSHIFT,

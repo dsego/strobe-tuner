@@ -27,3 +27,15 @@ blackman_window :: proc(index: f32, size: f32) -> f32 {
     angle: f32 = math.TAU * index / (size - 1.0)
     return a0 - a1 * math.cos(angle) + a2 * math.cos(2.0 * angle)
 }
+
+// Gamma shaped (order 3), the weight of a 3-pole lock-in low-pass: it rises fast from the newest sample and
+// falls off with age, so a tone is measured as of GAMMA_WINDOW_DELAY of the window back instead of half.
+// The spread of the weights matches the Blackman's (0.16 of the window, σ = √3 τ), for about as narrow
+// a band, and the mean matches its 0.42 so the levels are the same.
+GAMMA_WINDOW_TAU :: 0.0921 // of the window size
+GAMMA_WINDOW_DELAY :: 3 * GAMMA_WINDOW_TAU // the mean age, of the window size
+
+gamma_window :: proc(index: f32, size: f32) -> f32 {
+    age := (size - 1.0 - index) / (GAMMA_WINDOW_TAU * size)
+    return 0.42 / (2.0 * GAMMA_WINDOW_TAU) * age * age * math.exp(-age)
+}

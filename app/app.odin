@@ -284,6 +284,17 @@ handle_keys :: proc(app: ^App) {
     }
     if key_pressed(.X) do config.use_phase_average = !config.use_phase_average
     if key_pressed(.G) do config.strobe_glow = !config.strobe_glow
+    // Hidden, to compare the strobe's low latency window with the Blackman it had before
+    if key_pressed(.L) {
+        app.phase_comparator.low_latency = !app.phase_comparator.low_latency
+        fmt.println("Strobe window:", "gamma, low latency" if app.phase_comparator.low_latency else "Blackman")
+        retune(app)
+    }
+    // Hidden, to compare the strobe turning by the measured phase with the Kalman tracked one it had before
+    if key_pressed(.K) {
+        app.phase_comparator.kalman_motion = !app.phase_comparator.kalman_motion
+        fmt.println("Strobe motion:", "Kalman tracked" if app.phase_comparator.kalman_motion else "measured")
+    }
     if key_pressed(.TAB) {
         config.strobe_display_type = StrobeDisplayType((int(config.strobe_display_type) + 1) % len(StrobeDisplayType))
     }
