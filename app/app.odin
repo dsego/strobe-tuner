@@ -331,6 +331,12 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     app.readout_track, ready = core.strobe_readout_track(app.phase_comparator, app.readout_track)
     if core.update_tuner(tuner, reading.pitch, core.strobe_shows_note(app.phase_comparator)) do retune(app)
 
+    // The strobe stays an octave off the target while its own note still shows, see update_tuner. Once that
+    // track is dark it follows the target, otherwise a strobe put an octave low by one wrong detection keeps
+    // the real note on its octave track for good.
+    off_target := app.phase_comparator.base_freq_hz != core.tuner_target_freq(tuner)
+    if off_target && !core.strobe_shows_note(app.phase_comparator, fundamental_only = true) do retune(app)
+
     reading.out_of_range = core.tuner_out_of_range(tuner)
     reading.shown, reading.steady = core.tuner_readout(tuner)
 

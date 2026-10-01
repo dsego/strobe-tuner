@@ -540,10 +540,11 @@ strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: in
 }
 
 // Whether any track's stripes are at least half faded in, the note is still ringing. The background noise
-// stays under it.
-strobe_shows_note :: proc(self: ^PhaseComparator) -> bool {
+// stays under it. fundamental_only for just the track of the strobe's own note.
+strobe_shows_note :: proc(self: ^PhaseComparator, fundamental_only := false) -> bool {
     fade := STROBE_FADE_SNR_DB
     for band in self.bands {
+        if fundamental_only && band.interval != 1 do continue
         if band.in_range && band.snr_db >= 0.5 * (fade[0] + fade[1]) do return true
     }
     return false

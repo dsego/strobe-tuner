@@ -138,6 +138,8 @@ update_tuner :: proc(self: ^Tuner, pitch: PitchInfo, strobe_hears := false) -> (
 
             if new_target.cents != self.target_note.cents {
                 // The strobe stays on the note it's following when it jumps an octave, the note is still shown.
+                // E.g. a fading string whose octave reads a tad clearer. Only while the strobe still shows its
+                // own note, the app retunes once that track is dark.
                 // Not when the octave is tuned off by another amount, the strobe would stand still in the wrong
                 // place, and not on strings, another string an octave away is another string.
                 strobe_stays :=

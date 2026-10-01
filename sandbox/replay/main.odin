@@ -82,6 +82,9 @@ main :: proc() {
         // Like the app's readout, and the strobe keeps the note lit while it shows it
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
         if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) do retune(strobe, tuner.target_note.frequency)
+        // Like the app, an octave off strobe follows the target once its own note is dark
+        off_target := strobe.base_freq_hz != tuner.target_note.frequency
+        if off_target && !core.strobe_shows_note(strobe, fundamental_only = true) do retune(strobe, tuner.target_note.frequency)
         if !pitch.fresh do continue
 
         // Every so often, and whenever the tuner lets go of the note or picks it up
