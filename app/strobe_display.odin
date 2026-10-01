@@ -358,7 +358,7 @@ draw_strobe_display :: proc(
             // How far off this partial is, nothing while it's too quiet to measure. Right aligned on the
             // decimal point like the readout, the digits don't shift as the value changes.
             if config.show_band_cents && band.snr_db > band.noise_floor.snr_threshold_db {
-                font := pixel_fonts.label_large
+                font := pixel_fonts.band_cents
                 right := rect.x + 16 + measure_label(font, "-00.0").x
                 text := fmt.ctprintf("%+.1f", band.err_cents)
                 draw_text_right(font.font, text, {right, label_y}, font.size, 0, accent_color)

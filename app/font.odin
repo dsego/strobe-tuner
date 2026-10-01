@@ -21,6 +21,14 @@ import "core:math"
 // Missing ones draw as the first, the space too. Inter has no ♯, it comes from Noto.
 FONT_CODEPOINTS :: " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#/+-−1234567890.,:π!×½()[]¢·%"
 
+// The numbers that change while they're read, every digit as wide so they don't shift, and a weight lighter
+// than the labels. Inter Regular from the same 4.1 release, its tabular figures frozen in as the default ones
+// and cut down to these:
+//   uvx --from opentype-feature-freezer pyftfeatfreeze -f tnum Inter-Regular.ttf Inter-Regular-tnum.ttf
+//   uvx --from fonttools pyftsubset Inter-Regular-tnum.ttf --text="0123456789.+-" --layout-features='' \
+//       --no-hinting --output-file=assets/fonts/inter/Inter-Regular-Tabular.ttf
+TABULAR_CODEPOINTS :: "0123456789.+-"
+
 // Phosphor Regular (phosphoricons.com), the font is cut down to these, to add one:
 //   uvx --from fonttools pyftsubset Phosphor.ttf --unicodes=U+E272,U+E326,... --no-hinting \
 //       --output-file=assets/fonts/phosphor/Phosphor-Icons.ttf
@@ -98,6 +106,7 @@ PixelFonts :: struct {
     note_arrow:      PixelFont,
     strobe_arrow:    PixelFont,
     offset_value:    PixelFont,
+    band_cents:      PixelFont, // the cents of each track on the strobe
 }
 
 pixel_fonts: PixelFonts
@@ -111,6 +120,7 @@ update_pixel_fonts :: proc(ruler_scale: f32) {
 
     inter_medium := #load("../assets/fonts/inter/Inter-Medium.ttf")
     inter_bold := #load("../assets/fonts/inter/Inter-Bold.ttf")
+    inter_tabular := #load("../assets/fonts/inter/Inter-Regular-Tabular.ttf")
     noto_sans_mono := #load("../assets/fonts/noto/NotoSansMono-Medium.ttf")
     phosphor := #load("../assets/fonts/phosphor/Phosphor-Icons.ttf")
     phosphor_bold := #load("../assets/fonts/phosphor/Phosphor-Bold-Icons.ttf")
@@ -138,10 +148,11 @@ update_pixel_fonts :: proc(ruler_scale: f32) {
         octave          = load(inter_medium, ruler_scale * RULER_OCTAVE_SIZE, scale, "0123456789"),
         note_sharp      = load(noto_sans_mono, ruler_scale * RULER_NOTE_SHARP_SIZE, scale, "♯"),
         neighbour_sharp = load(noto_sans_mono, ruler_scale * RULER_NEIGHBOUR_SHARP_SIZE, scale, "♯"),
-        readout         = load(inter_medium, ruler_scale * READOUT_SIZE, scale, "0123456789.-+"),
+        readout         = load(inter_tabular, ruler_scale * READOUT_SIZE, scale, TABULAR_CODEPOINTS),
         note_arrow      = load(inter_medium, NOTE_ARROW_SIZE, scale, "◀▶"),
         strobe_arrow    = load(inter_medium, STROBE_ARROW_SIZE, scale, "◀▶"),
         offset_value    = load(inter_medium, OFFSET_VALUE_SIZE, scale, "ABCDEFG#0123456789.+-¢"),
+        band_cents      = load(inter_tabular, LABEL_LARGE_SIZE, scale, TABULAR_CODEPOINTS),
     }
 }
 
@@ -167,6 +178,7 @@ unload_pixel_fonts :: proc() {
     gfx_unload_font(pixel_fonts.note_arrow.font)
     gfx_unload_font(pixel_fonts.strobe_arrow.font)
     gfx_unload_font(pixel_fonts.offset_value.font)
+    gfx_unload_font(pixel_fonts.band_cents.font)
     pixel_fonts = {}
 }
 

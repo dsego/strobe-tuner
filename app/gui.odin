@@ -704,11 +704,12 @@ gui_dropdown :: proc(
 
 ReadoutAlign :: enum {
     RIGHT, // the right edges of both columns are fixed, pos is the top right of the cents column
-    CENTER, // pos is the top middle of the gutter, Hz right aligned before it and cents left aligned after it
+    CENTER, // pos is the top middle of the gutter, Hz before it and the cents column after it
 }
 
-// Two columns, Hz and cents, dashes when there's nothing to show. Centred, the sign of the cents hangs into
-// the gutter so the pair looks centred whatever the digits.
+// Two columns, Hz and cents, dashes when there's nothing to show. The values are right aligned in tabular
+// digits, so the decimal point stays put and the digits don't shift as they change. The sign of the cents
+// hangs to the left of the number.
 draw_measurements :: proc(pos: [2]f32, align: ReadoutAlign, hz, cents: f32, shown: bool, active: bool) {
     color := text_color_white if active else text_color_muted
     value := pixel_fonts.readout
@@ -722,26 +723,24 @@ draw_measurements :: proc(pos: [2]f32, align: ReadoutAlign, hz, cents: f32, show
     sign: cstring = "-" if cents < 0 else "+"
     signed := shown && cents_str != "0.0"
 
+    hz_right, cents_right: [2]f32
     switch align {
     case .CENTER:
-        hz_right := pos + {-READOUT_GUTTER / 2, 0}
-        draw_text_right(label_font, "Hz", hz_right, pixel_fonts.label.size, 1, text_color_muted)
-        draw_text_right(value.font, hz_str, hz_right + {0, VALUE_Y}, value.size, 0, color)
-
+        hz_right = pos + {-READOUT_GUTTER / 2, 0}
+        // The label left aligned after the gutter, the values in a column as wide as the widest
         cents_left := pos + {READOUT_GUTTER / 2, 0}
         draw_text(label_font, "Cents", snap_to_pixels(cents_left), pixel_fonts.label.size, 1, text_color_muted)
-        draw_text(value.font, cents_str, snap_to_pixels(cents_left + {0, VALUE_Y}), value.size, 0, color)
-        if signed do draw_text_right(value.font, sign, cents_left + {-2, VALUE_Y}, value.size, 0, color)
+        cents_right = cents_left + {measure_text(value.font, "00.0", value.size, 0).x, 0}
     case .RIGHT:
-        hz_right := pos + {-HZ_COLUMN_OFFSET, 0}
-        draw_text_right(label_font, "Hz", hz_right, pixel_fonts.label.size, 1, text_color_muted)
-        draw_text_right(value.font, hz_str, hz_right + {0, VALUE_Y}, value.size, 0, color)
-
+        hz_right = pos + {-HZ_COLUMN_OFFSET, 0}
+        cents_right = pos
         draw_text_right(label_font, "Cents", pos, pixel_fonts.label.size, 1, text_color_muted)
-        width := draw_text_right(value.font, cents_str, pos + {0, VALUE_Y}, value.size, 0, color)
-        // The sign hangs to the left of the number
-        if signed do draw_text_right(value.font, sign, pos + {-width - 2, VALUE_Y}, value.size, 0, color)
     }
+
+    draw_text_right(label_font, "Hz", hz_right, pixel_fonts.label.size, 1, text_color_muted)
+    draw_text_right(value.font, hz_str, hz_right + {0, VALUE_Y}, value.size, 0, color)
+    width := draw_text_right(value.font, cents_str, cents_right + {0, VALUE_Y}, value.size, 0, color)
+    if signed do draw_text_right(value.font, sign, cents_right + {-width - 2, VALUE_Y}, value.size, 0, color)
 }
 
 // Between the columns of the centred readout, room for the sign
