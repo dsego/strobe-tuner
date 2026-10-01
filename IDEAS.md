@@ -86,9 +86,9 @@ What falls short is around it, in this order:
    by time, about 150 ms, not by count, the frames overlap and aren't independent.
    `note_switch_confirmations` becomes a time and `READOUT_SMOOTHING` a time constant.
 4. The window is a fixed 4096 samples, 85 ms. That's 2.3 periods at A0 and 2.6 at a five string
-   bass's low B, the far lags rest on few samples. Measure first, A0 and B0 with a weak
-   fundamental in `test_nsdf_accuracy`, and only if they fail a longer window while the followed
-   note is low.
+   bass's low B, the far lags rest on few samples. Measured and it holds, in
+   `test_nsdf_accuracy` A0 and B0 read within 0.05 ¢ as sines and 0.2 ¢ with a weak fundamental
+   under louder partials, the window stays.
 5. Octaves by continuity. The decay of a string can repeat at half its period, the bass's E1
    reads E2 from about 4 s and the ukulele's A4 reads A5, and the tuner shows the octave. Both
    peaks are in `nsdf_peaks`. `sandbox/hmm` picks the note with an HMM over all of them, like

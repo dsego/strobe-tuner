@@ -275,7 +275,8 @@ test_nsdf_accuracy :: proc(t: ^testing.T) {
         return cents_deviation(freq, f32(fundamental))
     }
 
-    for fundamental in ([]f64{55, 110, 329.63, 1318.5}) {
+    // A0 and a five string bass's low B have only 2.3 and 2.6 periods in the window
+    for fundamental in ([]f64{27.5, 30.87, 55, 110, 329.63, 1318.5}) {
         pure := run(fundamental, {0.5}, 0)
         testing.expectf(t, abs(pure) < 0.05, "%v Hz sine, %v cents off", fundamental, pure)
 
