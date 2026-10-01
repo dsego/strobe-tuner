@@ -21,7 +21,7 @@ import "core:math"
 // The cents over the last few seconds as a line, one of the display types.
 // Shows what the strobe can't: the pluck going sharp and settling, vibrato, a held note drifting.
 
-TRACE_SECONDS :: 5
+TRACE_SECONDS :: 2
 TRACE_CAPACITY :: 256 // readings, they come about 20 times a second
 TRACE_RANGE :: 25 // cents from the middle to the top and bottom, further is clamped to the edge
 TRACE_BAND :: 5 // cents either side of in tune, marked with faint lines
@@ -31,6 +31,7 @@ TRACE_CURVE_STEPS :: 8 // pieces of the curve between two readings
 TraceSample :: struct {
     time:  f32, // seconds on the trace's clock
     cents: f32, // NaN marks where the pitch was lost, the line has a gap there
+    light: f32, // 0 to 1, as lit as the strobe track's stripes
 }
 
 Trace :: struct {
@@ -61,15 +62,15 @@ push_sample :: proc(self: ^Trace, sample: TraceSample) {
 }
 
 // Called every frame, fresh tells a new reading from the previous one repeated
-record_trace :: proc(self: ^Trace, cents: f32, fresh: bool, frame_time: f32) {
+record_trace :: proc(self: ^Trace, cents, light: f32, fresh: bool, frame_time: f32) {
     self.clock += frame_time
 
     lost := self.count > 0 && math.is_nan(trace_sample(self, self.count - 1).cents)
     if math.is_nan(cents) {
         // One marker where the pitch goes, not one every frame
-        if self.count > 0 && !lost do push_sample(self, {self.clock, cents})
+        if self.count > 0 && !lost do push_sample(self, {self.clock, cents, 0})
     } else if fresh || lost || self.count == 0 {
-        push_sample(self, {self.clock, cents})
+        push_sample(self, {self.clock, cents, light})
     }
 }
 
@@ -116,23 +117,31 @@ draw_cents_trace :: proc(self: ^Trace, rect: Rect, line_color, band_color, backg
     defer end_scissor()
 
     for pass in 0 ..< 2 {
+        // Dimmed along the line as the readings' light
+        pass_color := glow if pass == 0 else line_color
         pen := Pen {
             radius = GLOW_RADIUS if pass == 0 else LINE_RADIUS,
-            color  = glow if pass == 0 else line_color,
+            color  = pass_color,
         }
 
         for i in 0 ..< self.count {
             if !usable(self, i) do continue
             p1 := point(trace_sample(self, i), self.clock, plot, middle)
-            if !usable(self, i - 1) do pen_start(&pen, p1) // the start of a run
+            if !usable(self, i - 1) {
+                // the start of a run
+                pen.color.a = u8(f32(pass_color.a) * trace_sample(self, i).light)
+                pen_start(&pen, p1)
+            }
             if !usable(self, i + 1) do continue
             p2 := point(trace_sample(self, i + 1), self.clock, plot, middle)
 
             // A curve through the readings (Catmull-Rom), the neighbours on either side set its direction
             p0 := point(trace_sample(self, i - 1), self.clock, plot, middle) if usable(self, i - 1) else p1
             p3 := point(trace_sample(self, i + 2), self.clock, plot, middle) if usable(self, i + 2) else p2
+            light1, light2 := trace_sample(self, i).light, trace_sample(self, i + 1).light
             for step in 1 ..= TRACE_CURVE_STEPS {
                 progress := f32(step) / TRACE_CURVE_STEPS
+                pen.color.a = u8(f32(pass_color.a) * math.lerp(light1, light2, progress))
                 bend := 2 * p0 - 5 * p1 + 4 * p2 - p3
                 twist := 3 * p1 - p0 - 3 * p2 + p3
                 on_curve := 0.5 * (2 * p1 + (p2 - p0) * progress + bend * progress * progress + twist * progress * progress * progress)

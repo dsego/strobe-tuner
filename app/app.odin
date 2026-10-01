@@ -64,6 +64,7 @@ App :: struct {
     sharp_arrow:        bool,
 
     readout_track:      int, // the strobe track the readout follows, see core.strobe_readout_track
+    traced_track:       int, // the track the readout followed, the trace stays on it while its stripes show
     config_changed:     bool, // the tuner and the strobe need the new config, see apply_config
     unsaved:            bool, // the config changed since it was saved, see save_when_settled
     restart_audio:      bool, // opens the input again, after the background or an interruption
@@ -84,6 +85,7 @@ run_app :: proc(config: ^Config) {
     app := App {
         config        = config,
         readout_track = -1,
+        traced_track  = -1,
     }
     tuner := &app.tuner
     tuner^ = core.init_tuner(config.target_freq_hz, config.pitch_standard, config.note_switch_s, config.prevent_strobe_octave_jumps)
@@ -185,6 +187,7 @@ run_app :: proc(config: ^Config) {
 // The strobe on the target note with the current tracks, speed and mode
 retune :: proc(app: ^App) {
     config := app.config
+    app.traced_track = -1 // the tracks are at another note now
     core.set_phase_comparator_tracks(
         app.phase_comparator,
         config.strobe_intervals[:],
@@ -326,12 +329,6 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     reading.out_of_range = core.tuner_out_of_range(tuner)
     reading.shown, reading.steady = core.tuner_readout(tuner)
 
-    // Every detection unaveraged so the vibrato shows, a gap while there's no pitch. Not the weak ones of a
-    // note the strobe keeps lit.
-    traced_cents := math.nan_f32()
-    if tuner.active && !reading.out_of_range && !reading.pitch.is_weak_pitch do traced_cents = reading.shown.err_cents
-    record_trace(&app.cents_trace, traced_cents, reading.pitch.fresh, gfx_frame_time())
-
     // Close to the note the readout is the strobe's, 0 where the fundamental's track stands still. The pitch
     // detection reads the whole wave, a real string's partials are a little sharp and pull it a few cents off
     // the track you see. The Hz move along with the cents.
@@ -343,6 +340,27 @@ measure :: proc(app: ^App) -> (reading: Reading) {
         steady.detected_freq = core.cents_to_freq(cents - steady.err_cents, steady.detected_freq)
         steady.err_cents = cents
     }
+
+    // The readout's cents, the strobe's close to the note so an in tune note is on the middle line, further
+    // out every detection unaveraged. The track the readout followed carries on as the note decays and the
+    // readout gives way, the line as lit as its stripes and dark with them, not the noisy weak detections.
+    if reading.strobe_readout do app.traced_track = app.readout_track
+    light: f32 = 1
+    if app.traced_track >= 0 {
+        band := app.phase_comparator.bands[app.traced_track]
+        fade := core.STROBE_FADE_SNR_DB
+        light = math.smoothstep(fade[0], fade[1], band.snr_db)
+        if light == 0 || !band.in_range do app.traced_track = -1
+    }
+    detected := tuner.active && !reading.out_of_range && !reading.pitch.is_weak_pitch
+    far := detected && abs(steady.err_cents) > core.READOUT_RANGE_CENTS
+    traced_cents := math.nan_f32()
+    if app.traced_track >= 0 && !reading.out_of_range && !far {
+        traced_cents = app.phase_comparator.bands[app.traced_track].err_cents
+    } else if detected {
+        traced_cents, light = reading.shown.err_cents, 1
+    }
+    record_trace(&app.cents_trace, traced_cents, light, reading.pitch.fresh, gfx_frame_time())
     return
 }
 
