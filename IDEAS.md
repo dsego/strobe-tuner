@@ -48,6 +48,61 @@ input, dropped files, open dialogs and a resizable window.
 - macOS goes first with raylib kept as the Linux fallback, raylib goes once Linux runs on Vulkan on
   real hardware.
 
+## Pitch detection
+
+The pitch detection only names the note, the strobe's lock-in measures it. NSDF stays, it finds the
+period of the whole wave so a missing fundamental reads right, and its normalization holds up with
+about 2 periods in the window where YIN wants more. YIN, aubio's yinfft and zero crossings would be
+a sideways step, SWIPE′ and the neural ones (CREPE, PESTO) are better at noise than the strobe needs.
+What falls short is around it, in this order:
+
+1. Mains hum lights a note. The 60 Hz high-pass takes only about 5 dB off 50 Hz, and a higher
+   cutoff wouldn't help, the harmonics alone repeat every 20 ms, the missing fundamental again.
+   A steady hum passes clarity 0.98 and `is_tonal` keeps the noise floor from learning it.
+   Replayed, 50 Hz with harmonics up to 350 Hz and a little hiss at -45 dBFS RMS:
+   - Alone after silence, G1 +35 ¢, strong and lit for good, the floor rises 1 dB a second.
+   - Alone from the start, lit for about 10 s until the warmup's tonal limit lets the floor learn it.
+   - Under the Strat's A2, the pitch detection reads the decaying note sharp, +2 ¢ to +24 ¢, clarity
+     drops from 0.99 to 0.78, the note goes dark at 4.4 s instead of 8.4 s.
+   - Under the bass's A1, the hum 29 dB down, strong ends at 6.3 s instead of 8.4 s, and the decay
+     reads A0 and D0, 50 and 55 Hz only repeat together every 5 Hz. E1 barely moves.
+
+   The fix:
+   - Always on, detections within about 8 ¢ of 50 or 60 Hz don't name a note, the grid holds mains
+     to a few cents. No string is tuned there, 50 Hz is G1 +35 ¢, 60 Hz is A♯1 +50 ¢ and the low B1
+     of a seven string or baritone -49 ¢, but a string tuned up or down passes through. Locked or on
+     a string the strobe keeps its note. No exception for an onset, plugging a cable in is one too.
+   - A "Mains hum" setting, off, 50 Hz or 60 Hz, off by default everywhere. Narrow notches, 1 to
+     2 Hz, adaptive to follow the grid's drift, on the mains and its harmonics up to about 8, after
+     the high-pass and before both the pitch detection and the strobe. No tempered note is within
+     about 19 ¢ of them, higher ones hit partials, 660 Hz is 11 × 60 and E5 is 2 ¢ off it. The one
+     fix for a note pulled sharp or lost early, which costs bass the most.
+   - Not a steady tone taken for background, a bowed or held note is one too.
+2. The detection rate is a throttle, not a cost. The 8192-point FFT takes tens of µs, 20 detections
+   a second with 3 confirmations is about 150 ms before a switch. Run it at 50 to 100 a second and
+   confirm by time, about 100 ms, not by count, the frames overlap and aren't independent.
+3. The window is a fixed 4096 samples, 85 ms. That's 2.3 periods at A0 and 2.6 at a five string
+   bass's low B, the far lags rest on few samples. High notes don't need it, and a long window
+   keeps the attack's sharp glide in view longer. About 4 periods of the candidate, clamped.
+4. Skip the pitch frames for 30 to 50 ms after a pluck, `update_onset` in `phase.odin` already
+   finds it. The attack's glide doesn't become a candidate.
+5. Low-pass or decimate the input while the candidate is under about 1 kHz. Pick noise and hiss
+   go, the NSDF gets cheaper, the precision it loses isn't used.
+6. The SNR gate is on the broadband RMS, a fan or rumble pulls it down while the partials stand
+   well clear in their own bands. Clarity does most of the rejection anyway (0.98 is about 17 dB
+   periodic to aperiodic, 0.9 about 10 dB), the 2 dB gate rarely decides. The bands' SNR is the
+   better signal.
+7. One candidate a frame. `nsdf_find_peak` keeps the first peak over 0.95 of the highest, and the
+   tuner rebuilds the reasoning over time by hand: `candidate_count`, `steady_count`,
+   `shortest_period`, `prevent_octave_jumps`. pYIN's part worth taking is the HMM, not YIN: keep 2
+   or 3 peaks a frame with their clarity as a likelihood, and pick the note path over time with
+   Viterbi, continuity settles the octave on a low string. Reshapes the tuner, discuss first, and
+   only if the octave rules keep growing.
+
+To try, no promises: compressed spectrum before the inverse FFT, |X|^0.67 instead of |X|²
+(Tolonen and Karjalainen). Sharper peaks, a dominant partial pulls less, but it no longer matches
+the time domain normalization in `nsdf_run_nsdf`, the clarity thresholds would move.
+
 ## Temperaments
 
 A temperament is how the 12 notes of the octave are spaced, 12 offsets in cents from equal

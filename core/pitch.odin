@@ -18,11 +18,18 @@ package core
 
 
 import "core:math"
+import "core:testing"
 
 
 // A strong pitch stays strong down to this far under min_snr_db, so a decaying note doesn't flicker
 // between strong and weak around the threshold
 SNR_HYSTERESIS_DB :: 1.5
+
+// Mains hum repeats as steadily as a held note, and the grid holds it to a few cents of 50 or 60 Hz where
+// no note is tuned: G1 +35 ¢, A♯1 +50 ¢, B1 -49 ¢. It's the background, a string tuned through it loses
+// its note for a moment.
+MAINS_HZ :: [?]f32{50, 60}
+MAINS_CENTS :: 8
 
 
 PitchDetector :: struct {
@@ -116,8 +123,12 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     dt := f32(available) / f32(self.nsdf.samplerate)
     // Down to A0, flat by up to half a semitone, at the pitch standard
     min_freq := cents_to_freq(LOWEST_NOTE * 100 - 50, self.pitch_standard)
+    mains := false
+    for mains_hz in MAINS_HZ {
+        if abs(cents_deviation(info.detected_freq, mains_hz)) <= MAINS_CENTS do mains = true
+    }
     // A clear pitch is a note, not the background, even before the floor knows how loud that is
-    info.is_tonal = info.detected_freq >= min_freq && info.clarity >= self.clarity_high
+    info.is_tonal = info.detected_freq >= min_freq && info.clarity >= self.clarity_high && !mains
     self.snr_db = update_noise_floor(&self.noise_floor, info.rms, dt, is_tonal = info.is_tonal)
     info.snr_db = self.snr_db
     info.noise_floor = self.noise_floor.level
@@ -133,9 +144,11 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.is_strong_pitch =
         info.detected_freq >= min_freq &&
         info.clarity >= self.clarity_high &&
-        info.snr_db >= strong_snr_db
+        info.snr_db >= strong_snr_db &&
+        !mains
 
     info.is_weak_pitch =
+        mains ||
         info.detected_freq < min_freq ||
         info.clarity < self.clarity_low ||
         info.snr_db < weak_snr_db
@@ -151,4 +164,34 @@ calculate_rms :: proc(samples: []f32) -> f32 {
 
 dbfs :: proc(signal: $T) -> T {
     return 20.0 * math.log10(signal * math.sqrt(cast(T)2.0))
+}
+
+
+// Hum with its harmonics doesn't name a note at either mains frequency, the notes either side of it do
+@(test)
+test_mains_hum :: proc(t: ^testing.T) {
+    SAMPLERATE :: 48_000
+    FFT_SIZE :: 8192
+
+    detect :: proc(fundamental: f32) -> PitchInfo {
+        detector := init_pitch_detector(SAMPLERATE, FFT_SIZE, 0.98, 0.9, 2, 10)
+        defer destroy_pitch_detector(&detector)
+        samples: [FFT_SIZE / 2]f32
+        for &sample, i in samples {
+            for partial in 1 ..= 5 {
+                sample += 0.01 * math.sin(math.TAU * f32(partial) * fundamental * f32(i) / SAMPLERATE)
+            }
+        }
+        audio_capture_callback(&detector, samples[:])
+        return run_pitch_detection(&detector, {})
+    }
+
+    for mains_hz in MAINS_HZ {
+        hum := detect(mains_hz)
+        testing.expectf(t, hum.is_weak_pitch && !hum.is_strong_pitch && !hum.is_tonal, "%v Hz hum: %v", mains_hz, hum)
+    }
+    for note_hz in ([]f32{49.0, 61.74}) {
+        note := detect(note_hz)
+        testing.expectf(t, note.is_strong_pitch && note.is_tonal, "%v Hz note: %v", note_hz, note)
+    }
 }
