@@ -84,11 +84,10 @@ open_stream_on_active_device :: proc(self: ^AudioCapture) -> bool {
     // Ask the OS for an unprocessed signal (no AGC / noise suppression)
     config.aaudio.inputPreset = .unprocessed
 
-    // A nil ID lets miniaudio follow the system default device when it changes
-    info := &self.capture_infos[self.active_device]
-    if !info.isDefault {
-        config.capture.pDeviceID = &info.id
-    }
+    // The device by its ID. A nil ID would follow the system default, which may have changed since the list
+    // was made, so picking the input that was the default then could open another one. iOS has just the
+    // default.
+    when !IOS do config.capture.pDeviceID = &self.capture_infos[self.active_device].id
 
     if failed(ma.device_init(&self.ctx, &config, &self.device)) do return false
     self.device_open = true

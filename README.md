@@ -135,7 +135,7 @@ Core steps:
 - Input: The strobe takes the input as it is, unfiltered. Each band's narrow DFT rejects everything away from its frequency.
 - Frequency targeting: Compute a windowed single-bin DFT over the newest samples, precisely tuned to the reference frequency.
 - Demodulation: Rotate the DFT result by the phase of a reference oscillator running on an absolute sample clock. When the input pitch matches the reference, this phase stands still; a detuned signal makes it rotate at the frequency difference.
-- Strobe motion: The stripes turn by the measured phase. A small Kalman filter tracks it only for the cents of each track.
+- Strobe motion: The stripes turn by the measured phase. The cents of each track are its rate averaged over 0.3 s, restarted after each pluck's attack.
 - Stripe sharpness: The stripe edges are as sharp as the band's SNR allows, and the stripes fade out as it drops into the background noise.
 
 To maintain a consistent amount of visual drift across the frequency spectrum, the window length is based on musical pitch intervals (in cents) rather than absolute frequency, and the strobe phase is rescaled so each note spins at the same rate per cent of detuning.
@@ -161,4 +161,4 @@ A narrow filter needs a long look at the signal: the DFT window is about 0.6 s a
 
 #### Noise floor
 
-Each strobe band keeps an estimate of the background noise at its frequency (i.e. the noise floor), which gives the SNR used by the phase tracker and the display. The pitch detector keeps one the same way for the level of the whole signal, its SNR is part of telling a strong pitch from a weak one. It follows the level in dB while nothing louder is playing and pauses when the SNR is above a threshold, only creeping up slowly so it can catch up with a noisier environment. It's relearned when switching the input device and when the input is opened again, e.g. after the app was in the background.
+Each strobe band keeps an estimate of the background noise at its frequency (i.e. the noise floor), which gives the SNR used by the display and the readout. The pitch detector keeps one the same way for the level of the whole signal, its SNR is part of telling a strong pitch from a weak one. It follows the level in dB while nothing louder is playing and pauses when the SNR is above a threshold, only creeping up slowly so it can catch up with a noisier environment. It's relearned when switching the input device and when the input is opened again, e.g. after the app was in the background.

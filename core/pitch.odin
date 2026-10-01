@@ -18,6 +18,7 @@ package core
 
 
 import "core:math"
+import "core:slice"
 import "core:testing"
 
 
@@ -108,10 +109,13 @@ destroy_pitch_detector :: proc(self: ^PitchDetector) {
     delete(self.samples)
 }
 
-// Another input's signal is unrelated to the previous one's, the filters start from rest
-reset_pitch_filters :: proc(self: ^PitchDetector) {
+// Another input's signal is unrelated to the previous one's: the window starts out silent like at launch,
+// the filters from rest and the noise floor is learned again
+reset_pitch_detector :: proc(self: ^PitchDetector) {
+    slice.zero(self.samples)
     self.highpass.z1, self.highpass.z2 = 0, 0
     self.lowpass.z1, self.lowpass.z2 = 0, 0
+    reset_noise_floor(&self.noise_floor)
 }
 
 // Takes the previous detection to repeat when there are no new samples, the Tuner keeps the history

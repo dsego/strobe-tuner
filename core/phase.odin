@@ -21,8 +21,8 @@
     Lock-in amplifier: runs a single bin DFT over the newest samples and demodulates it against a
     reference oscillator running at the target frequency on an absolute sample clock. In tune, the
     resulting phase stands still; a detuned signal makes it rotate at the frequency difference.
-    The strobe turns by that phase as measured. A small Kalman filter tracks the phase and its rate,
-    weighting each measurement by the band SNR, for the cents of each track.
+    The strobe turns by that phase as measured. The cents of each track are its rate, averaged for a
+    steady readout.
 
  -------------------------------------------------------------------------------------------------*/
 
@@ -33,7 +33,6 @@ import "core:c/libc"
 import "core:fmt"
 import "core:math"
 import "core:math/cmplx"
-import "core:math/linalg"
 import "core:slice"
 import "core:testing"
 
@@ -50,19 +49,16 @@ MAX_BAND_NORM_FREQ :: 0.45
 // rate per cent of detuning
 STROBE_REFERENCE_HZ :: 656.5
 
-// Phase tracker (Kalman filter) process noise, i.e. how much the phase and frequency of a real string
-// are expected to wander on their own. Larger values follow the measurement more closely.
-TRACKER_PHASE_NOISE_RAD :: 0.05 // rad per √s
-TRACKER_FREQ_NOISE_CENTS :: 10.0 // cents per √s
-TRACKER_INITIAL_FREQ_CENTS :: 50.0 // frequency uncertainty after a reset
-TRACKER_MAX_MEASUREMENT_VAR :: 10.0 // rad², weak signals are effectively ignored
+// The cents of each track are the phase's rate averaged over this long, steady but a turned peg shows
+// this much later than on the stripes
+READOUT_AVERAGE_S :: 0.3
+MAX_PHASE_VAR :: 10.0 // rad², the stripes are as soft as they go
 
-// The pitch of a plucked string glides down from sharp during the attack. The tracker trusts the
-// measurement less while the attack is still inside the analysis window.
+// The pitch of a plucked string glides down from sharp during the attack. The readout's average starts
+// over once the attack has passed through the analysis window.
 ONSET_RATIO :: 1.5 // amp jump over the slow envelope that counts as a new pluck (~3.5 dB)
 ONSET_ENVELOPE_TIME_S :: 0.3
 ONSET_HOLD_S :: 0.1 // extra time after the attack reaches the window centre
-ONSET_MIN_MEASUREMENT_VAR :: 0.05 // rad²
 
 
 StrobeMode :: enum {
@@ -85,9 +81,9 @@ PhaseBand :: struct {
     phase:        f32, // measured lock-in phase, relative to the reference oscillator
     amp:          f32,
     phase_diff:   f32, // strobe phase advance since the previous frame (normalized to STROBE_REFERENCE_HZ)
-    err_cents:    f32, // of the tracked frequency
+    err_cents:    f32, // of the averaged rate
     scaled_phase: f32, // the strobe's phase, phase_diff times the speed added up
-    phase_sigma:  f32, // uncertainty (std dev) of the tracked phase, same scale as phase_diff
+    phase_sigma:  f32, // uncertainty (std dev) of the measured phase, same scale as phase_diff
     speed:        f32, // under 1 the strobe turns slower, over 1 faster
     snr_db:       f32,
     noise_floor:  NoiseFloor,
@@ -95,21 +91,14 @@ PhaseBand :: struct {
     // Lock-in reference oscillator frequency, radians per sample
     ref_omega:    f64,
 
-    // Phase tracker state: unwrapped phase (rad) and frequency offset (rad/sample) vs the reference
-    tracker:      PhaseTracker,
+    // The readout, the phase's rate vs the reference (rad/sample) averaged since the last pluck
+    measuring:    bool, // phase holds the previous frame's measurement, off until the first after a reset
+    rate:         f64,
+    rate_time_s:  f32, // averaged this long
 
     // Onset detection
     envelope:     f32,
     onset_hold:   int, // samples left during which the attack is distrusted
-}
-
-
-// 2-state Kalman filter following the lock-in phase: [phase, frequency offset]
-PhaseTracker :: struct {
-    active:     bool,
-    phase:      f64,
-    omega:      f64,
-    covariance: matrix[2, 2]f64,
 }
 
 
@@ -124,7 +113,6 @@ PhaseComparator :: struct {
     available:        int, // the new samples of the latest run_phase_detection
     snr_threshold_db: f32, // for the noise floor of a track added later
     low_latency:      bool, // the gamma window, off for the Blackman to compare, takes a retune
-    kalman_motion:    bool, // the strobe turns by the tracked phase instead of the measured one, to compare
 
     // Absolute index of the sample just past the end of the newest window, i.e. the lock-in clock
     sample_clock:     i64,
@@ -256,10 +244,7 @@ set_phase_comparator_freq :: proc(
 
     for &band, band_index in self.bands {
         band.time_stretch = self.samplerate / base_freq_hz
-        band.phase = 0
-        band.tracker = {}
-        band.envelope = 0
-        band.onset_hold = 0
+        restart_band(&band)
 
         switch self.mode {
         case .HARMONIC:
@@ -289,9 +274,23 @@ set_phase_comparator_freq :: proc(
     set_phase_comparator_speed(self, base_speed)
 }
 
-// Relearn the background noise, e.g. after switching the input device
-reset_phase_noise_floor :: proc(self: ^PhaseComparator) {
+// The measurements start over, for another note or another input
+restart_band :: proc(band: ^PhaseBand) {
+    band.phase = 0
+    band.measuring = false
+    band.rate = 0
+    band.rate_time_s = 0
+    band.envelope = 0
+    band.onset_hold = 0
+}
+
+// Another input's signal is unrelated to the previous one's, everything starts over like at launch: the
+// windows on silence, so the noise floors wait for the new input to fill them before they learn it
+reset_phase_comparator :: proc(self: ^PhaseComparator) {
+    slice.zero(self.sample_buffer)
+    self.sample_clock = 0
     for &band in self.bands {
+        restart_band(&band)
         reset_noise_floor(&band.noise_floor)
     }
 }
@@ -435,31 +434,32 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, use_phase
 
     update_onset(self, band, window_size)
 
-    was_active := band.tracker.active
-    prev_tracked := band.tracker.phase
-    predicted_advance := band.tracker.omega * f64(self.available)
-    update_phase_tracker(self, band)
+    // The strobe turns by the measured phase, the shortest way from the previous frame's, nothing else
+    // carries over between frames. A band can only be off by half the frame rate in Hz, further out its
+    // narrow window has faded the stripes. No advance on the first frame after a reset, the phase before
+    // it is arbitrary.
+    had_phase := band.measuring
+    phase_advance := wrap_phase(f64(band.phase - prev_measured)) if had_phase else 0
+    band.measuring = true
 
-    // The strobe turns by the measured phase, unwrapped around the advance of the tracked frequency, the
-    // tracker only picks the turn when the phase moves more than half of one between frames. Its edges are
-    // as sharp as the measurement's noise. kalman_motion turns it by the tracked phase instead.
-    phase_advance, phase_sigma: f64
-    if self.kalman_motion {
-        phase_advance = band.tracker.phase - prev_tracked
-        phase_sigma = math.sqrt(band.tracker.covariance[0, 0])
-    } else {
-        phase_advance = predicted_advance + wrap_phase(f64(band.phase - prev_measured) - predicted_advance)
-        phase_sigma = math.sqrt(phase_measurement_var(band^))
-    }
-    // No advance on the first frame after a reset, the initial phase is arbitrary.
-    if !was_active do phase_advance = 0
-
-    // Rescaled so all notes spin at the same rate per cent
+    // Rescaled so all notes spin at the same rate per cent, the edges as sharp as the measurement's noise
     band.phase_diff = f32(phase_advance * STROBE_REFERENCE_HZ / f64(band.freq_hz))
-    band.phase_sigma = f32(phase_sigma * STROBE_REFERENCE_HZ / f64(band.freq_hz))
+    band.phase_sigma = f32(math.sqrt(phase_measurement_var(band^)) * STROBE_REFERENCE_HZ / f64(band.freq_hz))
 
-    // The tracked frequency offset in cents
-    freq_diff_hz := f32(band.tracker.omega * f64(self.samplerate) / math.TAU)
+    // The readout averages the rate once the attack has passed, and while the stripes show, a fading note
+    // keeps the last of it
+    if had_phase && band.onset_hold == 0 && band.snr_db >= STROBE_FADE_SNR_DB[0] {
+        dt_s := f32(self.available) / self.samplerate
+        rate := phase_advance / f64(self.available)
+        if band.rate_time_s == 0 {
+            band.rate = rate
+        } else {
+            alpha := 1 - math.exp(-f64(dt_s) / READOUT_AVERAGE_S)
+            band.rate += alpha * (rate - band.rate)
+        }
+        band.rate_time_s += dt_s
+    }
+    freq_diff_hz := f32(band.rate * f64(self.samplerate) / math.TAU)
     band.err_cents = cents_deviation(band.freq_hz + freq_diff_hz, band.freq_hz)
 
     // The strobe turns by the phase times the track's speed
@@ -476,6 +476,8 @@ update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand, window_size: int)
         // The attack affects the phase until it has passed the window centre, the gamma window's is nearer
         delay := int(GAMMA_WINDOW_DELAY * f32(window_size)) if self.low_latency else window_size / 2
         band.onset_hold = delay + int(ONSET_HOLD_S * self.samplerate)
+        // The readout's average starts over on each pluck
+        band.rate_time_s = 0
     }
 
     alpha := 1.0 - math.exp(-f32(self.available) / (ONSET_ENVELOPE_TIME_S * self.samplerate))
@@ -487,52 +489,7 @@ update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand, window_size: int)
 phase_measurement_var :: proc(band: PhaseBand) -> f64 {
     EPS :: 1e-12
     noise_ratio := f64(band.noise_floor.level) / (f64(band.amp) + EPS)
-    return clamp(0.5 * noise_ratio * noise_ratio, 1e-9, TRACKER_MAX_MEASUREMENT_VAR)
-}
-
-// Kalman filter over [phase, frequency offset], the measurement is the wrapped lock-in phase.
-// The measurement noise follows the band SNR: a loud note is tracked closely, a decaying note
-// gradually coasts on its last good frequency instead of wandering with the noise.
-update_phase_tracker :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
-    tracker := &band.tracker
-    measured := f64(band.phase)
-    cent_omega := band_cent_omega(band^)
-
-    if !tracker.active {
-        tracker.active = true
-        tracker.phase = measured
-        tracker.omega = 0
-        freq_var := math.pow(TRACKER_INITIAL_FREQ_CENTS * cent_omega, 2)
-        tracker.covariance = {math.PI * math.PI, 0, 0, freq_var}
-        return
-    }
-
-    // Predict
-    dt := f64(self.available)
-    samplerate := f64(self.samplerate)
-    transition := matrix[2, 2]f64{1, dt, 0, 1}
-    process_noise := matrix[2, 2]f64 {
-        TRACKER_PHASE_NOISE_RAD * TRACKER_PHASE_NOISE_RAD / samplerate * dt, 0,
-        0, math.pow(TRACKER_FREQ_NOISE_CENTS * cent_omega, 2) / samplerate * dt,
-    }
-    tracker.phase += tracker.omega * dt
-    tracker.covariance = transition * tracker.covariance * linalg.transpose(transition) + process_noise
-
-    measurement_var := phase_measurement_var(band^)
-    if band.onset_hold > 0 do measurement_var = max(measurement_var, ONSET_MIN_MEASUREMENT_VAR)
-
-    // Update, unwrapping the measurement around the prediction
-    innovation := wrap_phase(measured - tracker.phase)
-    covariance := tracker.covariance
-    innovation_var := covariance[0, 0] + measurement_var
-    gain := [2]f64{covariance[0, 0] / innovation_var, covariance[1, 0] / innovation_var}
-
-    tracker.phase += gain[0] * innovation
-    tracker.omega += gain[1] * innovation
-    tracker.covariance = {
-        covariance[0, 0] - gain[0] * covariance[0, 0], covariance[0, 1] - gain[0] * covariance[0, 1],
-        covariance[1, 0] - gain[1] * covariance[0, 0], covariance[1, 1] - gain[1] * covariance[0, 1],
-    }
+    return clamp(0.5 * noise_ratio * noise_ratio, 1e-9, MAX_PHASE_VAR)
 }
 
 
@@ -541,7 +498,6 @@ STROBE_FADE_SNR_DB :: [2]f32{8, 16}
 
 // The readout follows a track this loud, where its stripes are fully there
 READOUT_MIN_SNR_DB :: STROBE_FADE_SNR_DB[1]
-READOUT_MAX_SIGMA_CENTS :: 2 // the tracked frequency is known this closely, not just reset or coasting
 READOUT_WEAK_FUNDAMENTAL_DB :: 20 // this far under the loudest partial the fundamental gives way to it
 READOUT_SWITCH_DB :: 6 // another partial takes over once it's this much louder, the fundamental this much nearer
 READOUT_RANGE_CENTS :: 30 // the pitch detection's distance from the note, further out the tracks can't follow
@@ -551,7 +507,7 @@ READOUT_RANGE_CENTS :: 30 // the pitch detection's distance from the note, furth
 // current one stays until another is clearly louder, and the fundamental takes over again once it's
 // clearly back. -1 for none.
 //
-// ready once its frequency has settled, until then the readout is the pitch detection's. Not another
+// ready once its averaged rate has settled after the attack, until then the readout is the pitch detection's. Not another
 // track's that settles sooner, the fundamental's window is the longest and the readout would hop from
 // one to the other after every pluck.
 strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: int, ready: bool) {
@@ -579,8 +535,7 @@ strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: in
     }
 
     band := self.bands[track]
-    sigma_cents := math.sqrt(band.tracker.covariance[1, 1]) / band_cent_omega(band)
-    ready = band.tracker.active && band.onset_hold == 0 && sigma_cents <= READOUT_MAX_SIGMA_CENTS
+    ready = band.onset_hold == 0 && band.rate_time_s >= READOUT_AVERAGE_S
     return
 }
 
@@ -593,12 +548,6 @@ strobe_shows_note :: proc(self: ^PhaseComparator) -> bool {
     }
     return false
 }
-
-// Radians per sample for one cent at the band's frequency
-band_cent_omega :: proc(band: PhaseBand) -> f64 {
-    return band.ref_omega * (math.pow(2.0, 1.0 / 1200.0) - 1.0)
-}
-
 
 // Keep an up-to-date estimate of background noise (i.e. when no note is playing)
 update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, is_tonal: bool) {
@@ -700,7 +649,7 @@ test_strobe_turn_rate :: proc(t: ^testing.T) {
     }
 
     // Up to the edge of the note. Further out the string is outside the band's window (25 cents a bin) and
-    // the tracker has nothing to follow.
+    // its phase has nothing to follow.
     for target_hz in ([]f32{82.41, 329.63}) {
         for speed_scale in ([]f32{0.25, 1}) {
             for cents in ([]f32{1, 5, 10, 25, 50, -50}) {
