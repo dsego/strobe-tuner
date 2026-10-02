@@ -32,11 +32,13 @@ SheetLayout :: struct {
     bottom:     f32, // as far from the home indicator as the rows are from the sides, for what sits under the rows
 }
 
-// A finger on a phone, a mouse needs less and the settings cover less of the strobe
+// A finger on a phone, a mouse needs less and the settings cover less of the strobe. A sheet with room to
+// spare under the strobe grows its rows and their pills up to the max.
 SHEET_ROW_HEIGHT :: 44 when IOS else 36
+SHEET_ROW_MAX_HEIGHT :: 56 when IOS else 48
 SHEET_CONTROL_MARGIN :: 6 // between the pills and their row, the touch area is the whole row
-SHEET_TOP_PADDING :: 10 // above the title, the first row's own margin spaces the title from it
-SHEET_TITLE_HEIGHT :: 26 // from the top of the title to the first row
+SHEET_TOP_PADDING :: 16 // above the title, the first row's own margin spaces the title from it
+SHEET_TITLE_HEIGHT :: 34 // from the top of the title to the first row
 
 // open is how far the sheet has slid up, 0 is hidden below the window and 1 is all the way. The settings
 // have SETTINGS_ROWS, a track's sheet fewer. Either covers the whole panel under the strobe at least, a
@@ -54,12 +56,13 @@ compute_sheet_layout :: proc(
 ) {
     left := safe.x + PANEL_PADDING
     sheet_layout.width = safe.width - 2 * PANEL_PADDING
-    sheet_layout.row_height = SHEET_ROW_HEIGHT
 
     // Below the rows, the home indicator on a phone
     below := window.y - (safe.y + safe.height) + PANEL_PADDING / 2
-    height := SHEET_TOP_PADDING + SHEET_TITLE_HEIGHT + f32(rows) * sheet_layout.row_height + extra + below
-    height = max(height, window.y - (strobe.y + strobe.height))
+    around := SHEET_TOP_PADDING + SHEET_TITLE_HEIGHT + extra + below
+    under_strobe := window.y - (strobe.y + strobe.height)
+    sheet_layout.row_height = clamp((under_strobe - around) / f32(rows), SHEET_ROW_HEIGHT, SHEET_ROW_MAX_HEIGHT)
+    height := max(around + f32(rows) * sheet_layout.row_height, under_strobe)
     height = min(height, window.y - safe.y)
     sheet_layout.sheet = {0, window.y - open * height, window.x, height}
     sheet_layout.bottom = sheet_layout.sheet.y + height - (window.y - (safe.y + safe.height)) - PANEL_PADDING
@@ -67,7 +70,9 @@ compute_sheet_layout :: proc(
     top := sheet_layout.sheet.y + SHEET_TOP_PADDING
     sheet_layout.title = {left, top}
     // Right aligned with the rows, centred on the title, the touch area from the sheet's edge down as far
-    sheet_layout.close = {left + sheet_layout.width - 32, sheet_layout.sheet.y, 48, 2 * SHEET_TOP_PADDING + TITLE_SIZE}
+    CLOSE_WIDTH :: 60
+    close_x := left + sheet_layout.width - (ICON_SHEET_SIZE + CLOSE_WIDTH) / 2
+    sheet_layout.close = {close_x, sheet_layout.sheet.y, CLOSE_WIDTH, 2 * SHEET_TOP_PADDING + TITLE_SIZE}
     sheet_layout.rows = {left, top + SHEET_TITLE_HEIGHT}
     return
 }
@@ -187,8 +192,9 @@ draw_sheet_header :: proc(sheet_layout: SheetLayout, title: cstring, details: cs
         draw_label(pixel_fonts.label, details, {title_position.x + title_size.x + 12, details_y}, text_color_light, 1)
     }
 
-    // A 16pt icon in the middle of a larger touch area
-    draw_icon(ICON_X, {close_area.x + (close_area.width - 16) / 2, close_area.y + (close_area.height - 16) / 2}, icon_color)
+    // The icon in the middle of a larger touch area
+    icon_position := [2]f32{close_area.x, close_area.y} + ([2]f32{close_area.width, close_area.height} - ICON_SHEET_SIZE) / 2
+    draw_label(pixel_fonts.icon_sheet, ICON_X, icon_position, icon_color)
     return gui_button(close_area)
 }
 

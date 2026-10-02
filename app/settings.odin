@@ -97,7 +97,7 @@ gui_settings :: proc(
     // options line up with them.
     CHEVRON_GAP :: 8
     sheet_layout := sheet_layout
-    sheet_layout.end_inset = ICON_SIZE + CHEVRON_GAP
+    sheet_layout.end_inset = ICON_SHEET_SIZE + CHEVRON_GAP
 
     display_names := DISPLAY_NAMES
     if display_options^ {
@@ -143,7 +143,8 @@ gui_settings :: proc(
         }
 
         right := rect.x + rect.width
-        draw_icon(ICON_CARET_RIGHT, {right + CHEVRON_GAP, rect.y + (rect.height - ICON_SIZE) / 2}, icon_color)
+        chevron := [2]f32{right + CHEVRON_GAP, rect.y + (rect.height - ICON_SHEET_SIZE) / 2}
+        draw_label(pixel_fonts.icon_sheet, ICON_CARET_RIGHT, chevron, icon_color)
         // From the control to the sheet's edge, the row's height
         sheet_right := sheet_layout.sheet.x + sheet_layout.sheet.width
         if gui_button({right, rect.y - SHEET_CONTROL_MARGIN, sheet_right - right, sheet_layout.row_height}) {
@@ -187,10 +188,10 @@ gui_settings :: proc(
     draw_back_header :: proc(sheet_layout: SheetLayout, title: cstring) -> (close: bool, back: bool) {
         GAP :: 6
         shifted := sheet_layout
-        shifted.title.x += ICON_SIZE + GAP
+        shifted.title.x += ICON_SHEET_SIZE + GAP
         close = draw_sheet_header(shifted, title)
         position := sheet_layout.title
-        draw_icon(ICON_CARET_LEFT, {position.x, position.y + (TITLE_SIZE - ICON_SIZE) / 2}, icon_color)
+        draw_label(pixel_fonts.icon_sheet, ICON_CARET_LEFT, {position.x, position.y + (TITLE_SIZE - ICON_SHEET_SIZE) / 2}, icon_color)
 
         // From the sheet's edge past the title, as tall as the ✕'s
         right := shifted.title.x + measure_label(pixel_fonts.title, title, 1).x + GAP
