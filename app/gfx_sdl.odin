@@ -110,13 +110,10 @@ when RENDERER == "sdl" {
         .SPACE       = .SPACE,
         .COMMA       = .COMMA,
         .ESCAPE      = .ESCAPE,
-        .C           = .C,
         .G           = .G,
         .H           = .H,
         .I           = .I,
-        .L           = .L,
         .R           = .R,
-        .W           = .W,
         .X           = .X,
         .LEFT_SHIFT  = .LSHIFT,
         .RIGHT_SHIFT = .RSHIFT,
@@ -433,10 +430,13 @@ when RENDERER == "sdl" {
 
         _ = sdl.SubmitGPUCommandBuffer(command_buffer)
 
-        // The rest of the frame at the limited rate, counted from the start of the frame in gfx_should_close
+        // The rest of the frame at the limited rate, counted from the start of the frame in gfx_should_close.
+        // A little short of it, the swapchain waits for the vsync that ends it, a sleep a touch too long
+        // would miss that one and hold the frame on screen a refresh longer.
+        VSYNC_MARGIN_S :: 0.002
         if gpu.max_fps > 0 {
             elapsed := f64(sdl.GetPerformanceCounter() - gpu.last_counter) / f64(sdl.GetPerformanceFrequency())
-            remaining := 1 / f64(gpu.max_fps) - elapsed
+            remaining := 1 / f64(gpu.max_fps) - elapsed - VSYNC_MARGIN_S
             if remaining > 0 do sdl.DelayPrecise(u64(remaining * 1e9))
         }
     }

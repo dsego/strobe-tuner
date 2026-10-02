@@ -38,6 +38,8 @@ INTERVAL_OPTIONS: [3][core.MAX_BANDS]f32 : {
 // With nothing to show the screen updates less often, it saves the battery of a tuner left open, see App.quiet_time
 IDLE_AFTER_S :: 2
 IDLE_FPS :: 30
+// Otherwise the display's rate up to ProMotion's, a faster monitor would only redraw the strobe more often
+MAX_FPS :: 120
 
 
 // What the main loop keeps from one frame to the next
@@ -284,25 +286,6 @@ handle_keys :: proc(app: ^App) {
     }
     if key_pressed(.X) do config.use_phase_average = !config.use_phase_average
     if key_pressed(.G) do config.strobe_glow = !config.strobe_glow
-    // Hidden, to compare the strobe's low latency window with the Blackman
-    if key_pressed(.L) {
-        app.phase_comparator.low_latency = !app.phase_comparator.low_latency
-        fmt.println("Strobe window:", "gamma, low latency" if app.phase_comparator.low_latency else "Blackman")
-        retune(app)
-    }
-    // Hidden, a wider band per track for less lag, to compare the clarity. Each step halves the lag.
-    if key_pressed(.W) {
-        comparator := app.phase_comparator
-        comparator.resolution_cents = comparator.resolution_cents * 2 if comparator.resolution_cents < 200 else 25
-        fmt.println("Strobe band:", comparator.resolution_cents, "cents")
-        retune(app)
-    }
-    // Hidden, the window combed so the other partials don't leak into a wide band
-    if key_pressed(.C) {
-        app.phase_comparator.comb = !app.phase_comparator.comb
-        fmt.println("Strobe comb:", "on" if app.phase_comparator.comb else "off")
-        retune(app)
-    }
     if key_pressed(.TAB) {
         config.strobe_display_type = StrobeDisplayType((int(config.strobe_display_type) + 1) % len(StrobeDisplayType))
     }
@@ -389,9 +372,17 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     return
 }
 
-// The new audio onto the scope's screen
+// The new audio onto the scope's screen, while its views or the tracks the lamp turns show it
 feed_scope :: proc(app: ^App) {
     scope, config := &app.scope, app.config
+
+    type := config.strobe_display_type
+    if type != .SCOPE && type != .LAMP && !(type == .STROBE && config.strobe_source == .LAMP) {
+        core.skip_scope(scope)
+        // The lamp's tracks start over on a dark screen too, the phases they turned by are stale
+        app.strobe_display.lamp_freq_hz = 0
+        return
+    }
 
     // At the strobe's frequency, not the target note's: that one jumps an octave with the detection while
     // the strobe stays, and every change starts with a dark screen
@@ -464,12 +455,11 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     if type == .STROBE {
         // Turned by the lock-in or by the lamp's screen
         comparator := app.phase_comparator
-        lamp: core.PhaseComparator
+        bands := comparator.bands[:]
         if config.strobe_source == .LAMP {
-            lamp = lamp_comparator(display, &app.scope, app.phase_comparator, app.pitch_detector.snr_db)
-            comparator = &lamp
+            bands = lamp_bands(display, &app.scope, bands, app.pitch_detector.snr_db)
         }
-        draw_strobe_display(display, layout.strobe, layout.strobe_scale, comparator, config)
+        draw_strobe_display(display, layout.strobe, layout.strobe_scale, bands, comparator.mode, config)
 
         // Fine mode shows the same pitch on every track, there's nothing to set on one
         if config.strobe_mode == .HARMONIC && !microphone_denied() && gui_button(layout.strobe) {
@@ -754,5 +744,5 @@ limit_frame_rate :: proc(app: ^App) {
     } else {
         app.quiet_time += gfx_frame_time()
     }
-    gfx_limit_fps(IDLE_FPS if app.quiet_time > IDLE_AFTER_S else 0)
+    gfx_limit_fps(IDLE_FPS if app.quiet_time > IDLE_AFTER_S else MAX_FPS)
 }

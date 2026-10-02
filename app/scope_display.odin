@@ -143,40 +143,40 @@ draw_scope_screen :: proc(rect: Rect, scope: ^core.Scope, beam_color, grid_color
     }
 }
 
-// The comparator with its tracks turned by the lamp instead, the strobe the other way: a DFT bin of the
+// The comparator's tracks turned by the lamp instead, the strobe the other way: a DFT bin of the
 // scope's screen from above (core.scope_partials) for each track's partial, instead of its DFT on the
 // samples. They turn like the tracks: by the bin's phase advance, rescaled so all notes spin at the same
 // rate per cent, times the track's speed, and stand still at its partial's target, offset included.
 // The stripe edges are as sharp as the bin's phase is certain (see update_band_look). The screen's quirks
-// show, a pluck or a weak partial can make the stripes jump. Only good until the next frame.
-lamp_comparator :: proc(
+// show, a pluck or a weak partial can make the stripes jump. A copy for drawing until the next frame, its
+// DFTs are the comparator's own. The phases between frames are kept in the display.
+lamp_bands :: proc(
     display: ^StrobeDisplay,
     scope: ^core.Scope,
-    comparator: ^core.PhaseComparator,
+    comparator_bands: []core.PhaseBand,
     signal_snr_db: f32,
 ) -> (
-    lamp: core.PhaseComparator,
+    bands: []core.PhaseBand,
 ) {
-    lamp = comparator^
-    lamp.bands = make([dynamic]core.PhaseBand, len(comparator.bands), context.temp_allocator)
-    copy(lamp.bands[:], comparator.bands[:])
+    bands = make([]core.PhaseBand, len(comparator_bands), context.temp_allocator)
+    copy(bands, comparator_bands)
     if scope.freq_hz <= 0 do return
 
     // The bin nearest each track's partial, its target a little off for an offset in cents
-    periods := make([]int, len(lamp.bands), context.temp_allocator)
-    for band, index in lamp.bands {
+    periods := make([]int, len(bands), context.temp_allocator)
+    for band, index in bands {
         periods[index] = max(int(math.round(core.SCOPE_PERIODS * f64(band.freq_hz) / scope.freq_hz)), 1)
     }
-    partials := make([]core.ScopePartial, len(lamp.bands), context.temp_allocator)
+    partials := make([]core.ScopePartial, len(bands), context.temp_allocator)
     noise := max(core.scope_partials(scope, periods, partials), 1e-9)
 
     // A new reference starts with a dark screen, the phases before it are arbitrary
-    measuring := display.lamp_freq_hz == scope.freq_hz
+    has_phase := display.lamp_freq_hz == scope.freq_hz
     elapsed := f64(scope.sample_clock - display.lamp_clock) / scope.samplerate
     display.lamp_freq_hz = scope.freq_hz
     display.lamp_clock = scope.sample_clock
 
-    for &band, index in lamp.bands {
+    for &band, index in bands {
         partial := partials[index]
         phase_before := display.lamp_phases[index]
         display.lamp_phases[index] = partial.phase
@@ -190,9 +190,9 @@ lamp_comparator :: proc(
         // the partial drifts on the screen by how far it is from the bin.
         bin_hz := f64(periods[index]) / core.SCOPE_PERIODS * scope.freq_hz
         target_advance := math.TAU * (f64(band.freq_hz) - bin_hz) * elapsed
-        advance := core.wrap_phase(partial.phase - phase_before - target_advance) if measuring else 0
+        advance := core.wrap_phase(partial.phase - phase_before - target_advance) if has_phase else 0
 
-        rescale := core.STROBE_REFERENCE_HZ / f64(band.freq_hz)
+        rescale := core.strobe_rescale(band.freq_hz)
         band.phase_diff = f32(advance * rescale)
         // The noise moves the bin's phase by about this much
         band.phase_sigma = f32(noise / (math.SQRT_TWO * level) * rescale)

@@ -22,20 +22,20 @@ import "core:testing"
 
 SingleFreqDFT :: struct {
     window_size:  int, // the comb's box included
+    gamma_size:   int, // the gamma window before the comb's box widened it
     norm_freq:    f32, // normalized frequency, eg 440Hz/ 48,000Hz
     comb_samples: f32, // the comb's box, 0 for none
-    twiddles:    []complex64, // precomputed windowed twiddles, one per sample of the window
-    dft:         complex64, // stores the resulting DFT after calling run_single_dft
+    twiddles:     []complex64, // precomputed windowed twiddles, one per sample of the window
+    dft:          complex64, // stores the resulting DFT after calling run_single_dft
 }
 
 
-// Tune to norm_freq over window_size samples, the twiddles are reallocated when the size changes.
+// Tune to norm_freq over window_size samples of the gamma window, the twiddles are reallocated when the
+// size changes.
 //
 // With spread_cents the bins that far below and above are added in, which flattens the top of the peak
 // ("phase average"): a slightly detuned note keeps its level and the in tune phase is the same. The sum of
 // the three DFTs is the DFT with the sum of their twiddles, so it costs no more than one.
-//
-// low_latency takes the gamma window instead of the Blackman, see gamma_window.
 //
 // comb_samples smooths the window with a box that long, a moving average. Its nulls fall every
 // samplerate / comb_samples from the bin, so a box of a note's period rejects every other partial of it
@@ -45,7 +45,6 @@ set_dft_freq :: proc(
     norm_freq: f32,
     window_size: int,
     spread_cents: f32 = 0,
-    low_latency := false,
     comb_samples: f32 = 0,
 ) {
     taps := int(math.ceil(comb_samples)) if comb_samples > 0 else 1
@@ -55,12 +54,12 @@ set_dft_freq :: proc(
         self.twiddles = make([]complex64, size)
     }
     self.window_size = size
+    self.gamma_size = window_size
     self.norm_freq = norm_freq
     self.comb_samples = comb_samples
 
-    window_fn := gamma_window if low_latency else blackman_window
     weights := make([]f64, size, context.temp_allocator)
-    for &weight, i in weights[:window_size] do weight = f64(window_fn(f32(i), f32(window_size)))
+    for &weight, index in weights[:window_size] do weight = f64(gamma_window(f32(index), f32(window_size)))
     if comb_samples > 0 do comb(weights, window_size, comb_samples)
 
     // exp(-j*omega*i), rotated one step at a time. In f64, a long window runs to a couple hundred thousand
@@ -76,11 +75,11 @@ set_dft_freq :: proc(
     below := complex128(1)
     above := complex128(1)
 
-    for weight, i in weights {
+    for weight, index in weights {
         twiddle := rotation
         if spread_cents != 0 do twiddle *= 1 + below + above
 
-        self.twiddles[i] = complex64(complex(weight, 0) * twiddle)
+        self.twiddles[index] = complex64(complex(weight, 0) * twiddle)
 
         rotation *= step
         below *= below_step
@@ -140,7 +139,7 @@ test_phase_average_matches_three_bins :: proc(t: ^testing.T) {
 
     samples := make([]f32, WINDOW)
     defer delete(samples)
-    for &sample, i in samples do sample = math.sin(math.TAU * 111 * f32(i) / SAMPLERATE)
+    for &sample, index in samples do sample = math.sin(math.TAU * 111 * f32(index) / SAMPLERATE)
 
     averaged: SingleFreqDFT
     defer destroy_dft(&averaged)
@@ -167,15 +166,15 @@ test_comb_rejects_partials :: proc(t: ^testing.T) {
 
     amp :: proc(dft: ^SingleFreqDFT, freq: f32) -> f32 {
         samples := make([]f32, dft.window_size, context.temp_allocator)
-        for &sample, i in samples do sample = math.sin(math.TAU * freq * f32(i) / SAMPLERATE)
+        for &sample, index in samples do sample = math.sin(math.TAU * freq * f32(index) / SAMPLERATE)
         return abs(run_single_dft(dft, samples))
     }
 
     plain, comb: SingleFreqDFT
     defer destroy_dft(&plain)
     defer destroy_dft(&comb)
-    set_dft_freq(&plain, freq / SAMPLERATE, WINDOW, low_latency = true)
-    set_dft_freq(&comb, freq / SAMPLERATE, WINDOW, low_latency = true, comb_samples = SAMPLERATE / freq)
+    set_dft_freq(&plain, freq / SAMPLERATE, WINDOW)
+    set_dft_freq(&comb, freq / SAMPLERATE, WINDOW, comb_samples = SAMPLERATE / freq)
 
     // Half the window's mean, as without the comb. The plain window is off it, this wide its band takes in
     // some of the sine's negative frequency, which the comb nulls too.

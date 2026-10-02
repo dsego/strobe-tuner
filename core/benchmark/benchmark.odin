@@ -14,71 +14,83 @@
 // with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
+// What the strobe's and the pitch detection's transforms cost a frame, with the window sizes the app uses:
+//
+//   odin run core/benchmark -o:speed -microarch:native
+//
+// Every result is added into a sum that's printed at the end, an unused one would be optimised away along
+// with the loop that made it.
 package benchmark
 
-import "core:time"
 import "core:fmt"
 import "core:math/rand"
+import "core:time"
 
 import ".."
 import pffft "../../external/odin-pffft"
 
-SIZE :: 8192
+SAMPLERATE :: 48_000
 ITERATIONS :: 1000
-
-
-// Results on Apple M1 Pro 2021 with -o:speed
-//  Pffft: 7.300834 µs
-//  Single bin DFT: 0.00091699999999999995 µs
-
-// Without -o:speed
-//  Pffft: 13.055584000000001 µs
-//  Single bin DFT: 101.444042 µs
+PITCH_FFT_SIZE :: 8192 // config_defaults.pitch_detect_fft_size
+TRACKS :: 5 // core.MAX_BANDS, every track on the fundamental's window
+FRAMES_PER_SECOND :: 120
 
 main :: proc() {
+    samples := make([]f32, core.MAX_WINDOW_SIZE)
+    defer delete(samples)
+    for &sample in samples do sample = rand.float32_range(-1, 1)
 
+    sink: f32
 
-    // Run optimized FFT transforms
     {
-        out : [SIZE*2]f32
-        samples: [SIZE]f32
-        for i in 0..<SIZE do samples[i] = rand.float32_range(-1.0, 1.0)
-
-        stopwatch := time.Stopwatch{}
-
-        setup := pffft.new_setup(SIZE, pffft.Transform.REAL)
+        out := make([]f32, PITCH_FFT_SIZE)
+        defer delete(out)
+        setup := pffft.new_setup(PITCH_FFT_SIZE, pffft.Transform.REAL)
         defer pffft.destroy_setup(setup)
 
+        stopwatch: time.Stopwatch
         time.stopwatch_start(&stopwatch)
-        for i in 0..<ITERATIONS {
-            pffft.transform_ordered(setup, raw_data(samples[:]),raw_data(out[:]), nil, pffft.Direction.FORWARD)
+        for _ in 0 ..< ITERATIONS {
+            pffft.transform_ordered(setup, raw_data(samples), raw_data(out), nil, pffft.Direction.FORWARD)
+            sink += out[1]
         }
         time.stopwatch_stop(&stopwatch)
-
-        duration := time.stopwatch_duration(stopwatch)
-        µs := time.duration_microseconds(duration)
-        fmt.printf("Pffft: {} µs\n", µs / f64(ITERATIONS))
+        microseconds := time.duration_microseconds(time.stopwatch_duration(stopwatch)) / ITERATIONS
+        fmt.printfln("pffft, %v points (pitch detection): %.1f µs", PITCH_FFT_SIZE, microseconds)
     }
 
-    // Run single bin DFT
-    {
+    // A track's window as set_phase_comparator_freq sizes it, the comb's box of one period included
+    notes := []struct {
+        name:    string,
+        freq_hz: f32,
+    }{{"E1", 41.2}, {"A2", 110}, {"A4", 440}}
+
+    for note in notes {
+        window_size := core.dft_window_size(note.freq_hz, SAMPLERATE, core.DFT_RESOLUTION_CENTS)
         dft: core.SingleFreqDFT
         defer core.destroy_dft(&dft)
-        samples: [SIZE]f32
-        core.set_dft_freq(&dft, 110.0/48_000.0, SIZE)
+        core.set_dft_freq(&dft, note.freq_hz / SAMPLERATE, window_size, comb_samples = SAMPLERATE / note.freq_hz)
 
-        for i in 0..<SIZE do samples[i] = f32(1)
-
-        stopwatch := time.Stopwatch{}
-
+        stopwatch: time.Stopwatch
         time.stopwatch_start(&stopwatch)
-        for i in 0..<ITERATIONS {
-            core.run_single_dft(&dft, samples[:])
+        for _ in 0 ..< ITERATIONS {
+            sink += real(core.run_single_dft(&dft, samples))
         }
         time.stopwatch_stop(&stopwatch)
+        microseconds := time.duration_microseconds(time.stopwatch_duration(stopwatch)) / ITERATIONS
 
-        duration := time.stopwatch_duration(stopwatch)
-        µs := time.duration_microseconds(duration)
-        fmt.printf("Single bin DFT: {} µs\n", µs / f64(ITERATIONS))
+        // Of one core, with every track measured on every frame
+        core_share := microseconds * TRACKS * FRAMES_PER_SECOND / 1e6
+        fmt.printfln(
+            "Single bin DFT, %v (%v samples): %.1f µs, %v tracks at %v fps %.2f%% of a core",
+            note.name,
+            dft.window_size,
+            microseconds,
+            TRACKS,
+            FRAMES_PER_SECOND,
+            100 * core_share,
+        )
     }
+
+    fmt.println("(sum", sink, "keeps the results)")
 }

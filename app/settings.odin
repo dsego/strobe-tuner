@@ -30,6 +30,7 @@ PITCH_STANDARD_MIN :: 400
 PITCH_STANDARD_MAX :: 480
 
 SEGMENT_WIDTH :: 60
+WIDE_SEGMENT_WIDTH :: 80 // for longer labels
 
 // The rows in gui_settings, iOS has no input row. The sheet has room for the strobe's group on the other
 // views too, it stays as tall when the display changes and the rows under the group move up into it.
@@ -103,22 +104,13 @@ gui_settings :: proc(
         }
     }
 
-    {
-        // In the order of StrobeDisplayType
-        labels := []cstring{"Scope", "Trace", "Strobe", "Lamp"}
-        rect := settings_row(sheet_layout, row, "Display", f32(len(labels)) * SEGMENT_WIDTH)
-        row += 1
-        if i, ok := gui_segmented(rect, labels, int(config.strobe_display_type)); ok {
-            config.strobe_display_type = StrobeDisplayType(i)
-        }
-    }
+    // In the order of StrobeDisplayType
+    gui_settings_segmented(sheet_layout, &row, "Display", {"Scope", "Trace", "Strobe", "Lamp"}, &config.strobe_display_type)
 
     // The strobe's own settings, grouped under the display on a darker panel and only there for the
     // strobe. The other views don't spin, they have no tracks to set. It slides out from under the
     // display's row and back in, cut off at its bottom edge, and the rows under it follow that edge.
-    target: f32 = 1 if config.strobe_display_type == .STROBE else 0
-    strobe_group^ += (target - strobe_group^) * min(1, SHEET_SLIDE_SPEED * gfx_frame_time())
-    if abs(target - strobe_group^) < 0.002 do strobe_group^ = target
+    slide_toward(strobe_group, 1 if config.strobe_display_type == .STROBE else 0)
 
     group_height := SETTINGS_STROBE_ROWS * sheet_layout.row_height
     shut := (1 - strobe_group^) * group_height
@@ -128,86 +120,54 @@ gui_settings :: proc(
         sheet_layout.width,
         group_height - shut,
     }
-    group_layout := sheet_layout
-    group_layout.rows.y -= shut
+    // The group's rows and the ones under it, moved up by as much as the group is shut
+    sliding_layout := sheet_layout
+    sliding_layout.rows.y -= shut
 
     if strobe_group^ > 0 {
         draw_rect({group.x, group.y}, {group.width, group.height}, settings_group_color)
         begin_scissor(group)
         defer end_scissor()
 
-        sheet_layout := group_layout
-        row := row
-
-        {
-            rect := settings_row(sheet_layout, row, "Shape", 3 * SEGMENT_WIDTH, grouped = true)
-            row += 1
-            labels := []cstring{"Flat", "Wheel", "Curved"}
-            if i, ok := gui_segmented(rect, labels, int(config.strobe_shape)); ok {
-                config.strobe_shape = StrobeShape(i)
-            }
+        group_row := row
+        gui_settings_segmented(sliding_layout, &group_row, "Shape", {"Flat", "Wheel", "Curved"}, &config.strobe_shape, grouped = true)
+        // What turns the tracks: their own DFT, or the lamp's screen, the strobe the other way
+        gui_settings_segmented(sliding_layout, &group_row, "Turned by", {"Lock-in", "Lamp"}, &config.strobe_source, grouped = true)
+        // Harmonic shows a track per partial, fine the same frequency at different sensitivities
+        if gui_settings_segmented(
+            sliding_layout,
+            &group_row,
+            "Mode",
+            {"Harmonic", "Fine"},
+            &config.strobe_mode,
+            segment_width = WIDE_SEGMENT_WIDTH,
+            grouped = true,
+        ) {
+            changed = true
         }
-
-        {
-            // What turns the tracks: their own DFT, or the lamp's screen, the strobe the other way
-            rect := settings_row(sheet_layout, row, "Turned by", 2 * SEGMENT_WIDTH, grouped = true)
-            row += 1
-            labels := []cstring{"Lock-in", "Lamp"}
-            if i, ok := gui_segmented(rect, labels, int(config.strobe_source)); ok {
-                config.strobe_source = StrobeSource(i)
-            }
-        }
-
-        {
-            // Harmonic shows a track per partial, fine the same frequency at different sensitivities
-            rect := settings_row(sheet_layout, row, "Mode", 2 * 80, grouped = true)
-            row += 1
-            labels := []cstring{"Harmonic", "Fine"}
-            if i, ok := gui_segmented(rect, labels, int(config.strobe_mode)); ok {
-                config.strobe_mode = core.StrobeMode(i)
-                changed = true
-            }
-        }
-
-        {
-            // Shown in harmonic mode
-            shown := config.strobe_mode == .HARMONIC
-            rect := settings_row(sheet_layout, row, "Partial labels", 4 * SEGMENT_WIDTH, grouped = true, enabled = shown)
-            row += 1
-            labels := []cstring{"Off", "1×", "Hz", "Note"}
-            if i, ok := gui_segmented(rect, labels, int(config.partial_labels), shown); ok {
-                config.partial_labels = PartialLabelType(i)
-            }
-        }
+        gui_settings_segmented(
+            sliding_layout,
+            &group_row,
+            "Partial labels",
+            {"Off", "1×", "Hz", "Note"},
+            &config.partial_labels,
+            grouped = true,
+            enabled = config.strobe_mode == .HARMONIC,
+        )
     }
     row += SETTINGS_STROBE_ROWS
-    below := group_layout
 
-    {
-        labels := []cstring{"Red", "Mint", "Amber", "Mono"}
-        rect := settings_row(below, row, "Colors", f32(len(labels)) * SEGMENT_WIDTH)
-        row += 1
-        if i, ok := gui_segmented(rect, labels, int(config.strobe_colorway)); ok {
-            config.strobe_colorway = StrobeColorway(i)
-            changed = true
-        }
+    if gui_settings_segmented(sliding_layout, &row, "Colors", {"Red", "Mint", "Amber", "Mono"}, &config.strobe_colorway) {
+        changed = true
     }
-
-    {
-        // Lights the stripes like a lamp behind the disc, in the hue of the colors above
-        rect := settings_row(below, row, "Retro glow", 2 * SEGMENT_WIDTH)
-        row += 1
-        labels := []cstring{"Off", "On"}
-        if i, ok := gui_segmented(rect, labels, int(config.strobe_glow)); ok {
-            config.strobe_glow = i == 1
-            changed = true
-        }
+    // Lights the stripes like a lamp behind the disc, in the hue of the colors above
+    if gui_settings_segmented(sliding_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow) {
+        changed = true
     }
-
     // iOS routes the input itself: built-in mic, headset or an audio interface
     when !IOS {
         // The menu opens upwards over the rows above
-        input_rect := settings_row(below, row, "Input", 240)
+        input_rect := settings_row(sliding_layout, row, "Input", 240)
         row += 1
 
         // TODO: add refresh button to show newly connected devices
@@ -218,7 +178,7 @@ gui_settings :: proc(
 
     {
         // Everything back to the defaults like the R key, including what's only in the config file
-        rect := settings_row(below, row, "Reset to defaults", 0)
+        rect := settings_row(sliding_layout, row, "Reset to defaults", 0)
         row += 1
         if gui_small_button(rect.x, rect.y + rect.height / 2, "RESET") {
             reset_config(config)
@@ -305,11 +265,11 @@ gui_track_settings :: proc(
         rect := settings_row(sheet_layout, row, "Speed", f32(len(labels)) * SEGMENT_WIDTH)
         row += 1
         selected := -1
-        for speed, i in speeds {
-            if config.strobe_speeds[slot] == speed do selected = i
+        for speed, index in speeds {
+            if config.strobe_speeds[slot] == speed do selected = index
         }
-        if i, ok := gui_segmented(rect, labels, selected); ok {
-            config.strobe_speeds[slot] = speeds[i]
+        if tapped, ok := gui_segmented(rect, labels, selected); ok {
+            config.strobe_speeds[slot] = speeds[tapped]
             changed = true
         }
     }
@@ -401,6 +361,30 @@ gui_settings_button :: proc(position: [2]f32) -> bool {
     return gui_button({position.x - 12, position.y - 12, 48, 48})
 }
 
+
+// A settings row of one of a few options, the labels in the order of value's enum, or off and on for a
+// bool. Returns whether a tap changed value.
+gui_settings_segmented :: proc(
+    sheet_layout: SheetLayout,
+    row: ^int,
+    label: cstring,
+    labels: []cstring,
+    value: ^$T,
+    segment_width: f32 = SEGMENT_WIDTH,
+    grouped := false,
+    enabled := true,
+) -> bool {
+    rect := settings_row(sheet_layout, row^, label, f32(len(labels)) * segment_width, grouped, enabled)
+    row^ += 1
+    selected, ok := gui_segmented(rect, labels, int(value^), enabled)
+    if !ok do return false
+    when T == bool {
+        value^ = selected == 1
+    } else {
+        value^ = T(selected)
+    }
+    return true
+}
 
 // The rows of a group under the row they belong to start this far in
 SETTINGS_GROUP_INDENT :: 16
@@ -508,10 +492,10 @@ gui_segmented :: proc(rect: Rect, labels: []cstring, selected: int, enabled := t
     draw_pill(rect, pill_dark)
 
     segment_width := rect.width / f32(len(labels))
-    for label, i in labels {
-        segment := Rect{rect.x + f32(i) * segment_width, rect.y, segment_width, rect.height}
+    for label, index in labels {
+        segment := Rect{rect.x + f32(index) * segment_width, rect.y, segment_width, rect.height}
 
-        if i == selected {
+        if index == selected {
             // Inset so the track shows around it, the radius shrinks by as much and the ends stay concentric
             INSET :: 2
             fill := pill_yellow if enabled else text_color_disabled
@@ -519,7 +503,7 @@ gui_segmented :: proc(rect: Rect, labels: []cstring, selected: int, enabled := t
             draw_centered_label(label, segment, text_color_dark)
         } else {
             draw_centered_label(label, segment, text_color_light if enabled else text_color_disabled)
-            if enabled && gui_button(touch_area(segment)) do return i, true
+            if enabled && gui_button(touch_area(segment)) do return index, true
         }
     }
 

@@ -34,7 +34,8 @@ SheetLayout :: struct {
 // A finger on a phone, a mouse needs less and the settings cover less of the strobe
 SHEET_ROW_HEIGHT :: 44 when IOS else 36
 SHEET_CONTROL_MARGIN :: 6 // between the pills and their row, the touch area is the whole row
-SHEET_TITLE_HEIGHT :: 36 // from the top of the title to the first row
+SHEET_TOP_PADDING :: 10 // above the title, the first row's own margin spaces the title from it
+SHEET_TITLE_HEIGHT :: 26 // from the top of the title to the first row
 
 // open is how far the sheet has slid up, 0 is hidden below the window and 1 is all the way. The settings
 // have SETTINGS_ROWS, a track's sheet fewer. Either covers the whole panel under the strobe at least, a
@@ -56,16 +57,16 @@ compute_sheet_layout :: proc(
 
     // Below the rows, the home indicator on a phone
     below := window.y - (safe.y + safe.height) + PANEL_PADDING / 2
-    height := PANEL_PADDING + SHEET_TITLE_HEIGHT + f32(rows) * sheet_layout.row_height + extra + below
+    height := SHEET_TOP_PADDING + SHEET_TITLE_HEIGHT + f32(rows) * sheet_layout.row_height + extra + below
     height = max(height, window.y - (strobe.y + strobe.height))
     height = min(height, window.y - safe.y)
     sheet_layout.sheet = {0, window.y - open * height, window.x, height}
     sheet_layout.bottom = sheet_layout.sheet.y + height - (window.y - (safe.y + safe.height)) - PANEL_PADDING
 
-    top := sheet_layout.sheet.y + PANEL_PADDING
+    top := sheet_layout.sheet.y + SHEET_TOP_PADDING
     sheet_layout.title = {left, top}
-    // Right aligned with the rows, centred on the title
-    sheet_layout.close = {left + sheet_layout.width - 32, top - 11, 48, 48}
+    // Right aligned with the rows, centred on the title, the touch area from the sheet's edge down as far
+    sheet_layout.close = {left + sheet_layout.width - 32, sheet_layout.sheet.y, 48, 2 * SHEET_TOP_PADDING + TITLE_SIZE}
     sheet_layout.rows = {left, top + SHEET_TITLE_HEIGHT}
     return
 }
@@ -97,9 +98,13 @@ SHEET_DISMISS_VELOCITY :: 600
 slide_sheet :: proc(sheet: ^Sheet) {
     if sheet.drag.active && sheet.slide == 0 do close_sheet(sheet)
     sheet.was_open = sheet.open
-    target := f32(int(sheet.open))
-    sheet.slide += (target - sheet.slide) * min(1, SHEET_SLIDE_SPEED * gfx_frame_time())
-    if abs(target - sheet.slide) < 0.002 do sheet.slide = target
+    slide_toward(&sheet.slide, f32(int(sheet.open)))
+}
+
+// Eases slide towards target at a sheet's pace and snaps the last bit
+slide_toward :: proc(slide: ^f32, target: f32) {
+    slide^ += (target - slide^) * min(1, SHEET_SLIDE_SPEED * gfx_frame_time())
+    if abs(target - slide^) < 0.002 do slide^ = target
 }
 
 close_sheet :: proc(sheet: ^Sheet) {

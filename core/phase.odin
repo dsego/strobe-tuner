@@ -93,7 +93,7 @@ PhaseBand :: struct {
     ref_omega:    f64,
 
     // The readout, the phase's rate vs the reference (rad/sample) fitted since the last pluck
-    measuring:    bool, // phase holds the previous frame's measurement, off until the first after a reset
+    has_phase:    bool, // phase holds the previous frame's measurement, off until the first after a reset
     rate:         f64,
     rate_time_s:  f32, // fitted this long
     fit:          RateFit,
@@ -124,9 +124,6 @@ PhaseComparator :: struct {
     mode:             StrobeMode,
     available:        int, // the new samples of the latest run_phase_detection
     snr_threshold_db: f32, // for the noise floor of a track added later
-    low_latency:      bool, // the gamma window, off for the Blackman to compare, takes a retune
-    resolution_cents: int, // the band of each track, see DFT_RESOLUTION_CENTS, takes a retune
-    comb:             bool, // the window combed to null the other partials, see set_dft_freq, takes a retune
 
     // Absolute index of the sample just past the end of the newest window, i.e. the lock-in clock
     sample_clock:     i64,
@@ -150,9 +147,6 @@ init_phase_comparator :: proc(
     self.mode = mode
     self.base_freq_hz = base_freq_hz
     self.snr_threshold_db = noise_floor_snr_db_threshold
-    self.low_latency = true
-    self.resolution_cents = DFT_RESOLUTION_CENTS
-    self.comb = true
 
     for interval in strobe_intervals {
         if interval >= 1.0 do append_phase_band(self, interval)
@@ -259,20 +253,7 @@ set_phase_comparator_freq :: proc(
     self.mode = mode
     self.speed_multiplier = speed_multiplier
 
-    // The comb's box spans enough periods of the note that every track's partials land on its nulls,
-    // two for a fifth (3/2): with a chord the root's partials and the fifth's are all multiples of half the root
-    comb_periods: f32 = 1
-    search: for mode == .HARMONIC && comb_periods < 4 {
-        for band in self.bands {
-            multiple := band.interval * comb_periods
-            if abs(multiple - math.round(multiple)) > 0.01 {
-                comb_periods += 1
-                continue search
-            }
-        }
-        break
-    }
-    comb_samples := comb_periods * self.samplerate / base_freq_hz if self.comb else 0
+    comb_samples := comb_periods(self.bands[:], mode) * self.samplerate / base_freq_hz
 
     for &band, band_index in self.bands {
         band.time_stretch = self.samplerate / base_freq_hz
@@ -294,25 +275,36 @@ set_phase_comparator_freq :: proc(
         if measures_band(self, band_index) {
             // Every track gets the fundamental's window. Sized in cents of its own partial an upper track's
             // window would be shorter, its band wider in Hz for a weaker partial, and it shimmers.
-            window_size := dft_window_size(base_freq_hz, self.samplerate, self.resolution_cents)
-            set_dft_freq(&band.dft, band.norm_freq, window_size, low_latency = self.low_latency, comb_samples = comb_samples)
-            set_dft_freq(
-                &band.averaged_dft,
-                band.norm_freq,
-                window_size,
-                PHASE_AVERAGE_SPREAD_CENTS,
-                low_latency = self.low_latency,
-                comb_samples = comb_samples,
-            )
+            window_size := dft_window_size(base_freq_hz, self.samplerate, DFT_RESOLUTION_CENTS)
+            set_dft_freq(&band.dft, band.norm_freq, window_size, comb_samples = comb_samples)
+            set_dft_freq(&band.averaged_dft, band.norm_freq, window_size, PHASE_AVERAGE_SPREAD_CENTS, comb_samples)
         }
     }
     set_phase_comparator_speed(self, base_speed)
+
+    // The comb's box spans enough periods of the note that every track's partials land on its nulls,
+    // two for a fifth (3/2): with a chord the root's partials and the fifth's are all multiples of half the root
+    comb_periods :: proc(bands: []PhaseBand, mode: StrobeMode) -> f32 {
+        if mode != .HARMONIC do return 1
+        for periods: f32 = 1; periods < 4; periods += 1 {
+            if all_whole(bands, periods) do return periods
+        }
+        return 4
+
+        all_whole :: proc(bands: []PhaseBand, periods: f32) -> bool {
+            for band in bands {
+                multiple := band.interval * periods
+                if abs(multiple - math.round(multiple)) > 0.01 do return false
+            }
+            return true
+        }
+    }
 }
 
 // The measurements start over, for another note or another input
 restart_band :: proc(band: ^PhaseBand) {
     band.phase = 0
-    band.measuring = false
+    band.has_phase = false
     band.rate = 0
     band.rate_time_s = 0
     band.fit = {}
@@ -468,32 +460,25 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, use_phase
     prev_measured := band.phase
     band.phase = f32(cmplx.phase(lock_in))
 
-    update_onset(self, band, window_size)
+    update_onset(self, band)
 
     // The strobe turns by the measured phase, the shortest way from the previous frame's, nothing else
     // carries over between frames. A band can only be off by half the frame rate in Hz, further out its
     // narrow window has faded the stripes. No advance on the first frame after a reset, the phase before
     // it is arbitrary.
-    had_phase := band.measuring
+    had_phase := band.has_phase
     phase_advance := wrap_phase(f64(band.phase - prev_measured)) if had_phase else 0
-    band.measuring = true
+    band.has_phase = true
 
     // Rescaled so all notes spin at the same rate per cent, the edges as sharp as the measurement's noise
-    band.phase_diff = f32(phase_advance * STROBE_REFERENCE_HZ / f64(band.freq_hz))
-    band.phase_sigma = f32(math.sqrt(phase_measurement_var(band^)) * STROBE_REFERENCE_HZ / f64(band.freq_hz))
+    rescale := strobe_rescale(band.freq_hz)
+    band.phase_diff = f32(phase_advance * rescale)
+    band.phase_sigma = f32(math.sqrt(phase_measurement_var(band^)) * rescale)
 
-    // The fit's measurements move back by the new samples and down by the phase advance, the new one comes
-    // in at 0, and the older ones weigh less
     step := f64(self.available)
     if had_phase {
-        fit := &band.fit
-        fit.time_phase += step * phase_advance * fit.weight - step * fit.phase - phase_advance * fit.time
-        fit.time_sq += step * step * fit.weight - 2 * step * fit.time
-        fit.time -= step * fit.weight
-        fit.phase -= phase_advance * fit.weight
-
         decay := math.exp(-step / (READOUT_FIT_S * f64(self.samplerate)))
-        fit^ = {fit.weight * decay, fit.time * decay, fit.time_sq * decay, fit.phase * decay, fit.time_phase * decay}
+        shift_fit(&band.fit, step, phase_advance, decay)
     }
 
     // The readout fits the rate once the attack has passed, and while the stripes show, a fading note
@@ -503,30 +488,51 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, use_phase
         if band.rate_time_s == 0 do band.fit = {}
         band.rate_time_s += f32(self.available) / self.samplerate
 
+        // The new measurement at time 0 and phase 0 only adds its weight
         band.fit.weight += step
-        fit := band.fit
-        spread := fit.weight * fit.time_sq - fit.time * fit.time
-        band.rate = (fit.weight * fit.time_phase - fit.time * fit.phase) / spread if spread > 0 else phase_advance / step
+        slope, has_slope := fit_slope(band.fit)
+        band.rate = slope if has_slope else phase_advance / step
     }
     freq_diff_hz := f32(band.rate * f64(self.samplerate) / math.TAU)
     band.err_cents = cents_deviation(band.freq_hz + freq_diff_hz, band.freq_hz)
 
     // The strobe turns by the phase times the track's speed
     band.scaled_phase -= band.phase_diff * band.speed
+
+    // The fit's measurements move back by step samples and down by the phase advance, so the new one
+    // comes in at 0, and the older ones weigh less by decay
+    shift_fit :: proc(fit: ^RateFit, step, phase_advance, decay: f64) {
+        fit.time_phase += step * phase_advance * fit.weight - step * fit.phase - phase_advance * fit.time
+        fit.time_sq += step * step * fit.weight - 2 * step * fit.time
+        fit.time -= step * fit.weight
+        fit.phase -= phase_advance * fit.weight
+        fit^ = {fit.weight * decay, fit.time * decay, fit.time_sq * decay, fit.phase * decay, fit.time_phase * decay}
+    }
+
+    // The least squares slope in rad per sample, none while the measurements have no spread in time
+    fit_slope :: proc(fit: RateFit) -> (slope: f64, ok: bool) {
+        time_variance := fit.weight * fit.time_sq - fit.time * fit.time
+        if time_variance <= 0 do return 0, false
+        return (fit.weight * fit.time_phase - fit.time * fit.phase) / time_variance, true
+    }
+}
+
+// A phase advance at freq_hz times this turns the strobe as fast per cent as every other note
+strobe_rescale :: proc(freq_hz: f32) -> f64 {
+    return STROBE_REFERENCE_HZ / f64(freq_hz)
 }
 
 
 // Detect a new pluck (sudden amplitude jump) and distrust the phase until the attack has passed
-update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand, window_size: int) {
+update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
     band.onset_hold = max(band.onset_hold - self.available, 0)
 
     is_loud := band.snr_db > band.noise_floor.snr_threshold_db
     if is_loud && band.amp > ONSET_RATIO * band.envelope {
-        // The attack affects the phase until it has passed the window centre, the gamma window's is nearer.
-        // The comb's box adds half its length.
-        comb := band.dft.comb_samples
-        gamma_size := f32(window_size) - max(math.ceil(comb) - 1, 0)
-        delay := int(GAMMA_WINDOW_DELAY * gamma_size + comb / 2) if self.low_latency else window_size / 2
+        // The attack affects the phase until it has passed the gamma window's mean age, the comb's box adds
+        // half its length
+        dft := band.dft
+        delay := int(GAMMA_WINDOW_DELAY * f32(dft.gamma_size) + dft.comb_samples / 2)
         band.onset_hold = delay + int(ONSET_HOLD_S * self.samplerate)
         // The readout's average starts over on each pluck
         band.rate_time_s = 0
@@ -617,19 +623,10 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
     FRAME :: 400 // samples per display frame at 120 FPS
     target_hz: f32 = 261.63
 
-    run :: proc(
-        target_hz: f32,
-        detune_cents: f32,
-        use_phase_average: bool,
-        low_latency: bool,
-    ) -> (
-        err_cents: [2]f32,
-        phase_diff: f32,
-    ) {
+    run :: proc(target_hz: f32, detune_cents: f32, use_phase_average: bool) -> (err_cents: [2]f32, phase_diff: f32) {
         intervals := []f32{1, 2}
         pc := init_phase_comparator(target_hz, SAMPLERATE, intervals, .HARMONIC, 10)
         defer destroy_phase_comparator(pc)
-        pc.low_latency = low_latency
         set_phase_comparator_freq(pc, target_hz, 440, 0.025, 2, .HARMONIC)
 
         freq := f64(cents_to_freq(detune_cents, target_hz))
@@ -647,23 +644,21 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
         return {pc.bands[0].err_cents, pc.bands[1].err_cents}, pc.bands[0].phase_diff
     }
 
-    for low_latency in ([]bool{false, true}) {
-        for average in ([]bool{false, true}) {
-            // In tune: the strobe stands still
-            err, diff := run(target_hz, 0, average, low_latency)
-            testing.expectf(t, abs(err[0]) < 0.05 && abs(err[1]) < 0.05, "in tune, got %v cents", err)
-            testing.expectf(t, abs(diff) < 1e-4, "in tune, got phase advance %v", diff)
+    for average in ([]bool{false, true}) {
+        // In tune: the strobe stands still
+        err, diff := run(target_hz, 0, average)
+        testing.expectf(t, abs(err[0]) < 0.05 && abs(err[1]) < 0.05, "in tune, got %v cents", err)
+        testing.expectf(t, abs(diff) < 1e-4, "in tune, got phase advance %v", diff)
 
-            // Sharp: both bands report the detuning, the strobe phase advances
-            err, diff = run(target_hz, 3, average, low_latency)
-            testing.expectf(t, abs(err[0] - 3) < 0.1 && abs(err[1] - 3) < 0.1, "+3 cents, got %v cents", err)
-            testing.expect(t, diff > 0)
+        // Sharp: both bands report the detuning, the strobe phase advances
+        err, diff = run(target_hz, 3, average)
+        testing.expectf(t, abs(err[0] - 3) < 0.1 && abs(err[1] - 3) < 0.1, "+3 cents, got %v cents", err)
+        testing.expect(t, diff > 0)
 
-            // Flat
-            err, diff = run(target_hz, -7, average, low_latency)
-            testing.expectf(t, abs(err[0] + 7) < 0.1 && abs(err[1] + 7) < 0.1, "-7 cents, got %v cents", err)
-            testing.expect(t, diff < 0)
-        }
+        // Flat
+        err, diff = run(target_hz, -7, average)
+        testing.expectf(t, abs(err[0] + 7) < 0.1 && abs(err[1] + 7) < 0.1, "-7 cents, got %v cents", err)
+        testing.expect(t, diff < 0)
     }
 }
 

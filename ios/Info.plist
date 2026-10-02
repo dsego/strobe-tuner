@@ -42,6 +42,9 @@
     </array>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
+    <!-- Lets a ProMotion iPhone run up to 120 like the iPad and the Mac, see MAX_FPS -->
+    <key>CADisableMinimumFrameDurationOnPhone</key>
+    <true/>
     <key>UIStatusBarHidden</key>
     <true/>
     <!-- Required, iOS kills the app when it opens the microphone without it -->

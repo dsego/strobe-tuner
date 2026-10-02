@@ -108,6 +108,7 @@ Scope :: struct {
     noise_floor:         f32,
     chunk:               []f32,
     coupling:            [2]f32, // the previous input and output of the AC coupling
+    skipping:            bool, // nothing shows the screen, see skip_scope
 
     // The screen from above, see scope_from_above
     heights:             []f32,
@@ -160,6 +161,7 @@ scope_width :: proc(self: ^Scope) -> int {
 
 // Draws what came in since the previous frame
 update_scope :: proc(self: ^Scope) {
+    self.skipping = false
     available := int(ringbuffer_available(&self.ringbuffer))
     if available == 0 do return
 
@@ -179,6 +181,17 @@ update_scope :: proc(self: ^Scope) {
         sweep_samples(self, self.chunk[:count])
         available -= count
     }
+}
+
+// Instead of update_scope while nothing shows the screen, drawing the beam costs more than the strobe's
+// measurements. What came in is dropped, the clock runs on and the screen goes dark, it starts over when
+// it shows again.
+skip_scope :: proc(self: ^Scope) {
+    available := ringbuffer_available(&self.ringbuffer)
+    skip_ringbuffer(&self.ringbuffer, available)
+    self.sample_clock += i64(available)
+    if !self.skipping do clear_scope(self)
+    self.skipping = true
 }
 
 // Draws the samples over what is on the screen, which fades by the persistence
