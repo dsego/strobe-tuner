@@ -1,11 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- The app's page in the Settings app, under the microphone switch. The build scripts write
-     Acknowledgements.plist next to it from assets/Acknowledgements.txt. -->
+<!-- The app's page in the Settings app, under the microphone switch. The build scripts fill in the
+     version from the Info.plist and write Acknowledgements.plist next to it from
+     assets/Acknowledgements.txt. -->
 <plist version="1.0">
 <dict>
     <key>PreferenceSpecifiers</key>
     <array>
+        <dict>
+            <key>Type</key>
+            <string>PSTitleValueSpecifier</string>
+            <key>Title</key>
+            <string>Version</string>
+            <key>Key</key>
+            <string>version</string>
+            <key>DefaultValue</key>
+            <string>dev</string>
+        </dict>
         <dict>
             <key>Type</key>
             <string>PSChildPaneSpecifier</string>

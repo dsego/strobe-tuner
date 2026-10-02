@@ -110,7 +110,7 @@ gui_settings :: proc(
         return
     }
 
-    close = draw_sheet_header(sheet_layout, "Settings")
+    close = draw_sheet_header(sheet_layout, "Settings", VERSION)
     row := 0
 
     {

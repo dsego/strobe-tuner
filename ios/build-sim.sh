@@ -15,6 +15,8 @@ OUT="$ROOT/build/ios-sim"
 APP="$OUT/StrobeTuner.app"
 BUNDLE_ID=com.dsego.strobetuner
 MIN_IOS=15.0
+# Shown after the settings' title and in the Settings app, e.g. "2.0 (1)"
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/ios/Info.plist") ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$ROOT/ios/Info.plist"))"
 TARGET="arm64-apple-ios$MIN_IOS-simulator"
 
 ODIN_ROOT=$(odin root)
@@ -105,6 +107,7 @@ odin build "$ROOT/app" \
     -minimum-os-version:$MIN_IOS \
     -define:RENDERER=sdl \
     -define:IOS=true \
+    -define:VERSION="$VERSION" \
     -debug \
     -out:"$OUT/app.o"
 
@@ -144,9 +147,10 @@ xcrun actool "$ROOT/ios/Assets.xcassets" --compile "$APP" --platform iphonesimul
     --target-device iphone --app-icon AppIcon --output-partial-info-plist "$OUT/icon-info.plist" > /dev/null
 /usr/libexec/PlistBuddy -c "Merge $OUT/icon-info.plist" "$APP/Info.plist"
 
-# The acknowledgements show in the app's page in the Settings app, like on the device
+# The version and acknowledgements show in the app's page in the Settings app, like on the device
 mkdir -p "$APP/Settings.bundle"
 cp "$ROOT/ios/Settings.bundle/Root.plist" "$APP/Settings.bundle/"
+plutil -replace PreferenceSpecifiers.0.DefaultValue -string "$VERSION" "$APP/Settings.bundle/Root.plist"
 ACKNOWLEDGEMENTS="$APP/Settings.bundle/Acknowledgements.plist"
 plutil -create xml1 "$ACKNOWLEDGEMENTS"
 plutil -insert PreferenceSpecifiers -json '[{"Type": "PSGroupSpecifier"}]' "$ACKNOWLEDGEMENTS"

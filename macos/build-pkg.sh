@@ -18,6 +18,8 @@ NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$ROOT/macos/Info.plist"
 APP="$OUT/$NAME.app"
 PKG="$OUT/$NAME.pkg"
 MIN_MACOS=11.0
+# Shown after the settings' title, e.g. "2.0 (1)", the About panel reads it from the Info.plist
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/macos/Info.plist") ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$ROOT/macos/Info.plist"))"
 
 if [ -z "${MAC_PROFILE:-}" ] || [ ! -f "$MAC_PROFILE" ]; then
     echo "Set MAC_PROFILE to the Mac App Store provisioning profile (.provisionprofile)"
@@ -28,7 +30,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 # No -microarch:native, the build has to run on every Apple silicon Mac, not only this one
 echo "Compiling app"
-odin build "$ROOT/app" -o:speed -minimum-os-version:$MIN_MACOS -out:"$APP/Contents/MacOS/app.bin"
+odin build "$ROOT/app" -o:speed -minimum-os-version:$MIN_MACOS -define:VERSION="$VERSION" -out:"$APP/Contents/MacOS/app.bin"
 
 cp "$ROOT/macos/Info.plist" "$APP/Contents/Info.plist"
 cp "$ROOT/macos/Credits.rtf" "$APP/Contents/Resources/"
