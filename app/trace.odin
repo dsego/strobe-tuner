@@ -16,14 +16,16 @@
 
 package app
 
+import "core:fmt"
 import "core:math"
 
 // The cents over the last few seconds as a line, one of the display types.
 // Shows what the strobe can't: the pluck going sharp and settling, vibrato, a held note drifting.
 
-TRACE_SECONDS :: 2
-TRACE_CAPACITY :: 256 // readings, they come about 20 times a second
-TRACE_RANGE :: 25 // cents from the middle to the top and bottom, further is clamped to the edge
+// Readings, one a frame at the most, the longest span at 120 fps fits with room to spare. The span and the
+// range, how many cents from the middle to the top and bottom, are in the config, further is clamped to
+// the edge.
+TRACE_CAPACITY :: 1024
 TRACE_BAND :: 5 // cents either side of in tune, marked with faint lines
 TRACE_CURVE_STEPS :: 8 // pieces of the curve between two readings
 
@@ -74,9 +76,10 @@ record_trace :: proc(self: ^Trace, cents, light: f32, fresh: bool, frame_time: f
     }
 }
 
-// Oldest on the left, the latest point on the right edge, sharp is up
+// Oldest on the left, the latest point on the right edge, sharp is up. seconds across, range_cents from
+// the middle to the top and bottom.
 // The line in the colorway's lit color, the in tune band in its second color
-draw_cents_trace :: proc(self: ^Trace, rect: Rect, line_color, band_color, background: Color) {
+draw_cents_trace :: proc(self: ^Trace, rect: Rect, seconds, range_cents: f32, line_color, band_color, background: Color) {
     draw_rect({rect.x, rect.y}, {rect.width, rect.height}, background)
 
     PADDING :: 28
@@ -86,15 +89,18 @@ draw_cents_trace :: proc(self: ^Trace, rect: Rect, line_color, band_color, backg
     // The in tune band and a line through the middle of it
     band := band_color
     band.a = 110
-    // ±TRACE_BAND of the ±TRACE_RANGE the plot covers, f32 as the constants would divide as integers
-    band_height := f32(TRACE_BAND) / TRACE_RANGE * plot.height
+    // ±TRACE_BAND of the ±range_cents the plot covers
+    band_height := TRACE_BAND / range_cents * plot.height
     draw_rect({plot.x, middle - band_height / 2}, {plot.width, band_height}, band)
     center_line := line_color
     center_line.a = 120
     draw_rect({plot.x, middle - 1}, {plot.width, 2}, center_line)
 
-    draw_label(pixel_fonts.label_large, "+25", {plot.x + 10, plot.y - 8}, text_color_muted, 1)
-    draw_label(pixel_fonts.label_large, "-25", {plot.x + 10, plot.y + plot.height - 12}, text_color_muted, 1)
+    // Inside the plot's top and bottom edges, clear of the tuning arrows above it, in the font and color of
+    // the partials on the strobe's tracks
+    font := pixel_fonts.band_label
+    draw_label(font, fmt.ctprintf("+%.0f¢", range_cents), {plot.x + 10, plot.y + 4}, accent_color)
+    draw_label(font, fmt.ctprintf("-%.0f¢", range_cents), {plot.x + 10, plot.y + plot.height - 4 - font.size}, accent_color)
 
     // Like a lit pen: a soft see-through glow under the line. Both are stamped as anti-aliased dots evenly
     // spaced along the whole line, so the edges and joins are smooth and the glow builds up the same
@@ -105,9 +111,12 @@ draw_cents_trace :: proc(self: ^Trace, rect: Rect, line_color, band_color, backg
     glow.a = 16
 
     // Placed by time, the newest reading is at the right edge now and scrolls left
-    point :: proc(sample: TraceSample, clock: f32, plot: Rect, middle: f32) -> [2]f32 {
-        x := plot.x + plot.width - (clock - sample.time) / TRACE_SECONDS * plot.width
-        return {x, middle - clamp(sample.cents / TRACE_RANGE, -1, 1) * plot.height / 2}
+    // The plot's scales, seconds and cents to points
+    scale := [2]f32{plot.width / seconds, plot.height / 2 / range_cents}
+    point :: proc(sample: TraceSample, clock: f32, plot: Rect, middle: f32, scale: [2]f32) -> [2]f32 {
+        x := plot.x + plot.width - (clock - sample.time) * scale.x
+        limit := plot.height / 2
+        return {x, middle - clamp(sample.cents * scale.y, -limit, limit)}
     }
     usable :: proc(self: ^Trace, i: int) -> bool {
         return i >= 0 && i < self.count && !math.is_nan(trace_sample(self, i).cents)
@@ -126,18 +135,18 @@ draw_cents_trace :: proc(self: ^Trace, rect: Rect, line_color, band_color, backg
 
         for i in 0 ..< self.count {
             if !usable(self, i) do continue
-            p1 := point(trace_sample(self, i), self.clock, plot, middle)
+            p1 := point(trace_sample(self, i), self.clock, plot, middle, scale)
             if !usable(self, i - 1) {
                 // the start of a run
                 pen.color.a = u8(f32(pass_color.a) * trace_sample(self, i).light)
                 pen_start(&pen, p1)
             }
             if !usable(self, i + 1) do continue
-            p2 := point(trace_sample(self, i + 1), self.clock, plot, middle)
+            p2 := point(trace_sample(self, i + 1), self.clock, plot, middle, scale)
 
             // A curve through the readings (Catmull-Rom), the neighbours on either side set its direction
-            p0 := point(trace_sample(self, i - 1), self.clock, plot, middle) if usable(self, i - 1) else p1
-            p3 := point(trace_sample(self, i + 2), self.clock, plot, middle) if usable(self, i + 2) else p2
+            p0 := point(trace_sample(self, i - 1), self.clock, plot, middle, scale) if usable(self, i - 1) else p1
+            p3 := point(trace_sample(self, i + 2), self.clock, plot, middle, scale) if usable(self, i + 2) else p2
             light1, light2 := trace_sample(self, i).light, trace_sample(self, i + 1).light
             for step in 1 ..= TRACE_CURVE_STEPS {
                 progress := f32(step) / TRACE_CURVE_STEPS

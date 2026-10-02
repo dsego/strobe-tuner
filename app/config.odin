@@ -36,11 +36,11 @@ PartialLabelType :: enum {
     NOTE_NAMES,
 }
 
-// The views of the settings' display menu, in its order
+// The views in the settings' display list, in its order
 StrobeDisplayType :: enum {
+    STROBE, // the tracks, in one of the StrobeShapes
     SCOPE, // the wave itself, like an oscilloscope synced to the strobe's frequency, see core/scope.odin
     TRACE, // a line of the cents over the last few seconds
-    STROBE, // the tracks, in one of the StrobeShapes
     LAMP, // the scope from above, stripes as bright as the wave is high, the lamp of a mechanical strobe
 }
 
@@ -154,6 +154,12 @@ Config :: struct {
     lamp_shape:                   core.ScopeShape,
     // the scope over time or as a Lissajous figure against the strobe's frequency, tapping it flips them
     scope_sweep:                  core.ScopeSweep,
+    // the screen's height follows the level, or holds the note's loudest to show its decay
+    scope_gain:                   core.ScopeGain,
+
+    // Trace display: how many seconds it shows, and how many cents from the middle to its edges
+    trace_seconds:                f32,
+    trace_range_cents:            f32,
 }
 
 config_defaults :: Config {
@@ -192,6 +198,9 @@ config_defaults :: Config {
     scope_persistence_ms         = 40,
     lamp_shape                   = .HALF_RECTIFIED,
     scope_sweep                  = .TIME,
+    scope_gain                   = .AUTO,
+    trace_seconds                = 2,
+    trace_range_cents            = 25,
 }
 
 

@@ -83,12 +83,19 @@ ScopeSweep :: enum {
     XY, // the reference's cosine, a Lissajous figure
 }
 
+// How the screen's height follows the input's level
+ScopeGain :: enum {
+    AUTO, // the peak, falling back over SCOPE_LEVEL_RELEASE_SECONDS, a fading note still fills the screen
+    HOLD, // the loudest peak since the reference changed, a fading note shrinks and shows its decay
+}
+
 
 Scope :: struct {
     using node:          AudioCaptureNode,
     samplerate:          f64,
     freq_hz:             f64,
     sweep:               ScopeSweep,
+    gain:                ScopeGain,
 
     // How long the beam stays on the screen, the time constant of its decay. 0 keeps only what came
     // in since the previous frame.
@@ -137,11 +144,12 @@ destroy_scope :: proc(self: ^Scope) {
     delete(self.chunk)
 }
 
-// Starts with a dark screen at the new reference frequency
+// Starts with a dark screen at the new reference frequency. A held level lets go, it's another note.
 set_scope_freq :: proc(self: ^Scope, freq_hz: f64) {
     self.freq_hz = freq_hz
     self.step = freq_hz / (self.samplerate * SCOPE_PERIODS)
     clear_scope(self)
+    if self.gain == .HOLD do self.level = SCOPE_MIN_LEVEL
 }
 
 clear_scope :: proc(self: ^Scope) {
@@ -207,7 +215,7 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
         for &cell in self.screen do cell *= fade
     }
 
-    release := f32(math.exp(-1 / (SCOPE_LEVEL_RELEASE_SECONDS * self.samplerate)))
+    release: f32 = 1 if self.gain == .HOLD else f32(math.exp(-1 / (SCOPE_LEVEL_RELEASE_SECONDS * self.samplerate)))
     clock := self.sample_clock - i64(len(samples))
     brightness := math.pow(decay, f64(len(samples) - 1))
     min_level := max(self.noise_floor * SCOPE_NOISE_HEADROOM, SCOPE_MIN_LEVEL)
@@ -587,4 +595,40 @@ test_scope_xy_in_tune_stands_still :: proc(t: ^testing.T) {
     }
     distance := off_circle(&scope)
     testing.expectf(t, distance > 20, "%v cells off the circle", distance)
+}
+
+@(test)
+test_scope_gain :: proc(t: ^testing.T) {
+    FREQ :: 220.0
+
+    // The level after a second of a loud note and two seconds of it 20 dB quieter
+    level_after_decay :: proc(gain: ScopeGain) -> f32 {
+        scope := scope_test_init(FREQ)
+        defer destroy_scope(&scope)
+        scope.gain = gain
+
+        samples: [SCOPE_TEST_FRAME]f32
+        for frame in 0 ..< 180 {
+            scope_test_sine(samples[:], FREQ, SCOPE_TEST_SAMPLERATE, scope.sample_clock)
+            if frame >= 60 do for &sample in samples do sample *= 0.1
+            sweep_samples(&scope, samples[:])
+        }
+        return scope.level
+    }
+
+    // Auto follows the quieter note down to its peak, hold keeps the loud one's
+    auto := level_after_decay(.AUTO)
+    testing.expectf(t, auto < 0.15, "auto: level %v", auto)
+    held := level_after_decay(.HOLD)
+    testing.expectf(t, held > 0.99, "hold: level %v", held)
+
+    // Another note lets the held level go
+    scope := scope_test_init(FREQ)
+    defer destroy_scope(&scope)
+    scope.gain = .HOLD
+    samples: [SCOPE_TEST_FRAME]f32
+    scope_test_sine(samples[:], FREQ, SCOPE_TEST_SAMPLERATE, scope.sample_clock)
+    sweep_samples(&scope, samples[:])
+    set_scope_freq(&scope, 2 * FREQ)
+    testing.expectf(t, scope.level == SCOPE_MIN_LEVEL, "after another note: level %v", scope.level)
 }

@@ -30,15 +30,28 @@ PITCH_STANDARD_MIN :: 400
 PITCH_STANDARD_MAX :: 480
 
 SEGMENT_WIDTH :: 60
-WIDE_SEGMENT_WIDTH :: 80 // for longer labels
 
-// The rows in gui_settings, iOS has no input row. The sheet has room for the strobe's group on the other
-// views too, it stays as tall when the display changes and the rows under the group move up into it.
-SETTINGS_ROWS :: 9 when IOS else 10
-SETTINGS_STROBE_ROWS :: 4
+// The rows in gui_settings, the display's take DISPLAY_ROWS, iOS has no input row
+SETTINGS_ROWS :: 8 when IOS else 9
 
-// Behind a group, darker than the sheet and lighter than the pills
-settings_group_color := hex(0x36373FFF)
+// The display's rows: its label and the displays listed down the left, the picked one's options on the
+// right. As many rows as the strobe's options, the most of any display, so the rows under them stay put
+// when the display changes. An option's control is a fifth smaller than a row's, its label before it, and
+// the whole row is its touch area.
+DISPLAY_ROWS :: 4
+DISPLAY_LIST_WIDTH :: 76
+OPTION_SEGMENT_WIDTH :: 0.8 * SEGMENT_WIDTH
+OPTION_WIDE_SEGMENT_WIDTH :: 60 // for longer labels, Persistence and its three fit beside the list on an iPhone SE
+OPTION_CONTROL_HEIGHT :: 0.8 * (SHEET_ROW_HEIGHT - 2 * SHEET_CONTROL_MARGIN)
+OPTION_LABEL_GAP :: 8
+
+// The scope's and the lamp's persistence, short, medium and long
+SCOPE_PERSISTENCE_STEPS_MS :: [3]f32{15, 40, 150}
+// The trace's span, short, medium and long, and its range from the middle to the edge, narrow and wide.
+// Narrow for an instrument's pluck settling, wide for a voice's vibrato, half a semitone is as far as a
+// note can be off before it's the next one.
+TRACE_SPAN_STEPS_S :: [3]f32{1, 2, 5}
+TRACE_RANGE_STEPS_CENTS :: [2]f32{25, 50}
 
 settings_separator_color := hex(0x35363EFF)
 
@@ -70,15 +83,13 @@ gui_settings_dropdown :: proc(
     }
 }
 
-// Returns close when ✕ is tapped, changed when the strobe or the note detection needs updating.
-// strobe_group is how far the strobe's group is open, 0 is shut and 1 all the way, it follows the display.
+// Returns close when ✕ is tapped, changed when the strobe or the note detection needs updating
 gui_settings :: proc(
     sheet_layout: SheetLayout,
     config: ^Config,
     audio_devices: []GuiOption,
     audio_device_index: ^int,
     menu: ^SettingsMenu,
-    strobe_group: ^f32,
 ) -> (
     close: bool,
     changed: bool,
@@ -104,70 +115,20 @@ gui_settings :: proc(
         }
     }
 
-    // In the order of StrobeDisplayType
-    gui_settings_segmented(sheet_layout, &row, "Display", {"Scope", "Trace", "Strobe", "Lamp"}, &config.strobe_display_type)
+    if gui_display_rows(sheet_layout, row, config) do changed = true
+    row += DISPLAY_ROWS
 
-    // The strobe's own settings, grouped under the display on a darker panel and only there for the
-    // strobe. The other views don't spin, they have no tracks to set. It slides out from under the
-    // display's row and back in, cut off at its bottom edge, and the rows under it follow that edge.
-    slide_toward(strobe_group, 1 if config.strobe_display_type == .STROBE else 0)
-
-    group_height := SETTINGS_STROBE_ROWS * sheet_layout.row_height
-    shut := (1 - strobe_group^) * group_height
-    group := Rect {
-        sheet_layout.rows.x,
-        sheet_layout.rows.y + f32(row) * sheet_layout.row_height,
-        sheet_layout.width,
-        group_height - shut,
-    }
-    // The group's rows and the ones under it, moved up by as much as the group is shut
-    sliding_layout := sheet_layout
-    sliding_layout.rows.y -= shut
-
-    if strobe_group^ > 0 {
-        draw_rect({group.x, group.y}, {group.width, group.height}, settings_group_color)
-        begin_scissor(group)
-        defer end_scissor()
-
-        group_row := row
-        gui_settings_segmented(sliding_layout, &group_row, "Shape", {"Flat", "Wheel", "Curved"}, &config.strobe_shape, grouped = true)
-        // What turns the tracks: their own DFT, or the lamp's screen, the strobe the other way
-        gui_settings_segmented(sliding_layout, &group_row, "Turned by", {"Lock-in", "Lamp"}, &config.strobe_source, grouped = true)
-        // Harmonic shows a track per partial, fine the same frequency at different sensitivities
-        if gui_settings_segmented(
-            sliding_layout,
-            &group_row,
-            "Mode",
-            {"Harmonic", "Fine"},
-            &config.strobe_mode,
-            segment_width = WIDE_SEGMENT_WIDTH,
-            grouped = true,
-        ) {
-            changed = true
-        }
-        gui_settings_segmented(
-            sliding_layout,
-            &group_row,
-            "Partial labels",
-            {"Off", "1×", "Hz", "Note"},
-            &config.partial_labels,
-            grouped = true,
-            enabled = config.strobe_mode == .HARMONIC,
-        )
-    }
-    row += SETTINGS_STROBE_ROWS
-
-    if gui_settings_segmented(sliding_layout, &row, "Colors", {"Red", "Mint", "Amber", "Mono"}, &config.strobe_colorway) {
+    if gui_settings_segmented(sheet_layout, &row, "Colors", {"Red", "Mint", "Amber", "Mono"}, &config.strobe_colorway) {
         changed = true
     }
     // Lights the stripes like a lamp behind the disc, in the hue of the colors above
-    if gui_settings_segmented(sliding_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow) {
+    if gui_settings_segmented(sheet_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow) {
         changed = true
     }
     // iOS routes the input itself: built-in mic, headset or an audio interface
     when !IOS {
         // The menu opens upwards over the rows above
-        input_rect := settings_row(sliding_layout, row, "Input", 240)
+        input_rect := settings_row(sheet_layout, row, "Input", 240)
         row += 1
 
         // TODO: add refresh button to show newly connected devices
@@ -178,7 +139,7 @@ gui_settings :: proc(
 
     {
         // Everything back to the defaults like the R key, including what's only in the config file
-        rect := settings_row(sliding_layout, row, "Reset to defaults", 0)
+        rect := settings_row(sheet_layout, row, "Reset to defaults", 0)
         row += 1
         if gui_small_button(rect.x, rect.y + rect.height / 2, "RESET") {
             reset_config(config)
@@ -187,6 +148,113 @@ gui_settings :: proc(
     }
 
     return
+
+    // The display's DISPLAY_ROWS from first_row: its label and the displays down the left, the picked one's
+    // options on the right, one a row. Returns changed when the strobe needs updating. The trace has nothing
+    // to set.
+    gui_display_rows :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Config) -> (changed: bool) {
+        left, width, row_height := sheet_layout.rows.x, sheet_layout.width, sheet_layout.row_height
+        top := sheet_layout.rows.y + f32(first_row) * row_height
+        draw_label(pixel_fonts.label, "Display", {left, top + (row_height - LABEL_SIZE) / 2}, text_color_light, 1)
+        draw_rect({left, top + DISPLAY_ROWS * row_height - 1}, {width, 1}, settings_separator_color)
+
+        // In the order of StrobeDisplayType, under the label, its pills as tall as a row's
+        item_height := row_height - 2 * SHEET_CONTROL_MARGIN
+        list_height := f32(len(StrobeDisplayType)) * item_height
+        list := Rect{left, top + row_height + ((DISPLAY_ROWS - 1) * row_height - list_height) / 2, DISPLAY_LIST_WIDTH, list_height}
+        gui_display_list(list, {"Strobe", "Scope", "Trace", "Lamp"}, &config.strobe_display_type)
+
+        // A row each, the label right before the control at the right edge
+        options := Rect{left, top, width, row_height}
+        switch config.strobe_display_type {
+        case .STROBE:
+            gui_option(options, 0, "Shape", {"Flat", "Wheel", "Curved"}, &config.strobe_shape)
+            // What turns the tracks: their own DFT, or the lamp's screen, the strobe the other way
+            gui_option(options, 1, "Turned by", {"Lock-in", "Lamp"}, &config.strobe_source, OPTION_WIDE_SEGMENT_WIDTH)
+            // Harmonic shows a track per partial, fine the same frequency at different sensitivities
+            if gui_option(options, 2, "Mode", {"Harmonic", "Fine"}, &config.strobe_mode, OPTION_WIDE_SEGMENT_WIDTH) {
+                changed = true
+            }
+            harmonic := config.strobe_mode == .HARMONIC
+            gui_option(options, 3, "Partials", {"Off", "1×", "Hz", "Note"}, &config.partial_labels, enabled = harmonic)
+        case .SCOPE:
+            // Tapping the scope flips it too
+            gui_option(options, 0, "Sweep", {"Time", "X-Y"}, &config.scope_sweep)
+            gui_steps(options, 1, "Persistence", {"Short", "Medium", "Long"}, &config.scope_persistence_ms, SCOPE_PERSISTENCE_STEPS_MS)
+            // Hold shows the note's decay, auto keeps a fading note filling the screen
+            gui_option(options, 2, "Gain", {"Auto", "Hold"}, &config.scope_gain)
+        case .TRACE:
+            gui_steps(options, 0, "Span", {"Short", "Medium", "Long"}, &config.trace_seconds, TRACE_SPAN_STEPS_S)
+            gui_steps(options, 1, "Range", {"Narrow", "Wide"}, &config.trace_range_cents, TRACE_RANGE_STEPS_CENTS)
+        case .LAMP:
+            // The positive half of the wave like a mechanical strobe's lamp, or the wave as it is
+            gui_option(options, 0, "Rectifier", {"Half", "None"}, &config.lamp_shape)
+            gui_steps(options, 1, "Persistence", {"Short", "Medium", "Long"}, &config.scope_persistence_ms, SCOPE_PERSISTENCE_STEPS_MS)
+            // Held, the stripes dim as the note decays like a mechanical strobe's lamp
+            gui_option(options, 2, "Gain", {"Auto", "Hold"}, &config.scope_gain)
+        }
+        return
+
+        // A vertical segmented control, an item a tap
+        gui_display_list :: proc(rect: Rect, labels: []cstring, value: ^StrobeDisplayType) {
+            item_height := rect.height / f32(len(labels))
+            draw_rounded_rect(rect, item_height / 2, pill_dark)
+            for label, index in labels {
+                item := Rect{rect.x, rect.y + f32(index) * item_height, rect.width, item_height}
+                if index == int(value^) {
+                    INSET :: 2
+                    draw_pill({item.x + INSET, item.y + INSET, item.width - 2 * INSET, item.height - 2 * INSET}, pill_yellow)
+                    draw_centered_label(label, item, text_color_dark)
+                } else {
+                    draw_centered_label(label, item, text_color_light)
+                    if gui_button(item) do value^ = StrobeDisplayType(index)
+                }
+            }
+        }
+
+        // A value that's one of a few steps, a label each. None is picked for a value set in the config file
+        // between them.
+        gui_steps :: proc(options: Rect, slot: int, label: cstring, labels: []cstring, value: ^f32, steps: [$N]f32) {
+            step := -1
+            for step_value, index in steps {
+                if value^ == step_value do step = index
+            }
+            if gui_option(options, slot, label, labels, &step, OPTION_WIDE_SEGMENT_WIDTH) {
+                value^ = steps[step]
+            }
+        }
+
+        // An option in its row counted from the first of options, the control in the order of value's enum.
+        // Returns whether a tap changed value.
+        gui_option :: proc(
+            options: Rect,
+            slot: int,
+            label: cstring,
+            labels: []cstring,
+            value: ^$T,
+            segment_width: f32 = OPTION_SEGMENT_WIDTH,
+            enabled := true,
+        ) -> bool {
+            top := options.y + f32(slot) * options.height
+            width := f32(len(labels)) * segment_width
+            control := Rect {
+                options.x + options.width - width,
+                top + (options.height - OPTION_CONTROL_HEIGHT) / 2,
+                width,
+                OPTION_CONTROL_HEIGHT,
+            }
+            font := pixel_fonts.label_small
+            label_width := measure_label(font, label, 1).x
+            color := text_color_light if enabled else text_color_disabled
+            draw_label(font, label, {control.x - OPTION_LABEL_GAP - label_width, top + (options.height - font.size) / 2}, color, 1)
+
+            // The whole height of the row is the touch area
+            reach := (options.height - OPTION_CONTROL_HEIGHT) / 2
+            selected, ok := gui_segmented(control, labels, int(value^), enabled, small = true, reach = {reach, reach})
+            if ok do value^ = T(selected)
+            return ok
+        }
+    }
 }
 
 
@@ -364,19 +432,10 @@ gui_settings_button :: proc(position: [2]f32) -> bool {
 
 // A settings row of one of a few options, the labels in the order of value's enum, or off and on for a
 // bool. Returns whether a tap changed value.
-gui_settings_segmented :: proc(
-    sheet_layout: SheetLayout,
-    row: ^int,
-    label: cstring,
-    labels: []cstring,
-    value: ^$T,
-    segment_width: f32 = SEGMENT_WIDTH,
-    grouped := false,
-    enabled := true,
-) -> bool {
-    rect := settings_row(sheet_layout, row^, label, f32(len(labels)) * segment_width, grouped, enabled)
+gui_settings_segmented :: proc(sheet_layout: SheetLayout, row: ^int, label: cstring, labels: []cstring, value: ^$T) -> bool {
+    rect := settings_row(sheet_layout, row^, label, f32(len(labels)) * SEGMENT_WIDTH)
     row^ += 1
-    selected, ok := gui_segmented(rect, labels, int(value^), enabled)
+    selected, ok := gui_segmented(rect, labels, int(value^))
     if !ok do return false
     when T == bool {
         value^ = selected == 1
@@ -386,32 +445,16 @@ gui_settings_segmented :: proc(
     return true
 }
 
-// The rows of a group under the row they belong to start this far in
-SETTINGS_GROUP_INDENT :: 16
-
-// Label on the left, the control right aligned, returns where the control goes. A row in a group is
-// indented and has no divider, the group's panel holds its rows together. Its label dims with its control
-// when it doesn't apply.
-settings_row :: proc(
-    sheet_layout: SheetLayout,
-    index: int,
-    label: cstring,
-    control_width: f32,
-    grouped := false,
-    enabled := true,
-) -> Rect {
+// Label on the left, the control right aligned, returns where the control goes
+settings_row :: proc(sheet_layout: SheetLayout, index: int, label: cstring, control_width: f32) -> Rect {
     left, width, row_height := sheet_layout.rows.x, sheet_layout.width, sheet_layout.row_height
     y := sheet_layout.rows.y + f32(index) * row_height
-    // In a group the label is in from the panel's edge, the control as far in as it's from the top
-    indent, inset: f32 = 0, 0
-    if grouped do indent, inset = SETTINGS_GROUP_INDENT, SHEET_CONTROL_MARGIN
 
-    color := text_color_light if enabled else text_color_disabled
-    draw_label(pixel_fonts.label, label, {left + indent, y + (row_height - LABEL_SIZE) / 2}, color, 1)
-    if !grouped do draw_rect({left, y + row_height - 1}, {width, 1}, settings_separator_color)
+    draw_label(pixel_fonts.label, label, {left, y + (row_height - LABEL_SIZE) / 2}, text_color_light, 1)
+    draw_rect({left, y + row_height - 1}, {width, 1}, settings_separator_color)
 
     return {
-        left + width - inset - control_width,
+        left + width - control_width,
         y + SHEET_CONTROL_MARGIN,
         control_width,
         row_height - 2 * SHEET_CONTROL_MARGIN,
@@ -488,7 +531,18 @@ icon_button_width :: proc(label: cstring) -> f32 {
 
 
 // One of a few options, the selected one is a yellow pill on a dark track. Dimmed and dead when not enabled.
-gui_segmented :: proc(rect: Rect, labels: []cstring, selected: int, enabled := true) -> (int, bool) {
+// small has the smaller labels of a display's options. Taps count as far as reach above and below the pill.
+gui_segmented :: proc(
+    rect: Rect,
+    labels: []cstring,
+    selected: int,
+    enabled := true,
+    small := false,
+    reach := [2]f32{SHEET_CONTROL_MARGIN, SHEET_CONTROL_MARGIN},
+) -> (
+    int,
+    bool,
+) {
     draw_pill(rect, pill_dark)
 
     segment_width := rect.width / f32(len(labels))
@@ -500,10 +554,11 @@ gui_segmented :: proc(rect: Rect, labels: []cstring, selected: int, enabled := t
             INSET :: 2
             fill := pill_yellow if enabled else text_color_disabled
             draw_pill({segment.x + INSET, segment.y + INSET, segment.width - 2 * INSET, segment.height - 2 * INSET}, fill)
-            draw_centered_label(label, segment, text_color_dark)
+            draw_centered_label(label, segment, text_color_dark, small)
         } else {
-            draw_centered_label(label, segment, text_color_light if enabled else text_color_disabled)
-            if enabled && gui_button(touch_area(segment)) do return index, true
+            draw_centered_label(label, segment, text_color_light if enabled else text_color_disabled, small)
+            touch := Rect{segment.x, segment.y - reach[0], segment.width, segment.height + reach[0] + reach[1]}
+            if enabled && gui_button(touch) do return index, true
         }
     }
 
@@ -590,7 +645,8 @@ stepper_scroll_rect: Rect
 stepper_last_click: time.Tick
 
 
-draw_centered_label :: proc(label: cstring, rect: Rect, color: Color) {
-    width := measure_label(pixel_fonts.label, label, 1).x
-    draw_label(pixel_fonts.label, label, {rect.x + (rect.width - width) / 2, rect.y + (rect.height - LABEL_SIZE) / 2}, color, 1)
+draw_centered_label :: proc(label: cstring, rect: Rect, color: Color, small := false) {
+    font := pixel_fonts.label_small if small else pixel_fonts.label
+    width := measure_label(font, label, 1).x
+    draw_label(font, label, {rect.x + (rect.width - width) / 2, rect.y + (rect.height - font.size) / 2}, color, 1)
 }

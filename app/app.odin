@@ -56,7 +56,6 @@ App :: struct {
     cents_trace:        Trace,
 
     settings_menu:      SettingsMenu, // the dropdown whose menu is open
-    strobe_group:       f32, // how far the settings' strobe group is open, see gui_settings
     settings_sheet:     Sheet,
     track_sheet:        Sheet, // a track's own, opened by tapping the track
     selected_track:     int,
@@ -298,7 +297,6 @@ handle_keys :: proc(app: ^App) {
         config.strobe_speeds = defaults.strobe_speeds
         retune(app)
     }
-    when DEBUG_STATS do scope_keys(config)
 
     // Debug builds only, Cmd+Shift+, reloads the config file and Cmd+, opens it in TextEdit, which can't be
     // started from the Mac App Store sandbox
@@ -392,6 +390,7 @@ feed_scope :: proc(app: ^App) {
     sweep := config.scope_sweep if config.strobe_display_type == .SCOPE else .TIME
     if scope.sweep != sweep do core.set_scope_sweep(scope, sweep)
     scope.persistence_seconds = f64(config.scope_persistence_ms) / 1000
+    scope.gain = config.scope_gain
     scope.noise_floor = app.pitch_detector.noise_floor.level
     core.update_scope(scope)
 }
@@ -478,7 +477,8 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
 
         if type == .TRACE {
             colors := strobe_colors(config)
-            draw_cents_trace(&app.cents_trace, view, hex(colors.x), hex(colors.y), hex(strobe_bg_color))
+            seconds, range := config.trace_seconds, config.trace_range_cents
+            draw_cents_trace(&app.cents_trace, view, seconds, range, hex(colors.x), hex(colors.y), hex(strobe_bg_color))
         } else {
             draw_scope_display(display, &app.scope, view, config, app.pitch_detector.snr_db)
             // Between the wave over time and the Lissajous figure
@@ -657,13 +657,10 @@ draw_sheets :: proc(app: ^App, layout: Layout) {
         return gui_button(above_sheet(sheet_layout)) || key_pressed(.ESCAPE) || swiped
     }
 
-    // The strobe's group comes up where the display has it, it only slides when the display changes
-    if app.settings_sheet.slide == 0 do app.strobe_group = 1 if config.strobe_display_type == .STROBE else 0
-
     if app.settings_sheet.slide > 0 {
         sheet := &app.settings_sheet
         sheet_layout, swiped := begin_sheet(sheet, SETTINGS_ROWS, &app.strobe_display, layout.strobe)
-        close, changed := gui_settings(sheet_layout, config, app.audio_devices[:], &app.audio_device_index, &app.settings_menu, &app.strobe_group)
+        close, changed := gui_settings(sheet_layout, config, app.audio_devices[:], &app.audio_device_index, &app.settings_menu)
         if changed do app.config_changed = true
         grab_sheet(sheet, sheet_layout)
         if close || closes(sheet_layout, swiped) {

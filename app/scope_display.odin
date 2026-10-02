@@ -38,22 +38,6 @@ SCOPE_GRID_THICKNESS :: 2
 // be as bright as a note
 SCOPE_NOISE_BRIGHTNESS :: 0.3
 
-SCOPE_PERSISTENCE_STEP_MS :: 10
-SCOPE_MAX_PERSISTENCE_MS :: 500
-
-// Debug builds: up and down change the persistence of the screen, H flips what the lamp shows
-scope_keys :: proc(config: ^Config) {
-    if config.strobe_display_type != .SCOPE && config.strobe_display_type != .LAMP do return
-
-    if key_pressed(.H) {
-        config.lamp_shape = .RAW_WAVEFORM if config.lamp_shape == .HALF_RECTIFIED else .HALF_RECTIFIED
-    }
-    step: f32 = 0
-    if key_pressed(.UP) do step = SCOPE_PERSISTENCE_STEP_MS
-    if key_pressed(.DOWN) do step = -SCOPE_PERSISTENCE_STEP_MS
-    config.scope_persistence_ms = clamp(config.scope_persistence_ms + step, 0, SCOPE_MAX_PERSISTENCE_MS)
-}
-
 // The beam is a thin line and its bloom is spread thin, it's added this many times over
 SCOPE_BLOOM_PASSES :: 3
 
