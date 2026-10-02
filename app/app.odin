@@ -289,6 +289,19 @@ handle_keys :: proc(app: ^App) {
         fmt.println("Strobe window:", "gamma, low latency" if app.phase_comparator.low_latency else "Blackman")
         retune(app)
     }
+    // Hidden, a wider band per track for less lag, to compare the clarity. Each step halves the lag.
+    if key_pressed(.W) {
+        comparator := app.phase_comparator
+        comparator.resolution_cents = comparator.resolution_cents * 2 if comparator.resolution_cents < 200 else 25
+        fmt.println("Strobe band:", comparator.resolution_cents, "cents")
+        retune(app)
+    }
+    // Hidden, the window combed so the other partials don't leak into a wide band
+    if key_pressed(.C) {
+        app.phase_comparator.comb = !app.phase_comparator.comb
+        fmt.println("Strobe comb:", "on" if app.phase_comparator.comb else "off")
+        retune(app)
+    }
     if key_pressed(.TAB) {
         config.strobe_display_type = StrobeDisplayType((int(config.strobe_display_type) + 1) % len(StrobeDisplayType))
     }

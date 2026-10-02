@@ -125,6 +125,8 @@ PhaseComparator :: struct {
     available:        int, // the new samples of the latest run_phase_detection
     snr_threshold_db: f32, // for the noise floor of a track added later
     low_latency:      bool, // the gamma window, off for the Blackman to compare, takes a retune
+    resolution_cents: int, // the band of each track, see DFT_RESOLUTION_CENTS, takes a retune
+    comb:             bool, // the window combed to null the other partials, see set_dft_freq, takes a retune
 
     // Absolute index of the sample just past the end of the newest window, i.e. the lock-in clock
     sample_clock:     i64,
@@ -149,6 +151,8 @@ init_phase_comparator :: proc(
     self.base_freq_hz = base_freq_hz
     self.snr_threshold_db = noise_floor_snr_db_threshold
     self.low_latency = true
+    self.resolution_cents = DFT_RESOLUTION_CENTS
+    self.comb = true
 
     for interval in strobe_intervals {
         if interval >= 1.0 do append_phase_band(self, interval)
@@ -232,8 +236,9 @@ set_phase_comparator_speed :: proc(self: ^PhaseComparator, base_speed: f32) {
 }
 
 
-// The window size of a band, each a quarter of a semitone wide
-DFT_RESOLUTION_CENTS :: 25
+// The window size of a band, a semitone wide. The comb keeps the other partials out, the readout's fit
+// steadies the cents, a narrower band only buys less noise for more lag.
+DFT_RESOLUTION_CENTS :: 100
 
 // Retunes every band to base_freq_hz, the tracks restart. The ring buffer stays, the samples are still valid
 // and the stream stays contiguous, and so do the noise floors, the background doesn't change with the note.
@@ -254,6 +259,21 @@ set_phase_comparator_freq :: proc(
     self.mode = mode
     self.speed_multiplier = speed_multiplier
 
+    // The comb's box spans enough periods of the note that every track's partials land on its nulls,
+    // two for a fifth (3/2): with a chord the root's partials and the fifth's are all multiples of half the root
+    comb_periods: f32 = 1
+    search: for mode == .HARMONIC && comb_periods < 4 {
+        for band in self.bands {
+            multiple := band.interval * comb_periods
+            if abs(multiple - math.round(multiple)) > 0.01 {
+                comb_periods += 1
+                continue search
+            }
+        }
+        break
+    }
+    comb_samples := comb_periods * self.samplerate / base_freq_hz if self.comb else 0
+
     for &band, band_index in self.bands {
         band.time_stretch = self.samplerate / base_freq_hz
         restart_band(&band)
@@ -272,14 +292,17 @@ set_phase_comparator_freq :: proc(
         band.ref_omega = math.TAU * f64(band.freq_hz) / f64(self.samplerate)
 
         if measures_band(self, band_index) {
-            window_size := dft_window_size(band.freq_hz, self.samplerate, DFT_RESOLUTION_CENTS)
-            set_dft_freq(&band.dft, band.norm_freq, window_size, low_latency = self.low_latency)
+            // Every track gets the fundamental's window. Sized in cents of its own partial an upper track's
+            // window would be shorter, its band wider in Hz for a weaker partial, and it shimmers.
+            window_size := dft_window_size(base_freq_hz, self.samplerate, self.resolution_cents)
+            set_dft_freq(&band.dft, band.norm_freq, window_size, low_latency = self.low_latency, comb_samples = comb_samples)
             set_dft_freq(
                 &band.averaged_dft,
                 band.norm_freq,
                 window_size,
                 PHASE_AVERAGE_SPREAD_CENTS,
                 low_latency = self.low_latency,
+                comb_samples = comb_samples,
             )
         }
     }
@@ -499,8 +522,11 @@ update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand, window_size: int)
 
     is_loud := band.snr_db > band.noise_floor.snr_threshold_db
     if is_loud && band.amp > ONSET_RATIO * band.envelope {
-        // The attack affects the phase until it has passed the window centre, the gamma window's is nearer
-        delay := int(GAMMA_WINDOW_DELAY * f32(window_size)) if self.low_latency else window_size / 2
+        // The attack affects the phase until it has passed the window centre, the gamma window's is nearer.
+        // The comb's box adds half its length.
+        comb := band.dft.comb_samples
+        gamma_size := f32(window_size) - max(math.ceil(comb) - 1, 0)
+        delay := int(GAMMA_WINDOW_DELAY * gamma_size + comb / 2) if self.low_latency else window_size / 2
         band.onset_hold = delay + int(ONSET_HOLD_S * self.samplerate)
         // The readout's average starts over on each pluck
         band.rate_time_s = 0
