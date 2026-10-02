@@ -26,6 +26,8 @@ import "core:math"
 // range, how many cents from the middle to the top and bottom, are in the config, further is clamped to
 // the edge.
 TRACE_CAPACITY :: 1024
+TRACE_MIN_SECONDS :: 0.5
+TRACE_MAX_SECONDS :: 8 // fits TRACE_CAPACITY at MAX_FPS
 TRACE_BAND :: 5 // cents either side of in tune, marked with faint lines
 TRACE_CURVE_STEPS :: 8 // pieces of the curve between two readings
 
@@ -80,6 +82,9 @@ record_trace :: proc(self: ^Trace, cents, light: f32, fresh: bool, frame_time: f
 // the middle to the top and bottom.
 // The line in the colorway's lit color, the in tune band in its second color
 draw_cents_trace :: proc(self: ^Trace, rect: Rect, seconds, range_cents: f32, line_color, band_color, background: Color) {
+    // As the config file has them, none or longer than the readings kept is as far as they go
+    seconds := clamp(seconds, TRACE_MIN_SECONDS, TRACE_MAX_SECONDS)
+    range_cents := max(range_cents, TRACE_BAND)
     draw_rect({rect.x, rect.y}, {rect.width, rect.height}, background)
 
     PADDING :: 28

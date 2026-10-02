@@ -202,11 +202,9 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
         draw_label(font, label, {rect.x + (rect.width - width) / 2, rect.y + (rect.height - font.size) / 2}, text_color_white, spacing)
 
         button_width: f32 = 44 if large else 22
-        icon_size: f32 = ICON_LARGE_SIZE if large else ICON_SIZE
-        icon_font := pixel_fonts.icon_large_bold if large else pixel_fonts.icon
-        icon_y := rect.y + (rect.height - icon_size) / 2
-        draw_label(icon_font, down_icon, {rect.x + (button_width - icon_size) / 2, icon_y}, icon_color)
-        draw_label(icon_font, up_icon, {rect.x + rect.width - (button_width + icon_size) / 2, icon_y}, icon_color)
+        style: IconStyle = .LARGE_BOLD if large else .REGULAR
+        draw_centered_icon(down_icon, {rect.x, rect.y, button_width, rect.height}, icon_color, style)
+        draw_centered_icon(up_icon, {rect.x + rect.width - button_width, rect.y, button_width, rect.height}, icon_color, style)
 
         middle := rect.x + rect.width / 2
         if gui_button_repeat({reach[0], rect.y, middle - reach[0], rect.height}) do step = -1
@@ -344,13 +342,12 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
     gui_buttons :: proc(rows: Rows, grid: Grid, header: Rect, editing: ^NoteOffsetsEditing, target: int) -> (changed: bool) {
         stringed := len(rows.strings) > 0
         count := row_count(rows)
-        middle := header.y + header.height / 2
         add_x := grid.right - icon_button_width("Add")
 
         clear_right := grid.right if stringed else add_x - 12 - small_button_width("REMOVE") - 8
         clearable := !stringed && count > 0
         for cents in rows.cents[:count] do if cents != 0 do clearable = true
-        if gui_small_button(clear_right, middle, "SURE?" if editing.clearing else "CLEAR", clearable) {
+        if gui_small_button(clear_right, header, "SURE?" if editing.clearing else "CLEAR", clearable) {
             if editing.clearing {
                 rows.count^ = 0
                 rows.notes^, rows.cents^ = {}, {}
@@ -365,7 +362,7 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
         if stringed do return
 
         count = row_count(rows)
-        if gui_small_button(add_x - 12, middle, "REMOVE", editing.selected >= 0) {
+        if gui_small_button(add_x - 12, header, "REMOVE", editing.selected >= 0) {
             for row in editing.selected ..< count - 1 {
                 rows.notes[row] = rows.notes[row + 1]
                 rows.cents[row] = rows.cents[row + 1]
@@ -377,7 +374,7 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
             changed = true
         }
 
-        add_rect := [2]f32{add_x, middle - BUTTONS_HEIGHT / 2}
+        add_rect := [2]f32{add_x, header.y + (header.height - BUTTONS_HEIGHT) / 2}
         if gui_icon_button(add_rect, BUTTONS_HEIGHT, ICON_PLUS, "Add", count < MAX_NOTE_OFFSETS) {
             rows.notes[count] = new_row_note(rows, target)
             rows.cents[count] = 0

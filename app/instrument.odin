@@ -195,7 +195,7 @@ gui_instrument_button :: proc(pos: [2]f32, config: ^Config) -> bool {
 
     setup := current_setup(config)
     icon := ICON_PIANO_KEYS if setup.instrument == .CHROMATIC else ICON_GUITAR
-    draw_icon(icon, {pos.x, pos.y - ICON_LARGE_SIZE / 2}, icon_color, large = true)
+    draw_icon(icon, {pos.x, pos.y - ICON_LARGE_SIZE / 2}, icon_color, .LARGE)
 
     label := fmt.ctprintf("%s", setup_label(setup))
     label_x := pos.x + ICON_LARGE_SIZE + LABEL_GAP

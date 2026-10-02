@@ -40,22 +40,23 @@ ICON_TRASH: cstring : "\ue4a8"
 ICON_PLUS_MINUS: cstring : "\ue3d8"
 ICON_PIANO_KEYS: cstring : "\ue9c8"
 ICON_GUITAR: cstring : "\uea8a"
+ICON_GEAR: cstring : "\ue272"
+ICON_MICROPHONE: cstring : "\ue326"
+ICON_CARET_DOWN: cstring : "\ue136"
+ICON_MINUS: cstring : "\ue32a"
+ICON_PLUS: cstring : "\ue3d4"
+// Bold only, see ICON_SHEET_CODEPOINTS
 ICON_CARET_LEFT: cstring : "\ue138"
 ICON_CARET_RIGHT: cstring : "\ue13a"
-ICON_GEAR: cstring : ""
-ICON_MICROPHONE: cstring : ""
-ICON_CARET_DOWN: cstring : ""
-ICON_MINUS: cstring : ""
-ICON_PLUS: cstring : ""
-ICON_X: cstring : ""
+ICON_X: cstring : "\ue4f6"
 
-ICON_CODEPOINTS :: "\ue432\ue13c\ue4a8\ue3d8\ue9c8\uea8a\ue138\ue13a"
+ICON_CODEPOINTS :: "\ue432\ue13c\ue4a8\ue3d8\ue9c8\uea8a\ue272\ue326\ue136\ue32a\ue3d4"
 
 // Phosphor Bold, cut down the same way from Phosphor-Bold.ttf to Phosphor-Bold-Icons.ttf, for the large
 // steppers: beside their 32pt value the regular stroke is too thin. And with ICON_SHEET_CODEPOINTS the
 // sheet's ✕, ‹ and ›, larger than the controls' icons to read as something to tap.
-ICON_SHEET_CODEPOINTS :: ""
-ICON_BOLD_CODEPOINTS :: ""
+ICON_SHEET_CODEPOINTS :: "\ue4f6\ue138\ue13a"
+ICON_BOLD_CODEPOINTS :: "\ue13c\ue136\ue32a\ue3d4"
 
 // All the text is rasterized at exactly the size it's drawn at on this screen, a scaled atlas is soft or
 // jagged. Point sizes, whole pixels at 1x, 2x and 3x.
@@ -200,10 +201,37 @@ snap_to_pixels :: proc(position: [2]f32) -> [2]f32 {
     return {math.round(position.x * scale), math.round(position.y * scale)} / scale
 }
 
-// Icon with its top left at position, ICON_SIZE or ICON_LARGE_SIZE
-draw_icon :: proc(icon: cstring, position: [2]f32, color: Color, large := false) {
-    font := pixel_fonts.icon_large if large else pixel_fonts.icon
-    draw_text(font.font, icon, snap_to_pixels(position), font.size, 0, color)
+// Which of the icon fonts an icon is drawn in
+IconStyle :: enum {
+    REGULAR, // ICON_SIZE, on the controls
+    LARGE, // ICON_LARGE_SIZE, on the main screen
+    LARGE_BOLD, // ICON_LARGE_SIZE, the steppers in the popup of the note offsets
+    SHEET, // ICON_SHEET_SIZE, the sheet's ✕, ‹ and ›
+}
+
+icon_font :: proc(style: IconStyle) -> PixelFont {
+    switch style {
+    case .REGULAR:
+        return pixel_fonts.icon
+    case .LARGE:
+        return pixel_fonts.icon_large
+    case .LARGE_BOLD:
+        return pixel_fonts.icon_large_bold
+    case .SHEET:
+        return pixel_fonts.icon_sheet
+    }
+    return pixel_fonts.icon
+}
+
+// Icon with its top left at position
+draw_icon :: proc(icon: cstring, position: [2]f32, color: Color, style := IconStyle.REGULAR) {
+    draw_label(icon_font(style), icon, position, color)
+}
+
+// Icon in the middle of rect
+draw_centered_icon :: proc(icon: cstring, rect: Rect, color: Color, style := IconStyle.REGULAR) {
+    size := icon_font(style).size
+    draw_icon(icon, {rect.x + (rect.width - size) / 2, rect.y + (rect.height - size) / 2}, color, style)
 }
 
 // Text in a pixel font, snapped to whole pixels

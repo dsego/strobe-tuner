@@ -41,6 +41,8 @@ WIDE_SEGMENT_WIDTH :: 80
 // In the order of StrobeDisplayType
 DISPLAY_NAMES :: [len(StrobeDisplayType)]cstring{"Strobe", "Scope", "Trace", "Lamp"}
 
+// The labels of the steps below that have three
+STEP_LABELS :: []cstring{"Short", "Medium", "Long"}
 // The scope's and the lamp's persistence, short, medium and long
 SCOPE_PERSISTENCE_STEPS_MS :: [3]f32{15, 40, 150}
 // The trace's span, short, medium and long, and its range from the middle to the edge, narrow and wide.
@@ -143,11 +145,10 @@ gui_settings :: proc(
         }
 
         right := rect.x + rect.width
-        chevron := [2]f32{right + CHEVRON_GAP, rect.y + (rect.height - ICON_SHEET_SIZE) / 2}
-        draw_label(pixel_fonts.icon_sheet, ICON_CARET_RIGHT, chevron, icon_color)
+        draw_centered_icon(ICON_CARET_RIGHT, {right + CHEVRON_GAP, rect.y, ICON_SHEET_SIZE, rect.height}, icon_color, .SHEET)
         // From the control to the sheet's edge, the row's height
         sheet_right := sheet_layout.sheet.x + sheet_layout.sheet.width
-        if gui_button({right, rect.y - SHEET_CONTROL_MARGIN, sheet_right - right, sheet_layout.row_height}) {
+        if gui_button(touch_area({right, rect.y, sheet_right - right, rect.height})) {
             display_options^ = true
         }
     }
@@ -168,14 +169,14 @@ gui_settings :: proc(
         // TODO: add refresh button to show newly connected devices
         gui_settings_dropdown(menu, .INPUT, input_rect, audio_devices, audio_device_index, left_pad = 36)
 
-        draw_icon(ICON_MICROPHONE, {input_rect.x + 12, input_rect.y + (input_rect.height - 16) / 2}, icon_color)
+        draw_centered_icon(ICON_MICROPHONE, {input_rect.x + 12, input_rect.y, ICON_SIZE, input_rect.height}, icon_color)
     }
 
     {
         // Everything back to the defaults like the R key, including what's only in the config file
         rect := settings_row(sheet_layout, row, "Reset to defaults", 0)
         row += 1
-        if gui_small_button(rect.x, rect.y + rect.height / 2, "RESET") {
+        if gui_small_button(rect.x, rect, "RESET") {
             reset_config(config)
             changed = true
         }
@@ -191,7 +192,7 @@ gui_settings :: proc(
         shifted.title.x += ICON_SHEET_SIZE + GAP
         close = draw_sheet_header(shifted, title)
         position := sheet_layout.title
-        draw_label(pixel_fonts.icon_sheet, ICON_CARET_LEFT, {position.x, position.y + (TITLE_SIZE - ICON_SHEET_SIZE) / 2}, icon_color)
+        draw_centered_icon(ICON_CARET_LEFT, {position.x, position.y, ICON_SHEET_SIZE, TITLE_SIZE}, icon_color, .SHEET)
 
         // From the sheet's edge past the title, as tall as the ✕'s
         right := shifted.title.x + measure_label(pixel_fonts.title, title, 1).x + GAP
@@ -216,20 +217,23 @@ gui_settings :: proc(
         case .SCOPE:
             // Tapping the scope flips it too
             gui_settings_segmented(sheet_layout, &row, "Sweep", {"Time", "X-Y"}, &config.scope_sweep)
-            gui_steps(sheet_layout, &row, "Persistence", {"Short", "Medium", "Long"}, &config.scope_persistence_ms, SCOPE_PERSISTENCE_STEPS_MS)
-            // Hold shows the note's decay, auto keeps a fading note filling the screen
-            gui_settings_segmented(sheet_layout, &row, "Gain", {"Auto", "Hold"}, &config.scope_gain)
+            gui_screen_options(sheet_layout, &row, config)
         case .TRACE:
-            gui_steps(sheet_layout, &row, "Span", {"Short", "Medium", "Long"}, &config.trace_seconds, TRACE_SPAN_STEPS_S)
+            gui_steps(sheet_layout, &row, "Span", STEP_LABELS, &config.trace_seconds, TRACE_SPAN_STEPS_S)
             gui_steps(sheet_layout, &row, "Range", {"Narrow", "Wide"}, &config.trace_range_cents, TRACE_RANGE_STEPS_CENTS)
         case .LAMP:
             // The positive half of the wave like a mechanical strobe's lamp, or the wave as it is
             gui_settings_segmented(sheet_layout, &row, "Rectifier", {"Half", "None"}, &config.lamp_shape)
-            gui_steps(sheet_layout, &row, "Persistence", {"Short", "Medium", "Long"}, &config.scope_persistence_ms, SCOPE_PERSISTENCE_STEPS_MS)
-            // Held, the stripes dim as the note decays like a mechanical strobe's lamp
-            gui_settings_segmented(sheet_layout, &row, "Gain", {"Auto", "Hold"}, &config.scope_gain)
+            gui_screen_options(sheet_layout, &row, config)
         }
         return
+
+        // The scope's and the lamp's screen. Held, a note's decay shows, the wave shrinks and the stripes dim
+        // like a mechanical strobe's lamp. Auto keeps a fading note filling the screen.
+        gui_screen_options :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config) {
+            gui_steps(sheet_layout, row, "Persistence", STEP_LABELS, &config.scope_persistence_ms, SCOPE_PERSISTENCE_STEPS_MS)
+            gui_settings_segmented(sheet_layout, row, "Gain", {"Auto", "Hold"}, &config.scope_gain)
+        }
 
         // A value that's one of a few steps, a label each. None is picked for a value set in the config file
         // between them.
@@ -333,7 +337,7 @@ gui_track_settings :: proc(
     {
         rect := settings_row(sheet_layout, row, "Reset track", 0)
         row += 1
-        if gui_small_button(rect.x, rect.y + rect.height / 2, "RESET") {
+        if gui_small_button(rect.x, rect, "RESET") {
             config.strobe_intervals[slot] = preset_partial
             config.strobe_offsets_cents[slot] = 0
             config.strobe_speeds[slot] = 1
@@ -413,7 +417,7 @@ step_partial :: proc(partial: f32, steps: int) -> f32 {
 
 // 24pt icon in the middle of a 2x larger touch area
 gui_settings_button :: proc(position: [2]f32) -> bool {
-    draw_icon(ICON_SLIDERS, position, icon_color, large = true)
+    draw_icon(ICON_SLIDERS, position, icon_color, .LARGE)
     return gui_button({position.x - 12, position.y - 12, 48, 48})
 }
 
@@ -466,15 +470,16 @@ touch_area :: proc(rect: Rect) -> Rect {
 
 
 // For what can't be undone, a reset or a clear: smaller than the controls and in capitals, it isn't tapped
-// in passing. right is its right edge and middle its vertical middle, the touch area is as tall as a row.
-// Dimmed and dead when not enabled.
-gui_small_button :: proc(right, middle: f32, label: cstring, enabled := true) -> bool {
+// in passing. right is its right edge, control is where settings_row puts the row's control, the button is
+// in its middle and the touch area as tall as the row. Dimmed and dead when not enabled.
+gui_small_button :: proc(right: f32, control: Rect, label: cstring, enabled := true) -> bool {
     HEIGHT :: 26
 
     font := pixel_fonts.label_small
     width := small_button_width(label)
+    middle := control.y + control.height / 2
     rect := Rect{right - width, middle - HEIGHT / 2, width, HEIGHT}
-    touch := Rect{rect.x, middle - SHEET_ROW_HEIGHT / 2, width, SHEET_ROW_HEIGHT}
+    touch := touch_area({rect.x, control.y, width, control.height})
 
     draw_pill(rect, pill_gray if enabled && gui_button_held(touch) else pill_dark)
     label_color := text_color_white if enabled else text_color_disabled
@@ -503,9 +508,9 @@ gui_icon_button :: proc(
 
     held := enabled && gui_button_held(touch_area(rect))
     draw_pill(rect, pill_gray if held else pill_dark)
-    draw_icon(
+    draw_centered_icon(
         icon,
-        pos + {ICON_BUTTON_PADDING, (height - ICON_SIZE) / 2},
+        {pos.x + ICON_BUTTON_PADDING, pos.y, ICON_SIZE, height},
         icon_color if enabled else text_color_disabled,
     )
     draw_label(
@@ -577,15 +582,14 @@ gui_stepper_buttons :: proc(
     minus := Rect{rect.x, rect.y, button_width, rect.height}
     plus := Rect{rect.x + rect.width - button_width, rect.y, button_width, rect.height}
 
-    icon_offset := [2]f32{(button_width - 16) / 2, (rect.height - 16) / 2}
     if !enabled {
-        draw_icon(ICON_MINUS, {minus.x, minus.y} + icon_offset, text_color_disabled)
+        draw_centered_icon(ICON_MINUS, minus, text_color_disabled)
         draw_centered_label(label, rect, text_color_disabled)
-        draw_icon(ICON_PLUS, {plus.x, plus.y} + icon_offset, text_color_disabled)
+        draw_centered_icon(ICON_PLUS, plus, text_color_disabled)
         return
     }
 
-    draw_icon(ICON_MINUS, {minus.x, minus.y} + icon_offset, icon_color)
+    draw_centered_icon(ICON_MINUS, minus, icon_color)
     if times {
         // The larger × centred on the same line as the digits, the pair centred together
         TIMES :: "×"
@@ -598,7 +602,7 @@ gui_stepper_buttons :: proc(
     } else {
         draw_centered_label(label, rect, text_color_white)
     }
-    draw_icon(ICON_PLUS, {plus.x, plus.y} + icon_offset, icon_color)
+    draw_centered_icon(ICON_PLUS, plus, icon_color)
 
     if gui_button_repeat(touch_area(minus)) do return -1, false
     if gui_button_repeat(touch_area(plus)) do return 1, false

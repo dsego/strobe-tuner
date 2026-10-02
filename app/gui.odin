@@ -598,7 +598,7 @@ gui_dropdown :: proc(
 
     // Draw the button
     draw_pill(btn_bounds, pill_dark)
-    draw_icon(ICON_CARET_DOWN, {position.x + width - 22, position.y + (height - 16) / 2}, icon_color)
+    draw_centered_icon(ICON_CARET_DOWN, {position.x + width - 22, position.y, ICON_SIZE, height}, icon_color)
 
     if selected_idx != nil {
         label := strings.cut(options[selected_idx^].label, 0, MAX_LABEL_LENGTH)

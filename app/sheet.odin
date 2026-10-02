@@ -193,8 +193,7 @@ draw_sheet_header :: proc(sheet_layout: SheetLayout, title: cstring, details: cs
     }
 
     // The icon in the middle of a larger touch area
-    icon_position := [2]f32{close_area.x, close_area.y} + ([2]f32{close_area.width, close_area.height} - ICON_SHEET_SIZE) / 2
-    draw_label(pixel_fonts.icon_sheet, ICON_X, icon_position, icon_color)
+    draw_centered_icon(ICON_X, close_area, icon_color, .SHEET)
     return gui_button(close_area)
 }
 
