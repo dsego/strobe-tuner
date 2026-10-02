@@ -5,8 +5,9 @@
 # into external/ios-device. Odin only emits an object file, clang links it into the app bundle.
 #
 #   IOS_PROFILE=<path>        provisioning profile, required, the bundle id and entitlements come from it
-#   IOS_SIGN_IDENTITY=<name>  signing certificate, defaults to "Apple Development" for a development profile
-#                             (e.g. a free Personal Team) and "Apple Distribution" for an Ad Hoc one
+#   IOS_SIGN_IDENTITY=<name>  signing certificate, defaults to the one in the keychain the profile was made for,
+#                             else "Apple Development" for a development profile (e.g. a free Personal Team)
+#                             and "Apple Distribution" for an Ad Hoc one
 #   IOS_DEVICE=<name or udid> installs and launches the app on this iPhone, needs Developer Mode on it
 #   SDL_VERSION=3.2.x         SDL release to build, defaults to the brew installed version
 #
@@ -194,6 +195,19 @@ if [ "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$OUT/pr
     DEFAULT_IDENTITY="Apple Development"
 else
     DEFAULT_IDENTITY="Apple Distribution"
+fi
+# The certificate the profile was made for, by its SHA-1. Xcode can leave another certificate of the same
+# name in the keychain, the name alone is ambiguous then.
+if [ -z "${IOS_SIGN_IDENTITY:-}" ]; then
+    IDENTITIES=$(security find-identity -v -p codesigning)
+    index=0
+    while certificate=$(plutil -extract "DeveloperCertificates.$index" raw -o - "$OUT/profile.plist" 2>/dev/null); do
+        hash=$(printf '%s' "$certificate" | base64 -D | shasum -a 1 | awk '{ print toupper($1) }')
+        case "$IDENTITIES" in
+            *"$hash"*) DEFAULT_IDENTITY=$hash && break ;;
+        esac
+        index=$((index + 1))
+    done
 fi
 codesign --force --sign "${IOS_SIGN_IDENTITY:-$DEFAULT_IDENTITY}" --entitlements "$OUT/entitlements.plist" "$APP"
 
