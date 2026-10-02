@@ -40,6 +40,8 @@ ICON_TRASH: cstring : "\ue4a8"
 ICON_PLUS_MINUS: cstring : "\ue3d8"
 ICON_PIANO_KEYS: cstring : "\ue9c8"
 ICON_GUITAR: cstring : "\uea8a"
+ICON_CARET_LEFT: cstring : "\ue138"
+ICON_CARET_RIGHT: cstring : "\ue13a"
 ICON_GEAR: cstring : ""
 ICON_MICROPHONE: cstring : ""
 ICON_CARET_DOWN: cstring : ""
@@ -47,7 +49,7 @@ ICON_MINUS: cstring : ""
 ICON_PLUS: cstring : ""
 ICON_X: cstring : ""
 
-ICON_CODEPOINTS :: "\ue432\ue13c\ue4a8\ue3d8\ue9c8\uea8a"
+ICON_CODEPOINTS :: "\ue432\ue13c\ue4a8\ue3d8\ue9c8\uea8a\ue138\ue13a"
 
 // Phosphor Bold, cut down the same way from Phosphor-Bold.ttf to Phosphor-Bold-Icons.ttf, for the large
 // steppers only: beside their 32pt value the regular stroke is too thin.

@@ -28,6 +28,7 @@ SheetLayout :: struct {
     rows:       [2]f32, // top left of the first row
     width:      f32,
     row_height: f32, // the controls are SHEET_CONTROL_MARGIN shorter at the top and bottom
+    end_inset:  f32, // from the right of the rows to the right of their controls, see settings_row
     bottom:     f32, // as far from the home indicator as the rows are from the sides, for what sits under the rows
 }
 

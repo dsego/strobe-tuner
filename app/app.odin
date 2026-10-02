@@ -57,6 +57,7 @@ App :: struct {
 
     settings_menu:      SettingsMenu, // the dropdown whose menu is open
     settings_sheet:     Sheet,
+    display_options:    bool, // the settings sheet shows the display's options, see gui_settings
     track_sheet:        Sheet, // a track's own, opened by tapping the track
     selected_track:     int,
     instrument_sheet:   Sheet, // the instruments and the presets, opened from the bottom left corner
@@ -425,7 +426,11 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
             core.set_phase_comparator_speed(app.phase_comparator, speed)
         }
     }
-    if gui_settings_button(layout.settings) do app.settings_sheet.open = true
+    // Opens on the settings, not the display's options it was closed on
+    if gui_settings_button(layout.settings) {
+        app.settings_sheet.open = true
+        app.display_options = false
+    }
     if gui_instrument_button(layout.instrument, config) do app.instrument_sheet.open = true
 
     // The input level, the microphone icon marks it as the input. The level is the rounded track cut off flat
@@ -660,10 +665,20 @@ draw_sheets :: proc(app: ^App, layout: Layout) {
     if app.settings_sheet.slide > 0 {
         sheet := &app.settings_sheet
         sheet_layout, swiped := begin_sheet(sheet, SETTINGS_ROWS, &app.strobe_display, layout.strobe)
-        close, changed := gui_settings(sheet_layout, config, app.audio_devices[:], &app.audio_device_index, &app.settings_menu)
+        close, changed := gui_settings(
+            sheet_layout,
+            config,
+            app.audio_devices[:],
+            &app.audio_device_index,
+            &app.settings_menu,
+            &app.display_options,
+        )
         if changed do app.config_changed = true
         grab_sheet(sheet, sheet_layout)
-        if close || closes(sheet_layout, swiped) {
+        // Escape goes back from the display's options like the ‹
+        if app.display_options && key_pressed(.ESCAPE) {
+            app.display_options = false
+        } else if close || closes(sheet_layout, swiped) {
             close_sheet(sheet)
             app.settings_menu = .NONE
             exclusive_control_mode = false
