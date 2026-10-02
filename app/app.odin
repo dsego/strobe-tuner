@@ -46,7 +46,7 @@ App :: struct {
     tuner:              core.Tuner,
     pitch_detector:     core.PitchDetector, // follows the config, see apply_config
     phase_comparator:   ^core.PhaseComparator,
-    scope:              core.Scope, // of the scope and the ribbon display types
+    scope:              core.Scope, // of the scope and the lamp display types, and the tracks the lamp turns
     audio_capture:      ^AudioCapture,
     audio_devices:      [dynamic]GuiOption,
     audio_device_index: int, // in audio_devices, picked in the settings
@@ -54,6 +54,7 @@ App :: struct {
     cents_trace:        Trace,
 
     settings_menu:      SettingsMenu, // the dropdown whose menu is open
+    strobe_group:       f32, // how far the settings' strobe group is open, see gui_settings
     settings_sheet:     Sheet,
     track_sheet:        Sheet, // a track's own, opened by tapping the track
     selected_track:     int,
@@ -396,7 +397,7 @@ feed_scope :: proc(app: ^App) {
     // the strobe stays, and every change starts with a dark screen
     strobe_hz := f64(app.phase_comparator.base_freq_hz)
     if scope.freq_hz != strobe_hz do core.set_scope_freq(scope, strobe_hz)
-    // The ribbon is the screen from above, it needs the sweep over time
+    // The lamp is the screen from above, it needs the sweep over time, and so do the tracks it turns
     sweep := config.scope_sweep if config.strobe_display_type == .SCOPE else .TIME
     if scope.sweep != sweep do core.set_scope_sweep(scope, sweep)
     scope.persistence_seconds = f64(config.scope_persistence_ms) / 1000
@@ -407,11 +408,6 @@ feed_scope :: proc(app: ^App) {
 // An instrument's strings are always on the ruler
 shows_ruler :: proc(config: ^Config) -> bool {
     return config.chromatic_ruler || current_setup(config).instrument != .CHROMATIC
-}
-
-// The strobe tracks and the wheel spin, the trace and the scope's views draw something else
-is_spinning_strobe :: proc(type: StrobeDisplayType) -> bool {
-    return type == .CURVED_TRACKS || type == .SPINNING_WHEEL
 }
 
 draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
@@ -432,7 +428,8 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
         app.tuner.active,
     )
 
-    if is_spinning_strobe(config.strobe_display_type) {
+    // The trace and the scope's views don't spin
+    if config.strobe_display_type == .STROBE {
         if speed, speed_changed := gui_response_toggle(layout.response, config.strobe_speed); speed_changed {
             config.strobe_speed = speed
             core.set_phase_comparator_speed(app.phase_comparator, speed)
@@ -464,12 +461,19 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     display.selected_track = app.selected_track
     display.selection = app.track_sheet.slide
 
-    if is_spinning_strobe(type) {
-        draw_strobe_display(display, layout.strobe, layout.strobe_scale, app.phase_comparator, config)
+    if type == .STROBE {
+        // Turned by the lock-in or by the lamp's screen
+        comparator := app.phase_comparator
+        lamp: core.PhaseComparator
+        if config.strobe_source == .LAMP {
+            lamp = lamp_comparator(display, &app.scope, app.phase_comparator, app.pitch_detector.snr_db)
+            comparator = &lamp
+        }
+        draw_strobe_display(display, layout.strobe, layout.strobe_scale, comparator, config)
 
         // Fine mode shows the same pitch on every track, there's nothing to set on one
         if config.strobe_mode == .HARMONIC && !microphone_denied() && gui_button(layout.strobe) {
-            track := strobe_track_at(type, layout.strobe, layout.strobe_scale, len(app.phase_comparator.bands), mouse_position())
+            track := strobe_track_at(config.strobe_shape, layout.strobe, layout.strobe_scale, len(app.phase_comparator.bands), mouse_position())
             if track >= 0 {
                 app.selected_track = track
                 app.track_sheet.open = true
@@ -663,10 +667,13 @@ draw_sheets :: proc(app: ^App, layout: Layout) {
         return gui_button(above_sheet(sheet_layout)) || key_pressed(.ESCAPE) || swiped
     }
 
+    // The strobe's group comes up where the display has it, it only slides when the display changes
+    if app.settings_sheet.slide == 0 do app.strobe_group = 1 if config.strobe_display_type == .STROBE else 0
+
     if app.settings_sheet.slide > 0 {
         sheet := &app.settings_sheet
         sheet_layout, swiped := begin_sheet(sheet, SETTINGS_ROWS, &app.strobe_display, layout.strobe)
-        close, changed := gui_settings(sheet_layout, config, app.audio_devices[:], &app.audio_device_index, &app.settings_menu)
+        close, changed := gui_settings(sheet_layout, config, app.audio_devices[:], &app.audio_device_index, &app.settings_menu, &app.strobe_group)
         if changed do app.config_changed = true
         grab_sheet(sheet, sheet_layout)
         if close || closes(sheet_layout, swiped) {
@@ -687,7 +694,7 @@ draw_sheets :: proc(app: ^App, layout: Layout) {
 
         // Tapping another track above the sheet switches to it, anywhere else closes the sheet
         if gui_button(above_sheet(sheet_layout)) {
-            track := strobe_track_at(config.strobe_display_type, layout.strobe, layout.strobe_scale, len(bands), mouse_position())
+            track := strobe_track_at(config.strobe_shape, layout.strobe, layout.strobe_scale, len(bands), mouse_position())
             if track >= 0 do app.selected_track = track
             else do close = true
         }

@@ -109,12 +109,13 @@ partial_text :: proc(partial: f32) -> cstring {
 
 // Right aligned at position, a track's offset from the exact partial goes before it so it's never hidden.
 // Tapping the track opens its sheet, see strobe_track_at.
-draw_strobe_partial :: proc(position: [2]f32, type: PartialLabelType, band: core.PhaseBand) {
+// position is the label's top right, or its middle when centered
+draw_strobe_partial :: proc(position: [2]f32, type: PartialLabelType, band: core.PhaseBand, centered := false) {
     text: cstring
-    font := pixel_fonts.label_large
+    font := pixel_fonts.band_label
 
     if type == .FREQUENCY {
-        font = pixel_fonts.label
+        font = pixel_fonts.band_label_small
         text = fmt.ctprintf("%.1fHz", band.freq_hz)
     } else if type == .NOTE_NAMES {
         // Inter has no ♯, a plain # reads fine at this size
@@ -125,11 +126,12 @@ draw_strobe_partial :: proc(position: [2]f32, type: PartialLabelType, band: core
 
     text_size := measure_label(font, text)
     bounds: Rect = {position.x - text_size.x, position.y, text_size.x, text_size.y}
+    if centered do bounds.x, bounds.y = position.x - text_size.x / 2, position.y - text_size.y / 2
 
     draw_label(font, text, {bounds.x, bounds.y}, accent_color)
 
     if band.offset_cents != 0 {
-        offset_font := pixel_fonts.label
+        offset_font := pixel_fonts.band_label_small
         offset := fmt.ctprintf("%+.1f¢", band.offset_cents)
         offset_size := measure_label(offset_font, offset)
         center_y := bounds.y + text_size.y / 2

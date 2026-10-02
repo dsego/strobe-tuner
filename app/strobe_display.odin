@@ -46,6 +46,12 @@ StrobeDisplay :: struct {
     band_visibility: [core.MAX_BANDS]f32,
     // and of the scope's beam, see draw_scope_display
     scope_visibility: f32,
+    // the tracks turned by the lamp, see lamp_comparator: each one's phase on the screen at the previous
+    // frame, at this reference and this sample, and the phase it turned to
+    lamp_phases:        [core.MAX_BANDS]f64,
+    lamp_freq_hz:       f64,
+    lamp_clock:         i64,
+    lamp_scaled_phases: [core.MAX_BANDS]f32,
 
     // The track whose sheet is open, outlined while the others dim. selection fades it in and out with
     // the sheet, 0 is no selection.
@@ -60,6 +66,8 @@ StrobeGeometry :: struct {
     band_height:      f32,
     period_count:     f32, // how many strobe periods fit in a circle
     density:          f32, // period_count is this many times the desktop's, see strobe_density
+    // The tracks straightened, stacked from y down, see strobe_geometry
+    flat:             bool,
 }
 
 // The desktop tracks' circle and how much of it shows across the window
@@ -79,58 +87,55 @@ strobe_density :: proc(half_width, radius: f32) -> f32 {
 }
 
 // The tracks are laid out for the desktop size and scaled by scale, then aligned to the bottom of rect,
-// a taller rect only extends the background upwards (e.g. behind the notch). Not ok for the trace and the scope's views.
-strobe_geometry :: proc(
-    display_type: StrobeDisplayType,
-    rect: Rect,
-    scale: f32,
-    band_count: int,
-) -> (
-    geometry: StrobeGeometry,
-    ok: bool,
-) {
-    switch display_type {
-    case .SPINNING_WHEEL:
+// a taller rect only extends the background upwards (e.g. behind the notch).
+// Flat tracks fill the strobe, each is the top of a curved track's arc, with the stripes as wide.
+strobe_geometry :: proc(shape: StrobeShape, rect: Rect, scale: f32, band_count: int) -> (geometry: StrobeGeometry) {
+    switch shape {
+    case .WHEEL:
         geometry.curvature_radius = 90.0
         geometry.band_height = 26.0
         geometry.period_count = 4.0
-    case .CURVED_TRACKS:
+    case .CURVED, .FLAT:
         geometry.curvature_radius = DESKTOP_TRACKS_RADIUS
         geometry.band_height = 66.0
         if band_count > 3 {
             geometry.band_height = 50.0
         }
         geometry.period_count = DESKTOP_TRACKS_PERIODS
-    case .TRACE, .SCOPE, .RIBBON:
-        return {}, false
     }
     geometry.curvature_radius *= scale
     geometry.band_height *= scale
 
     geometry.density = 1
-    if display_type == .CURVED_TRACKS {
+    if shape != .WHEEL {
         geometry.density = strobe_density(rect.width / 2, geometry.curvature_radius)
         geometry.period_count *= geometry.density
     }
 
     geometry.y = rect.y + rect.height - scale * STROBE_HEIGHT
-    if display_type == .CURVED_TRACKS {
+    switch shape {
+    case .CURVED:
         geometry.y += 32 * scale
+    case .FLAT:
+        geometry.flat = true
+        geometry.band_height = scale * STROBE_HEIGHT / f32(max(band_count, 1))
+    case .WHEEL:
     }
-    return geometry, true
+    return
 }
 
 // The track under point, -1 for none. The tracks are concentric, the gap outside a track counts as part
-// of it, so the whole ring from one track to the next is its touch area.
-strobe_track_at :: proc(
-    display_type: StrobeDisplayType,
-    rect: Rect,
-    scale: f32,
-    band_count: int,
-    point: [2]f32,
-) -> int {
-    geometry, ok := strobe_geometry(display_type, rect, scale, band_count)
-    if !ok || !point_in_rect(point, rect) do return -1
+// of it, so the whole ring from one track to the next is its touch area. Flat ones are stacked.
+strobe_track_at :: proc(shape: StrobeShape, rect: Rect, scale: f32, band_count: int, point: [2]f32) -> int {
+    geometry := strobe_geometry(shape, rect, scale, band_count)
+    if !point_in_rect(point, rect) do return -1
+
+    if geometry.flat {
+        // The first track is the bottom one
+        order := int(math.floor((point.y - geometry.y) / geometry.band_height))
+        if order < 0 || order >= band_count do return -1
+        return band_count - 1 - order
+    }
 
     // The centre of the circles, see draw_strobe_bands and the strobe shader
     outer_radius := geometry.curvature_radius + geometry.band_height * f32(band_count - 1)
@@ -277,10 +282,8 @@ draw_strobe_display :: proc(
     comparator: ^core.PhaseComparator,
     config: ^Config,
 ) {
-    // The trace and the scope's views are drawn by draw_cents_trace and draw_scope_display instead
-    display_type := config.strobe_display_type
-    geometry, ok := strobe_geometry(display_type, rect, scale, len(comparator.bands))
-    if !ok do return
+    shape := config.strobe_shape
+    geometry := strobe_geometry(shape, rect, scale, len(comparator.bands))
     band_height := geometry.band_height
 
     glow_enabled := config.strobe_glow
@@ -292,8 +295,9 @@ draw_strobe_display :: proc(
         strobe_blur     = i32(config.strobe_blur),
         motion_blur     = i32(config.motion_blur),
         glow            = i32(glow_enabled),
+        flat_track      = i32(geometry.flat),
         // The wheel is lit evenly all around, the tracks only show the top of the disc
-        lamp_spread     = 1000.0 if display_type == .SPINNING_WHEEL else 0.45,
+        lamp_spread     = 1000.0 if shape == .WHEEL else 0.45,
         glow_exposure   = glow.exposure,
         glow_saturation = glow.saturation,
         color_a         = normalize_color(self.colors.x),
@@ -339,16 +343,37 @@ draw_strobe_display :: proc(
         draw_strobe_bands(self, rect, comparator, &uniforms, geometry)
     }
 
-    // The partial of each track on the right, e.g. 1×, 2×, on the curve of the track a little in from the edge
-    if config.strobe_mode == .HARMONIC && display_type == .CURVED_TRACKS && config.partial_labels != .NONE {
+    // The partial of each track, e.g. 1×, 2×: on the right, on the curve of a curved track a little in from
+    // the edge or in the middle of a flat one, and on the top of a wheel's ring, where the ring runs level
+    // and the labels of the rings stack in a column
+    if config.strobe_mode == .HARMONIC && config.partial_labels != .NONE {
+        // The wheel's centre, see draw_strobe_bands and the strobe shader
+        center := [2]f32 {
+            rect.x + 0.5 * rect.width,
+            geometry.y + 10 + geometry.curvature_radius + band_height * f32(len(comparator.bands) - 1),
+        }
+        middle := 0.5 * (band_height - 4) - 0.5 * pixel_fonts.band_label.size
+
         radius := uniforms.min_radius
         for &band, band_index in comparator.bands {
             order := len(comparator.bands) - 1 - band_index
             radius += band_height
-            // From the centre of the circles across to the label, and up to the track there
-            across := 0.5 * rect.width - 28
-            up := math.sqrt(radius * radius - across * across)
-            label_y := geometry.y + band_height * (f32(order) + 0.6) + radius - up
+
+            label_y: f32
+            on_ring: [2]f32 // a wheel's, the middle of the label
+            switch shape {
+            case .CURVED:
+                // From the centre of the circles across to the label, and up to the track there
+                across := 0.5 * rect.width - 28
+                up := math.sqrt(radius * radius - across * across)
+                label_y = geometry.y + band_height * (f32(order) + 0.6) + radius - up
+            case .FLAT:
+                label_y = geometry.y + band_height * f32(order) + middle
+            case .WHEEL:
+                ring_middle := radius - 0.5 * (band_height - 4)
+                on_ring = {center.x, center.y - ring_middle}
+                label_y = on_ring.y - 0.5 * pixel_fonts.band_label.size
+            }
 
             // Hidden, too high for the sample rate
             if !band.in_range do continue
@@ -356,13 +381,14 @@ draw_strobe_display :: proc(
             // How far off this partial is, nothing while it's too quiet to measure. Right aligned on the
             // decimal point like the readout, the digits don't shift as the value changes.
             if config.show_band_cents && band.snr_db > band.noise_floor.snr_threshold_db {
-                font := pixel_fonts.band_cents
+                font := pixel_fonts.band_label
                 right := rect.x + 16 + measure_label(font, "-00.0").x
                 text := fmt.ctprintf("%+.1f", band.err_cents)
                 draw_text_right(font.font, text, {right, label_y}, font.size, 0, accent_color)
             }
 
-            draw_strobe_partial({rect.x + rect.width - 12, label_y}, config.partial_labels, band)
+            if shape == .WHEEL do draw_strobe_partial(on_ring, config.partial_labels, band, centered = true)
+            else do draw_strobe_partial({rect.x + rect.width - 12, label_y}, config.partial_labels, band)
         }
     }
 
@@ -464,6 +490,9 @@ draw_strobe_bands :: proc(
             arc_height = curvature_radius - math.sqrt(inner_radius * inner_radius - half_width * half_width)
         }
         height := min(strobe_rect.y + strobe_rect.height - band_y, arc_height + 4)
+        // The shader draws a track from the top of its quad, a curved one a little lower
+        offset: f32 = 10
+        if geometry.flat do height, offset = band_height, 0
         rect := Rect{strobe_rect.x, band_y, strobe_rect.width, height}
 
         uniforms.bounding_rect = {rect.x, rect.y, rect.width, rect.height}
@@ -492,7 +521,7 @@ draw_strobe_bands :: proc(
         // A partial too high for the sample rate leaves a gap, its sheet still opens there
         if band.in_range {
             set_shader_uniforms(self.strobe_shader, uniforms)
-            draw_shader_quad({rect.x, rect.y + 10, rect.width, rect.height})
+            draw_shader_quad({rect.x, rect.y + offset, rect.width, rect.height})
         }
 
         // Each fine track turns faster, its stripes are packed twice as tight

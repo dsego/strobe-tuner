@@ -31,7 +31,8 @@ SheetLayout :: struct {
     bottom:     f32, // as far from the home indicator as the rows are from the sides, for what sits under the rows
 }
 
-SHEET_ROW_HEIGHT :: 44 // a finger
+// A finger on a phone, a mouse needs less and the settings cover less of the strobe
+SHEET_ROW_HEIGHT :: 44 when IOS else 36
 SHEET_CONTROL_MARGIN :: 6 // between the pills and their row, the touch area is the whole row
 SHEET_TITLE_HEIGHT :: 36 // from the top of the title to the first row
 

@@ -53,6 +53,7 @@ struct StrobeUniforms {
     int strobe_blur;
     int motion_blur;
     int glow;
+    int flat_track; // the top of the arc straightened, see strobe_fragment
 };
 
 constant float TAU = 6.28318530717958647692;
@@ -139,9 +140,8 @@ static float generate_blurred_signal(
     return mix(0.5, value, fade);
 }
 
-static float draw_curved_track(float thickness, float outer_radius, float feathering, float2 distance)
+static float draw_curved_track(float thickness, float outer_radius, float feathering, float radial_position)
 {
-    float radial_position = length(distance);
     float inner_radius = outer_radius - thickness;
 
     float outer_circle = smoothstep(outer_radius, outer_radius - feathering, abs(radial_position));
@@ -169,17 +169,25 @@ fragment float4 strobe_fragment(FragmentIn in [[stage_in]], constant StrobeUnifo
 
     // This is the pixel position in terms of distance from the circle center
     float2 distance = center - position;
+    float radial_position = length(distance);
+
+    // Current pixel angle
+    float angle = atan2(distance.y, distance.x);
+
+    // Flat, the top of the arc straightened: the radius is the distance down from the top of the quad and
+    // the angle grows to the right as on the innermost track's top, every track has as many stripes across
+    if (u.flat_track > 0) {
+        radial_position = u.curvature_radius - position.y;
+        angle = 0.25 * TAU + (position.x - center.x) / (u.min_radius + u.band_height);
+    }
 
     // Color the pixel at position based on whether it sits in the donut shape
-    float curved_track = draw_curved_track(thickness, u.curvature_radius, feathering, distance);
+    float curved_track = draw_curved_track(thickness, u.curvature_radius, feathering, radial_position);
 
     // Most of the quad is outside the arc, skip the signal there, it's the costly part with the motion blur
     if (curved_track <= 0.0) {
         return float4(0.0);
     }
-
-    // Current pixel angle
-    float angle = atan2(distance.y, distance.x);
 
     // Time is translated from the linear to radial
     float time = angle / TAU;
@@ -208,7 +216,6 @@ fragment float4 strobe_fragment(FragmentIn in [[stage_in]], constant StrobeUnifo
 
         // Lamp hotspot, sits behind the inner band at the top centre of the arcs.
         // The outer bands fall off in brightness, so each band gets its own tone.
-        float radial_position = length(distance);
         float radial_t = (radial_position - u.min_radius) / max(u.max_radius - u.min_radius, 1.0);
         float angle_offset = (angle - 0.25 * TAU) / u.lamp_spread;
         float hotspot = exp(-angle_offset * angle_offset - 2.0 * radial_t * radial_t);
@@ -230,7 +237,6 @@ fragment float4 strobe_fragment(FragmentIn in [[stage_in]], constant StrobeUnifo
     // The outline follows the arc, the distance to the nearer edge of the track. The edges are where the
     // feathering is halfway, the outer one fades inside the radius and the inner one outside it.
     if (u.highlight > 0.0) {
-        float radial_position = length(distance);
         float outer_edge = u.curvature_radius - 0.5 * feathering;
         float inner_edge = u.curvature_radius - thickness - 0.5 * feathering;
         float edge = min(radial_position - inner_edge, outer_edge - radial_position);

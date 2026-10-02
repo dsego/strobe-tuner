@@ -139,6 +139,7 @@ StrobeUniforms :: struct #align (16) {
     strobe_blur:      i32,
     motion_blur:      i32,
     glow:             i32,
+    flat_track:       i32, // the top of the arc straightened
 }
 
 BloomUniforms :: struct #align (16) {

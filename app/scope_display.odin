@@ -20,11 +20,11 @@ import "core:math"
 
 // Two display types, both views of the scope in core/scope.odin that only draw what it gives them:
 //   scope   - its screen
-//   ribbon - its screen from above, stripes as bright as the wave is high
+//   lamp   - its screen from above, stripes as bright as the wave is high, the lamp of a mechanical strobe
 //
 // Two periods of the strobe's frequency across. An in tune note stands still, a detuned one drifts. The
 // scope runs left to right like an oscilloscope, a sawtooth leans the way it's generated and a sharp note
-// drifts left. The ribbon is mirrored to move like the strobe tracks, flat to the left and sharp to the right.
+// drifts left. The lamp is mirrored to move like the strobe tracks, flat to the left and sharp to the right.
 // Tapped, the scope draws the wave against the strobe's frequency instead, a Lissajous figure that
 // stands still in tune and rolls open and shut when it isn't.
 
@@ -41,12 +41,12 @@ SCOPE_NOISE_BRIGHTNESS :: 0.3
 SCOPE_PERSISTENCE_STEP_MS :: 10
 SCOPE_MAX_PERSISTENCE_MS :: 500
 
-// Debug builds: up and down change the persistence of the screen, H flips what the ribbon shows
+// Debug builds: up and down change the persistence of the screen, H flips what the lamp shows
 scope_keys :: proc(config: ^Config) {
-    if config.strobe_display_type != .SCOPE && config.strobe_display_type != .RIBBON do return
+    if config.strobe_display_type != .SCOPE && config.strobe_display_type != .LAMP do return
 
     if key_pressed(.H) {
-        config.ribbon_shape = .RAW_WAVEFORM if config.ribbon_shape == .HALF_RECTIFIED else .HALF_RECTIFIED
+        config.lamp_shape = .RAW_WAVEFORM if config.lamp_shape == .HALF_RECTIFIED else .HALF_RECTIFIED
     }
     step: f32 = 0
     if key_pressed(.UP) do step = SCOPE_PERSISTENCE_STEP_MS
@@ -57,8 +57,8 @@ scope_keys :: proc(config: ^Config) {
 // The beam is a thin line and its bloom is spread thin, it's added this many times over
 SCOPE_BLOOM_PASSES :: 3
 
-// The scope or the ribbon. With the retro glow on the scope's beam glows like the strobe, through the
-// strobe display's render targets. The ribbon is lit all over and a glow adds little, it has none.
+// The scope or the lamp. With the retro glow on the scope's beam glows like the strobe, through the
+// strobe display's render targets. The lamp is lit all over and a glow adds little, it has none.
 // snr_db is of the whole signal, the beam fades in with it like the strobe's stripes.
 draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: Rect, config: ^Config, snr_db: f32) {
     colors := strobe_colors(config)
@@ -93,9 +93,9 @@ draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: Re
     begin_scissor(rect)
     defer end_scissor()
 
-    if config.strobe_display_type == .RIBBON {
-        heights, dwell := core.scope_from_above(scope, config.ribbon_shape)
-        draw_ribbon(rect, heights, dwell, config.ribbon_shape, beam_color, dark_color)
+    if config.strobe_display_type == .LAMP {
+        heights, dwell := core.scope_from_above(scope, config.lamp_shape)
+        draw_lamp(rect, heights, dwell, config.lamp_shape, beam_color, dark_color)
     } else {
         draw_scope_screen(rect, scope, beam_color, dark_color, display.scope_visibility)
     }
@@ -143,10 +143,69 @@ draw_scope_screen :: proc(rect: Rect, scope: ^core.Scope, beam_color, grid_color
     }
 }
 
-// Stripes as bright as the beam is high, the classic strobe and the first version of this one. heights
-// is the beam's height in every column, 1 is the peak level, dwell is 0 where the beam hasn't been.
-// A smeared beam is gray, its height is the middle of the smear.
-draw_ribbon :: proc(rect: Rect, heights, dwell: []f32, shape: core.ScopeShape, bright_color, dark_color: Color) {
+// The comparator with its tracks turned by the lamp instead, the strobe the other way: a DFT bin of the
+// scope's screen from above (core.scope_partials) for each track's partial, instead of its DFT on the
+// samples. They turn like the tracks: by the bin's phase advance, rescaled so all notes spin at the same
+// rate per cent, times the track's speed, and stand still at its partial's target, offset included.
+// The stripe edges are as sharp as the bin's phase is certain (see update_band_look). The screen's quirks
+// show, a pluck or a weak partial can make the stripes jump. Only good until the next frame.
+lamp_comparator :: proc(
+    display: ^StrobeDisplay,
+    scope: ^core.Scope,
+    comparator: ^core.PhaseComparator,
+    signal_snr_db: f32,
+) -> (
+    lamp: core.PhaseComparator,
+) {
+    lamp = comparator^
+    lamp.bands = make([dynamic]core.PhaseBand, len(comparator.bands), context.temp_allocator)
+    copy(lamp.bands[:], comparator.bands[:])
+    if scope.freq_hz <= 0 do return
+
+    // The bin nearest each track's partial, its target a little off for an offset in cents
+    periods := make([]int, len(lamp.bands), context.temp_allocator)
+    for band, index in lamp.bands {
+        periods[index] = max(int(math.round(core.SCOPE_PERIODS * f64(band.freq_hz) / scope.freq_hz)), 1)
+    }
+    partials := make([]core.ScopePartial, len(lamp.bands), context.temp_allocator)
+    noise := max(core.scope_partials(scope, periods, partials), 1e-9)
+
+    // A new reference starts with a dark screen, the phases before it are arbitrary
+    measuring := display.lamp_freq_hz == scope.freq_hz
+    elapsed := f64(scope.sample_clock - display.lamp_clock) / scope.samplerate
+    display.lamp_freq_hz = scope.freq_hz
+    display.lamp_clock = scope.sample_clock
+
+    for &band, index in lamp.bands {
+        partial := partials[index]
+        phase_before := display.lamp_phases[index]
+        display.lamp_phases[index] = partial.phase
+        if !band.in_range do continue
+
+        // The screen remembers a note after it fades into the room's noise, the signal's SNR fades it out
+        level := max(partial.level, 1e-9)
+        band.snr_db = min(f32(20 * math.log10(level / noise)), signal_snr_db)
+
+        // As run_phase_detection does it, the shortest way from the previous frame's phase. On the target
+        // the partial drifts on the screen by how far it is from the bin.
+        bin_hz := f64(periods[index]) / core.SCOPE_PERIODS * scope.freq_hz
+        target_advance := math.TAU * (f64(band.freq_hz) - bin_hz) * elapsed
+        advance := core.wrap_phase(partial.phase - phase_before - target_advance) if measuring else 0
+
+        rescale := core.STROBE_REFERENCE_HZ / f64(band.freq_hz)
+        band.phase_diff = f32(advance * rescale)
+        // The noise moves the bin's phase by about this much
+        band.phase_sigma = f32(noise / (math.SQRT_TWO * level) * rescale)
+        display.lamp_scaled_phases[index] -= band.phase_diff * band.speed
+        band.scaled_phase = display.lamp_scaled_phases[index]
+    }
+    return
+}
+
+// Stripes as bright as the beam is high, the lamp of a mechanical strobe and the first version of this
+// one. heights is the beam's height in every column, 1 is the peak level, dwell is 0 where the beam
+// hasn't been. A smeared beam is gray, its height is the middle of the smear.
+draw_lamp :: proc(rect: Rect, heights, dwell: []f32, shape: core.ScopeShape, bright_color, dark_color: Color) {
     bright := normalize_color(bright_color)
     dark := normalize_color(dark_color)
     column_width := rect.width / f32(len(heights))

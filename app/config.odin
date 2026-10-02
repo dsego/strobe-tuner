@@ -36,12 +36,24 @@ PartialLabelType :: enum {
     NOTE_NAMES,
 }
 
+// The views of the settings' display menu, in its order
 StrobeDisplayType :: enum {
-    CURVED_TRACKS,
-    SPINNING_WHEEL,
-    TRACE, // a line of the cents over the last few seconds
     SCOPE, // the wave itself, like an oscilloscope synced to the strobe's frequency, see core/scope.odin
-    RIBBON, // the scope from above, stripes as bright as the wave is high, the classic strobe
+    TRACE, // a line of the cents over the last few seconds
+    STROBE, // the tracks, in one of the StrobeShapes
+    LAMP, // the scope from above, stripes as bright as the wave is high, the lamp of a mechanical strobe
+}
+
+StrobeShape :: enum {
+    FLAT, // the curved tracks straightened, the top of each arc
+    WHEEL,
+    CURVED,
+}
+
+// What turns the tracks
+StrobeSource :: enum {
+    LOCK_IN, // each track's DFT on the samples, against a reference at its partial, see core/phase.odin
+    LAMP, // the lamp's screen, a DFT bin of it for each track's partial, see lamp_comparator
 }
 
 
@@ -76,6 +88,8 @@ Config :: struct {
     speed_multiplier:             f32,
 
     strobe_display_type:          StrobeDisplayType,
+    strobe_shape:                 StrobeShape,
+    strobe_source:                StrobeSource,
 
     strobe_colorway:              StrobeColorway,
     strobe_blur:                  bool,
@@ -133,11 +147,11 @@ Config :: struct {
     // How far off each track's partial is, next to the track
     show_band_cents:              bool,
 
-    // Scope and ribbon displays: how long the beam stays on the screen, 0 shows only what came in since
+    // Scope and lamp displays: how long the beam stays on the screen, 0 shows only what came in since
     // the previous frame
     scope_persistence_ms:         f32,
-    // what the ribbon shows, the positive half of the wave like a lamp or the wave as it is
-    ribbon_shape:                 core.ScopeShape,
+    // what the lamp shows, the positive half of the wave like a lamp or the wave as it is
+    lamp_shape:                   core.ScopeShape,
     // the scope over time or as a Lissajous figure against the strobe's frequency, tapping it flips them
     scope_sweep:                  core.ScopeSweep,
 }
@@ -154,7 +168,9 @@ config_defaults :: Config {
     strobe_mode                  = .HARMONIC,
     strobe_speed                 = 0.0125,
     speed_multiplier             = 2.0,
-    strobe_display_type          = .CURVED_TRACKS,
+    strobe_display_type          = .STROBE,
+    strobe_shape                 = .CURVED,
+    strobe_source                = .LOCK_IN,
     strobe_colorway              = .VIBRANT_RED,
     strobe_blur                  = true,
     motion_blur                  = true,
@@ -174,7 +190,7 @@ config_defaults :: Config {
     use_phase_average            = true,
     show_band_cents              = false,
     scope_persistence_ms         = 40,
-    ribbon_shape                 = .HALF_RECTIFIED,
+    lamp_shape                   = .HALF_RECTIFIED,
     scope_sweep                  = .TIME,
 }
 

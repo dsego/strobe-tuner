@@ -22,12 +22,13 @@ import "core:math"
 FONT_CODEPOINTS :: " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#/+-−1234567890.,:π!×½()[]¢·%"
 
 // The numbers that change while they're read, every digit as wide so they don't shift, and a weight lighter
-// than the labels. Inter Regular from the same 4.1 release, its tabular figures frozen in as the default ones
-// and cut down to these:
+// than the labels, and the strobe's track labels next to them. Inter Regular from the same 4.1 release
+// (extras/ttf in the zip of github.com/rsms/inter/releases), its tabular figures frozen in as the default
+// ones, the rest of the characters as they are, and cut down to these:
 //   uvx --from opentype-feature-freezer pyftfeatfreeze -f tnum Inter-Regular.ttf Inter-Regular-tnum.ttf
-//   uvx --from fonttools pyftsubset Inter-Regular-tnum.ttf --text="0123456789.+-" --layout-features='' \
-//       --no-hinting --output-file=assets/fonts/inter/Inter-Regular-Tabular.ttf
-TABULAR_CODEPOINTS :: "0123456789.+-"
+//   uvx --from fonttools pyftsubset Inter-Regular-tnum.ttf --text="0123456789.+-×½#ABCDEFGHz¢" \
+//       --layout-features='' --no-hinting --output-file=assets/fonts/inter/Inter-Regular-Tabular.ttf
+TABULAR_CODEPOINTS :: "0123456789.+-×½#ABCDEFGHz¢"
 
 // Phosphor Regular (phosphoricons.com), the font is cut down to these, to add one:
 //   uvx --from fonttools pyftsubset Phosphor.ttf --unicodes=U+E272,U+E326,... --no-hinting \
@@ -106,7 +107,8 @@ PixelFonts :: struct {
     note_arrow:      PixelFont,
     strobe_arrow:    PixelFont,
     offset_value:    PixelFont,
-    band_cents:      PixelFont, // the cents of each track on the strobe
+    band_label:      PixelFont, // each track's partial and cents on the strobe
+    band_label_small: PixelFont, // a track's frequency and its offset
 }
 
 pixel_fonts: PixelFonts
@@ -152,7 +154,8 @@ update_pixel_fonts :: proc(ruler_scale: f32) {
         note_arrow      = load(inter_medium, NOTE_ARROW_SIZE, scale, "◀▶"),
         strobe_arrow    = load(inter_medium, STROBE_ARROW_SIZE, scale, "◀▶"),
         offset_value    = load(inter_medium, OFFSET_VALUE_SIZE, scale, "ABCDEFG#0123456789.+-¢"),
-        band_cents      = load(inter_tabular, LABEL_LARGE_SIZE, scale, TABULAR_CODEPOINTS),
+        band_label      = load(inter_tabular, LABEL_LARGE_SIZE, scale, TABULAR_CODEPOINTS),
+        band_label_small = load(inter_tabular, LABEL_SIZE, scale, TABULAR_CODEPOINTS),
     }
 }
 
@@ -178,7 +181,8 @@ unload_pixel_fonts :: proc() {
     gfx_unload_font(pixel_fonts.note_arrow.font)
     gfx_unload_font(pixel_fonts.strobe_arrow.font)
     gfx_unload_font(pixel_fonts.offset_value.font)
-    gfx_unload_font(pixel_fonts.band_cents.font)
+    gfx_unload_font(pixel_fonts.band_label.font)
+    gfx_unload_font(pixel_fonts.band_label_small.font)
     pixel_fonts = {}
 }
 

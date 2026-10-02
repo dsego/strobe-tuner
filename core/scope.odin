@@ -295,6 +295,44 @@ scope_from_above :: proc(self: ^Scope, shape: ScopeShape) -> (heights: []f32, dw
 }
 
 
+// Partials on the screen, each a DFT bin of the wave from above, the sine with as many periods across
+// the screen, SCOPE_PERIODS times the partial. And the noise in the bins halfway between the harmonics of
+// the reference, nothing locked to it lands there.
+ScopePartial :: struct {
+    phase: f64, // radians of the partial, the screen's left edge is 0
+    level: f64, // 1 is the peak level
+}
+
+SCOPE_NOISE_BINS :: 32 // of the halfway bins, from the bottom
+
+scope_partials :: proc(self: ^Scope, periods: []int, partials: []ScopePartial) -> (noise: f64) {
+    // The sine with this many periods across the screen. A dark column counts as zero, it's a part of
+    // the sweep the beam hasn't been to.
+    dft_bin :: proc(heights: []f32, periods: int) -> (bin: complex128) {
+        for height, column in heights {
+            angle := math.TAU * f64(periods) * (f64(column) + 0.5) / f64(len(heights))
+            bin += complex(f64(height), 0) * complex(math.cos(angle), -math.sin(angle))
+        }
+        return bin * complex(2 / f64(len(heights)), 0)
+    }
+
+    // The wave as it is, half rectified it would have harmonics of its own
+    heights, _ := scope_from_above(self, .RAW_WAVEFORM)
+
+    for &partial, index in partials {
+        bin := dft_bin(heights, periods[index])
+        partial = {math.atan2(imag(bin), real(bin)), abs(bin)}
+    }
+
+    power: f64 = 0
+    for index in 0 ..< SCOPE_NOISE_BINS {
+        bin := dft_bin(heights, 2 * index + 1)
+        power += real(bin) * real(bin) + imag(bin) * imag(bin)
+    }
+    return math.sqrt(power / SCOPE_NOISE_BINS)
+}
+
+
 // The phase and amplitude of the reference frequency in the screen from above
 scope_test_fundamental :: proc(heights: []f32) -> (phase: f64, amp: f64) {
     sum: complex128
