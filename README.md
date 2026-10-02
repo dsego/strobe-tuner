@@ -20,10 +20,10 @@ Strobie is on the App Store for Mac and iPhone. The source is here to read and b
 - Track settings: tap a track to choose its partial (1× to 8×, or the fifth at 1½×), move its target by up to ±50 cents (e.g. for a stretched octave) and change its speed.
 - Fine mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity.
 - Fast toggle: the strobe spins 4× faster per cent of detuning, for the final adjustment.
-- Four displays:
+- Four displays, see [Displays](#displays):
   - Strobe: curved tracks, a wheel or flat tracks, turned by a lock-in on each partial or by the lamp.
   - Lamp: the mechanical strobe, stripes lit by the wave.
-  - Scope: the waveform synced to the strobe's frequency.
+  - Scope: the waveform synced to the strobe's frequency, tap it for a Lissajous figure.
   - Trace: the cents over time.
 - Note offsets: tune a note up to ±25 cents off pitch, the strobe stands still at the offset note.
 - Transpose for B♭, E♭, F and other transposing instruments.
@@ -123,7 +123,20 @@ The config is saved to `$XDG_CONFIG_HOME/Strobie/config.ini`, or `~/.config/Stro
 
 ### How it works
 
-<img src="docs/signal-path.svg" alt="Audio signal path: the audio thread writes the input into two ring buffers, the main thread filters one for pitch detection and reads the other as it is for the strobe bands">
+<img src="docs/signal-path.svg" alt="Audio signal path: the audio thread writes the input into three ring buffers. On the main thread the pitch detector picks the target note, which sets the reference of the lock-in and the lamp. The lock-in's phase or the lamp's turns the strobe tracks, the lamp's screen also draws the scope and the lamp views.">
+
+#### Displays
+
+All four show the same thing, how the note's phase slips against a reference at the target pitch, in four ways:
+
+- **Strobe**: the tracks of a strobe tuner, one per partial in harmonic mode, standing still when the partial is in tune and turning left when flat, right when sharp. The shape is flat, a wheel or curved tracks. They can be turned by:
+  - **Lock-in** (the default): each track measures its own partial with a single-bin DFT, see [Stroboscopic effect](#stroboscopic-effect). Smooth, with each partial measured on its own.
+  - **Lamp**: each track turns by its partial on the lamp's screen, a DFT bin of it. That's the strobe the other way round, from the picture to the tracks, with its quirks: a pluck or a weak partial can make the stripes jump.
+- **Lamp**: the disc of a mechanical strobe lit by a lamp that flashes with the wave. Every sample is folded onto two periods of the reference, the stripes are as bright as the wave is high there. A detuned note drifts, a fast drift smears the stripes to gray, like the eye does with a real one.
+- **Scope**: the same folded screen as it is, an oscilloscope with its sweep synced to the reference. Tapped, it draws the wave against the reference's cosine instead, a Lissajous figure that stands still in tune and rolls open and shut when it isn't.
+- **Trace**: the cents of the readout over the last few seconds, to see a vibrato or a drift.
+
+The cents readout and the trace come from the lock-in in every display.
 
 #### Pitch detection
 
@@ -139,28 +152,26 @@ Core steps:
 - Input: The strobe takes the input as it is, unfiltered. Each band's narrow DFT rejects everything away from its frequency.
 - Frequency targeting: Compute a windowed single-bin DFT over the newest samples, precisely tuned to the reference frequency.
 - Demodulation: Rotate the DFT result by the phase of a reference oscillator running on an absolute sample clock. When the input pitch matches the reference, this phase stands still; a detuned signal makes it rotate at the frequency difference.
-- Strobe motion: The stripes turn by the measured phase. The cents of each track are its rate averaged over 0.3 s, restarted after each pluck's attack.
+- Strobe motion: The stripes turn by the measured phase, times the track's speed.
+- Readout: The cents of each track are the slope of a least squares line through its phase, older measurements weighted down, restarted after each pluck's attack.
 - Stripe sharpness: The stripe edges are as sharp as the band's SNR allows, and the stripes fade out as it drops into the background noise.
 
-To maintain a consistent amount of visual drift across the frequency spectrum, the window length is based on musical pitch intervals (in cents) rather than absolute frequency, and the strobe phase is rescaled so each note spins at the same rate per cent of detuning.
+Every track's window is sized for a band a semitone wide around the fundamental, about 0.16 s at 110 Hz. The window is gamma shaped, weighted toward the newest samples like an analog lock-in's low-pass, so the phase is measured as of about 50 ms ago instead of half the window. A semitone lets the neighbouring partials in, so the window is also smoothed with a box one period of the note long (two for a fifth), a comb whose nulls fall on every other partial.
 
-The single-bin DFT also serves as a narrowband filter, providing a clean strobe signal while still allowing nearby frequencies to influence the display. The amount of visual drift per cent can be scaled directly by multiplying the tracked phase — allowing customizable strobe sensitivity.
+The strobe phase is rescaled so each note spins at the same rate per cent of detuning, and since it's a measured phase it can be multiplied by any factor, which is what the track speed, the fast toggle and the fine mode are built on.
 
 
-#### Alternative approaches I have tried
+#### How it got here
 
-Before the lock-in, I drew the strobe from the waveform itself, like an untriggered oscilloscope with its sweep synced to the reference period, so a detuned note drifts sideways:
+The strobe went through four versions, each one fixing what the one before couldn't.
 
-- Time-aligned windowing with resampling - each band resampled so that one reference period fills the pattern.
-- Time-aligned windowing with a sub-sample frame counter - instead of resampling, a fractional counter keeps the alignment and the number of samples per frame is rounded up or down.
-
-Both ran into the same problems, which the lock-in doesn't have:
-
-- Sensitivity: the drift is the actual phase the signal slips against the reference, so it can't be made slower or faster. The lock-in measures that phase, and the strobe turns by the phase times any factor, which is what the strobe response setting and the fine mode are built on.
-- Shimmer: rounding each frame to whole samples moves the pattern by up to half a sample per frame. High notes have few samples per period, 12 at 4 kHz, so that's 15° of jitter. Resampling avoided the rounding, but with few samples per period the motion was blocky. The lock-in phase is continuous, so the stripes move smoothly at any pitch.
-- Band filters: each band needed an IIR bandpass, otherwise the other harmonics bled into its pattern. A narrow IIR shifts the phase steeply around its centre frequency, differently in each band, so the tracks were offset from each other and reacted at different speeds when the pitch moved, e.g. a pluck gliding down from sharp. The single-bin DFT is just as narrow a bandpass, and its phase shifts alike in every band.
-
-A narrow filter needs a long look at the signal: the DFT window is about 0.6 s at 110 Hz, weighted toward the newest samples, so the phase is measured as of about 0.17 s ago.
+1. **Resampled frames**: each display frame took the newest samples and resampled them so one reference period filled the pattern, drawn as stripes. The trouble:
+   - No smear: every frame was a sharp snapshot. On a real strobe the eye blends the moving pattern, so a fast drift washes out to gray, here it jumped from frame to frame.
+   - Resampling: high notes have few samples per period, 12 at 4 kHz, and the interpolated pattern moved in blocks.
+   - Bleed: each band needed an IIR bandpass, otherwise the other partials bled into its pattern. A narrow IIR shifts the phase steeply around its centre frequency, differently in each band, so the tracks were offset from each other and reacted at different speeds when the pitch moved, e.g. a pluck gliding down from sharp.
+2. **Frame counting**: instead of resampling, a fractional counter kept the frames aligned to the reference and rounded each one to whole samples. The same missing smear and the same IIR filters, and the rounding moved the pattern by up to half a sample per frame, 15° of jitter at 4 kHz.
+3. **Folding, the lamp**: instead of cutting frames, every sample is placed on the screen at its phase of the reference, on the absolute sample clock, and the screen fades like phosphor. Each column averages the wave at that phase over the persistence time. Nothing is rounded or resampled, and the smear comes by itself: a slow drift stays sharp, a fast one washes out. Folding at the reference period is itself a comb, only its harmonics add up. This is the Lamp and the Scope display today, and it can turn the strobe tracks. What it still can't do: the drift is the actual phase the note slips, it can't be made slower or faster.
+4. **Phase lock**: the lock-in compares the phase of each partial with the reference and the strobe turns by that phase, see [Stroboscopic effect](#stroboscopic-effect). The single-bin DFT is a bandpass whose phase shifts alike in every band, the phase is continuous so the stripes move smoothly at any pitch, and its speed can be scaled.
 
 
 #### Noise floor

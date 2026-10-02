@@ -1,193 +1,196 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 588" width="1140" height="588" role="img" aria-labelledby="title desc">
-  <!--
-    Drawn in the app's style: its background, Inter, the LED dots, the cyan accent for the pitch and the red
-    colorway's stripes for the strobe. Inter Medium (https://rsms.me/inter/, SIL Open Font License 1.1) is
-    embedded, an image can't load an outside font. It's cut down to the characters used here with the fonttools
-    pyftsubset command (text-file and flavor woff2 options), new ones need adding.
-  -->
-  <title id="title">Strobe tuner audio signal path</title>
-  <desc id="desc">On the audio thread the microphone input is converted to mono 48 kHz by miniaudio and written into two lock-free ring buffers. On the main thread the pitch detector reads one every display frame, high-passes it at 60 Hz and low-passes it at 5 kHz, runs the NSDF and picks the target note once it has held for 50 ms, which retunes the strobe bands. The strobe reads the other every display frame: a Blackman windowed single-bin DFT per band, a lock-in rotation on the absolute sample clock and a Kalman tracker drive the strobe shader, with each band's noise floor giving the SNR.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 565" width="1100" height="565" role="img" aria-labelledby="title desc">
+  <title id="title">Strobie audio signal path</title>
+  <desc id="desc">On the audio thread the input is converted to mono 48 kHz by miniaudio and written into three lock-free ring buffers, one per reader. On the main thread, every display frame: the pitch lane filters its samples, runs the NSDF, picks the peak and holds the target note for 50 ms, which sets the reference frequency of the lock-in and the lamp. The lock-in lane runs a single-bin DFT per track and rotates it by the reference on the sample clock, its phase advance times the track speed turns the strobe tracks, and a least squares fit of the phase gives the cents for the readout and the trace. The lamp lane folds every sample onto two periods of the reference on a fading screen, which the scope view draws as it is and the lamp view from above; a DFT bin of the screen per track can turn the strobe tracks instead of the lock-in.</desc>
   <style>
-    @font-face {
-      font-family: "Inter Diagram";
-      font-weight: 500;
-      src: url("data:font/woff2;base64,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") format("woff2");
-    }
-    text { font-family: "Inter Diagram", Inter, system-ui, sans-serif; font-weight: 500; }
-    .bg { fill: #15161A; }
-    .panel { fill: #1B1C21; stroke: #26272E; stroke-width: 1; }
-    .box { fill: #22232A; stroke: #2D2E35; stroke-width: 1; }
-    .header { font-size: 11px; letter-spacing: 1.6px; fill: #7D7E8F; }
-    .lane-name { font-size: 12px; letter-spacing: 1.6px; }
-    .lane-rate { font-size: 12px; fill: #7D7E8F; }
-    .label { font-size: 15px; fill: #FBFBFB; }
-    .sub { font-size: 12px; fill: #7D7E8F; }
-    .note { font-size: 12px; }
-    .wire { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-    .audio-wire { stroke: #5C5D6A; }
-    .pitch-wire { stroke: #82E2FF; stroke-opacity: 0.7; }
-    .strobe-wire { stroke: #FF6767; stroke-opacity: 0.7; }
-    .mint { fill: #61FFCA; }
-    .cyan { fill: #82E2FF; }
-    .coral { fill: #FF6767; }
-    .mauve { fill: #6B4949; }
+    text { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #111; }
+    .bg { fill: #fff; }
+    .frame, .box, .note { fill: #fff; stroke: #222; stroke-width: 1; }
+    .lane { stroke: #999; stroke-width: 1; stroke-dasharray: 4 4; }
+    .wire { fill: none; stroke: #222; stroke-width: 1; }
+    .dashed { stroke-dasharray: 4 3; }
+    .tab { font-size: 12px; font-weight: 600; }
+    .lane-name { font-size: 11px; font-style: italic; fill: #666; }
+    .title { font-size: 13px; font-weight: 600; }
+    .sub { font-size: 11px; fill: #444; }
+    .stereotype { font-size: 10px; fill: #444; }
+    .guard { font-size: 11px; fill: #444; }
   </style>
 
   <defs>
-    <marker id="arrow-audio" viewBox="0 0 10 12" refX="8" refY="6" markerWidth="8" markerHeight="10" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M2,2 L8,6 L2,10" fill="none" stroke="#5C5D6A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M1,1 L9,5 L1,9" fill="none" stroke="#222" stroke-width="1"/>
     </marker>
-    <marker id="arrow-pitch" viewBox="0 0 10 12" refX="8" refY="6" markerWidth="8" markerHeight="10" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M2,2 L8,6 L2,10" fill="none" stroke="#82E2FF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-    </marker>
-    <marker id="arrow-strobe" viewBox="0 0 10 12" refX="8" refY="6" markerWidth="8" markerHeight="10" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M2,2 L8,6 L2,10" fill="none" stroke="#FF6767" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-    </marker>
-    <!-- The LEDs shine like the indicator lamps next to the app's toggles -->
-    <filter id="glow" x="-200%" y="-200%" width="500%" height="500%">
-      <feGaussianBlur stdDeviation="2.5" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <clipPath id="shader-box"><rect x="952" y="292" width="152" height="76" rx="12"/></clipPath>
   </defs>
 
-  <rect class="bg" width="1140" height="588" rx="20"/>
+  <rect class="bg" width="1100" height="565"/>
 
-  <!-- Threads -->
-  <text class="header" x="28" y="32">AUDIO THREAD</text>
-  <text class="header" x="264" y="32">MAIN THREAD</text>
+  <!-- Frames, the threads -->
+  <rect class="frame" x="10" y="30" width="190" height="515"/>
+  <path class="frame" d="M10,30 H112 V42 L104,50 H10 Z"/>
+  <text class="tab" x="18" y="45">audio thread</text>
 
-  <rect class="panel" x="16" y="48" width="216" height="336" rx="16"/>
-  <rect class="panel" x="248" y="48" width="876" height="140" rx="16"/>
-  <rect class="panel" x="248" y="248" width="876" height="320" rx="16"/>
+  <rect class="frame" x="220" y="30" width="870" height="515"/>
+  <path class="frame" d="M220,30 H448 V42 L440,50 H220 Z"/>
+  <text class="tab" x="228" y="45">main thread, every display frame</text>
 
-  <circle class="mint" cx="32" cy="72" r="4" filter="url(#glow)"/>
-  <text class="lane-name" x="44" y="76" fill="#61FFCA">INPUT</text>
-
-  <circle class="cyan" cx="268" cy="72" r="4" filter="url(#glow)"/>
-  <text class="lane-name" x="280" y="76" fill="#82E2FF">PITCH</text>
-  <text class="lane-rate" x="340" y="76">every display frame</text>
-
-  <circle class="coral" cx="268" cy="272" r="4" filter="url(#glow)"/>
-  <text class="lane-name" x="280" y="276" fill="#FF6767">STROBE</text>
-  <text class="lane-rate" x="348" y="276">every display frame</text>
+  <!-- Lanes -->
+  <line class="lane" x1="220" y1="180" x2="1090" y2="180"/>
+  <line class="lane" x1="220" y1="355" x2="1090" y2="355"/>
+  <text class="lane-name" x="1080" y="68" text-anchor="end">pitch</text>
+  <text class="lane-name" x="1080" y="196" text-anchor="end">lock-in</text>
+  <text class="lane-name" x="1080" y="372" text-anchor="end">lamp</text>
 
   <!-- Boxes -->
-  <rect class="box" x="28" y="92" width="192" height="76" rx="12"/>
-  <rect class="box" x="28" y="188" width="192" height="76" rx="12"/>
-  <rect class="box" x="28" y="284" width="192" height="76" rx="12"/>
+  <rect class="box" x="30" y="80" width="150" height="56"/>
+  <rect class="box" x="30" y="190" width="150" height="56"/>
+  <rect class="box" x="30" y="300" width="150" height="70"/>
 
-  <rect class="box" x="264" y="92" width="152" height="76" rx="12"/>
-  <rect class="box" x="436" y="92" width="152" height="76" rx="12"/>
-  <rect class="box" x="608" y="92" width="152" height="76" rx="12"/>
-  <rect class="box" x="780" y="92" width="152" height="76" rx="12"/>
-  <rect class="box" x="952" y="92" width="152" height="76" rx="12"/>
+  <rect class="box" x="240" y="80" width="140" height="56"/>
+  <rect class="box" x="410" y="80" width="140" height="56"/>
+  <rect class="box" x="580" y="80" width="140" height="56"/>
+  <rect class="box" x="750" y="80" width="140" height="56"/>
 
-  <rect class="box" x="264" y="292" width="152" height="76" rx="12"/>
-  <rect class="box" x="436" y="292" width="152" height="76" rx="12"/>
-  <rect class="box" x="608" y="292" width="152" height="76" rx="12"/>
-  <rect class="box" x="780" y="292" width="152" height="76" rx="12"/>
-  <rect class="box" x="952" y="292" width="152" height="76" rx="12"/>
-  <rect class="box" x="608" y="464" width="496" height="76" rx="12"/>
+  <rect class="box" x="240" y="200" width="140" height="56"/>
+  <rect class="box" x="410" y="200" width="140" height="56"/>
+  <rect class="box" x="580" y="200" width="140" height="56"/>
+  <rect class="box" x="920" y="200" width="140" height="56"/>
+  <rect class="box" x="580" y="280" width="140" height="56"/>
+  <rect class="box" x="920" y="280" width="140" height="56"/>
+  <path class="note" d="M240,280 H370 L380,290 V336 H240 Z M370,280 V290 H380"/>
 
-  <!-- The shader's box ends in a strip of the red colorway's stripes -->
-  <g clip-path="url(#shader-box)">
-    <rect class="coral" x="952" y="363" width="19" height="5"/>
-    <rect class="mauve" x="971" y="363" width="19" height="5"/>
-    <rect class="coral" x="990" y="363" width="19" height="5"/>
-    <rect class="mauve" x="1009" y="363" width="19" height="5"/>
-    <rect class="coral" x="1028" y="363" width="19" height="5"/>
-    <rect class="mauve" x="1047" y="363" width="19" height="5"/>
-    <rect class="coral" x="1066" y="363" width="19" height="5"/>
-    <rect class="mauve" x="1085" y="363" width="19" height="5"/>
-  </g>
+  <rect class="box" x="240" y="390" width="140" height="56"/>
+  <rect class="box" x="410" y="390" width="140" height="56"/>
+  <rect class="box" x="580" y="390" width="140" height="56"/>
+  <rect class="box" x="750" y="390" width="140" height="56"/>
+  <rect class="box" x="410" y="470" width="140" height="56"/>
+  <rect class="box" x="580" y="470" width="140" height="56"/>
 
-  <!-- Audio thread flow -->
-  <path class="wire audio-wire" d="M124,168 V186" marker-end="url(#arrow-audio)"/>
-  <path class="wire audio-wire" d="M124,264 V282" marker-end="url(#arrow-audio)"/>
+  <!-- Turned by the lock-in or the lamp -->
+  <path class="box" d="M820,214 L834,228 L820,242 L806,228 Z"/>
 
-  <!-- The ring buffers fork into the two readers -->
-  <path class="wire audio-wire" d="M220,322 H230 Q238,322 238,314 V138 Q238,130 246,130 H262" marker-end="url(#arrow-audio)"/>
-  <path class="wire audio-wire" d="M238,314 V322 Q238,330 246,330 H262" marker-end="url(#arrow-audio)"/>
+  <!-- Audio thread -->
+  <path class="wire" d="M105,136 V190" marker-end="url(#arrow)"/>
+  <path class="wire" d="M105,246 V300" marker-end="url(#arrow)"/>
 
-  <!-- Pitch flow -->
-  <path class="wire pitch-wire" d="M416,130 H434" marker-end="url(#arrow-pitch)"/>
-  <path class="wire pitch-wire" d="M588,130 H606" marker-end="url(#arrow-pitch)"/>
-  <path class="wire pitch-wire" d="M760,130 H778" marker-end="url(#arrow-pitch)"/>
-  <path class="wire pitch-wire" d="M932,130 H950" marker-end="url(#arrow-pitch)"/>
+  <!-- One ring buffer per reader -->
+  <path class="wire" d="M180,335 H210"/>
+  <circle cx="210" cy="335" r="2.5" fill="#222"/>
+  <path class="wire" d="M210,335 V108 H240" marker-end="url(#arrow)"/>
+  <path class="wire" d="M210,228 H240" marker-end="url(#arrow)"/>
+  <path class="wire" d="M210,335 V418 H240" marker-end="url(#arrow)"/>
 
-  <!-- The target note sets the band frequencies and window sizes -->
-  <path class="wire pitch-wire" d="M1028,168 V210 Q1028,218 1020,218 H520 Q512,218 512,226 V290" marker-end="url(#arrow-pitch)"/>
+  <!-- Pitch -->
+  <path class="wire" d="M380,108 H410" marker-end="url(#arrow)"/>
+  <path class="wire" d="M550,108 H580" marker-end="url(#arrow)"/>
+  <path class="wire" d="M720,108 H750" marker-end="url(#arrow)"/>
 
-  <!-- Strobe flow -->
-  <path class="wire strobe-wire" d="M416,330 H434" marker-end="url(#arrow-strobe)"/>
-  <path class="wire strobe-wire" d="M588,330 H606" marker-end="url(#arrow-strobe)"/>
-  <path class="wire strobe-wire" d="M760,330 H778" marker-end="url(#arrow-strobe)"/>
-  <path class="wire strobe-wire" d="M932,330 H950" marker-end="url(#arrow-strobe)"/>
+  <!-- The target note sets the reference of the lock-in and the lamp -->
+  <path class="wire" d="M820,136 V168 H310 V200" marker-end="url(#arrow)"/>
+  <circle cx="395" cy="168" r="2.5" fill="#222"/>
+  <path class="wire" d="M395,168 V375 H480 V390" marker-end="url(#arrow)"/>
+  <text class="guard" x="610" y="162" text-anchor="middle">reference frequency, 1× 2× 4× … per track</text>
 
-  <!-- The DFT amplitude feeds the noise floor, its SNR feeds the tracker and the shader -->
-  <path class="wire strobe-wire" d="M512,368 V494 Q512,502 520,502 H606" marker-end="url(#arrow-strobe)"/>
-  <path class="wire strobe-wire" d="M856,464 V370" marker-end="url(#arrow-strobe)"/>
-  <path class="wire strobe-wire" d="M1028,464 V370" marker-end="url(#arrow-strobe)"/>
+  <!-- Lock-in -->
+  <path class="wire" d="M380,228 H410" marker-end="url(#arrow)"/>
+  <path class="wire" d="M550,228 H580" marker-end="url(#arrow)"/>
+  <path class="wire" d="M720,228 H806" marker-end="url(#arrow)"/>
+  <path class="wire" d="M834,228 H920" marker-end="url(#arrow)"/>
+  <path class="wire" d="M650,256 V280" marker-end="url(#arrow)"/>
+  <path class="wire" d="M720,308 H920" marker-end="url(#arrow)"/>
+  <path class="wire dashed" d="M310,256 V280"/>
+  <text class="guard" x="763" y="222" text-anchor="middle">[lock-in]</text>
+  <text class="guard" x="820" y="207" text-anchor="middle">turned by</text>
 
-  <text class="note" x="770" y="208" text-anchor="middle" fill="#82E2FF">retunes the bands, 1× 2× 4× …</text>
-  <text class="note" x="524" y="440" fill="#FF6767" fill-opacity="0.8">amplitude</text>
+  <!-- Lamp -->
+  <path class="wire" d="M380,418 H410" marker-end="url(#arrow)"/>
+  <path class="wire" d="M550,418 H580" marker-end="url(#arrow)"/>
+  <path class="wire" d="M720,418 H750" marker-end="url(#arrow)"/>
+  <path class="wire" d="M820,390 V242" marker-end="url(#arrow)"/>
+  <path class="wire" d="M480,446 V470" marker-end="url(#arrow)"/>
+  <path class="wire" d="M650,446 V470" marker-end="url(#arrow)"/>
+  <text class="guard" x="826" y="370">[lamp]</text>
 
   <g text-anchor="middle">
     <!-- Audio thread -->
-    <text class="label" x="124" y="122">Microphone</text>
-    <text class="sub" x="124" y="144">or audio interface</text>
+    <text class="title" x="105" y="104">Microphone</text>
+    <text class="sub" x="105" y="122">or audio interface</text>
 
-    <text class="label" x="124" y="218">miniaudio</text>
-    <text class="sub" x="124" y="240">mono f32, 48 kHz</text>
+    <text class="title" x="105" y="214">miniaudio</text>
+    <text class="sub" x="105" y="232">mono f32, 48 kHz</text>
 
-    <text class="label" x="124" y="314">Ring buffers</text>
-    <text class="sub" x="124" y="336">2 × 64k frames, lock-free</text>
+    <text class="title" x="105" y="324">Ring buffers</text>
+    <text class="sub" x="105" y="342">one per reader</text>
+    <text class="sub" x="105" y="357">64k samples, lock-free</text>
 
-    <!-- Pitch lane -->
-    <text class="label" x="340" y="118">Filters</text>
-    <text class="sub" x="340" y="140">60 Hz high-pass</text>
-    <text class="sub" x="340" y="156">5 kHz low-pass</text>
+    <!-- Pitch -->
+    <text class="title" x="310" y="102">Filters</text>
+    <text class="sub" x="310" y="119">60 Hz high-pass</text>
+    <text class="sub" x="310" y="132">5 kHz low-pass</text>
 
-    <text class="label" x="512" y="118">Sample window</text>
-    <text class="sub" x="512" y="140">newest 4096</text>
-    <text class="sub" x="512" y="156">every 800 samples</text>
+    <text class="title" x="480" y="102">NSDF</text>
+    <text class="sub" x="480" y="119">newest 4096 samples</text>
+    <text class="sub" x="480" y="132">8192-point FFT</text>
 
-    <text class="label" x="684" y="118">NSDF</text>
-    <text class="sub" x="684" y="140">8192-point pffft</text>
-    <text class="sub" x="684" y="156">autocorrelation</text>
+    <text class="title" x="650" y="102">Peak pick</text>
+    <text class="sub" x="650" y="119">parabolic peak</text>
+    <text class="sub" x="650" y="132">clarity, SNR</text>
 
-    <text class="label" x="856" y="118">Peak pick</text>
-    <text class="sub" x="856" y="140">parabolic peak</text>
-    <text class="sub" x="856" y="156">clarity, RMS, SNR</text>
+    <text class="title" x="820" y="102">Target note</text>
+    <text class="sub" x="820" y="119">held for 50 ms</text>
+    <text class="sub" x="820" y="132">or the locked note</text>
 
-    <text class="label" x="1028" y="118">Target note</text>
-    <text class="sub" x="1028" y="140">held for 50 ms</text>
-    <text class="sub" x="1028" y="156">or the locked note</text>
+    <!-- Lock-in -->
+    <text class="title" x="310" y="222">Single-bin DFT</text>
+    <text class="sub" x="310" y="239">per track, gamma window</text>
+    <text class="sub" x="310" y="252">semitone wide, comb</text>
 
-    <!-- Strobe lane -->
-    <text class="label" x="340" y="318">Sample window</text>
-    <text class="sub" x="340" y="340">per band, 25 cents</text>
-    <text class="sub" x="340" y="356">30k at 110 Hz</text>
+    <text class="title" x="480" y="222">Lock-in</text>
+    <text class="sub" x="480" y="239">rotate by the reference</text>
+    <text class="sub" x="480" y="252">on the sample clock</text>
 
-    <text class="label" x="512" y="318">Single-bin DFT</text>
-    <text class="sub" x="512" y="340">Blackman window</text>
-    <text class="sub" x="512" y="356">phase average</text>
+    <text class="title" x="650" y="222">Phase advance</text>
+    <text class="sub" x="650" y="239">since the last frame</text>
+    <text class="sub" x="650" y="252">× track speed</text>
 
-    <text class="label" x="684" y="318">Lock-in</text>
-    <text class="sub" x="684" y="340">rotate by reference</text>
-    <text class="sub" x="684" y="356">on the sample clock</text>
+    <text class="title" x="650" y="302">Readout fit</text>
+    <text class="sub" x="650" y="319">least squares line</text>
+    <text class="sub" x="650" y="332">through the phase</text>
 
-    <text class="label" x="856" y="318">Kalman tracker</text>
-    <text class="sub" x="856" y="340">phase and its rate</text>
-    <text class="sub" x="856" y="356">SNR weighted</text>
+    <text class="title" x="310" y="302">Noise floor per band</text>
+    <text class="sub" x="310" y="319">its SNR fades and</text>
+    <text class="sub" x="310" y="332">sharpens the stripes</text>
 
-    <text class="label" x="1028" y="318">Strobe shader</text>
-    <text class="sub" x="1028" y="340">sharpness from σ</text>
-    <text class="sub" x="1028" y="356">glow and bloom</text>
+    <text class="stereotype" x="990" y="216">«display»</text>
+    <text class="title" x="990" y="233">Strobe tracks</text>
+    <text class="sub" x="990" y="249">flat, wheel, curved</text>
 
-    <text class="label" x="856" y="490">Noise floor per band</text>
-    <text class="sub" x="856" y="512">follows the band level in dB while it's quiet</text>
-    <text class="sub" x="856" y="528">its SNR weights the tracker and fades the stripes</text>
+    <text class="stereotype" x="990" y="296">«display»</text>
+    <text class="title" x="990" y="313">Readout, Trace</text>
+    <text class="sub" x="990" y="329">cents per track</text>
+
+    <!-- Lamp -->
+    <text class="title" x="310" y="412">AC coupling</text>
+    <text class="sub" x="310" y="429">2 Hz, like a scope</text>
+    <text class="sub" x="310" y="442">the wave as it is</text>
+
+    <text class="title" x="480" y="412">Fold</text>
+    <text class="sub" x="480" y="429">each sample at its phase</text>
+    <text class="sub" x="480" y="442">on a fading screen</text>
+
+    <text class="title" x="650" y="412">From above</text>
+    <text class="sub" x="650" y="429">the beam's average</text>
+    <text class="sub" x="650" y="442">height per column</text>
+
+    <text class="title" x="820" y="412">DFT bin per track</text>
+    <text class="sub" x="820" y="429">phase advance</text>
+    <text class="sub" x="820" y="442">× track speed</text>
+
+    <text class="stereotype" x="480" y="486">«display»</text>
+    <text class="title" x="480" y="503">Scope</text>
+    <text class="sub" x="480" y="519">the folded wave</text>
+
+    <text class="stereotype" x="650" y="486">«display»</text>
+    <text class="title" x="650" y="503">Lamp</text>
+    <text class="sub" x="650" y="519">height as brightness</text>
   </g>
 </svg>
