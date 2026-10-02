@@ -335,6 +335,8 @@ when RENDERER == "raylib" {
             source = #load("../shaders/strobe-shader.frag")
         case .BLOOM:
             source = #load("../shaders/bloom.frag")
+        case .SHADOW:
+            source = #load("../shaders/shadow.frag")
         }
         fragment := strings.clone_to_cstring(string(source), context.temp_allocator)
         return {rl.LoadShaderFromMemory(nil, fragment), kind}
@@ -402,6 +404,8 @@ when RENDERER == "raylib" {
     gfx_load_render_target :: proc(width, height: i32) -> RenderTarget {
         target := rl.LoadRenderTexture(width, height)
         rl.SetTextureFilter(target.texture, .BILINEAR)
+        // Like the SDL sampler, the bloom's blur would wrap around and light the top with the bottom's stripes
+        rl.SetTextureWrap(target.texture, .CLAMP)
         return target
     }
 

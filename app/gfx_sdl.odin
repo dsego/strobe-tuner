@@ -58,6 +58,7 @@ when RENDERER == "sdl" {
         SPRITE,
         STROBE,
         BLOOM,
+        SHADOW,
     }
 
     Vertex :: struct {
@@ -98,6 +99,7 @@ when RENDERER == "sdl" {
     MSL_SPRITE :: #load("../shaders/metal/sprite.metal")
     MSL_STROBE :: #load("../shaders/metal/strobe.metal")
     MSL_BLOOM :: #load("../shaders/metal/bloom.metal")
+    MSL_SHADOW :: #load("../shaders/metal/shadow.metal")
 
     scancodes := [Key]sdl.Scancode {
         .LEFT        = .LEFT,
@@ -197,6 +199,7 @@ when RENDERER == "sdl" {
             .SPRITE = create_shader(MSL_SPRITE, "sprite_fragment", .FRAGMENT, 1, 0),
             .STROBE = create_shader(MSL_STROBE, "strobe_fragment", .FRAGMENT, 0, 1),
             .BLOOM  = create_shader(MSL_BLOOM, "bloom_fragment", .FRAGMENT, 1, 1),
+            .SHADOW = create_shader(MSL_SHADOW, "shadow_fragment", .FRAGMENT, 0, 1),
         }
         for shader in gpu.fragment_shaders {
             if shader == nil do return false
@@ -797,6 +800,8 @@ when RENDERER == "sdl" {
             return .STROBE
         case .BLOOM:
             return .BLOOM
+        case .SHADOW:
+            return .SHADOW
         }
         return .SPRITE
     }

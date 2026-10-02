@@ -103,6 +103,7 @@ BlendMode :: enum {
 ShaderKind :: enum {
     STROBE,
     BLOOM,
+    SHADOW,
 }
 
 // Shader uniforms are plain structs. The Metal backend pushes them as a uniform buffer, so the
@@ -141,6 +142,11 @@ StrobeUniforms :: struct #align (16) {
 BloomUniforms :: struct #align (16) {
     texel_step: [2]f32, // mode 0: source texel size, mode 1: blur step
     mode:       i32, // 0 - downsample & threshold, 1 - blur
+}
+
+ShadowUniforms :: struct #align (16) {
+    shape: [4]f32, // the rounded rectangle, min x and y then max x and y, in points of the quad
+    size:  [2]f32, // the quad, in points
 }
 
 

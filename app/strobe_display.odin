@@ -22,8 +22,6 @@ import "core:math/linalg"
 
 import "../core"
 
-shadow_data := #load("../assets/images/shadow.2x.png")
-
 // Bloom for the strobe glow, rendered at a fraction of the strobe size since it gets blurred anyway
 BLOOM_DOWNSCALE :: 2
 BLOOM_TAP_SPACING :: 1.5 // blur taps spaced apart for a wider glow at the same cost
@@ -33,7 +31,7 @@ BLOOM_STRENGTH :: 0.2
 StrobeDisplay :: struct {
     strobe_shader:   Shader,
     bloom_shader:    Shader,
-    shadow_tex:      Texture,
+    shadow_shader:   Shader,
     colors:          [2]Color,
     background:      Color,
 
@@ -151,7 +149,7 @@ init_strobe_display :: proc(colors: [2]u32, background: u32) -> (self: StrobeDis
 
     self.strobe_shader = gfx_load_shader(.STROBE)
     self.bloom_shader = gfx_load_shader(.BLOOM)
-    self.shadow_tex = gfx_load_texture(shadow_data)
+    self.shadow_shader = gfx_load_shader(.SHADOW)
 
     return
 }
@@ -159,7 +157,7 @@ init_strobe_display :: proc(colors: [2]u32, background: u32) -> (self: StrobeDis
 destroy_strobe_display :: proc(self: ^StrobeDisplay) {
     gfx_unload_shader(self.strobe_shader)
     gfx_unload_shader(self.bloom_shader)
-    gfx_unload_texture(self.shadow_tex)
+    gfx_unload_shader(self.shadow_shader)
     unload_glow_targets(self)
 }
 
@@ -371,33 +369,39 @@ draw_strobe_display :: proc(
     draw_strobe_shadow(self, rect)
 }
 
+// The shadow's rounded rectangle is on the strobe's sides and a little past its top and bottom, so those
+// are a little less dark. The shade reaches 2 points under the strobe, onto the panel.
+SHADOW_TOP :: 4
+SHADOW_BOTTOM :: 4
+SHADOW_OVERHANG :: 2
+
 // The inner shadow that sets the strobe into the window, over the trace and the scope's views too
 draw_strobe_shadow :: proc(self: ^StrobeDisplay, strobe: Rect) {
-    draw_texture(
-        self.shadow_tex,
-        {0, 0, f32(self.shadow_tex.width), f32(self.shadow_tex.height)},
-        shadow_rect(strobe),
-    )
-}
-
-// The shadow over the strobe, a little past its top and bottom so only the edges are dark
-shadow_rect :: proc(strobe: Rect) -> Rect {
-    return {strobe.x, strobe.y - 20, strobe.width, strobe.height + 22}
+    shape := Rect{strobe.x, strobe.y - SHADOW_TOP, strobe.width, strobe.height + SHADOW_TOP + SHADOW_BOTTOM}
+    area := Rect{strobe.x, strobe.y, strobe.width, strobe.height + SHADOW_OVERHANG}
+    draw_inner_shadow(self, area, shape)
 }
 
 // Just the bottom edge of the shadow, ending at bottom, where something covers the strobe from below
-// like the settings sheet. A narrow column from the middle stretched across, the corners would darken
-// the sides a second time. Scaled vertically the same as the whole shadow.
+// like the settings sheet. The sides of the shape are far out, the whole shadow has darkened them already.
 draw_strobe_bottom_shadow :: proc(self: ^StrobeDisplay, strobe: Rect, bottom: f32) {
-    EDGE :: 24 // enough for the darkening, the rest of the texture is clear
-    tex := self.shadow_tex
-    full := shadow_rect(strobe)
-    edge := EDGE * f32(tex.height) / full.height
-    draw_texture(
-        tex,
-        {f32(tex.width) / 2 - 1, f32(tex.height) - edge, 2, edge},
-        {full.x, bottom + 2 - EDGE, full.width, EDGE},
-    )
+    EDGE :: 24 // enough for the darkening, the shade has faded out above it
+    FAR :: 1000
+    area := Rect{strobe.x, bottom + SHADOW_OVERHANG - EDGE, strobe.width, EDGE}
+    shape := Rect{strobe.x - FAR, area.y - FAR, strobe.width + 2 * FAR, bottom + SHADOW_BOTTOM - area.y + FAR}
+    draw_inner_shadow(self, area, shape)
+}
+
+// Shades area along the inside of the rounded rectangle shape, see shaders/shadow.frag
+draw_inner_shadow :: proc(self: ^StrobeDisplay, area: Rect, shape: Rect) {
+    uniforms := ShadowUniforms {
+        shape = {shape.x - area.x, shape.y - area.y, shape.x + shape.width - area.x, shape.y + shape.height - area.y},
+        size  = {area.width, area.height},
+    }
+    begin_shader(self.shadow_shader)
+    defer end_shader()
+    set_shader_uniforms(self.shadow_shader, &uniforms)
+    draw_shader_quad(area)
 }
 
 // The stripe edges are as sharp as the phase is certain: a sharp edge on a jittery phase twitches,
