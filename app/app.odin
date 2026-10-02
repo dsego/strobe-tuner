@@ -560,7 +560,7 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     // No pitch yet, nothing to show
     if tuner.target_note.frequency == 0 do shown_note.frequency = 0
 
-    step, browse: int
+    step: int
     note_tapped, swiping: bool
     if shows_ruler(config) {
         // The strings, or every note of a piano with the target among them
@@ -581,7 +581,7 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
             }
             target = clamp(tuner.target_note.cents / 100 - core.LOWEST_NOTE, 0, core.NOTE_COUNT - 1)
         }
-        step, browse, note_tapped, swiping = gui_note_ruler(layout.ruler, ruler_notes, target, tuner.active)
+        step, note_tapped, swiping = gui_note_ruler(layout.ruler, ruler_notes, target, tuner.active)
 
         // Within half a semitone of the note, or a few semitones of a string. Another note than a locked one
         // pins it at the end on that side.
@@ -613,8 +613,8 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
         if key_pressed(.LEFT) do step = -1
         if key_pressed(.RIGHT) do step = 1
     }
-    // A swipe locks the note it started on right away, and the one it lands on, the same one too. The
-    // target stays put under the swipe rather than following the detected note.
+    // A swipe locks the note in the middle as it goes, the one it started on right away, rather than the
+    // target following the detected note under the finger
     if swiping do lock_toggled = !tuner.locked
     if lock_toggled || step != 0 do app.quiet_time = 0
     retune_target := lock_toggled && core.toggle_note_lock(tuner)
@@ -622,14 +622,8 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     if retune_target do retune(app)
 
     // A note that's tuned off pitch says so between the letter and the lock, the strobe and the readout are on
-    // the offset note, see gui_note_offsets. While swiping the ruler, of the note in the middle.
-    middle_note := tuner.target_note
-    if browse != 0 && string_mode {
-        middle_note = core.string_note(tuner, tuner.string_index + browse)
-    } else if browse != 0 {
-        middle_note = core.cents_to_note(f32(middle_note.cents + 100 * browse), middle_note.pitch_standard)
-    }
-    if offset := core.note_offset_cents(tuner, middle_note); offset != 0 && shown_note.frequency != 0 {
+    // the offset note, see gui_note_offsets.
+    if offset := core.note_offset_cents(tuner, tuner.target_note); offset != 0 && shown_note.frequency != 0 {
         text := fmt.ctprintf("%+.1f¢", offset)
         width := measure_label(pixel_fonts.label, text, 1).x
         // Like the note, white while there's a pitch

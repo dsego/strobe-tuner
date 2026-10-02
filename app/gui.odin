@@ -238,9 +238,9 @@ RulerSwipe :: struct {
 ruler_swipe: RulerSwipe
 
 // notes[target] is the target note, none hides the ruler. Returns how many notes to step when another note is
-// tapped or a swipe lands, while swiping how far the note in the middle is from the target, whether the
-// target itself was tapped, which toggles the lock like the lock button, and whether the row is swiped or
-// coasting, which locks the note even when it lands back on the same one.
+// tapped or the note in the middle of a swipe changes, whether the target itself was tapped, which toggles the
+// lock like the lock button, and whether the row is swiped or coasting, which locks the note even when it
+// lands back on the same one.
 gui_note_ruler :: proc(
     rect: Rect,
     notes: []core.Note,
@@ -248,7 +248,6 @@ gui_note_ruler :: proc(
     active: bool,
 ) -> (
     step: int,
-    browse: int,
     toggle_lock: bool,
     swiping: bool,
 ) {
@@ -359,14 +358,11 @@ gui_note_ruler :: proc(
     settle, land, tapped := follow_finger(swipe, rect, spacing, f32(len(notes) - 1))
     swiping = swipe.gesture == .SWIPING || swipe.gesture == .COASTING || swipe.gesture == .CAUGHT
 
-    // Settled, the note becomes the target and the ruler eases onto it from where it is
-    if land {
-        step = int(settle) - target
-        swipe^ = {}
-    }
-    if swiping && !land {
-        browse = int(settle) - target
-    } else {
+    // The note in the middle is the target, already while the row follows the finger or coasts. Settled, the
+    // ruler eases onto it from where it is.
+    step = int(settle) - target if swiping || land else 0
+    if land do swipe^ = {}
+    if !swiping || land {
         // Slide to the next note, and settle exactly on it, a jump further snaps
         shown := target + step
         if abs(f32(shown) - ruler_position) > 1 && step == 0 do ruler_position = f32(shown)
