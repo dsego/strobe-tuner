@@ -100,11 +100,12 @@ SHEET_DISMISS_SLIDE :: 0.7
 SHEET_DISMISS_VELOCITY :: 600
 
 // At the start of the frame, the sheet eases towards open or closed and snaps the last bit. Dragged all
-// the way off it closes, it isn't there to see the finger let go.
+// the way off it closes, it isn't there to see the finger let go. While it's dragged it stays where the
+// finger left it, the frame the finger lets go draws it there and not eased back up a bit.
 slide_sheet :: proc(sheet: ^Sheet) {
     if sheet.drag.active && sheet.slide == 0 do close_sheet(sheet)
     sheet.was_open = sheet.open
-    slide_toward(&sheet.slide, f32(int(sheet.open)))
+    if !sheet.drag.active do slide_toward(&sheet.slide, f32(int(sheet.open)))
 }
 
 // Eases slide towards target at a sheet's pace and snaps the last bit

@@ -545,8 +545,8 @@ draw_tuning_arrows :: proc(app: ^App, layout: Layout, reading: Reading) {
 }
 
 // The target note on the ruler with the gauge under it, or on its own with arrows, the lock, and the note's
-// offset. The lock button (or space) locks the note, tapping another note on the ruler (or the arrows) locks
-// that one instead.
+// offset. The lock button (or space, or tapping the note) locks the note, tapping another note on the ruler
+// (or the arrows) locks that one instead.
 draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     config, tuner := app.config, &app.tuner
     string_mode := current_setup(config).instrument != .CHROMATIC
@@ -561,6 +561,7 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     if tuner.target_note.frequency == 0 do shown_note.frequency = 0
 
     step, browse: int
+    note_tapped, swiping: bool
     if shows_ruler(config) {
         // The strings, or every note of a piano with the target among them
         ruler_notes: []core.Note
@@ -580,7 +581,7 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
             }
             target = clamp(tuner.target_note.cents / 100 - core.LOWEST_NOTE, 0, core.NOTE_COUNT - 1)
         }
-        step, browse = gui_note_ruler(layout.ruler, ruler_notes, target, tuner.active)
+        step, browse, note_tapped, swiping = gui_note_ruler(layout.ruler, ruler_notes, target, tuner.active)
 
         // Within half a semitone of the note, or a few semitones of a string. Another note than a locked one
         // pins it at the end on that side.
@@ -600,14 +601,21 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     } else {
         draw_note(shown_note, layout.note, tuner.active)
         step = gui_note_arrows(layout.note, tuner.locked)
+        // Tapping the note toggles the lock too, between the touch areas of the arrows
+        note := layout.note
+        note_area := Rect{note.x + 6, note.y, NOTE_WIDTH - NOTE_RIGHT_ARROW_INSET - 12, NOTE_HEIGHT}
+        note_tapped = shown_note.frequency != 0 && gui_button(note_area)
     }
 
-    lock_toggled := gui_lock_toggle(layout.lock, tuner.locked)
+    lock_toggled := gui_lock_toggle(layout.lock, tuner.locked) || note_tapped
     if !gui_disabled {
         if key_pressed(.SPACE) do lock_toggled = true
         if key_pressed(.LEFT) do step = -1
         if key_pressed(.RIGHT) do step = 1
     }
+    // A swipe locks the note it started on right away, and the one it lands on, the same one too. The
+    // target stays put under the swipe rather than following the detected note.
+    if swiping do lock_toggled = !tuner.locked
     if lock_toggled || step != 0 do app.quiet_time = 0
     retune_target := lock_toggled && core.toggle_note_lock(tuner)
     if core.step_target_note(tuner, step) do retune_target = true

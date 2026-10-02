@@ -119,7 +119,8 @@ panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, ruler: bool, rul
         middle := readout_bottom + gap - note_top
 
         center := (left + right) / 2
-        height := ruler_scale * RULER_HEIGHT
+        // Centred on the notes and stopping above the gauge, a press on the gauge doesn't swipe the notes
+        height := min(ruler_scale * RULER_HEIGHT, 2 * gauge_y)
         layout.ruler = {left, middle - height / 2, right - left, height}
         layout.measurements = {center, readout_top}
         layout.readout_align = .CENTER

@@ -238,8 +238,20 @@ RulerSwipe :: struct {
 ruler_swipe: RulerSwipe
 
 // notes[target] is the target note, none hides the ruler. Returns how many notes to step when another note is
-// tapped or a swipe lands, and while swiping how far the note in the middle is from the target.
-gui_note_ruler :: proc(rect: Rect, notes: []core.Note, target: int, active: bool) -> (step: int, browse: int) {
+// tapped or a swipe lands, while swiping how far the note in the middle is from the target, whether the
+// target itself was tapped, which toggles the lock like the lock button, and whether the row is swiped or
+// coasting, which locks the note even when it lands back on the same one.
+gui_note_ruler :: proc(
+    rect: Rect,
+    notes: []core.Note,
+    target: int,
+    active: bool,
+) -> (
+    step: int,
+    browse: int,
+    toggle_lock: bool,
+    swiping: bool,
+) {
     // Moves the row with the finger and the coast. settle is where it settles, the nearest note or the next one
     // on the way, land a swipe or a coast that's over, tapped a press let go where it was.
     follow_finger :: proc(swipe: ^RulerSwipe, rect: Rect, spacing, highest: f32) -> (settle: f32, land, tapped: bool) {
@@ -345,14 +357,14 @@ gui_note_ruler :: proc(rect: Rect, notes: []core.Note, target: int, active: bool
     }
 
     settle, land, tapped := follow_finger(swipe, rect, spacing, f32(len(notes) - 1))
-    moving := swipe.gesture == .SWIPING || swipe.gesture == .COASTING || swipe.gesture == .CAUGHT
+    swiping = swipe.gesture == .SWIPING || swipe.gesture == .COASTING || swipe.gesture == .CAUGHT
 
     // Settled, the note becomes the target and the ruler eases onto it from where it is
     if land {
         step = int(settle) - target
         swipe^ = {}
     }
-    if moving && !land {
+    if swiping && !land {
         browse = int(settle) - target
     } else {
         // Slide to the next note, and settle exactly on it, a jump further snaps
@@ -407,8 +419,12 @@ gui_note_ruler :: proc(rect: Rect, notes: []core.Note, target: int, active: bool
         color.a = u8(f32(color.a) * clamp(f32(per_side) + 1 - distance, 0, 1))
         draw_ruler_note(ruler_note, {x, center.y}, name_font, sharp_font, octave, color)
 
-        // Tapping another note locks it
-        if tapped && index != target && distance <= f32(per_side) && point_in_rect(mouse, {x - spacing / 2, rect.y, spacing, rect.height}) {
+        // Tapping another note locks it, tapping the target toggles the lock. The target's touch area
+        // reaches over the gaps either side of it up to its neighbours'.
+        if tapped && index == target && distance < 0.5 {
+            half := spacing / 2 + center_gap
+            toggle_lock = point_in_rect(mouse, {x - half, rect.y, 2 * half, rect.height})
+        } else if tapped && index != target && distance <= f32(per_side) && point_in_rect(mouse, {x - spacing / 2, rect.y, spacing, rect.height}) {
             step = index - target
         }
     }
