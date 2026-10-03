@@ -16,7 +16,8 @@
 
 #version 330
 
-// Used by the raylib renderer, the SDL renderer uses shaders/metal/strobe.metal, keep the two in sync.
+// Used by the raylib renderer, the SDL renderer uses shaders/metal/strobe.metal and shaders/vulkan/strobe.frag,
+// keep the three in sync.
 
 // Input vertex attributes (from vertex shader)
 in vec2 fragTexCoord;

@@ -14,50 +14,54 @@
 // with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-#version 330
-
-// Used by the raylib renderer, the SDL renderer uses shaders/metal/bloom.metal and shaders/vulkan/bloom.frag,
-// keep the three in sync.
-
+// Vulkan version of metal/bloom.metal, keep the two in sync.
+//
 // Bloom passes for the strobe glow:
 //   mode 0 - downsample the strobe and keep only the bright parts (the background shouldn't glow)
 //   mode 1 - one direction of a separable gaussian blur
 
-in vec2 fragTexCoord;
-in vec4 fragColor;
+#version 450
 
-out vec4 finalColor;
+layout(location = 0) in vec2 frag_uv;
+layout(location = 1) in vec4 frag_color;
 
-uniform sampler2D texture0;
-uniform int mode;
-uniform vec2 texel_step; // mode 0: source texel size, mode 1: blur step (texel size * direction * spacing)
+layout(location = 0) out vec4 out_color;
+
+layout(set = 2, binding = 0) uniform sampler2D texture0;
+
+// Same layout as BloomUniforms in app/gfx.odin
+layout(set = 3, binding = 0) uniform BloomUniforms {
+    vec2 texel_step; // mode 0: source texel size, mode 1: blur step (texel size * direction * spacing)
+    int mode;
+} u;
 
 const int BLUR_RADIUS = 6;
 const float BLUR_SIGMA = 3.0; // in taps
 
 void main()
 {
-    if (mode == 0) {
+    if (u.mode == 0) {
         // 4 bilinear taps cover a 4x4 block of source texels, avoids shimmer from skipping pixels
-        vec3 c = texture(texture0, fragTexCoord + texel_step * vec2(-1.0, -1.0)).rgb;
-        c += texture(texture0, fragTexCoord + texel_step * vec2(1.0, -1.0)).rgb;
-        c += texture(texture0, fragTexCoord + texel_step * vec2(-1.0, 1.0)).rgb;
-        c += texture(texture0, fragTexCoord + texel_step * vec2(1.0, 1.0)).rgb;
+        vec3 c = texture(texture0, frag_uv + u.texel_step * vec2(-1.0, -1.0)).rgb;
+        c += texture(texture0, frag_uv + u.texel_step * vec2(1.0, -1.0)).rgb;
+        c += texture(texture0, frag_uv + u.texel_step * vec2(-1.0, 1.0)).rgb;
+        c += texture(texture0, frag_uv + u.texel_step * vec2(1.0, 1.0)).rgb;
         c *= 0.25;
 
         // Soft threshold on the brightest channel, only the lit stripes bloom (a pure red counts as bright)
         float peak = max(c.r, max(c.g, c.b));
         c *= smoothstep(0.35, 0.9, peak);
 
-        finalColor = vec4(c, 1.0);
-    } else {
-        vec3 sum = vec3(0.0);
-        float weight_sum = 0.0;
-        for (int i = -BLUR_RADIUS; i <= BLUR_RADIUS; i++) {
-            float w = exp(-float(i * i) / (2.0 * BLUR_SIGMA * BLUR_SIGMA));
-            sum += texture(texture0, fragTexCoord + texel_step * float(i)).rgb * w;
-            weight_sum += w;
-        }
-        finalColor = vec4(sum / weight_sum, 1.0);
+        out_color = vec4(c, 1.0);
+        return;
     }
+
+    vec3 sum = vec3(0.0);
+    float weight_sum = 0.0;
+    for (int i = -BLUR_RADIUS; i <= BLUR_RADIUS; i++) {
+        float w = exp(-float(i * i) / (2.0 * BLUR_SIGMA * BLUR_SIGMA));
+        sum += texture(texture0, frag_uv + u.texel_step * float(i)).rgb * w;
+        weight_sum += w;
+    }
+    out_color = vec4(sum / weight_sum, 1.0);
 }

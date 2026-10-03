@@ -37,14 +37,14 @@ setup:
 
 # just dev [target]
 #   (none) raylib renderer
-#   sdl    SDL3 GPU renderer with Metal shaders (brew install sdl3)
+#   sdl    SDL3 GPU renderer, Metal shaders on macOS (brew install sdl3), Vulkan elsewhere (needs glslc)
 #   stats  with the signal stats and NSDF plots
 #   ios    SDL renderer on the iOS simulator, the first run builds the native deps into external/ios-sim
 dev target="": setup
     #!/usr/bin/env sh
     case "{{target}}" in
         "") odin run app -debug ;;
-        sdl) odin run app -debug -define:RENDERER=sdl ;;
+        sdl) [ "$(uname -s)" = Darwin ] || sh shaders/vulkan/compile.sh; odin run app -debug -define:RENDERER=sdl ;;
         stats) odin run app -debug -define:DEBUG_STATS=true ;;
         ios) sh ios/build-sim.sh ;;
         *) echo "Unknown target '{{target}}', use sdl, stats or ios"; exit 1 ;;
@@ -55,13 +55,17 @@ build target="": setup
     #!/usr/bin/env sh
     case "{{target}}" in
         "") odin build app -o:speed -microarch:native ;;
-        sdl) odin build app -o:speed -microarch:native -define:RENDERER=sdl ;;
+        sdl) [ "$(uname -s)" = Darwin ] || sh shaders/vulkan/compile.sh; odin build app -o:speed -microarch:native -define:RENDERER=sdl ;;
         *) echo "Unknown target '{{target}}', use sdl"; exit 1 ;;
     esac
 
 # Signed .ipa for iPhone: IOS_PROFILE=path/to/profile.mobileprovision [IOS_DEVICE=<name>] just ipa
 ipa: setup
     sh ios/build-device.sh
+
+# Debug signed .apk for Android: [ANDROID_DEVICE=usb] just apk
+apk: setup
+    sh android/build.sh
 
 # Signed .pkg for the Mac App Store: MAC_PROFILE=path/to/profile.provisionprofile just pkg
 pkg: setup

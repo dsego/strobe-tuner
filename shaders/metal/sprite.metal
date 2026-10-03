@@ -16,6 +16,7 @@
 
 // The vertex shader for everything, and the fragment shader for textured and plain 2D shapes.
 // Bindings follow SDL GPU: uniform slot N is [[buffer(N)]], sampler slot N is [[texture(N)]] + [[sampler(N)]].
+// The Vulkan versions are vulkan/sprite.vert and vulkan/sprite.frag, keep them in sync.
 
 #include <metal_stdlib>
 using namespace metal;

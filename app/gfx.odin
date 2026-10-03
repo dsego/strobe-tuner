@@ -57,7 +57,6 @@ import "core:math/linalg"
 RENDERER :: #config(RENDERER, "raylib")
 
 #assert(RENDERER == "raylib" || RENDERER == "sdl", "RENDERER must be raylib or sdl")
-#assert(RENDERER != "sdl" || ODIN_OS == .Darwin, "the sdl renderer only has Metal shaders, use raylib")
 
 
 Rect :: struct {
@@ -104,8 +103,9 @@ ShaderKind :: enum {
     SHADOW,
 }
 
-// Shader uniforms are plain structs. The Metal backend pushes them as a uniform buffer, so the
-// layout has to match the MSL struct: vec4s first, then scalars, padded to 16 bytes.
+// Shader uniforms are plain structs. The SDL backend pushes them as a uniform buffer, so the
+// layout has to match the MSL struct and the Vulkan uniform block (std140): vec4s first, then scalars,
+// padded to 16 bytes.
 // The raylib backend sets them one by one, by field name.
 
 StrobeUniforms :: struct #align (16) {

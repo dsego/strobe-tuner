@@ -24,8 +24,12 @@ import sdl "vendor:sdl3"
 
 // Building for iOS, see ios/build-sim.sh
 IOS :: #config(IOS, false)
+// Building for Android, see android/build.sh
+ANDROID :: ODIN_PLATFORM_SUBTARGET == .Android
+// A phone: touch sized controls, portrait, suspended in the background, the system picks the input
+MOBILE :: IOS || ANDROID
 
-#assert(!IOS || RENDERER == "sdl", "iOS needs the sdl renderer")
+#assert(!MOBILE || RENDERER == "sdl", "iOS and Android need the sdl renderer")
 
 
 main :: proc() {
@@ -33,6 +37,8 @@ main :: proc() {
         // UIKit owns the main thread, SDL starts the app from its application delegate
         sdl.RunApp(c.int(len(runtime.args__)), raw_data(runtime.args__), ios_main, nil)
     } else {
+        // On Android SDL's Java activity loads libmain.so and calls its C main on a thread of its own,
+        // see android/StrobieActivity.java
         run()
     }
 }

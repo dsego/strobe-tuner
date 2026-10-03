@@ -99,10 +99,11 @@ The first run clones and compiles the dependencies into `external/`, later runs 
 | Command | What it does |
 | --- | --- |
 | `just dev` | Debug build with the raylib renderer (OpenGL), then runs it |
-| `just dev sdl` | The same with the SDL3 GPU renderer and Metal shaders, needs `brew install sdl3` |
+| `just dev sdl` | The same with the SDL3 GPU renderer, Metal shaders on macOS, needs `brew install sdl3` |
 | `just dev stats` | Also shows the signal stats and NSDF plots |
 | `just dev ios` | Builds for the iOS simulator and runs it there, needs Xcode |
 | `just ipa` | Signed build for iPhone, see `ios/build-device.sh`, needs Xcode and a provisioning profile |
+| `just apk` | Debug signed build for Android, see [Android](#android) |
 | `just build`, `just build sdl` | Optimized build with either renderer |
 | `just test` | Unit tests of the pitch detection and strobe code |
 
@@ -110,7 +111,7 @@ Debug builds also have <kbd>Cmd</kbd><kbd>,</kbd> to open the config file and <k
 
 #### Linux
 
-Only the raylib renderer, the SDL renderer only has Metal shaders. It needs the X11 headers for raylib, OpenGL and the audio libraries (PulseAudio, PipeWire through its PulseAudio server, or ALSA) are loaded at runtime. The first `just dev` also compiles Odin's vendored stb and miniaudio into the Odin folder, which has to be writable, the Linux install leaves them uncompiled.
+The raylib renderer. The SDL renderer's Vulkan shaders are written but not yet tried on Linux, `just dev sdl` compiles them with `glslc` (`apt install glslc`) and needs SDL3 installed. raylib needs the X11 headers, OpenGL and the audio libraries (PulseAudio, PipeWire through its PulseAudio server, or ALSA) are loaded at runtime. The first `just dev` also compiles Odin's vendored stb and miniaudio into the Odin folder, which has to be writable, the Linux install leaves them uncompiled.
 
 ```sh
 sudo apt install clang git libx11-dev    # Debian, Ubuntu
@@ -119,6 +120,30 @@ just dev
 ```
 
 The config is saved to `$XDG_CONFIG_HOME/Strobie/config.ini`, or `~/.config/Strobie/config.ini`.
+
+#### Android
+
+`just apk` builds a debug signed `build/android/Strobie.apk` with the SDL renderer and Vulkan shaders, see `android/build.sh`. No Android Studio or Gradle, only the command line SDK, adb and a JDK for SDL's Java classes and the build tools. The first build compiles SDL into `external/android`, and stb into the Odin folder with the NDK, where Odin's bindings look for it.
+
+```sh
+brew install --cask android-platform-tools android-commandlinetools
+brew install openjdk@17
+```
+
+Homebrew's JDK is keg-only, the system `java` doesn't find it and `sdkmanager` fails with "Unable to locate a Java Runtime". Point the shell at it in `~/.zshrc`:
+
+```sh
+export JAVA_HOME="$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home"
+export PATH="$JAVA_HOME/bin:$PATH"
+```
+
+Then the SDK packages, `sdkmanager --list | grep ndk` shows the NDK versions:
+
+```sh
+sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358"
+```
+
+To install on a phone, tap Build number in Settings → About phone 7 times, turn on USB debugging in Developer options, plug it in and accept the prompt from `adb devices`. `ANDROID_DEVICE=usb just apk` then installs and launches it. `adb logcat -s SDL` shows SDL's logs, `brew install scrcpy` mirrors the screen.
 
 
 ### How it works

@@ -14,6 +14,9 @@
 // with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
+// The input through miniaudio. Android has audio_capture_android.odin, Odin's miniaudio bindings lay out
+// its structs for desktop Linux there.
+#+build !linux:android
 package app
 
 import "base:intrinsics"
@@ -192,6 +195,11 @@ notification_callback :: proc "c" (notification: ^ma.device_notification) {
     }
 }
 
+
+// The app's page in the Settings app, where the microphone is turned on again
+allow_microphone :: proc() {
+    gfx_open_url("app-settings:")
+}
 
 // iOS gives a denied microphone a silent input, nothing fails
 microphone_denied :: proc() -> bool {

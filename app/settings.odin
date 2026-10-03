@@ -31,9 +31,9 @@ PITCH_STANDARD_MAX :: 480
 
 SEGMENT_WIDTH :: 60
 
-// The rows in gui_settings, iOS has no input row. The display's options page is as tall, the strobe's four
-// options are the most of any display.
-SETTINGS_ROWS :: 5 when IOS else 6
+// The rows in gui_settings, a phone has no input row. The display's options page is as tall, the strobe's
+// four options are the most of any display.
+SETTINGS_ROWS :: 5 when MOBILE else 6
 
 // For the longer labels of the display's options, three of them as wide as the four colors
 WIDE_SEGMENT_WIDTH :: 80
@@ -160,8 +160,8 @@ gui_settings :: proc(
     if gui_settings_segmented(sheet_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow) {
         changed = true
     }
-    // iOS routes the input itself: built-in mic, headset or an audio interface
-    when !IOS {
+    // A phone routes the input itself: built-in mic, headset or an audio interface
+    when !MOBILE {
         // The menu opens upwards over the rows above
         input_rect := settings_row(sheet_layout, row, "Input", 240)
         row += 1

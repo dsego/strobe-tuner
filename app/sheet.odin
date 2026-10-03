@@ -34,8 +34,8 @@ SheetLayout :: struct {
 
 // A finger on a phone, a mouse needs less and the settings cover less of the strobe. A sheet with room to
 // spare under the strobe grows its rows and their pills up to the max.
-SHEET_ROW_HEIGHT :: 44 when IOS else 36
-SHEET_ROW_MAX_HEIGHT :: 56 when IOS else 48
+SHEET_ROW_HEIGHT :: 44 when MOBILE else 36
+SHEET_ROW_MAX_HEIGHT :: 56 when MOBILE else 48
 SHEET_CONTROL_MARGIN :: 6 // between the pills and their row, the touch area is the whole row
 SHEET_TOP_PADDING :: 16 // above the title, the first row's own margin spaces the title from it
 SHEET_TITLE_HEIGHT :: 34 // from the top of the title to the first row

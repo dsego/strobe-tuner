@@ -96,10 +96,34 @@ when RENDERER == "sdl" {
     PASS_WINDOW :: 0
     PASS_TARGET :: 1
 
-    MSL_SPRITE :: #load("../shaders/metal/sprite.metal")
-    MSL_STROBE :: #load("../shaders/metal/strobe.metal")
-    MSL_BLOOM :: #load("../shaders/metal/bloom.metal")
-    MSL_SHADOW :: #load("../shaders/metal/shadow.metal")
+    ShaderCode :: struct {
+        code:       []u8,
+        entrypoint: cstring,
+    }
+
+    // Metal on Apple, Vulkan elsewhere. The SPIR-V is compiled from shaders/vulkan into build/spirv by
+    // shaders/vulkan/compile.sh, Metal takes the source.
+    when ODIN_OS == .Darwin {
+        SHADER_FORMAT :: sdl.GPUShaderFormat{.MSL}
+
+        vertex_shader_code := ShaderCode{#load("../shaders/metal/sprite.metal"), "vertex_main"}
+        fragment_shader_code := [Program]ShaderCode {
+            .SPRITE = {#load("../shaders/metal/sprite.metal"), "sprite_fragment"},
+            .STROBE = {#load("../shaders/metal/strobe.metal"), "strobe_fragment"},
+            .BLOOM  = {#load("../shaders/metal/bloom.metal"), "bloom_fragment"},
+            .SHADOW = {#load("../shaders/metal/shadow.metal"), "shadow_fragment"},
+        }
+    } else {
+        SHADER_FORMAT :: sdl.GPUShaderFormat{.SPIRV}
+
+        vertex_shader_code := ShaderCode{#load("../build/spirv/sprite.vert.spv"), "main"}
+        fragment_shader_code := [Program]ShaderCode {
+            .SPRITE = {#load("../build/spirv/sprite.frag.spv"), "main"},
+            .STROBE = {#load("../build/spirv/strobe.frag.spv"), "main"},
+            .BLOOM  = {#load("../build/spirv/bloom.frag.spv"), "main"},
+            .SHADOW = {#load("../build/spirv/shadow.frag.spv"), "main"},
+        }
+    }
 
     scancodes := [Key]sdl.Scancode {
         .LEFT        = .LEFT,
@@ -168,10 +192,10 @@ when RENDERER == "sdl" {
 
         // Without it SDL picks the orientation from the window's aspect ratio, landscape for the
         // desktop sizes, and keeps rotating the phone away from portrait
-        when IOS do sdl.SetHint("SDL_ORIENTATIONS", "Portrait")
+        when MOBILE do sdl.SetHint("SDL_ORIENTATIONS", "Portrait")
 
         // The app may be suspended before the queued events are polled
-        when IOS do _ = sdl.AddEventWatch(watch_app_events, nil)
+        when MOBILE do _ = sdl.AddEventWatch(watch_app_events, nil)
 
         gpu.window = sdl.CreateWindow(title, width, height, {.HIGH_PIXEL_DENSITY})
         if gpu.window == nil {
@@ -179,7 +203,7 @@ when RENDERER == "sdl" {
             return false
         }
 
-        gpu.device = sdl.CreateGPUDevice({.MSL}, ODIN_DEBUG, nil)
+        gpu.device = sdl.CreateGPUDevice(SHADER_FORMAT, ODIN_DEBUG, nil)
         if gpu.device == nil {
             fmt.eprintln("SDL_CreateGPUDevice failed:", sdl.GetError())
             return false
@@ -192,12 +216,12 @@ when RENDERER == "sdl" {
         _ = sdl.SetGPUSwapchainParameters(gpu.device, gpu.window, .SDR, .VSYNC)
         gpu.window_format = sdl.GetGPUSwapchainTextureFormat(gpu.device, gpu.window)
 
-        gpu.vertex_shader = create_shader(MSL_SPRITE, "vertex_main", .VERTEX, 0, 1)
+        gpu.vertex_shader = create_shader(vertex_shader_code, .VERTEX, 0, 1)
         gpu.fragment_shaders = {
-            .SPRITE = create_shader(MSL_SPRITE, "sprite_fragment", .FRAGMENT, 1, 0),
-            .STROBE = create_shader(MSL_STROBE, "strobe_fragment", .FRAGMENT, 0, 1),
-            .BLOOM  = create_shader(MSL_BLOOM, "bloom_fragment", .FRAGMENT, 1, 1),
-            .SHADOW = create_shader(MSL_SHADOW, "shadow_fragment", .FRAGMENT, 0, 1),
+            .SPRITE = create_shader(fragment_shader_code[.SPRITE], .FRAGMENT, 1, 0),
+            .STROBE = create_shader(fragment_shader_code[.STROBE], .FRAGMENT, 0, 1),
+            .BLOOM  = create_shader(fragment_shader_code[.BLOOM], .FRAGMENT, 1, 1),
+            .SHADOW = create_shader(fragment_shader_code[.SHADOW], .FRAGMENT, 0, 1),
         }
         for shader in gpu.fragment_shaders {
             if shader == nil do return false
@@ -916,8 +940,7 @@ when RENDERER == "sdl" {
     }
 
     create_shader :: proc(
-        source: []u8,
-        entrypoint: cstring,
+        source: ShaderCode,
         stage: sdl.GPUShaderStage,
         num_samplers: u32,
         num_uniform_buffers: u32,
@@ -925,17 +948,17 @@ when RENDERER == "sdl" {
         shader := sdl.CreateGPUShader(
             gpu.device,
             {
-                code_size = len(source),
-                code = raw_data(source),
-                entrypoint = entrypoint,
-                format = {.MSL},
+                code_size = len(source.code),
+                code = raw_data(source.code),
+                entrypoint = source.entrypoint,
+                format = SHADER_FORMAT,
                 stage = stage,
                 num_samplers = num_samplers,
                 num_uniform_buffers = num_uniform_buffers,
             },
         )
         if shader == nil {
-            fmt.eprintln("Could not compile shader", entrypoint, sdl.GetError())
+            fmt.eprintln("Could not compile shader", source.entrypoint, sdl.GetError())
         }
         return shader
     }

@@ -14,25 +14,23 @@
 // with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-// Metal version of strobe-shader.frag and vulkan/strobe.frag, keep the three in sync.
+// Vulkan version of metal/strobe.metal, keep the two in sync.
 
-#include <metal_stdlib>
-using namespace metal;
+#version 450
 
-struct FragmentIn {
-    float4 position [[position]];
-    float2 uv [[user(uv)]];
-    float4 color [[user(color)]];
-};
+layout(location = 0) in vec2 frag_uv;
+layout(location = 1) in vec4 frag_color;
+
+layout(location = 0) out vec4 out_color;
 
 // Same layout as StrobeUniforms in app/gfx.odin
-struct StrobeUniforms {
-    float4 bounding_rect;
-    float4 color_a;
-    float4 color_b;
-    float4 glow_filter; // lamp filter, normalized and squared on the CPU, see glow_filter in strobe_display.odin
-    float4 glow_dark_filter; // the dark stripes can have a hue of their own
-    float4 highlight_color; // outline of the selected track
+layout(set = 3, binding = 0) uniform StrobeUniforms {
+    vec4 bounding_rect;
+    vec4 color_a;
+    vec4 color_b;
+    vec4 glow_filter; // lamp filter, normalized and squared on the CPU, see glow_filter in strobe_display.odin
+    vec4 glow_dark_filter; // the dark stripes can have a hue of their own
+    vec4 highlight_color; // outline of the selected track
     float curvature_radius;
     float time_stretch;
     float phase;
@@ -53,20 +51,20 @@ struct StrobeUniforms {
     int strobe_blur;
     int motion_blur;
     int glow;
-    int flat_track; // the top of the arc straightened, see strobe_fragment
-};
+    int flat_track; // the top of the arc straightened, see main
+} u;
 
-constant float TAU = 6.28318530717958647692;
+const float TAU = 6.28318530717958647692;
 
 // Share of the lamp light the dark stripes let through
-constant float DARK_TRANSMISSION = 0.3;
+const float DARK_TRANSMISSION = 0.3;
 
 // The selected track: its outline along both edges, inside the track, and how much the others darken
-constant float OUTLINE_WIDTH = 1.0;
-constant float DIM_AMOUNT = 0.65;
+const float OUTLINE_WIDTH = 1.0;
+const float DIM_AMOUNT = 0.65;
 
 
-static float generate_signal(
+float generate_signal(
     float freq,
     float phase,
     float amplitude,
@@ -97,7 +95,7 @@ static float generate_signal(
 // Average the signal over the phase swept since the previous frame, like a camera shutter would.
 // Without it the pattern aliases (wagon wheel effect) and shimmers once it moves close to
 // half a period per frame.
-static float generate_blurred_signal(
+float generate_blurred_signal(
     float freq,
     float phase,
     float phase_step,
@@ -140,7 +138,7 @@ static float generate_blurred_signal(
     return mix(0.5, value, fade);
 }
 
-static float draw_curved_track(float thickness, float outer_radius, float feathering, float radial_position)
+float draw_curved_track(float thickness, float outer_radius, float feathering, float radial_position)
 {
     float inner_radius = outer_radius - thickness;
 
@@ -151,13 +149,13 @@ static float draw_curved_track(float thickness, float outer_radius, float feathe
 }
 
 
-fragment float4 strobe_fragment(FragmentIn in [[stage_in]], constant StrobeUniforms &u [[buffer(0)]])
+void main()
 {
     // Viewport resolution (extract width & height)
-    float2 size = u.bounding_rect.zw;
+    vec2 size = u.bounding_rect.zw;
 
     // Position in pixels
-    float2 position = in.uv * size;
+    vec2 position = frag_uv * size;
     float feathering = 2.0; // 2 px feathering for smoothstep
 
     // Define the thickness of our donut shape (track), leave a gap between tracks
@@ -165,14 +163,14 @@ fragment float4 strobe_fragment(FragmentIn in [[stage_in]], constant StrobeUnifo
 
     // Calculate the center so the circle touches the top of the viewport
     // vertically and is centered horizontally
-    float2 center = float2(0.5 * size.x, u.curvature_radius);
+    vec2 center = vec2(0.5 * size.x, u.curvature_radius);
 
     // This is the pixel position in terms of distance from the circle center
-    float2 distance = center - position;
+    vec2 distance = center - position;
     float radial_position = length(distance);
 
     // Current pixel angle
-    float angle = atan2(distance.y, distance.x);
+    float angle = atan(distance.y, distance.x);
 
     // Flat, the top of the arc straightened: the radius is the distance down from the top of the quad and
     // the angle grows to the right as on the innermost track's top, every track has as many stripes across
@@ -186,7 +184,8 @@ fragment float4 strobe_fragment(FragmentIn in [[stage_in]], constant StrobeUnifo
 
     // Most of the quad is outside the arc, skip the signal there, it's the costly part with the motion blur
     if (curved_track <= 0.0) {
-        return float4(0.0);
+        out_color = vec4(0.0);
+        return;
     }
 
     // Time is translated from the linear to radial
@@ -205,7 +204,7 @@ fragment float4 strobe_fragment(FragmentIn in [[stage_in]], constant StrobeUnifo
     );
 
     // Blend colors
-    float3 rgb = mix(u.color_a.rgb, u.color_b.rgb, signal_value);
+    vec3 rgb = mix(u.color_a.rgb, u.color_b.rgb, signal_value);
     float alpha = curved_track;
 
     if (u.glow > 0) {
@@ -228,10 +227,10 @@ fragment float4 strobe_fragment(FragmentIn in [[stage_in]], constant StrobeUnifo
         // dim light stays deep and saturated. Only the fully lit and fully dark colors go through the curve,
         // in between is a linear blend. Otherwise the mid tones (soft stripe edges, a weak strobe fading out)
         // pick up the curve's most saturated color and show up as red fringes.
-        float3 lit_rgb = 1.0 - exp(-lamp * u.glow_filter.rgb);
-        float3 dark_rgb = 1.0 - exp(-DARK_TRANSMISSION * lamp * u.glow_dark_filter.rgb);
+        vec3 lit_rgb = 1.0 - exp(-lamp * u.glow_filter.rgb);
+        vec3 dark_rgb = 1.0 - exp(-DARK_TRANSMISSION * lamp * u.glow_dark_filter.rgb);
         rgb = mix(dark_rgb, lit_rgb, lit);
-        rgb = mix(float3(dot(rgb, float3(0.299, 0.587, 0.114))), rgb, u.glow_saturation);
+        rgb = mix(vec3(dot(rgb, vec3(0.299, 0.587, 0.114))), rgb, u.glow_saturation);
     }
 
     // The outline follows the arc, the distance to the nearer edge of the track. The edges are where the
@@ -245,5 +244,5 @@ fragment float4 strobe_fragment(FragmentIn in [[stage_in]], constant StrobeUnifo
     }
     rgb *= 1.0 - DIM_AMOUNT * u.dim;
 
-    return float4(rgb, alpha);
+    out_color = vec4(rgb, alpha);
 }

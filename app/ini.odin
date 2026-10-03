@@ -20,6 +20,7 @@ import "core:os"
 import "core:path/filepath"
 import "core:slice"
 import "core:strings"
+import sdl "vendor:sdl3"
 
 CONFIG_NAME :: "config.ini"
 
@@ -131,6 +132,9 @@ config_directory :: proc(app_name: string) -> string {
         defer delete(home)
         path, _ := filepath.join({home, "Library", "Application Support", app_name})
         return path
+    } else when ANDROID {
+        // No HOME, the app's own folder in the internal storage, the system removes it with the app
+        return strings.clone(string(sdl.GetAndroidInternalStoragePath()))
     } else {
         // Linux/Unix: ~/.config or XDG_CONFIG_HOME
         config_home := os.get_env("XDG_CONFIG_HOME", context.allocator)

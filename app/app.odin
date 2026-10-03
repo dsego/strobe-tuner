@@ -505,12 +505,12 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         draw_rect({strobe.x, strobe.y}, {strobe.width, strobe.height}, hex(strobe_bg_color))
         center := [2]f32{strobe.x + strobe.width / 2, strobe.y + strobe.height / 2}
         title: cstring = "Microphone access is off"
-        hint: cstring = "Tap to allow it in Settings"
+        hint: cstring = "Tap to allow it" when ANDROID else "Tap to allow it in Settings"
         title_size := measure_label(pixel_fonts.title, title)
         hint_size := measure_label(pixel_fonts.label, hint)
         draw_label(pixel_fonts.title, title, center - {title_size.x / 2, title_size.y + 4}, text_color_white)
         draw_label(pixel_fonts.label, hint, center - {hint_size.x / 2, -4}, text_color_muted)
-        if gui_button(strobe) do gfx_open_url("app-settings:")
+        if gui_button(strobe) do allow_microphone()
     }
 }
 

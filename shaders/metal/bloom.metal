@@ -14,7 +14,7 @@
 // with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-// Metal version of bloom.frag, keep the two in sync.
+// Metal version of bloom.frag and vulkan/bloom.frag, keep the three in sync.
 //
 // Bloom passes for the strobe glow:
 //   mode 0 - downsample the strobe and keep only the bright parts (the background shouldn't glow)
