@@ -36,17 +36,10 @@ path to real VoiceOver support later.
 
 ## Piano stretch tuning
 
-## SDL only
+## Desktop on SDL
 
-Drop raylib, SDL3 GPU becomes the one renderer. It also brings what the desktop is missing: text
-input, dropped files, open dialogs and a resizable window.
-
-- The shaders are written twice by hand, Metal for macOS and iOS, Vulkan GLSL compiled to SPIR-V
-  with `glslc` for Linux. No generator, the two files keep the same structure and point at each other.
-- The raylib GLSL isn't Vulkan GLSL, the uniforms move into blocks on SDL's binding slots and the
-  sprite shader is new.
-- macOS goes first with raylib kept as the Linux fallback, raylib goes once Linux runs on Vulkan on
-  real hardware.
+SDL3 is the one renderer now, it brings what the desktop is missing: text input, dropped files, open
+dialogs and a resizable window. Linux hasn't run it on real hardware yet.
 
 ## Pitch detection
 

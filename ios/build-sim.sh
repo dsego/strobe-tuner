@@ -105,7 +105,6 @@ odin build "$ROOT/app" \
     -target:darwin_arm64 \
     -subtarget:iphonesimulator \
     -minimum-os-version:$MIN_IOS \
-    -define:RENDERER=sdl \
     -define:IOS=true \
     -define:VERSION="$VERSION" \
     -debug \

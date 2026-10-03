@@ -33,31 +33,26 @@ setup:
         vendor="$(odin root)/vendor"
         [ -f "$vendor/stb/lib/stb_image.a" ] || sh "$vendor/stb/src/build_stb.sh"
         [ -f "$vendor/miniaudio/lib/miniaudio.a" ] || sh "$vendor/miniaudio/src/build_miniaudio.sh"
+        # Vulkan there, the SPIR-V the app embeds
+        sh ../shaders/vulkan/compile.sh
     fi
 
 # just dev [target]
-#   (none) raylib renderer
-#   sdl    SDL3 GPU renderer, Metal shaders on macOS (brew install sdl3), Vulkan elsewhere (needs glslc)
+#   (none) debug build, needs SDL3 (brew install sdl3)
 #   stats  with the signal stats and NSDF plots
-#   ios    SDL renderer on the iOS simulator, the first run builds the native deps into external/ios-sim
+#   ios    on the iOS simulator, the first run builds the native deps into external/ios-sim
 dev target="": setup
     #!/usr/bin/env sh
     case "{{target}}" in
         "") odin run app -debug ;;
-        sdl) [ "$(uname -s)" = Darwin ] || sh shaders/vulkan/compile.sh; odin run app -debug -define:RENDERER=sdl ;;
         stats) odin run app -debug -define:DEBUG_STATS=true ;;
         ios) sh ios/build-sim.sh ;;
-        *) echo "Unknown target '{{target}}', use sdl, stats or ios"; exit 1 ;;
+        *) echo "Unknown target '{{target}}', use stats or ios"; exit 1 ;;
     esac
 
-# just build [sdl]
-build target="": setup
-    #!/usr/bin/env sh
-    case "{{target}}" in
-        "") odin build app -o:speed -microarch:native ;;
-        sdl) [ "$(uname -s)" = Darwin ] || sh shaders/vulkan/compile.sh; odin build app -o:speed -microarch:native -define:RENDERER=sdl ;;
-        *) echo "Unknown target '{{target}}', use sdl"; exit 1 ;;
-    esac
+# Optimized build for this machine
+build: setup
+    odin build app -o:speed -microarch:native
 
 # Signed .ipa for iPhone: IOS_PROFILE=path/to/profile.mobileprovision [IOS_DEVICE=<name>] just ipa
 ipa: setup

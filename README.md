@@ -62,10 +62,6 @@ SIL Open Font License 1.1 <br />
 Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic) <br />
 SIL Open Font License, Version 1.1 . <br />
 
-- [Raylib](https://www.raylib.com/) <br />
-Copyright (c) 2013-2025 Ramon Santamaria (@raysan5) <br />
-Zlib license
-
 - [SDL](https://libsdl.org/) <br />
 Copyright (C) 1997-2025 Sam Lantinga <br />
 Zlib license <br />
@@ -86,7 +82,7 @@ MIT license <br />
 
 ### Development
 
-You need [Odin](https://odin-lang.org/docs/install/), the [just](https://github.com/casey/just) command runner, git and clang (on macOS from the Xcode command line tools).
+You need [Odin](https://odin-lang.org/docs/install/), the [just](https://github.com/casey/just) command runner, git, clang (on macOS from the Xcode command line tools) and SDL3 (`brew install sdl3`). It draws with SDL3 GPU, Metal on macOS and iOS, Vulkan on Linux and Android.
 
 ```sh
 git clone https://github.com/dsego/strobe-tuner
@@ -98,24 +94,24 @@ The first run clones and compiles the dependencies into `external/`, later runs 
 
 | Command | What it does |
 | --- | --- |
-| `just dev` | Debug build with the raylib renderer (OpenGL), then runs it |
-| `just dev sdl` | The same with the SDL3 GPU renderer, Metal shaders on macOS, needs `brew install sdl3` |
+| `just dev` | Debug build, then runs it |
 | `just dev stats` | Also shows the signal stats and NSDF plots |
 | `just dev ios` | Builds for the iOS simulator and runs it there, needs Xcode |
 | `just ipa` | Signed build for iPhone, see `ios/build-device.sh`, needs Xcode and a provisioning profile |
 | `just apk` | Debug signed build for Android, see [Android](#android) |
-| `just build`, `just build sdl` | Optimized build with either renderer |
+| `just build` | Optimized build for this machine |
+| `just pkg` | Signed build for the Mac App Store, see `macos/build-pkg.sh`, links SDL in statically |
 | `just test` | Unit tests of the pitch detection and strobe code |
 
 Debug builds also have <kbd>Cmd</kbd><kbd>,</kbd> to open the config file and <kbd>Cmd</kbd><kbd>Shift</kbd><kbd>,</kbd> to reload it.
 
 #### Linux
 
-The raylib renderer. The SDL renderer's Vulkan shaders are written but not yet tried on Linux, `just dev sdl` compiles them with `glslc` (`apt install glslc`) and needs SDL3 installed. raylib needs the X11 headers, OpenGL and the audio libraries (PulseAudio, PipeWire through its PulseAudio server, or ALSA) are loaded at runtime. The first `just dev` also compiles Odin's vendored stb and miniaudio into the Odin folder, which has to be writable, the Linux install leaves them uncompiled.
+Not tried yet. It draws with Vulkan, `just dev` compiles the shaders with `glslc`, and needs SDL3 and a Vulkan driver. The audio libraries (PulseAudio, PipeWire through its PulseAudio server, or ALSA) are loaded at runtime. The first `just dev` also compiles Odin's vendored stb and miniaudio into the Odin folder, which has to be writable, the Linux install leaves them uncompiled.
 
 ```sh
-sudo apt install clang git libx11-dev    # Debian, Ubuntu
-sudo dnf install clang git libX11-devel  # Fedora
+sudo apt install clang git libsdl3-dev glslc  # Debian, Ubuntu
+sudo dnf install clang git SDL3-devel glslc   # Fedora
 just dev
 ```
 
@@ -123,7 +119,7 @@ The config is saved to `$XDG_CONFIG_HOME/Strobie/config.ini`, or `~/.config/Stro
 
 #### Android
 
-`just apk` builds a debug signed `build/android/Strobie.apk` with the SDL renderer and Vulkan shaders, see `android/build.sh`. No Android Studio or Gradle, only the command line SDK, adb and a JDK for SDL's Java classes and the build tools. The first build compiles SDL into `external/android`, and stb into the Odin folder with the NDK, where Odin's bindings look for it.
+`just apk` builds a debug signed `build/android/Strobie.apk`, see `android/build.sh`. No Android Studio or Gradle, only the command line SDK, adb and a JDK for SDL's Java classes and the build tools. The first build compiles SDL into `external/android`, and stb into the Odin folder with the NDK, where Odin's bindings look for it.
 
 ```sh
 brew install --cask android-platform-tools android-commandlinetools

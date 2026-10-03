@@ -14,7 +14,7 @@
 // with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-// Metal version of strobe-shader.frag and vulkan/strobe.frag, keep the three in sync.
+// Metal version of vulkan/strobe.frag, keep the two in sync.
 
 #include <metal_stdlib>
 using namespace metal;

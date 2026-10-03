@@ -109,7 +109,6 @@ odin build "$ROOT/app" \
     -subtarget:android \
     -minimum-os-version:$MIN_SDK \
     -reloc-mode:pic \
-    -define:RENDERER=sdl \
     -define:VERSION="$VERSION ($VERSION_CODE)" \
     -o:speed \
     -out:"$OUT/app.o"

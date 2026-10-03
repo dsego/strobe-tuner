@@ -13,6 +13,7 @@
 set -eu
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+DEPS="$ROOT/external/macos"
 OUT="$ROOT/build/macos"
 NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$ROOT/macos/Info.plist")
 APP="$OUT/$NAME.app"
@@ -26,11 +27,94 @@ if [ -z "${MAC_PROFILE:-}" ] || [ ! -f "$MAC_PROFILE" ]; then
     exit 1
 fi
 
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$DEPS" "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-# No -microarch:native, the build has to run on every Apple silicon Mac, not only this one
+# The native libraries are built once into external/macos for the oldest macOS the app runs on, the ones
+# `just setup` and Odin ship are built for the Mac they were built on. SDL is linked in statically,
+# Homebrew's isn't on the Macs the app runs on.
+ODIN_ROOT=$(odin root)
+CC="xcrun clang -target arm64-apple-macos$MIN_MACOS"
+CFLAGS="-O2 -fPIC"
+
+if [ ! -f "$DEPS/libpffft.a" ]; then
+    echo "Building pffft"
+    $CC $CFLAGS -c "$ROOT/external/pffft/pffft.c" -o "$DEPS/pffft.o"
+    ar rcs "$DEPS/libpffft.a" "$DEPS/pffft.o"
+fi
+
+if [ ! -f "$DEPS/libpa_ringbuffer.a" ]; then
+    echo "Building pa_ringbuffer"
+    $CC $CFLAGS -c "$ROOT/external/portaudio/src/common/pa_ringbuffer.c" -o "$DEPS/pa_ringbuffer.o"
+    ar rcs "$DEPS/libpa_ringbuffer.a" "$DEPS/pa_ringbuffer.o"
+fi
+
+if [ ! -f "$DEPS/libminiaudio.a" ]; then
+    echo "Building miniaudio"
+    mkdir -p "$DEPS/miniaudio"
+    for src in "$ODIN_ROOT"/vendor/miniaudio/src/*.c; do
+        $CC $CFLAGS -c "$src" -o "$DEPS/miniaudio/$(basename "$src" .c).o"
+    done
+    ar rcs "$DEPS/libminiaudio.a" "$DEPS"/miniaudio/*.o
+fi
+
+if [ ! -d "$DEPS/SDL" ]; then
+    # Match the desktop SDL, the Odin bindings are written against it
+    SDL_VERSION=${SDL_VERSION:-$(brew list --versions sdl3 | awk '{print $2}')}
+    git -c advice.detachedHead=false clone --depth 1 --branch "release-$SDL_VERSION" https://github.com/libsdl-org/SDL "$DEPS/SDL"
+fi
+if [ ! -f "$DEPS/sdl3/lib/libSDL3.a" ]; then
+    echo "Building SDL"
+    cmake -S "$DEPS/SDL" -B "$DEPS/SDL/build" \
+        -DCMAKE_OSX_ARCHITECTURES=arm64 \
+        -DCMAKE_OSX_DEPLOYMENT_TARGET=$MIN_MACOS \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$DEPS/sdl3" \
+        -DSDL_SHARED=OFF \
+        -DSDL_STATIC=ON \
+        -DSDL_TEST_LIBRARY=OFF \
+        -DSDL_EXAMPLES=OFF
+    cmake --build "$DEPS/SDL/build" --config Release --parallel
+    cmake --install "$DEPS/SDL/build" --config Release
+fi
+
+# No -microarch:native, the build has to run on every Apple silicon Mac, not only this one. Odin only emits an
+# object file, clang links it with the static libraries, Odin would link Homebrew's SDL.
 echo "Compiling app"
-odin build "$ROOT/app" -o:speed -minimum-os-version:$MIN_MACOS -define:VERSION="$VERSION" -out:"$APP/Contents/MacOS/app.bin"
+odin build "$ROOT/app" \
+    -build-mode:obj \
+    -use-single-module \
+    -target:darwin_arm64 \
+    -minimum-os-version:$MIN_MACOS \
+    -define:VERSION="$VERSION" \
+    -o:speed \
+    -out:"$OUT/app.o"
+
+echo "Linking"
+$CC \
+    "$OUT/app.o" \
+    "$DEPS/libpffft.a" \
+    "$DEPS/libpa_ringbuffer.a" \
+    "$DEPS/libminiaudio.a" \
+    "$ODIN_ROOT/vendor/stb/lib/darwin/stb_image.a" \
+    "$ODIN_ROOT/vendor/stb/lib/darwin/stb_truetype.a" \
+    "$ODIN_ROOT/vendor/stb/lib/darwin/stb_rect_pack.a" \
+    "$DEPS/sdl3/lib/libSDL3.a" \
+    -framework CoreMedia \
+    -framework CoreVideo \
+    -framework Cocoa \
+    -weak_framework UniformTypeIdentifiers \
+    -framework IOKit \
+    -framework ForceFeedback \
+    -framework Carbon \
+    -framework CoreAudio \
+    -framework AudioToolbox \
+    -framework AVFoundation \
+    -framework Foundation \
+    -framework GameController \
+    -framework Metal \
+    -framework QuartzCore \
+    -weak_framework CoreHaptics \
+    -o "$APP/Contents/MacOS/app.bin"
 
 cp "$ROOT/macos/Info.plist" "$APP/Contents/Info.plist"
 cp "$ROOT/macos/Credits.rtf" "$APP/Contents/Resources/"

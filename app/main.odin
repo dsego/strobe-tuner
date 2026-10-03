@@ -29,8 +29,6 @@ ANDROID :: ODIN_PLATFORM_SUBTARGET == .Android
 // A phone: touch sized controls, portrait, suspended in the background, the system picks the input
 MOBILE :: IOS || ANDROID
 
-#assert(!MOBILE || RENDERER == "sdl", "iOS and Android need the sdl renderer")
-
 
 main :: proc() {
     when IOS {

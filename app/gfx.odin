@@ -18,14 +18,8 @@ package app
 
 import "core:math/linalg"
 
-// Rendering and input go through a small immediate mode API, implemented by one of the backends:
-//   raylib - OpenGL, GLSL shaders in shaders/          (gfx_raylib.odin)
-//   sdl    - SDL3 GPU, Metal shaders in shaders/metal/ (gfx_sdl.odin)
-//
-// Pick one at compile time, e.g. `odin run app -define:RENDERER=sdl`.
-// The backend that isn't used doesn't get linked.
-//
-// Each backend implements:
+// Rendering and input go through a small immediate mode API, gfx_sdl.odin implements it with SDL3 GPU: Metal
+// shaders in shaders/metal/ on macOS and iOS, Vulkan shaders in shaders/vulkan/ on Linux and Android.
 //
 //   gfx_init(width, height, title) -> bool, gfx_shutdown()
 //   gfx_should_close() -> bool          polls the window events, call once per frame
@@ -33,7 +27,7 @@ import "core:math/linalg"
 //   gfx_frame_time() -> f32, gfx_dpi_scale() -> f32
 //   gfx_window_size() -> [2]f32, gfx_safe_area() -> Rect   in points
 //   gfx_in_background() -> bool, gfx_wait_for_foreground()  a phone, nothing may be drawn in the background
-//   gfx_open_url(url), gfx_system_back()  the latter Android's back button, the sdl renderer only
+//   gfx_open_url(url), gfx_system_back()  the latter what Android does with its back button
 //   gfx_limit_fps(fps)                  fewer frames while there's nothing to show, 0 for the display's rate
 //
 //   key_pressed(key), key_down(key), mouse_position(), mouse_pressed(), mouse_down(), mouse_wheel()
@@ -53,10 +47,6 @@ import "core:math/linalg"
 //   RenderTarget, gfx_load_render_target(width, height), gfx_unload_render_target(target)
 //   begin_render_target(target, clear, offset, zoom), end_render_target()
 //   draw_render_target(target, dest, tint), render_target_size(target)
-
-RENDERER :: #config(RENDERER, "raylib")
-
-#assert(RENDERER == "raylib" || RENDERER == "sdl", "RENDERER must be raylib or sdl")
 
 
 Rect :: struct {
@@ -103,10 +93,8 @@ ShaderKind :: enum {
     SHADOW,
 }
 
-// Shader uniforms are plain structs. The SDL backend pushes them as a uniform buffer, so the
-// layout has to match the MSL struct and the Vulkan uniform block (std140): vec4s first, then scalars,
-// padded to 16 bytes.
-// The raylib backend sets them one by one, by field name.
+// Shader uniforms are plain structs, pushed as a uniform buffer. The layout has to match the MSL struct and
+// the Vulkan uniform block (std140): vec4s first, then scalars, padded to 16 bytes.
 
 StrobeUniforms :: struct #align (16) {
     bounding_rect:    [4]f32,

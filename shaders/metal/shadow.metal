@@ -14,7 +14,7 @@
 // with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-// Metal version of shadow.frag and vulkan/shadow.frag, keep the three in sync.
+// Metal version of vulkan/shadow.frag, keep the two in sync.
 //
 // The inner shadow that sets the strobe into the window: dark along the inside of a rounded rectangle,
 // fading out away from its edges. The rounded corners curve the shade around them, darker than the two
