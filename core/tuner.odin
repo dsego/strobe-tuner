@@ -117,13 +117,7 @@ update_tuner :: proc(self: ^Tuner, pitch: PitchInfo, strobe_hears := false) -> (
     steady := seen && self.steady_s >= 0 && self.steady_s >= self.confirm_s
     strong := pitch.is_strong_pitch || (!pitch.is_weak_pitch && steady)
 
-    // Keep the previous measurement while there is no detected note. A locked note's readout only follows
-    // that note, a stray detection an octave or a fifth off would swing it from one side to the other.
     if strong {
-        if !locked_note(self) || pitch.detected_note.cents == self.target_note.cents {
-            if pitch.fresh do steady_readout(self, pitch.detected_freq, pitch.elapsed_s)
-            self.last_good_pitch = pitch
-        }
         if confirmed && self.detected_note.cents != pitch.detected_note.cents {
             self.detected_note = pitch.detected_note
 
@@ -152,6 +146,22 @@ update_tuner :: proc(self: ^Tuner, pitch: PitchInfo, strobe_hears := false) -> (
                 retune = !strobe_stays
                 self.target_note = new_target
             }
+        }
+
+        // Keep the previous measurement while there is no detected note. A locked note's readout only follows
+        // that note, a stray detection an octave or a fifth off would swing it from one side to the other. An
+        // unlocked string's only follows that string, another string's note is measured once it's held long
+        // enough to be the target, not against the string before. A locked string follows every note, it's
+        // tuned from wherever it starts.
+        follows := true
+        if locked_note(self) {
+            follows = pitch.detected_note.cents == self.target_note.cents
+        } else if self.string_count > 0 && !self.locked {
+            follows = nearest_string(self, pitch.detected_note) == self.string_index
+        }
+        if follows {
+            if pitch.fresh do steady_readout(self, pitch.detected_freq, pitch.elapsed_s)
+            self.last_good_pitch = pitch
         }
         self.active = true
     }
@@ -493,6 +503,21 @@ test_tuner :: proc(t: ^testing.T) {
     update_tuner(&tuner, detection(2 * E2))
     testing.expect_value(t, tuner.string_index, 0)
     _, steady = tuner_readout(&tuner)
+    testing.expect(t, abs(steady.err_cents) < 0.1)
+
+    // Another string's note isn't measured against the target string while it's held long enough to be the
+    // target, then against its own string
+    held := init_tuner(A3, 440, 0.1, true)
+    set_tuner_strings(&held, guitar)
+    for _ in 0 ..< 3 do update_tuner(&held, detection(196.0)) // G3, the target
+    update_tuner(&held, detection(E2))
+    testing.expect_value(t, held.string_index, 3)
+    _, steady = tuner_readout(&held)
+    testing.expect(t, abs(steady.err_cents) < 0.1)
+    update_tuner(&held, detection(E2))
+    update_tuner(&held, detection(E2))
+    testing.expect_value(t, held.string_index, 0)
+    _, steady = tuner_readout(&held)
     testing.expect(t, abs(steady.err_cents) < 0.1)
 
     // Drop D's low D and the D string an octave up are two strings

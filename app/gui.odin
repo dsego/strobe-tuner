@@ -732,10 +732,12 @@ draw_measurements :: proc(pos: [2]f32, align: ReadoutAlign, hz, cents: f32, show
     VALUE_Y :: READOUT_VALUE_Y
     label_font := pixel_fonts.label.font
     hz_str := fmt.ctprintf("%.1f", hz) if shown else "-"
-    cents_str := fmt.ctprintf("%.1f", abs(cents)) if shown else "-"
+    // A semitone or more off the cents don't fit the column, the gauge shows how many semitones it is
+    cents_shown := shown && abs(cents) < 99.95
+    cents_str := fmt.ctprintf("%.1f", abs(cents)) if cents_shown else "-"
     // No sign on a rounded zero
     sign: cstring = "-" if cents < 0 else "+"
-    signed := shown && cents_str != "0.0"
+    signed := cents_shown && cents_str != "0.0"
 
     hz_right, cents_right: [2]f32
     switch align {
