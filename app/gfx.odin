@@ -32,8 +32,8 @@ import "core:math/linalg"
 //   gfx_begin_frame(clear), gfx_end_frame()
 //   gfx_frame_time() -> f32, gfx_dpi_scale() -> f32
 //   gfx_window_size() -> [2]f32, gfx_safe_area() -> Rect   in points
-//   gfx_in_background() -> bool, gfx_wait_for_foreground()  iOS, nothing may be drawn in the background
-//   gfx_open_url(url)
+//   gfx_in_background() -> bool, gfx_wait_for_foreground()  a phone, nothing may be drawn in the background
+//   gfx_open_url(url), gfx_system_back()  the latter Android's back button, the sdl renderer only
 //   gfx_limit_fps(fps)                  fewer frames while there's nothing to show, 0 for the display's rate
 //
 //   key_pressed(key), key_down(key), mouse_position(), mouse_pressed(), mouse_down(), mouse_wheel()

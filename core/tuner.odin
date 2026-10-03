@@ -44,7 +44,7 @@ Tuner :: struct {
     confirm_s:            f32, // seen this long in a row before switching, the last one strong or the run steady
     prevent_octave_jumps: bool,
     // The strobe shows the octave on a track of its own, it can stay where it is when the note jumps an
-    // octave. Fine mode has every track on the one note, it goes dark on the octave and follows it instead.
+    // octave. Vernier mode has every track on the one note, it goes dark on the octave and follows it instead.
     octave_track:         bool,
 
     // Cents each note from A0 up is tuned off equal temperament, e.g. a ukulele's E a little flat so its

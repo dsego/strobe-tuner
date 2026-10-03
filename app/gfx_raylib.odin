@@ -415,10 +415,11 @@ when RENDERER == "raylib" {
         return {f32(target.texture.width), f32(target.texture.height)}
     }
 
-    // offset is the top left corner of the target in the drawing coordinates, zoom scales them to target pixels
-    begin_render_target :: proc(target: RenderTarget, clear: Color, offset: [2]f32 = {}, zoom: f32 = 1) {
+    // offset is the top left corner of the target in the drawing coordinates, zoom scales them to target pixels.
+    // No clear when the draws cover the whole target.
+    begin_render_target :: proc(target: RenderTarget, clear: Maybe(Color), offset: [2]f32 = {}, zoom: f32 = 1) {
         rl.BeginTextureMode(target)
-        rl.ClearBackground(rl.Color(clear))
+        if color, ok := clear.?; ok do rl.ClearBackground(rl.Color(color))
         rl.BeginMode2D(rl.Camera2D{target = offset, zoom = zoom})
     }
 

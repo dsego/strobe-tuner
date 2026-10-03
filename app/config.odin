@@ -84,7 +84,7 @@ Config :: struct {
     // How fast the strobe turns per cent of detuning, the FAST toggle steps through RESPONSE_SPEEDS
     strobe_speed:                 f32,
 
-    // Fine mode, each track turns this much faster than the one under it
+    // Vernier mode, each track turns this much faster than the one under it
     speed_multiplier:             f32,
 
     strobe_display_type:          StrobeDisplayType,

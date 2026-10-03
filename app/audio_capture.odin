@@ -52,23 +52,6 @@ audio_device_name :: proc(self: ^AudioCapture, device_index: i32) -> string {
     return strings.truncate_to_byte(string(self.capture_infos[device_index].name[:]), 0)
 }
 
-switch_audio_device :: proc(self: ^AudioCapture, device_index: i32) {
-    close_device(self)
-
-    // Flush ring buffers to discard stale samples from the previous device
-    for node in self.nodes {
-        core.flush_audio_capture_ringbuffer(node)
-    }
-
-    self.active_device = device_index
-
-    fmt.println("Switching audio device to: ", audio_device_name(self, device_index), device_index)
-
-    if open_stream_on_active_device(self) {
-        start_audio_capture(self)
-    }
-}
-
 open_stream_on_active_device :: proc(self: ^AudioCapture) -> bool {
     config := ma.device_config_init(.capture)
     config.capture.format = .f32
@@ -157,8 +140,9 @@ audio_interruption_ended :: proc(self: ^AudioCapture) -> bool {
     return intrinsics.atomic_exchange(&self.interruption_ended, false)
 }
 
-register_audio_node :: proc(self: ^AudioCapture, node: ^core.AudioCaptureNode) {
-    append(&self.nodes, node)
+// The input couldn't be opened, the strobe would just stand still
+audio_input_failed :: proc(self: ^AudioCapture) -> bool {
+    return !self.device_open
 }
 
 close_device :: proc(self: ^AudioCapture) {
@@ -182,10 +166,7 @@ destroy_audio_capture :: proc(self: ^AudioCapture) {
 stream_callback :: proc "c" (device: ^ma.device, output, input: rawptr, frame_count: u32) {
     context = runtime.default_context()
     self := cast(^AudioCapture)device.pUserData
-    samples := slice.from_ptr(cast([^]f32)input, int(frame_count))
-
-    // The input as it is to every node, the pitch detection filters its own
-    for node in self.nodes do core.audio_capture_write(node, samples)
+    write_to_audio_nodes(self, slice.from_ptr(cast([^]f32)input, int(frame_count)))
 }
 
 notification_callback :: proc "c" (notification: ^ma.device_notification) {

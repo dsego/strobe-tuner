@@ -24,14 +24,19 @@ APK="$OUT/Strobie.apk"
 PACKAGE=com.dsego.strobetuner
 MIN_SDK=29 # Android 10, the oldest with Vulkan on most phones
 TARGET_SDK=35
-# The same version as on iOS, the build number counts up for each upload to Google Play
+# The same version as on iOS. The code is Android's own, Google Play wants it higher with each upload and
+# never back, where iOS starts its build number over for each version.
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/ios/Info.plist")
-VERSION_CODE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$ROOT/ios/Info.plist")
+VERSION_CODE=1
 
 SDK=${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}
-NDK=$(ls -d "$SDK"/ndk/* | tail -n 1)
-BUILD_TOOLS=$(ls -d "$SDK"/build-tools/* | tail -n 1)
+NDK=$(ls -d "$SDK"/ndk/* 2> /dev/null | tail -n 1)
+BUILD_TOOLS=$(ls -d "$SDK"/build-tools/* 2> /dev/null | tail -n 1)
 PLATFORM_JAR="$SDK/platforms/android-$TARGET_SDK/android.jar"
+if [ -z "$NDK" ] || [ -z "$BUILD_TOOLS" ] || [ ! -f "$PLATFORM_JAR" ]; then
+    echo "The Android SDK in $SDK needs the NDK, build-tools and platforms;android-$TARGET_SDK, see the README"
+    exit 1
+fi
 TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/darwin-x86_64"
 CC="$TOOLCHAIN/bin/clang --target=aarch64-linux-android$MIN_SDK"
 AR="$TOOLCHAIN/bin/llvm-ar"

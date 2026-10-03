@@ -22,7 +22,6 @@ package app
 
 import "base:intrinsics"
 import "base:runtime"
-import "core:c"
 import "core:fmt"
 import "core:slice"
 import sdl "vendor:sdl3"
@@ -43,7 +42,8 @@ AudioCapture :: struct {
 }
 
 MicrophonePermission :: enum i32 {
-    UNKNOWN,
+    UNKNOWN, // asked when the input is opened
+    ASKED, // the system's dialog is up
     GRANTED,
     DENIED,
 }
@@ -61,22 +61,24 @@ audio_device_name :: proc(self: ^AudioCapture, device_index: i32) -> string {
     return "Microphone"
 }
 
-switch_audio_device :: proc(self: ^AudioCapture, device_index: i32) {
-    close_device(self)
-
-    // Flush ring buffers to discard stale samples from the previous stream
-    for node in self.nodes {
-        core.flush_audio_capture_ringbuffer(node)
-    }
-
-    if open_stream_on_active_device(self) {
-        start_audio_capture(self)
-    }
-}
-
 open_stream_on_active_device :: proc(self: ^AudioCapture) -> bool {
-    // Opened once the microphone is allowed, see allow_microphone
-    if intrinsics.atomic_load(&microphone_permission) != .GRANTED do return false
+    // Answered right away when it's allowed, else after the system's dialog, then the input is opened
+    // again. It's asked each time the app comes back, it may have been allowed or taken away meanwhile.
+    permission_answered :: proc "c" (userdata: rawptr, permission: cstring, granted: bool) {
+        intrinsics.atomic_store(&microphone_permission, MicrophonePermission.GRANTED if granted else .DENIED)
+        if granted do intrinsics.atomic_store(&microphone_granted, true)
+    }
+    switch intrinsics.atomic_load(&microphone_permission) {
+    case .GRANTED:
+    case .ASKED, .DENIED:
+        return false
+    case .UNKNOWN:
+        intrinsics.atomic_store(&microphone_permission, MicrophonePermission.ASKED)
+        if !sdl.RequestAndroidPermission("android.permission.RECORD_AUDIO", permission_answered, nil) {
+            fmt.println("Couldn't ask for the microphone:", sdl.GetError())
+        }
+        return false
+    }
 
     // Unprocessed has no automatic gain or noise suppression, not every phone has it. Voice recognition
     // is the next least processed.
@@ -94,11 +96,19 @@ open_stream_on_active_device :: proc(self: ^AudioCapture) -> bool {
         AAudioStreamBuilder_setDataCallback(builder, stream_callback, self)
         AAudioStreamBuilder_setErrorCallback(builder, error_callback, self)
 
-        if !failed(AAudioStreamBuilder_openStream(builder, &self.stream)) {
-            self.device_open = true
-            fmt.println("Opened input stream, preset", preset, "at", AAudioStream_getSampleRate(self.stream), "Hz")
-            return true
+        if failed(AAudioStreamBuilder_openStream(builder, &self.stream)) do continue
+
+        // AAudio converts to the rate asked for. Should it open at another, every note would read off by
+        // the ratio, a semitone and a half from 48 to 44.1 kHz.
+        if rate := AAudioStream_getSampleRate(self.stream); rate != i32(self.samplerate) {
+            fmt.println("Input opened at", rate, "Hz instead of", self.samplerate)
+            failed(AAudioStream_close(self.stream))
+            self.stream = nil
+            return false
         }
+        self.device_open = true
+        fmt.println("Opened input stream, preset", preset)
+        return true
     }
     return false
 }
@@ -108,7 +118,7 @@ open_stream_on_active_device :: proc(self: ^AudioCapture) -> bool {
 init_audio_capture :: proc(samplerate: u32) -> (self: ^AudioCapture, ok: bool) {
     self = new(AudioCapture)
     self.samplerate = samplerate
-    allow_microphone()
+    open_stream_on_active_device(self)
     return self, true
 }
 
@@ -121,7 +131,12 @@ start_audio_capture :: proc(self: ^AudioCapture) -> bool {
     return true
 }
 
+// On the way to the background. The microphone is asked for again on the way back, unless its dialog is
+// what sent the app there.
 stop_audio_capture :: proc(self: ^AudioCapture) {
+    intrinsics.atomic_compare_exchange_strong(&microphone_permission, .GRANTED, .UNKNOWN)
+    intrinsics.atomic_compare_exchange_strong(&microphone_permission, .DENIED, .UNKNOWN)
+
     if !self.device_open do return
     if failed(AAudioStream_requestStop(self.stream)) do return
 
@@ -134,8 +149,9 @@ audio_interruption_ended :: proc(self: ^AudioCapture) -> bool {
     return intrinsics.atomic_exchange(&self.interruption_ended, false) || granted
 }
 
-register_audio_node :: proc(self: ^AudioCapture, node: ^core.AudioCaptureNode) {
-    append(&self.nodes, node)
+// The input couldn't be opened though it's allowed, the strobe would just stand still
+audio_input_failed :: proc(self: ^AudioCapture) -> bool {
+    return !self.device_open && intrinsics.atomic_load(&microphone_permission) == .GRANTED
 }
 
 close_device :: proc(self: ^AudioCapture) {
@@ -162,10 +178,7 @@ stream_callback :: proc "c" (
 ) -> AAudioCallbackResult {
     context = runtime.default_context()
     self := cast(^AudioCapture)userdata
-    samples := slice.from_ptr(cast([^]f32)audio_data, int(frame_count))
-
-    // The input as it is to every node, the pitch detection filters its own
-    for node in self.nodes do core.audio_capture_write(node, samples)
+    write_to_audio_nodes(self, slice.from_ptr(cast([^]f32)audio_data, int(frame_count)))
     return .CONTINUE
 }
 
@@ -176,15 +189,12 @@ error_callback :: proc "c" (stream: ^AAudioStream, userdata: rawptr, error: AAud
 }
 
 
-// Asks for the microphone, answered right away when it was allowed before, else after the system's
-// dialog. After two denials Android stops asking and only the app's page in its settings can allow it.
+// The app's page in Android's settings, where the microphone is turned on again. After two denials
+// Android stops showing its dialog, the settings always work. StrobieActivity opens them.
 allow_microphone :: proc() {
-    permission_answered :: proc "c" (userdata: rawptr, permission: cstring, granted: bool) {
-        intrinsics.atomic_store(&microphone_permission, MicrophonePermission.GRANTED if granted else .DENIED)
-        if granted do intrinsics.atomic_store(&microphone_granted, true)
-    }
-    if !sdl.RequestAndroidPermission("android.permission.RECORD_AUDIO", permission_answered, nil) {
-        fmt.println("Couldn't ask for the microphone:", sdl.GetError())
+    OPEN_APP_SETTINGS :: 0x8000 // COMMAND_USER in SDLActivity.java
+    if !sdl.SendAndroidMessage(OPEN_APP_SETTINGS, 0) {
+        fmt.println("Couldn't open the app's settings:", sdl.GetError())
     }
 }
 

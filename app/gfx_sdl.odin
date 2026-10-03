@@ -84,7 +84,7 @@ when RENDERER == "sdl" {
     Pass :: struct {
         target:        ^sdl.GPUTexture, // nil for the window
         target_size:   [2]f32, // in pixels
-        clear:         Maybe(Color), // or keep the previous contents
+        clear:         Maybe(Color), // a target's, or the draws cover all of it, the window clears to gpu.clear
         offset:        [2]f32,
         zoom:          f32,
         first_command: int,
@@ -171,6 +171,7 @@ when RENDERER == "sdl" {
         scissor:          Maybe(Rect),
         uniforms:         [Program]UniformRange,
         clear:            Color,
+        acquire_failed:   bool, // the last frame's swapchain, reported once
 
         // input
         quit:             bool,
@@ -193,6 +194,9 @@ when RENDERER == "sdl" {
         // Without it SDL picks the orientation from the window's aspect ratio, landscape for the
         // desktop sizes, and keeps rotating the phone away from portrait
         when MOBILE do sdl.SetHint("SDL_ORIENTATIONS", "Portrait")
+
+        // The back button closes a sheet first, the app passes it on when there's none, see gfx_system_back
+        when ANDROID do sdl.SetHint(sdl.HINT_ANDROID_TRAP_BACK_BUTTON, "1")
 
         // The app may be suspended before the queued events are polled
         when MOBILE do _ = sdl.AddEventWatch(watch_app_events, nil)
@@ -297,6 +301,8 @@ when RENDERER == "sdl" {
                 for scancode, key in scancodes {
                     if scancode == event.key.scancode do gpu.keys_pressed += {key}
                 }
+                // Android's back button, see gfx_system_back
+                if event.key.scancode == .AC_BACK do gpu.keys_pressed += {.ESCAPE}
             case .MOUSE_BUTTON_DOWN:
                 if event.button.button == sdl.BUTTON_LEFT do gpu.mouse_clicked = true
                 gpu.touch = event.button.which == sdl.TOUCH_MOUSEID
@@ -331,6 +337,12 @@ when RENDERER == "sdl" {
         if !sdl.OpenURL(url) do fmt.eprintln("SDL_OpenURL failed:", sdl.GetError())
     }
 
+    // SDL traps Android's back button and sends it as a key, see gfx_init. What the system does with it
+    // otherwise, leave the app.
+    gfx_system_back :: proc() {
+        when ANDROID do sdl.SendAndroidBackButton()
+    }
+
     watch_app_events :: proc "c" (userdata: rawptr, event: ^sdl.Event) -> bool {
         // Not WILL_ENTER_BACKGROUND, it comes for anything that makes the app inactive, like the Control
         // Center or the microphone permission alert, and it may keep drawing then
@@ -354,80 +366,62 @@ when RENDERER == "sdl" {
         gpu.uniforms = {}
         gpu.clear = clear
 
-        begin_window_pass(clear)
+        begin_window_pass()
     }
 
     gfx_end_frame :: proc() {
-        command_buffer := sdl.AcquireGPUCommandBuffer(gpu.device)
-        if command_buffer == nil {
-            fmt.eprintln("SDL_AcquireGPUCommandBuffer failed:", sdl.GetError())
-            return
+        pass_commands :: proc(pass_index: int) -> []DrawCommand {
+            last_command := len(gpu.commands)
+            if pass_index + 1 < len(gpu.passes) do last_command = gpu.passes[pass_index + 1].first_command
+            return gpu.commands[gpu.passes[pass_index].first_command:last_command]
         }
 
-        swapchain: ^sdl.GPUTexture
-        swapchain_w, swapchain_h: u32
-        if !sdl.WaitAndAcquireGPUSwapchainTexture(command_buffer, gpu.window, &swapchain, &swapchain_w, &swapchain_h) {
-            fmt.eprintln("SDL_WaitAndAcquireGPUSwapchainTexture failed:", sdl.GetError())
-        }
-
-        // Minimized or hidden, nothing to draw into
-        if swapchain == nil {
-            _ = sdl.SubmitGPUCommandBuffer(command_buffer)
-            sdl.Delay(16)
-            return
-        }
-
-        upload_vertices(command_buffer)
-
-        logical_w: i32
-        sdl.GetWindowSize(gpu.window, &logical_w, nil)
-        window_zoom := f32(swapchain_w) / f32(max(logical_w, 1))
-
-        for pass, pass_idx in gpu.passes {
-            target := pass.target
-            target_size := pass.target_size
-            zoom := pass.zoom
-            kind := PASS_TARGET
-            if target == nil {
-                target = swapchain
-                target_size = {f32(swapchain_w), f32(swapchain_h)}
-                zoom = window_zoom
-                kind = PASS_WINDOW
-            }
-
-            color_target := sdl.GPUColorTargetInfo {
-                texture  = target,
-                load_op  = .LOAD,
-                store_op = .STORE,
-            }
-            if clear, ok := pass.clear.?; ok {
-                normalized := normalize_color(clear)
-                color_target.clear_color = {normalized.r, normalized.g, normalized.b, normalized.a}
-                color_target.load_op = .CLEAR
-            }
-
-            render_pass := sdl.BeginGPURenderPass(command_buffer, &color_target, 1, nil)
+        begin_render_pass :: proc(
+            command_buffer: ^sdl.GPUCommandBuffer,
+            color_target: ^sdl.GPUColorTargetInfo,
+            target_size: [2]f32,
+        ) -> ^sdl.GPURenderPass {
+            render_pass := sdl.BeginGPURenderPass(command_buffer, color_target, 1, nil)
             sdl.SetGPUViewport(render_pass, {0, 0, target_size.x, target_size.y, 0, 1})
             binding := sdl.GPUBufferBinding{gpu.vertex_buffer, 0}
             if gpu.vertex_buffer != nil do sdl.BindGPUVertexBuffers(render_pass, 0, &binding, 1)
+            return render_pass
+        }
 
+        // offset is the drawing position of the target's top left corner, zoom scales drawing coordinates to
+        // its pixels
+        draw_commands :: proc(
+            command_buffer: ^sdl.GPUCommandBuffer,
+            render_pass: ^sdl.GPURenderPass,
+            commands: []DrawCommand,
+            target_size: [2]f32,
+            offset: [2]f32,
+            zoom: f32,
+            kind: int,
+        ) {
             // xy scale drawing coordinates to clip space, zw is the drawing position of the top left corner
-            view := [4]f32{2 * zoom / target_size.x, 2 * zoom / target_size.y, pass.offset.x, pass.offset.y}
+            view := [4]f32{2 * zoom / target_size.x, 2 * zoom / target_size.y, offset.x, offset.y}
 
-            last_command := len(gpu.commands)
-            if pass_idx + 1 < len(gpu.passes) do last_command = gpu.passes[pass_idx + 1].first_command
-
-            for command in gpu.commands[pass.first_command:last_command] {
+            // Bound and pushed only when they change
+            pipeline: ^sdl.GPUGraphicsPipeline
+            uniforms: UniformRange
+            for command in commands {
                 if command.vertex_count == 0 do continue
+                // A texture that failed to load
+                if command.program != .STROBE && command.texture == nil do continue
 
-                sdl.BindGPUGraphicsPipeline(render_pass, gpu.pipelines[command.program][command.blend][kind])
-                sdl.PushGPUVertexUniformData(command_buffer, 0, &view, size_of(view))
-                if command.uniforms.size > 0 {
+                if next := gpu.pipelines[command.program][command.blend][kind]; next != pipeline {
+                    pipeline = next
+                    sdl.BindGPUGraphicsPipeline(render_pass, pipeline)
+                    sdl.PushGPUVertexUniformData(command_buffer, 0, &view, size_of(view))
+                }
+                if command.uniforms.size > 0 && command.uniforms != uniforms {
+                    uniforms = command.uniforms
                     sdl.PushGPUFragmentUniformData(
                         command_buffer,
                         0,
-                        &gpu.uniform_data[command.uniforms.offset],
-                        u32(command.uniforms.size),
+                        &gpu.uniform_data[uniforms.offset],
+                        u32(uniforms.size),
                     )
                 }
                 if command.program != .STROBE {
@@ -437,19 +431,82 @@ when RENDERER == "sdl" {
 
                 scissor := sdl.Rect{0, 0, i32(target_size.x), i32(target_size.y)}
                 if rect, ok := command.scissor.?; ok {
-                    x0 := clamp(math.round((rect.x - pass.offset.x) * zoom), 0, target_size.x)
-                    y0 := clamp(math.round((rect.y - pass.offset.y) * zoom), 0, target_size.y)
-                    x1 := clamp(math.round((rect.x + rect.width - pass.offset.x) * zoom), x0, target_size.x)
-                    y1 := clamp(math.round((rect.y + rect.height - pass.offset.y) * zoom), y0, target_size.y)
+                    x0 := clamp(math.round((rect.x - offset.x) * zoom), 0, target_size.x)
+                    y0 := clamp(math.round((rect.y - offset.y) * zoom), 0, target_size.y)
+                    x1 := clamp(math.round((rect.x + rect.width - offset.x) * zoom), x0, target_size.x)
+                    y1 := clamp(math.round((rect.y + rect.height - offset.y) * zoom), y0, target_size.y)
                     scissor = {i32(x0), i32(y0), i32(x1 - x0), i32(y1 - y0)}
                 }
                 sdl.SetGPUScissor(render_pass, scissor)
 
                 sdl.DrawGPUPrimitives(render_pass, command.vertex_count, 1, command.first_vertex, 0)
             }
+        }
 
+        command_buffer := sdl.AcquireGPUCommandBuffer(gpu.device)
+        if command_buffer == nil {
+            fmt.eprintln("SDL_AcquireGPUCommandBuffer failed:", sdl.GetError())
+            return
+        }
+
+        swapchain: ^sdl.GPUTexture
+        swapchain_w, swapchain_h: u32
+        acquired := sdl.WaitAndAcquireGPUSwapchainTexture(command_buffer, gpu.window, &swapchain, &swapchain_w, &swapchain_h)
+        // Once, it can fail every frame while Android tears the surface down
+        if !acquired && !gpu.acquire_failed {
+            fmt.eprintln("SDL_WaitAndAcquireGPUSwapchainTexture failed:", sdl.GetError())
+        }
+        gpu.acquire_failed = !acquired
+
+        // Minimized or hidden, nothing to draw into. Or no vertex buffer, nothing to draw with.
+        if swapchain == nil || !upload_vertices(command_buffer) {
+            _ = sdl.SubmitGPUCommandBuffer(command_buffer)
+            sdl.Delay(16)
+            return
+        }
+
+        // The render targets first, then the window in a single pass. Apple's and nearly every phone's GPU
+        // draws in tiles, each pass loads its whole target into them and stores it back, a window pass
+        // between each render target would move the full screen through memory every time. The window is
+        // never sampled, and each target is finished before the window draws it, the order stays right.
+        for pass, pass_index in gpu.passes {
+            if pass.target == nil do continue
+            commands := pass_commands(pass_index)
+            if len(commands) == 0 && pass.clear == nil do continue
+
+            color_target := sdl.GPUColorTargetInfo {
+                texture  = pass.target,
+                load_op  = .DONT_CARE, // the draws cover all of it
+                store_op = .STORE,
+            }
+            if clear, ok := pass.clear.?; ok {
+                normalized := normalize_color(clear)
+                color_target.clear_color = {normalized.r, normalized.g, normalized.b, normalized.a}
+                color_target.load_op = .CLEAR
+            }
+            render_pass := begin_render_pass(command_buffer, &color_target, pass.target_size)
+            draw_commands(command_buffer, render_pass, commands, pass.target_size, pass.offset, pass.zoom, PASS_TARGET)
             sdl.EndGPURenderPass(render_pass)
         }
+
+        logical_w: i32
+        sdl.GetWindowSize(gpu.window, &logical_w, nil)
+        window_zoom := f32(swapchain_w) / f32(max(logical_w, 1))
+        window_size := [2]f32{f32(swapchain_w), f32(swapchain_h)}
+
+        clear := normalize_color(gpu.clear)
+        color_target := sdl.GPUColorTargetInfo {
+            texture     = swapchain,
+            clear_color = {clear.r, clear.g, clear.b, clear.a},
+            load_op     = .CLEAR,
+            store_op    = .STORE,
+        }
+        render_pass := begin_render_pass(command_buffer, &color_target, window_size)
+        for pass, pass_index in gpu.passes {
+            if pass.target != nil do continue
+            draw_commands(command_buffer, render_pass, pass_commands(pass_index), window_size, {}, window_zoom, PASS_WINDOW)
+        }
+        sdl.EndGPURenderPass(render_pass)
 
         _ = sdl.SubmitGPUCommandBuffer(command_buffer)
 
@@ -793,8 +850,9 @@ when RENDERER == "sdl" {
         return {f32(target.texture.width), f32(target.texture.height)}
     }
 
-    // offset is the top left corner of the target in the drawing coordinates, zoom scales them to target pixels
-    begin_render_target :: proc(target: RenderTarget, clear: Color, offset: [2]f32 = {}, zoom: f32 = 1) {
+    // offset is the top left corner of the target in the drawing coordinates, zoom scales them to target pixels.
+    // No clear when the draws cover the whole target, its contents aren't loaded then.
+    begin_render_target :: proc(target: RenderTarget, clear: Maybe(Color), offset: [2]f32 = {}, zoom: f32 = 1) {
         append(
             &gpu.passes,
             Pass {
@@ -810,7 +868,7 @@ when RENDERER == "sdl" {
 
     // Back to drawing into the window, over what's there already
     end_render_target :: proc() {
-        begin_window_pass(nil)
+        begin_window_pass()
     }
 
     draw_render_target :: proc(target: RenderTarget, dest: Rect, tint := WHITE) {
@@ -831,8 +889,8 @@ when RENDERER == "sdl" {
         return .SPRITE
     }
 
-    begin_window_pass :: proc(clear: Maybe(Color)) {
-        append(&gpu.passes, Pass{clear = clear, zoom = 1, first_command = len(gpu.commands)})
+    begin_window_pass :: proc() {
+        append(&gpu.passes, Pass{zoom = 1, first_command = len(gpu.commands)})
     }
 
     push_quad :: proc(texture: ^sdl.GPUTexture, dest: Rect, uv0, uv1: [2]f32, color: Color) {
@@ -879,32 +937,42 @@ when RENDERER == "sdl" {
         append(&gpu.commands, command)
     }
 
-    upload_vertices :: proc(command_buffer: ^sdl.GPUCommandBuffer) {
-        if len(gpu.vertices) == 0 do return
+    // False when the buffers couldn't be made, nothing can be drawn then
+    upload_vertices :: proc(command_buffer: ^sdl.GPUCommandBuffer) -> bool {
+        if len(gpu.vertices) == 0 do return true
         size := len(gpu.vertices) * size_of(Vertex)
 
         if size > gpu.vertex_capacity {
-            if gpu.vertex_buffer != nil {
-                sdl.ReleaseGPUBuffer(gpu.device, gpu.vertex_buffer)
-                sdl.ReleaseGPUTransferBuffer(gpu.device, gpu.transfer_buffer)
-            }
+            if gpu.vertex_buffer != nil do sdl.ReleaseGPUBuffer(gpu.device, gpu.vertex_buffer)
+            if gpu.transfer_buffer != nil do sdl.ReleaseGPUTransferBuffer(gpu.device, gpu.transfer_buffer)
             gpu.vertex_capacity = max(size, 2 * gpu.vertex_capacity, 64 * 1024)
             gpu.vertex_buffer = sdl.CreateGPUBuffer(gpu.device, {usage = {.VERTEX}, size = u32(gpu.vertex_capacity)})
             gpu.transfer_buffer = sdl.CreateGPUTransferBuffer(
                 gpu.device,
                 {usage = .UPLOAD, size = u32(gpu.vertex_capacity)},
             )
+            if gpu.vertex_buffer == nil || gpu.transfer_buffer == nil {
+                fmt.eprintln("Could not create the vertex buffers:", sdl.GetError())
+                gpu.vertex_capacity = 0 // tried again next frame
+                return false
+            }
         }
 
         mapped := sdl.MapGPUTransferBuffer(gpu.device, gpu.transfer_buffer, true)
+        if mapped == nil {
+            fmt.eprintln("SDL_MapGPUTransferBuffer failed:", sdl.GetError())
+            return false
+        }
         mem.copy(mapped, raw_data(gpu.vertices), size)
         sdl.UnmapGPUTransferBuffer(gpu.device, gpu.transfer_buffer)
 
         copy_pass := sdl.BeginGPUCopyPass(command_buffer)
         sdl.UploadToGPUBuffer(copy_pass, {gpu.transfer_buffer, 0}, {gpu.vertex_buffer, 0, u32(size)}, true)
         sdl.EndGPUCopyPass(copy_pass)
+        return true
     }
 
+    // An empty texture when it fails, the draws with it are skipped
     create_texture :: proc(width, height: i32, pixels: []u8) -> Texture {
         handle := sdl.CreateGPUTexture(
             gpu.device,
@@ -919,9 +987,20 @@ when RENDERER == "sdl" {
             },
         )
 
+        if handle == nil {
+            fmt.eprintln("SDL_CreateGPUTexture failed:", sdl.GetError())
+            return {}
+        }
+
         transfer := sdl.CreateGPUTransferBuffer(gpu.device, {usage = .UPLOAD, size = u32(len(pixels))})
+        mapped := sdl.MapGPUTransferBuffer(gpu.device, transfer, false) if transfer != nil else nil
+        if mapped == nil {
+            fmt.eprintln("Could not upload the texture:", sdl.GetError())
+            if transfer != nil do sdl.ReleaseGPUTransferBuffer(gpu.device, transfer)
+            sdl.ReleaseGPUTexture(gpu.device, handle)
+            return {}
+        }
         defer sdl.ReleaseGPUTransferBuffer(gpu.device, transfer)
-        mapped := sdl.MapGPUTransferBuffer(gpu.device, transfer, false)
         mem.copy(mapped, raw_data(pixels), len(pixels))
         sdl.UnmapGPUTransferBuffer(gpu.device, transfer)
 
@@ -979,10 +1058,8 @@ when RENDERER == "sdl" {
             blend_state.src_alpha_blendfactor = .ONE
             blend_state.dst_alpha_blendfactor = .ONE_MINUS_SRC_ALPHA
         case .REPLACE:
-            blend_state.src_color_blendfactor = .ONE
-            blend_state.dst_color_blendfactor = .ZERO
-            blend_state.src_alpha_blendfactor = .ONE
-            blend_state.dst_alpha_blendfactor = .ZERO
+            // Written as it is, without reading the target
+            blend_state.enable_blend = false
         case .ADD:
             blend_state.src_color_blendfactor = .ONE
             blend_state.dst_color_blendfactor = .ONE

@@ -64,7 +64,7 @@ ONSET_HOLD_S :: 0.1 // extra time after the attack reaches the window centre
 
 StrobeMode :: enum {
     HARMONIC, // a track per partial
-    FINE, // every track on the fundamental, each one turning faster than the one under it
+    VERNIER, // every track on the fundamental, each one turning faster than the one under it
 }
 
 
@@ -117,7 +117,7 @@ RateFit :: struct {
 PhaseComparator :: struct {
     using node:       AudioCaptureNode,
     base_freq_hz:     f32,
-    speed_multiplier: f32, // fine mode, each track turns this much faster than the one under it
+    speed_multiplier: f32, // vernier mode, each track turns this much faster than the one under it
     sample_buffer:    []f32,
     bands:            [dynamic]PhaseBand,
     samplerate:       f32,
@@ -168,7 +168,7 @@ destroy_phase_band :: proc(band: ^PhaseBand) {
     destroy_dft(&band.averaged_dft)
 }
 
-// Fine mode measures the first band only, the others show it at other speeds
+// Vernier mode measures the first band only, the others show it at other speeds
 measures_band :: proc(self: ^PhaseComparator, band_index: int) -> bool {
     return self.mode == .HARMONIC || band_index == 0
 }
@@ -184,7 +184,7 @@ append_phase_band :: proc(self: ^PhaseComparator, interval: f32) {
 }
 
 // Like init_phase_comparator, a band per interval of 1 or more, the rest are padding. Adds or removes bands
-// on top to match. Kept in fine mode too, for switching back to harmonic mode.
+// on top to match. Kept in vernier mode too, for switching back to harmonic mode.
 // The partial, target offset and speed of each track, the offsets and speeds line up with the intervals.
 // Takes effect with the next set_phase_comparator_freq.
 set_phase_comparator_tracks :: proc(
@@ -215,14 +215,15 @@ set_phase_comparator_tracks :: proc(
     }
 }
 
-// Harmonic mode turns each track by its partial and its own speed, fine mode each one faster than the one under it
+// Harmonic mode turns each track by its partial and its own speed, vernier mode each one faster than the one
+// under it
 set_phase_comparator_speed :: proc(self: ^PhaseComparator, base_speed: f32) {
     speed := base_speed
     for &band in self.bands {
         switch self.mode {
         case .HARMONIC:
             band.speed = base_speed * band.interval * band.speed_scale
-        case .FINE:
+        case .VERNIER:
             band.speed = speed
             speed *= self.speed_multiplier
         }
@@ -264,7 +265,7 @@ set_phase_comparator_freq :: proc(
             // Named after the exact partial, a big offset would otherwise land on the next note
             band.note = freq_to_note(band.interval * base_freq_hz, pitch_standard)
             band.freq_hz = band.interval * base_freq_hz * math.pow(2, band.offset_cents / 1200)
-        case .FINE:
+        case .VERNIER:
             band.freq_hz = base_freq_hz
             band.note = freq_to_note(band.freq_hz, pitch_standard)
         }
@@ -347,7 +348,7 @@ run_phase_detection :: proc(self: ^PhaseComparator, use_phase_average: bool, is_
 
     for &band, band_index in self.bands {
         if !measures_band(self, band_index) {
-            // Fine mode, the first track at another speed
+            // Vernier mode, the first track at another speed
             base_band := self.bands[0]
             band.amp = base_band.amp
             band.phase_diff = base_band.phase_diff
@@ -573,8 +574,8 @@ strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: in
         return band.in_range && band.snr_db >= READOUT_MIN_SNR_DB
     }
 
-    // Fine mode measures the first track, the others show it at other speeds
-    count := 1 if self.mode == .FINE else len(self.bands)
+    // Vernier mode measures the first track, the others show it at other speeds
+    count := 1 if self.mode == .VERNIER else len(self.bands)
     loudest, fundamental := -1, -1
     for band, index in self.bands[:count] {
         if !loud(band) do continue

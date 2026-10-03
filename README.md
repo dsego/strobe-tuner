@@ -18,7 +18,7 @@ Strobie is on the App Store for Mac and iPhone. The source is here to read and b
 - Note lock: keeps the strobe on the note, another note played pins the gauge at the end on its side.
 - Harmonic mode: shows the partials of the detected note on up to 5 strobe tracks.
 - Track settings: tap a track to choose its partial (1× to 8×, or the fifth at 1½×), move its target by up to ±50 cents (e.g. for a stretched octave) and change its speed.
-- Fine mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity.
+- Vernier mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity.
 - Fast toggle: the strobe spins 4× faster per cent of detuning, for the final adjustment.
 - Four displays, see [Displays](#displays):
   - Strobe: curved tracks, a wheel or flat tracks, turned by a lock-in on each partial or by the lamp.
@@ -183,7 +183,7 @@ Core steps:
 
 Every track's window is sized for a band a semitone wide around the fundamental, about 0.16 s at 110 Hz. The window is gamma shaped, weighted toward the newest samples like an analog lock-in's low-pass, so the phase is measured as of about 50 ms ago instead of half the window. A semitone lets the neighbouring partials in, so the window is also smoothed with a box one period of the note long (two for a fifth), a comb whose nulls fall on every other partial.
 
-The strobe phase is rescaled so each note spins at the same rate per cent of detuning, and since it's a measured phase it can be multiplied by any factor, which is what the track speed, the fast toggle and the fine mode are built on.
+The strobe phase is rescaled so each note spins at the same rate per cent of detuning, and since it's a measured phase it can be multiplied by any factor, which is what the track speed, the fast toggle and the vernier mode are built on.
 
 
 #### How it got here

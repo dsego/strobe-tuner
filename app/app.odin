@@ -262,7 +262,7 @@ apply_config :: proc(app: ^App) {
     app.config_changed = false
 }
 
-// iOS suspends the app in the background and may end it there without warning. The config is saved on the
+// A phone suspends the app in the background and may end it there without warning. The config is saved on the
 // way out, the input is opened again on the way back.
 wait_in_background :: proc(app: ^App) {
     app.config.target_freq_hz = app.tuner.target_note.frequency
@@ -469,8 +469,8 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         }
         draw_strobe_display(display, layout.strobe, layout.strobe_scale, bands, comparator.mode, config)
 
-        // Fine mode shows the same pitch on every track, there's nothing to set on one
-        if config.strobe_mode == .HARMONIC && !microphone_denied() && gui_button(layout.strobe) {
+        // Vernier mode shows the same pitch on every track, there's nothing to set on one
+        if config.strobe_mode == .HARMONIC && !input_missing(app) && gui_button(layout.strobe) {
             track := strobe_track_at(config.strobe_shape, layout.strobe, layout.strobe_scale, len(app.phase_comparator.bands), mouse_position())
             if track >= 0 {
                 app.selected_track = track
@@ -491,7 +491,7 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         } else {
             draw_scope_display(display, &app.scope, view, config, app.pitch_detector.snr_db)
             // Between the wave over time and the Lissajous figure
-            if type == .SCOPE && !microphone_denied() && gui_button(layout.strobe) {
+            if type == .SCOPE && !input_missing(app) && gui_button(layout.strobe) {
                 config.scope_sweep = .XY if config.scope_sweep == .TIME else .TIME
             }
         }
@@ -499,19 +499,32 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         draw_strobe_shadow(display, layout.strobe)
     }
 
-    // A denied microphone only gives silence and the strobe would just stand still, say why instead
+    // A denied microphone only gives silence, an input that didn't open gives nothing. The strobe would just
+    // stand still, say why instead.
+    title, hint: cstring
     if microphone_denied() {
+        title, hint = "Microphone access is off", "Tap to allow it in Settings"
+    } else if audio_input_failed(app.audio_capture) {
+        title, hint = "The input didn't open", "Tap to try again"
+    }
+    if title != nil {
         strobe := layout.strobe
         draw_rect({strobe.x, strobe.y}, {strobe.width, strobe.height}, hex(strobe_bg_color))
         center := [2]f32{strobe.x + strobe.width / 2, strobe.y + strobe.height / 2}
-        title: cstring = "Microphone access is off"
-        hint: cstring = "Tap to allow it" when ANDROID else "Tap to allow it in Settings"
         title_size := measure_label(pixel_fonts.title, title)
         hint_size := measure_label(pixel_fonts.label, hint)
         draw_label(pixel_fonts.title, title, center - {title_size.x / 2, title_size.y + 4}, text_color_white)
         draw_label(pixel_fonts.label, hint, center - {hint_size.x / 2, -4}, text_color_muted)
-        if gui_button(strobe) do allow_microphone()
+        if gui_button(strobe) {
+            if microphone_denied() do allow_microphone()
+            else do app.restart_audio = true
+        }
     }
+}
+
+// The strobe area says why there's no input instead, see draw_strobe_area
+input_missing :: proc(app: ^App) -> bool {
+    return microphone_denied() || audio_input_failed(app.audio_capture)
 }
 
 // An arrow on the side the pitch is off to, pointing inwards the way to tune: flat on the left pointing right
@@ -666,6 +679,12 @@ draw_sheets :: proc(app: ^App, layout: Layout) {
     // A tap on the strobe above a sheet closes it, like the ✕, Escape or a swipe down
     closes :: proc(sheet_layout: SheetLayout, swiped: bool) -> bool {
         return gui_button(above_sheet(sheet_layout)) || key_pressed(.ESCAPE) || swiped
+    }
+
+    // Android's back button is Escape. It closes a sheet, with none up it leaves the app as anywhere else.
+    when ANDROID {
+        sheets_down := app.settings_sheet.slide == 0 && app.track_sheet.slide == 0 && app.instrument_sheet.slide == 0
+        if key_pressed(.ESCAPE) && sheets_down do gfx_system_back()
     }
 
     if app.settings_sheet.slide > 0 {

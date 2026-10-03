@@ -201,13 +201,13 @@ blur_render_targets :: proc(
     for _ in 0 ..< iterations {
         uniforms.texel_step = {tap_spacing / size.x, 0}
         set_shader_uniforms(self.bloom_shader, &uniforms)
-        begin_render_target(rts[1], {})
+        begin_render_target(rts[1], nil)
         draw_render_target(rts[0], dest)
         end_render_target()
 
         uniforms.texel_step = {0, tap_spacing / size.y}
         set_shader_uniforms(self.bloom_shader, &uniforms)
-        begin_render_target(rts[0], {})
+        begin_render_target(rts[0], nil)
         draw_render_target(rts[1], dest)
         end_render_target()
     }
@@ -258,7 +258,8 @@ render_bloom :: proc(self: ^StrobeDisplay) {
     }
     set_shader_uniforms(self.bloom_shader, &uniforms)
     bloom_size := render_target_size(self.bloom_rt[0])
-    begin_render_target(self.bloom_rt[0], {})
+    // Each pass replaces every pixel of its target, nothing to clear
+    begin_render_target(self.bloom_rt[0], nil)
     draw_render_target(self.scene_rt, {0, 0, bloom_size.x, bloom_size.y})
     end_render_target()
 
@@ -526,7 +527,7 @@ draw_strobe_bands :: proc(
             draw_shader_quad({rect.x, rect.y + offset, rect.width, rect.height})
         }
 
-        // Each fine track turns faster, its stripes are packed twice as tight
-        if mode == .FINE do period_count *= 2.0
+        // Each vernier track turns faster, its stripes are packed twice as tight
+        if mode == .VERNIER do period_count *= 2.0
     }
 }

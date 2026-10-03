@@ -208,8 +208,8 @@ gui_settings :: proc(
             gui_settings_segmented(sheet_layout, &row, "Shape", {"Flat", "Wheel", "Curved"}, &config.strobe_shape, WIDE_SEGMENT_WIDTH)
             // What turns the tracks: their own DFT, or the lamp's screen, the strobe the other way
             gui_settings_segmented(sheet_layout, &row, "Turned by", {"Lock-in", "Lamp"}, &config.strobe_source, WIDE_SEGMENT_WIDTH)
-            // Harmonic shows a track per partial, fine the same frequency at different sensitivities
-            if gui_settings_segmented(sheet_layout, &row, "Mode", {"Harmonic", "Fine"}, &config.strobe_mode, WIDE_SEGMENT_WIDTH) {
+            // Harmonic shows a track per partial, vernier the same frequency at different sensitivities
+            if gui_settings_segmented(sheet_layout, &row, "Mode", {"Harmonic", "Vernier"}, &config.strobe_mode, WIDE_SEGMENT_WIDTH) {
                 changed = true
             }
             harmonic := config.strobe_mode == .HARMONIC
