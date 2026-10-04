@@ -53,7 +53,6 @@ STROBE_REFERENCE_HZ :: 656.5
 // weighted down with this time constant. Its weight on the rate of each moment peaks this long ago and is
 // twice that on average, steady but a turned peg shows that much later than on the stripes.
 READOUT_FIT_S :: 0.15
-MAX_PHASE_VAR :: 10.0 // rad², the stripes are as soft as they go
 
 // The pitch of a plucked string glides down from sharp during the attack. The readout's average starts
 // over once the attack has passed through the analysis window.
@@ -84,7 +83,6 @@ PhaseBand :: struct {
     phase_diff:   f32, // strobe phase advance since the previous frame (normalized to STROBE_REFERENCE_HZ)
     err_cents:    f32, // of the averaged rate
     scaled_phase: f32, // the strobe's phase, phase_diff times the speed added up
-    phase_sigma:  f32, // uncertainty (std dev) of the measured phase, same scale as phase_diff
     speed:        f32, // under 1 the strobe turns slower, over 1 faster
     snr_db:       f32,
     noise_floor:  NoiseFloor,
@@ -352,7 +350,6 @@ run_phase_detection :: proc(self: ^PhaseComparator, use_phase_average: bool, is_
             base_band := self.bands[0]
             band.amp = base_band.amp
             band.phase_diff = base_band.phase_diff
-            band.phase_sigma = base_band.phase_sigma
             band.noise_floor = base_band.noise_floor
             band.snr_db = base_band.snr_db
             band.scaled_phase -= band.phase_diff * band.speed
@@ -471,10 +468,8 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, use_phase
     phase_advance := wrap_phase(f64(band.phase - prev_measured)) if had_phase else 0
     band.has_phase = true
 
-    // Rescaled so all notes spin at the same rate per cent, the edges as sharp as the measurement's noise
-    rescale := strobe_rescale(band.freq_hz)
-    band.phase_diff = f32(phase_advance * rescale)
-    band.phase_sigma = f32(math.sqrt(phase_measurement_var(band^)) * rescale)
+    // Rescaled so all notes spin at the same rate per cent
+    band.phase_diff = f32(phase_advance * strobe_rescale(band.freq_hz))
 
     step := f64(self.available)
     if had_phase {
@@ -543,13 +538,6 @@ update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
     band.envelope += alpha * (band.amp - band.envelope)
 }
 
-
-// Phase noise variance of a phasor in noise ≈ 1 / (2 SNR), in rad²
-phase_measurement_var :: proc(band: PhaseBand) -> f64 {
-    EPS :: 1e-12
-    noise_ratio := f64(band.noise_floor.level) / (f64(band.amp) + EPS)
-    return clamp(0.5 * noise_ratio * noise_ratio, 1e-9, MAX_PHASE_VAR)
-}
 
 
 // The stripes fade in between these SNRs, below it's the background noise (it stays under ~10 dB)

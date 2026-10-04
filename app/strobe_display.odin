@@ -41,8 +41,7 @@ StrobeDisplay :: struct {
     glow_scale:      f32, // DPI scale the render targets were created for
     glow_size:       [2]f32, // and the strobe size in points
 
-    // per band stripe sharpness and visibility, smoothed so they don't flicker, see update_band_look
-    band_amp:        [core.MAX_BANDS]f32,
+    // per band stripe visibility, smoothed so it doesn't flicker, see update_band_visibility
     band_visibility: [core.MAX_BANDS]f32,
     // and of the scope's beam, see draw_scope_display
     scope_visibility: f32,
@@ -433,35 +432,19 @@ draw_inner_shadow :: proc(self: ^StrobeDisplay, area: Rect, shape: Rect) {
     draw_shader_quad(area)
 }
 
-// The stripe edges are as sharp as the phase is certain: a sharp edge on a jittery phase twitches,
-// a soft edge on a clean one looks washed out. The shader draws amp * sin(phase), so an edge spans
-// about 2 / amp radians of the strobe phase, keep that a few standard deviations of the phase wide.
-STROBE_EDGE_SIGMAS :: 3.0
-STROBE_MAX_AMP :: 50.0 // limit, to avoid jagged edges in the strobe display
+// The shader draws amp * sin(phase), an edge spans about 2 / amp radians of the strobe phase. The edges
+// stay this sharp while a note fades, the stripes dim like a lamp's. Sharper gets jagged.
+STROBE_AMP :: 50.0
 STROBE_LOOK_TIME_S :: 0.05
 
-// The sharpness and visibility of a band's stripes, smoothed so they don't flicker
-update_band_look :: proc(
-    self: ^StrobeDisplay,
-    band: ^core.PhaseBand,
-    band_index: int,
-    period_count: f32,
-) -> (
-    amp: f32,
-    visibility: f32,
-) {
-    // Uncertainty of the phase as drawn on the screen
-    sigma := band.phase_sigma * band.speed * period_count
-    target_amp := clamp(2.0 / (STROBE_EDGE_SIGMAS * max(sigma, 1e-6)), 1.0, STROBE_MAX_AMP)
-
+// The visibility of a band's stripes, smoothed so they don't flicker
+update_band_visibility :: proc(self: ^StrobeDisplay, band: ^core.PhaseBand, band_index: int) -> f32 {
     fade := core.STROBE_FADE_SNR_DB
-    target_visibility := math.smoothstep(fade[0], fade[1], band.snr_db)
+    target := math.smoothstep(fade[0], fade[1], band.snr_db)
 
     alpha := 1.0 - math.exp(-gfx_frame_time() / STROBE_LOOK_TIME_S)
-    self.band_amp[band_index] += alpha * (target_amp - self.band_amp[band_index])
-    self.band_visibility[band_index] += alpha * (target_visibility - self.band_visibility[band_index])
-
-    return self.band_amp[band_index], self.band_visibility[band_index]
+    self.band_visibility[band_index] += alpha * (target - self.band_visibility[band_index])
+    return self.band_visibility[band_index]
 }
 
 // The circular bands from the centre outwards, the lowest frequency is the bottom one
@@ -513,7 +496,8 @@ draw_strobe_bands :: proc(
         // How far the strobe moved this frame, see determine_band_phase
         uniforms.phase_step = -band.phase_diff * band.speed / density
 
-        uniforms.amp, uniforms.visibility = update_band_look(self, &band, band_index, period_count / density)
+        uniforms.amp = STROBE_AMP
+        uniforms.visibility = update_band_visibility(self, &band, band_index)
         uniforms.norm_freq = band.norm_freq
         uniforms.err_cents = band.err_cents
 

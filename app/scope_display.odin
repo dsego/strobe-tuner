@@ -131,8 +131,7 @@ draw_scope_screen :: proc(rect: Rect, scope: ^core.Scope, beam_color, grid_color
 // scope's screen from above (core.scope_partials) for each track's partial, instead of its DFT on the
 // samples. They turn like the tracks: by the bin's phase advance, rescaled so all notes spin at the same
 // rate per cent, times the track's speed, and stand still at its partial's target, offset included.
-// The stripe edges are as sharp as the bin's phase is certain (see update_band_look). The screen's quirks
-// show, a pluck or a weak partial can make the stripes jump. A copy for drawing until the next frame, its
+// The screen's quirks show, a pluck or a weak partial can make the stripes jump. A copy for drawing until the next frame, its
 // DFTs are the comparator's own. The phases between frames are kept in the display.
 lamp_bands :: proc(
     display: ^StrobeDisplay,
@@ -178,8 +177,6 @@ lamp_bands :: proc(
 
         rescale := core.strobe_rescale(band.freq_hz)
         band.phase_diff = f32(advance * rescale)
-        // The noise moves the bin's phase by about this much
-        band.phase_sigma = f32(noise / (math.SQRT_TWO * level) * rescale)
         display.lamp_scaled_phases[index] -= band.phase_diff * band.speed
         band.scaled_phase = display.lamp_scaled_phases[index]
     }
