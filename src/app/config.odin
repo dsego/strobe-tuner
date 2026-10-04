@@ -141,9 +141,6 @@ Config :: struct {
     // How far off each track's partial is, next to the track
     show_band_cents:              bool,
 
-    // all the notes in a sliding row, off shows just the note with arrows either side to step it
-    chromatic_ruler:              bool,
-
     // Scope and lamp displays: how long the beam stays on the screen, 0 shows only what came in since
     // the previous frame
     scope_persistence_ms:         f32,
@@ -184,7 +181,6 @@ config_defaults :: Config {
     strobe_glow                  = true,
     partial_labels               = .MULTIPLES,
     show_band_cents              = false,
-    chromatic_ruler              = true,
     scope_persistence_ms         = 40,
     lamp_shape                   = .HALF_RECTIFIED,
     scope_sweep                  = .TIME,

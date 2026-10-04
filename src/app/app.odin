@@ -166,7 +166,7 @@ run_app :: proc(config: ^Config) {
             window.x = STROBE_WIDTH
             safe.width = STROBE_WIDTH
         }
-        layout := compute_layout(window, safe, shows_ruler(config), selected_preset(config) >= 0)
+        layout := compute_layout(window, safe, selected_preset(config) >= 0)
         update_pixel_fonts(layout.ruler_scale)
 
         gfx.begin_frame(gfx.hex(strobe_bg_color))
@@ -374,11 +374,6 @@ feed_scope :: proc(app: ^App) {
     core.update_scope(scope)
 }
 
-// An instrument's strings are always on the ruler
-shows_ruler :: proc(config: ^Config) -> bool {
-    return config.chromatic_ruler || current_setup(config).instrument != .CHROMATIC
-}
-
 draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
     config := app.config
 
@@ -390,7 +385,6 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
     // note than a locked one.
     draw_measurements(
         layout.measurements,
-        layout.readout_align,
         reading.steady.detected_freq,
         reading.steady.err_cents,
         reading.steady.measured && !reading.out_of_range,
@@ -531,9 +525,8 @@ draw_tuning_arrows :: proc(app: ^App, layout: Layout, reading: Reading) {
     }
 }
 
-// The target note on the ruler with the gauge under it, or on its own with arrows, the lock, and the note's
-// offset. The lock button (or space, or tapping the note) locks the note, tapping another note on the ruler
-// (or the arrows) locks that one instead.
+// The target note on the ruler with the gauge under it, the lock, and the note's offset. The lock button (or
+// space, or tapping the note) locks the note, tapping another note on the ruler locks that one instead.
 draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     config, tuner := app.config, &app.tuner
     string_mode := current_setup(config).instrument != .CHROMATIC
@@ -547,51 +540,40 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     // No pitch yet, nothing to show
     if tuner.target_note.frequency == 0 do shown_note.frequency = 0
 
-    step: int
-    note_tapped, swiping: bool
-    if shows_ruler(config) {
-        // The strings, or every note of a piano with the target among them
-        ruler_notes: []core.Note
-        target: int
-        if shown_note.frequency == 0 {
-            // Nothing on the ruler
-        } else if string_mode {
-            ruler_notes = make([]core.Note, tuner.string_count, context.temp_allocator)
-            for &note, index in ruler_notes {
-                note = core.cents_to_note(f32(100 * (tuner.strings[index] + transpose)), shown_note.pitch_standard)
-            }
-            target = tuner.string_index
-        } else {
-            ruler_notes = make([]core.Note, core.NOTE_COUNT, context.temp_allocator)
-            for &note, index in ruler_notes {
-                note = core.cents_to_note(f32(100 * (core.LOWEST_NOTE + index + transpose)), shown_note.pitch_standard)
-            }
-            target = clamp(tuner.target_note.cents / 100 - core.LOWEST_NOTE, 0, core.NOTE_COUNT - 1)
+    // The strings, or every note of a piano with the target among them
+    ruler_notes: []core.Note
+    target: int
+    if shown_note.frequency == 0 {
+        // Nothing on the ruler
+    } else if string_mode {
+        ruler_notes = make([]core.Note, tuner.string_count, context.temp_allocator)
+        for &note, index in ruler_notes {
+            note = core.cents_to_note(f32(100 * (tuner.strings[index] + transpose)), shown_note.pitch_standard)
         }
-        step, note_tapped, swiping = gui_note_ruler(layout.ruler, ruler_notes, target, tuner.active)
-
-        // Within half a semitone of the note, or a few semitones of a string. Another note than a locked one
-        // pins it at the end on that side.
-        cents := reading.steady.err_cents
-        lit := tuner.active && (reading.steady.measured || reading.out_of_range)
-        if reading.out_of_range do cents = 1200 * core.tuner_out_of_range_side(tuner)
-        // Further than the gauge reaches from any string, e.g. a guitar's low E on a ukulele, it says so instead
-        // of the gauge stuck at its end, and which way
-        if string_mode && lit && abs(cents) > 100 * GAUGE_SEMITONE_TICKS {
-            label: cstring = "TOO FLAT" if cents < 0 else "TOO SHARP"
-            width := measure_label(pixel_fonts.label, label, 1).x
-            label_y := layout.gauge.y + (GAUGE_HEIGHT - LABEL_SIZE) / 2
-            draw_label(pixel_fonts.label, label, {layout.gauge.x - width / 2, label_y}, text_color_light, 1)
-        } else {
-            draw_cents_gauge(layout.gauge, cents, lit, string_mode, gfx.hex(strobe_colors(config).x))
-        }
+        target = tuner.string_index
     } else {
-        draw_note(shown_note, layout.note, tuner.active)
-        step = gui_note_arrows(layout.note, tuner.locked)
-        // Tapping the note toggles the lock too, between the touch areas of the arrows
-        note := layout.note
-        note_area := gfx.Rect{note.x + 6, note.y, NOTE_WIDTH - NOTE_RIGHT_ARROW_INSET - 12, NOTE_HEIGHT}
-        note_tapped = shown_note.frequency != 0 && gui_button(note_area)
+        ruler_notes = make([]core.Note, core.NOTE_COUNT, context.temp_allocator)
+        for &note, index in ruler_notes {
+            note = core.cents_to_note(f32(100 * (core.LOWEST_NOTE + index + transpose)), shown_note.pitch_standard)
+        }
+        target = clamp(tuner.target_note.cents / 100 - core.LOWEST_NOTE, 0, core.NOTE_COUNT - 1)
+    }
+    step, note_tapped, swiping := gui_note_ruler(layout.ruler, ruler_notes, target, tuner.active)
+
+    // Within half a semitone of the note, or a few semitones of a string. Another note than a locked one
+    // pins it at the end on that side.
+    cents := reading.steady.err_cents
+    lit := tuner.active && (reading.steady.measured || reading.out_of_range)
+    if reading.out_of_range do cents = 1200 * core.tuner_out_of_range_side(tuner)
+    // Further than the gauge reaches from any string, e.g. a guitar's low E on a ukulele, it says so instead
+    // of the gauge stuck at its end, and which way
+    if string_mode && lit && abs(cents) > 100 * GAUGE_SEMITONE_TICKS {
+        label: cstring = "TOO FLAT" if cents < 0 else "TOO SHARP"
+        width := measure_label(pixel_fonts.label, label, 1).x
+        label_y := layout.gauge.y + (GAUGE_HEIGHT - LABEL_SIZE) / 2
+        draw_label(pixel_fonts.label, label, {layout.gauge.x - width / 2, label_y}, text_color_light, 1)
+    } else {
+        draw_cents_gauge(layout.gauge, cents, lit, string_mode, gfx.hex(strobe_colors(config).x))
     }
 
     lock_toggled := gui_lock_toggle(layout.lock, tuner.locked) || note_tapped

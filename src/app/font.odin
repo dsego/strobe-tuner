@@ -70,19 +70,14 @@ TITLE_SIZE :: 18
 ICON_SIZE :: 16
 ICON_SHEET_SIZE :: 20 // bold, the sheet's ✕, ‹ and ›
 ICON_LARGE_SIZE :: 24
-// The note without the ruler
-NOTE_NAME_SIZE :: 128
-NOTE_OCTAVE_SIZE :: 38
-NOTE_SHARP_SIZE :: 48
 // The ruler, scaled by the layout
 RULER_NOTE_SIZE :: 88 // the target note
 RULER_NEIGHBOUR_SIZE :: 52
 RULER_OCTAVE_SIZE :: 26
-// The sharps 3/8 of their letter like NOTE_SHARP_SIZE, the octave already matches
+// The sharps 3/8 of their letter
 RULER_NOTE_SHARP_SIZE :: 33
 RULER_NEIGHBOUR_SHARP_SIZE :: 20
 READOUT_SIZE :: 24 // the Hz and cents values, they grow with the ruler
-NOTE_ARROW_SIZE :: 26 // either side of the note without the ruler
 STROBE_ARROW_SIZE :: 22 // over the strobe, which way to tune
 OFFSET_VALUE_SIZE :: 32 // the value in the popup of the note offsets
 
@@ -112,16 +107,12 @@ PixelFonts :: struct {
     icon_large:      PixelFont,
     icon_large_bold: PixelFont, // the large steppers
     icon_sheet:      PixelFont, // the sheet's ✕, ‹ and ›
-    note_name:      PixelFont, // the note without the ruler
-    note_octave:     PixelFont,
-    note_name_sharp: PixelFont,
     note:            PixelFont, // the ruler's target note
     neighbour:       PixelFont,
     octave:          PixelFont,
     note_sharp:      PixelFont,
     neighbour_sharp: PixelFont,
     readout:         PixelFont,
-    note_arrow:      PixelFont,
     strobe_arrow:    PixelFont,
     offset_value:    PixelFont,
     band_label:      PixelFont, // each track's partial and cents on the strobe
@@ -160,16 +151,12 @@ update_pixel_fonts :: proc(ruler_scale: f32) {
         icon_large      = load(phosphor, ICON_LARGE_SIZE, scale, ICON_CODEPOINTS),
         icon_large_bold = load(phosphor_bold, ICON_LARGE_SIZE, scale, ICON_BOLD_CODEPOINTS),
         icon_sheet      = load(phosphor_bold, ICON_SHEET_SIZE, scale, ICON_SHEET_CODEPOINTS),
-        note_name      = load(inter_medium, NOTE_NAME_SIZE, scale, "ABCDEFG"),
-        note_octave     = load(inter_medium, NOTE_OCTAVE_SIZE, scale, "0123456789"),
-        note_name_sharp = load(noto_sans_mono, NOTE_SHARP_SIZE, scale, "♯"),
         note            = load(inter_medium, ruler_scale * RULER_NOTE_SIZE, scale, "ABCDEFG"),
         neighbour       = load(inter_medium, ruler_scale * RULER_NEIGHBOUR_SIZE, scale, "ABCDEFG"),
         octave          = load(inter_medium, ruler_scale * RULER_OCTAVE_SIZE, scale, "0123456789"),
         note_sharp      = load(noto_sans_mono, ruler_scale * RULER_NOTE_SHARP_SIZE, scale, "♯"),
         neighbour_sharp = load(noto_sans_mono, ruler_scale * RULER_NEIGHBOUR_SHARP_SIZE, scale, "♯"),
         readout         = load(inter_tabular, ruler_scale * READOUT_SIZE, scale, TABULAR_CODEPOINTS),
-        note_arrow      = load(inter_medium, NOTE_ARROW_SIZE, scale, "◀▶"),
         strobe_arrow    = load(inter_medium, STROBE_ARROW_SIZE, scale, "◀▶"),
         offset_value    = load(inter_medium, OFFSET_VALUE_SIZE, scale, "ABCDEFG#0123456789.+-¢"),
         band_label      = load(inter_tabular, LABEL_LARGE_SIZE, scale, TABULAR_CODEPOINTS),
@@ -188,16 +175,12 @@ unload_pixel_fonts :: proc() {
     gfx.unload_font(pixel_fonts.icon_large.font)
     gfx.unload_font(pixel_fonts.icon_large_bold.font)
     gfx.unload_font(pixel_fonts.icon_sheet.font)
-    gfx.unload_font(pixel_fonts.note_name.font)
-    gfx.unload_font(pixel_fonts.note_octave.font)
-    gfx.unload_font(pixel_fonts.note_name_sharp.font)
     gfx.unload_font(pixel_fonts.note.font)
     gfx.unload_font(pixel_fonts.neighbour.font)
     gfx.unload_font(pixel_fonts.octave.font)
     gfx.unload_font(pixel_fonts.note_sharp.font)
     gfx.unload_font(pixel_fonts.neighbour_sharp.font)
     gfx.unload_font(pixel_fonts.readout.font)
-    gfx.unload_font(pixel_fonts.note_arrow.font)
     gfx.unload_font(pixel_fonts.strobe_arrow.font)
     gfx.unload_font(pixel_fonts.offset_value.font)
     gfx.unload_font(pixel_fonts.band_label.font)

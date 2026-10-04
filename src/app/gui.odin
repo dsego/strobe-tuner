@@ -159,50 +159,6 @@ draw_strobe_partial :: proc(position: [2]f32, type: PartialLabelType, band: core
 }
 
 
-// White while there's a pitch
-draw_note :: proc(note: core.Note, pos: [2]f32, active: bool) {
-    if note.frequency == 0 do return
-
-    color := text_color_white if active else text_color_muted
-
-    // Note name
-    draw_label(pixel_fonts.note_name, fmt.ctprintf("%v", note.name), pos, color)
-
-    // Sharp sign
-    if note.is_accidental {
-        draw_label(pixel_fonts.note_name_sharp, "♯", {pos.x + 76, pos.y + 12}, color)
-    }
-
-    // Octave number
-    draw_label(pixel_fonts.note_octave, fmt.ctprintf("%v", note.octave), {pos.x + 76, pos.y + 72}, color)
-}
-
-// A locked note shows arrows either side of it to step by a semitone
-gui_note_arrows :: proc(pos: [2]f32, locked: bool) -> (step: int) {
-    if !locked do return
-
-    prev := gfx.Rect{pos.x - NOTE_ARROW_SLOT, pos.y, NOTE_ARROW_SLOT, NOTE_HEIGHT}
-    next := gfx.Rect{pos.x + NOTE_WIDTH - NOTE_RIGHT_ARROW_INSET, pos.y, NOTE_ARROW_SLOT, NOTE_HEIGHT}
-
-    font := pixel_fonts.note_arrow
-    ARROW_HEIGHT :: 18 // of the triangle itself, it sits in the middle of the line
-    for arrow, i in ([2]cstring{"◀", "▶"}) {
-        slot := prev if i == 0 else next
-        size := gfx.measure_text(font.font, arrow, font.size, 0)
-        // Sitting on the baseline of the letter
-        center_y := slot.y + NOTE_BASELINE - ARROW_HEIGHT / 2
-        position := snap_to_pixels({slot.x + (slot.width - size.x) / 2, center_y - size.y / 2})
-        gfx.draw_text(font.font, arrow, position, font.size, 0, text_color_white)
-    }
-
-    // A finger is wider than the slots, the touch areas reach a little past them
-    if gui_button({prev.x - 6, prev.y, prev.width + 12, prev.height}) do step = -1
-    if gui_button({next.x - 6, next.y, next.width + 12, next.height}) do step = 1
-
-    return
-}
-
-
 // The ruler, the notes in a row with the target note large in the middle: every semitone, or an
 // instrument's strings in the order they're tuned.
 // The notes slide over to the next one, further jumps snap, a swipe drags the row. A note grows as it
@@ -302,7 +258,7 @@ gui_note_ruler :: proc(
         if abs(shown - ruler.position) < 0.002 do ruler.position = shown
     }
 
-    // The target note is white while there's a pitch, like the note without the ruler
+    // The target note is white while there's a pitch
     draw_ruler(layout, notes, ruler.position, text_color_white if active else text_color_muted)
 
     if tapped do step, toggle_lock = ruler_tap(layout, notes, ruler.position, target)
@@ -750,15 +706,11 @@ gui_dropdown :: proc(
 }
 
 
-ReadoutAlign :: enum {
-    RIGHT, // the right edges of both columns are fixed, pos is the top right of the cents column
-    CENTER, // pos is the top middle of the gutter, Hz before it and the cents column after it
-}
-
-// Two columns, Hz and cents, dashes when there's nothing to show. The values are right aligned in tabular
-// digits, so the decimal point stays put and the digits don't shift as they change. The sign of the cents
-// hangs to the left of the number.
-draw_measurements :: proc(pos: [2]f32, align: ReadoutAlign, hz, cents: f32, shown: bool, active: bool) {
+// Two columns, Hz and cents, dashes when there's nothing to show. pos is the top middle of the gutter, Hz
+// before it and the cents column after it. The values are right aligned in tabular digits, so the decimal
+// point stays put and the digits don't shift as they change. The sign of the cents hangs to the left of the
+// number.
+draw_measurements :: proc(pos: [2]f32, hz, cents: f32, shown: bool, active: bool) {
     color := text_color_white if active else text_color_muted
     value := pixel_fonts.readout
 
@@ -773,19 +725,11 @@ draw_measurements :: proc(pos: [2]f32, align: ReadoutAlign, hz, cents: f32, show
     sign: cstring = "-" if cents < 0 else "+"
     signed := cents_shown && cents_str != "0.0"
 
-    hz_right, cents_right: [2]f32
-    switch align {
-    case .CENTER:
-        hz_right = pos + {-READOUT_GUTTER / 2, 0}
-        // The label left aligned after the gutter, the values in a column as wide as the widest
-        cents_left := pos + {READOUT_GUTTER / 2, 0}
-        gfx.draw_text(label_font, "Cents", snap_to_pixels(cents_left), pixel_fonts.label.size, 1, text_color_muted)
-        cents_right = cents_left + {gfx.measure_text(value.font, "00.0", value.size, 0).x, 0}
-    case .RIGHT:
-        hz_right = pos + {-HZ_COLUMN_OFFSET, 0}
-        cents_right = pos
-        draw_text_right(label_font, "Cents", pos, pixel_fonts.label.size, 1, text_color_muted)
-    }
+    hz_right := pos + {-READOUT_GUTTER / 2, 0}
+    // The label left aligned after the gutter, the values in a column as wide as the widest
+    cents_left := pos + {READOUT_GUTTER / 2, 0}
+    gfx.draw_text(label_font, "Cents", snap_to_pixels(cents_left), pixel_fonts.label.size, 1, text_color_muted)
+    cents_right := cents_left + {gfx.measure_text(value.font, "00.0", value.size, 0).x, 0}
 
     draw_text_right(label_font, "Hz", hz_right, pixel_fonts.label.size, 1, text_color_muted)
     draw_text_right(value.font, hz_str, hz_right + {0, VALUE_Y}, value.size, 0, color)
