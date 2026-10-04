@@ -40,7 +40,6 @@ import "core:testing"
 MIN_STROBE_FREQ_HZ :: 16.0
 MAX_BANDS :: 5 // the strobe's tracks, the config holds as many
 MAX_WINDOW_SIZE :: 262_144 // the sample buffer, the window for the lowest note fits in it
-PHASE_AVERAGE_SPREAD_CENTS :: 5
 // A band goes up to 90% of Nyquist (21.6 kHz at 48 kHz), above it the audio can't hold the frequency and
 // the input filters roll off before that anyway
 MAX_BAND_NORM_FREQ :: 0.45
@@ -76,7 +75,6 @@ PhaseBand :: struct {
     note:         Note,
     norm_freq:    f32,
     dft:          SingleFreqDFT,
-    averaged_dft: SingleFreqDFT, // with PHASE_AVERAGE_SPREAD_CENTS, see set_dft_freq
     window_delay: int, // samples, how far back the DFTs measure, see gamma_comb_delay
     time_stretch: f32, // samples in a period of the base note, the strobe shader's time scale
     phase:        f32, // measured lock-in phase, relative to the reference oscillator
@@ -154,7 +152,6 @@ destroy_phase_comparator :: proc(self: ^PhaseComparator) {
 
 destroy_phase_band :: proc(band: ^PhaseBand) {
     destroy_dft(&band.dft)
-    destroy_dft(&band.averaged_dft)
 }
 
 // Vernier mode measures the first band only, the others show it at other speeds
@@ -266,9 +263,7 @@ set_phase_comparator_freq :: proc(
             // Every track gets the fundamental's window. Sized in cents of its own partial an upper track's
             // window would be shorter, its band wider in Hz for a weaker partial, and it shimmers.
             gamma_size := dft_window_size(base_freq_hz, SAMPLERATE, DFT_RESOLUTION_CENTS)
-            window := gamma_comb_window(gamma_size, comb_samples)
-            set_dft_freq(&band.dft, band.norm_freq, window)
-            set_dft_freq(&band.averaged_dft, band.norm_freq, window, PHASE_AVERAGE_SPREAD_CENTS)
+            set_dft_freq(&band.dft, band.norm_freq, gamma_comb_window(gamma_size, comb_samples))
             band.window_delay = gamma_comb_delay(gamma_size, comb_samples)
         }
     }
@@ -320,7 +315,7 @@ wrap_phase :: proc(phase: f64) -> f64 {
 
 // Measures the new samples, nothing changes without any. is_tonal is a clear pitch from the pitch detection,
 // the bands' noise floors don't learn it as the background.
-run_phase_detection :: proc(self: ^PhaseComparator, use_phase_average: bool, is_tonal := false) {
+run_phase_detection :: proc(self: ^PhaseComparator, is_tonal := false) {
     // Just the longest window, the lowest partial's, which isn't always the first track's. The buffer is no
     // longer than that, the newest samples come in without delay.
     window_size := self.bands[0].dft.window_size
@@ -356,7 +351,7 @@ run_phase_detection :: proc(self: ^PhaseComparator, use_phase_average: bool, is_
             band.snr_db = 0
             band.phase_diff = 0
         } else {
-            determine_band_phase(self, &band, use_phase_average)
+            determine_band_phase(self, &band)
             update_band_noise_floor(self, &band, is_tonal)
         }
     }
@@ -438,12 +433,12 @@ resize_sample_buffer :: proc(self: ^PhaseComparator, size: int) {
 
 
 // A single bin DFT over the newest samples, demodulated against the band's reference oscillator
-determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, use_phase_average: bool) {
+determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
     // Every band analyses the newest samples, i.e. the end of the buffer
     window_size := band.dft.window_size
     samples := self.sample_buffer[self.buffer_len - window_size:self.buffer_len]
 
-    dft := run_single_dft(&band.averaged_dft if use_phase_average else &band.dft, samples)
+    dft := run_single_dft(&band.dft, samples)
     band.amp = abs(dft)
 
     // Lock-in / heterodyne: the DFT twiddles restart at 0 for every window, so rotate the result by
@@ -605,7 +600,7 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
     FRAME :: 400 // samples per display frame at 120 FPS
     target_hz: f32 = 261.63
 
-    run :: proc(target_hz: f32, detune_cents: f32, use_phase_average: bool) -> (err_cents: [2]f32, phase_diff: f32) {
+    run :: proc(target_hz: f32, detune_cents: f32) -> (err_cents: [2]f32, phase_diff: f32) {
         intervals := []f32{1, 2}
         pc := init_phase_comparator(target_hz, intervals, .HARMONIC)
         defer destroy_phase_comparator(pc)
@@ -621,27 +616,25 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
                 clock += 1
             }
             audio_capture_write(pc, chunk[:])
-            run_phase_detection(pc, use_phase_average)
+            run_phase_detection(pc)
         }
         return {pc.bands[0].err_cents, pc.bands[1].err_cents}, pc.bands[0].phase_diff
     }
 
-    for average in ([]bool{false, true}) {
-        // In tune: the strobe stands still
-        err, diff := run(target_hz, 0, average)
-        testing.expectf(t, abs(err[0]) < 0.05 && abs(err[1]) < 0.05, "in tune, got %v cents", err)
-        testing.expectf(t, abs(diff) < 1e-4, "in tune, got phase advance %v", diff)
+    // In tune: the strobe stands still
+    err, diff := run(target_hz, 0)
+    testing.expectf(t, abs(err[0]) < 0.05 && abs(err[1]) < 0.05, "in tune, got %v cents", err)
+    testing.expectf(t, abs(diff) < 1e-4, "in tune, got phase advance %v", diff)
 
-        // Sharp: both bands report the detuning, the strobe phase advances
-        err, diff = run(target_hz, 3, average)
-        testing.expectf(t, abs(err[0] - 3) < 0.1 && abs(err[1] - 3) < 0.1, "+3 cents, got %v cents", err)
-        testing.expect(t, diff > 0)
+    // Sharp: both bands report the detuning, the strobe phase advances
+    err, diff = run(target_hz, 3)
+    testing.expectf(t, abs(err[0] - 3) < 0.1 && abs(err[1] - 3) < 0.1, "+3 cents, got %v cents", err)
+    testing.expect(t, diff > 0)
 
-        // Flat
-        err, diff = run(target_hz, -7, average)
-        testing.expectf(t, abs(err[0] + 7) < 0.1 && abs(err[1] + 7) < 0.1, "-7 cents, got %v cents", err)
-        testing.expect(t, diff < 0)
-    }
+    // Flat
+    err, diff = run(target_hz, -7)
+    testing.expectf(t, abs(err[0] + 7) < 0.1 && abs(err[1] + 7) < 0.1, "-7 cents, got %v cents", err)
+    testing.expect(t, diff < 0)
 }
 
 

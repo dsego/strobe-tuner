@@ -89,13 +89,13 @@ PitchInfo :: struct {
 }
 
 
-init_pitch_detector :: proc() -> (self: PitchDetector) {
+init_pitch_detector :: proc(pitch_standard: f32 = 440.0) -> (self: PitchDetector) {
     self.samples = make([]f32, PITCH_FFT_SIZE / 2)
     self.highpass = init_highpass(PITCH_HIGHPASS_HZ, SAMPLERATE)
     self.lowpass = init_lowpass(PITCH_LOWPASS_HZ, SAMPLERATE)
     self.nsdf = init_nsdf(PITCH_FFT_SIZE)
     self.noise_floor = init_noise_floor()
-    self.pitch_standard = 440.0
+    self.pitch_standard = pitch_standard
 
     init_audio_capture_node(&self, "pitch")
     return

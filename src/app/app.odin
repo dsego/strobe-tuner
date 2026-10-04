@@ -73,9 +73,6 @@ App :: struct {
     unsaved:            bool, // the config changed since it was saved, see save_when_settled
     restart_audio:      bool, // opens the input again, after the background or an interruption
     quiet_time:         f32, // seconds with no signal and nobody touching anything, see IDLE_AFTER_S
-    // Add in the DFT bins 5 cents either side, a slightly detuned note keeps its level, see set_dft_freq.
-    // Debug builds toggle it with the X key to compare, it isn't saved.
-    phase_average:      bool,
 }
 
 // This frame's measurements, for the main screen
@@ -92,7 +89,6 @@ run_app :: proc(config: ^Config) {
         config        = config,
         readout_track = -1,
         traced_track  = -1,
-        phase_average = true,
     }
     tuner := &app.tuner
     tuner^ = core.init_tuner(config.target_freq_hz, config.pitch_standard, prevent_octave_jumps = true)
@@ -116,8 +112,7 @@ run_app :: proc(config: ^Config) {
     )
     defer core.destroy_phase_comparator(app.phase_comparator)
 
-    app.pitch_detector = core.init_pitch_detector()
-    app.pitch_detector.pitch_standard = config.pitch_standard
+    app.pitch_detector = core.init_pitch_detector(config.pitch_standard)
     defer core.destroy_pitch_detector(&app.pitch_detector)
 
     app.scope = core.init_scope(SCOPE_COLUMNS, SCOPE_ROWS)
@@ -159,8 +154,10 @@ run_app :: proc(config: ^Config) {
 
         config_before := config^
         handle_keys(&app)
+
         if app.config_changed do apply_config(&app)
         reading := measure(&app)
+
         feed_scope(&app)
 
         window, safe := gfx.window_size(), gfx.safe_area()
@@ -265,7 +262,6 @@ handle_keys :: proc(app: ^App) {
         reset_config(config)
         app.config_changed = true
     }
-    if ODIN_DEBUG && gfx.key_pressed(.X) do app.phase_average = !app.phase_average
     if gfx.key_pressed(.G) do config.strobe_glow = !config.strobe_glow
     if gfx.key_pressed(.TAB) {
         config.strobe_display_type = StrobeDisplayType((int(config.strobe_display_type) + 1) % len(StrobeDisplayType))
@@ -301,7 +297,7 @@ handle_keys :: proc(app: ^App) {
 measure :: proc(app: ^App) -> (reading: Reading) {
     tuner := &app.tuner
     reading.pitch = core.run_pitch_detection(&app.pitch_detector, tuner.pitch)
-    core.run_phase_detection(app.phase_comparator, app.phase_average, reading.pitch.is_tonal)
+    core.run_phase_detection(app.phase_comparator, reading.pitch.is_tonal)
 
     // The track the readout follows. The strobe keeps the note lit while it shows it.
     ready: bool

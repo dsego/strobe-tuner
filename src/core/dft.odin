@@ -89,11 +89,7 @@ SingleFreqDFT :: struct {
 
 // Tune to norm_freq over the window's weights, one per sample, the twiddles are reallocated when the
 // size changes.
-//
-// With spread_cents the bins that far below and above are added in, which flattens the top of the peak
-// ("phase average"): a slightly detuned note keeps its level and the in tune phase is the same. The sum of
-// the three DFTs is the DFT with the sum of their twiddles, so it costs no more than one.
-set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32, weights: []f64, spread_cents: f32 = 0) {
+set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32, weights: []f64) {
     size := len(weights)
 
     if len(self.twiddles) != size {
@@ -110,22 +106,9 @@ set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32, weights: []f64, sprea
     step := complex(math.cos(omega), -math.sin(omega))
     rotation := complex128(1)
 
-    // The neighbouring bins relative to the centre one
-    ratio := math.pow(2, f64(spread_cents) / 1200)
-    below_step := complex(math.cos(omega / ratio - omega), -math.sin(omega / ratio - omega))
-    above_step := complex(math.cos(omega * ratio - omega), -math.sin(omega * ratio - omega))
-    below := complex128(1)
-    above := complex128(1)
-
     for weight, index in weights {
-        twiddle := rotation
-        if spread_cents != 0 do twiddle *= 1 + below + above
-
-        self.twiddles[index] = complex64(complex(weight, 0) * twiddle)
-
+        self.twiddles[index] = complex64(complex(weight, 0) * rotation)
         rotation *= step
-        below *= below_step
-        above *= above_step
     }
 }
 
@@ -148,32 +131,6 @@ run_single_dft :: proc(self: ^SingleFreqDFT, samples: []f32) -> complex64 {
     return self.dft
 }
 
-
-@(test)
-test_phase_average_matches_three_bins :: proc(t: ^testing.T) {
-    WINDOW :: 7339
-    freq: f32 = 110
-
-    samples := make([]f32, WINDOW)
-    defer delete(samples)
-    for &sample, index in samples do sample = math.sin(math.TAU * 111 * f32(index) / SAMPLERATE)
-
-    averaged: SingleFreqDFT
-    defer destroy_dft(&averaged)
-    set_dft_freq(&averaged, freq / SAMPLERATE, gamma_comb_window(WINDOW), 5)
-
-    // The three bins on their own
-    sum: complex64
-    for cents in ([]f32{-5, 0, 5}) {
-        bin: SingleFreqDFT
-        defer destroy_dft(&bin)
-        set_dft_freq(&bin, cents_to_freq(cents, freq) / SAMPLERATE, gamma_comb_window(WINDOW))
-        sum += run_single_dft(&bin, samples)
-    }
-
-    got := run_single_dft(&averaged, samples)
-    testing.expectf(t, abs(got - sum) < 1e-4 * abs(sum), "got %v, the three bins add up to %v", got, sum)
-}
 
 @(test)
 test_comb_rejects_partials :: proc(t: ^testing.T) {
