@@ -196,7 +196,7 @@ The strobe went through four versions, each one fixing what the one before could
 
 #### Other approaches
 
-- **A square-wave slot**: [strobeTuner](https://sourceforge.net/projects/strobetuner/) (Scott Duplichan, GPLv3) builds each band the other way round from the lamp. Every frame, each column multiplies the last 6 periods by a ±1 square wave at the band's pitch, shifted by the column's place on the wheel, and clips the average. That's the same fold, seen through a slot half a period wide instead of a thin slit, and recomputed from the raw audio for every column. The slot softens the stripes a lot: tried on the lamp, they were too soft to read, so the thin slit stayed.
+- **A square-wave slot**: [strobeTuner](https://sourceforge.net/projects/strobetuner/) (Scott Duplichan, GPLv3) builds each band the other way round from the lamp. Every frame, each column multiplies the last 6 periods by a ±1 square wave at the band's pitch, shifted by the column's place on the wheel, and clips the average. That's the same fold, seen through a slot half a period wide instead of a thin slit, and recomputed from the raw audio for every column.
 
 
 #### Noise floor
