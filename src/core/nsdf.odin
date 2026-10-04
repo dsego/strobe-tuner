@@ -75,16 +75,18 @@ run_nsdf :: proc(self: ^NSDF, samples: []f32) -> (freq: f32, peak: Vec2) {
     if peak.x > 0 do freq = f32(self.samplerate) / peak.x
     return
 
-    // The NSDF through the autocorrelation, the left-hand sum of the squares runs down as the lag grows
+    // The NSDF through the autocorrelation, the left-hand sum of the squares runs down as the lag grows.
+    // The sum is kept in f64, in f32 thousands of subtractions drift it at the far lags.
     normalize :: proc(self: ^NSDF, samples: []f32) {
         count := len(samples)
         copy(self.values, self.autocorr[:count])
 
-        squares := 2.0 * self.values[0]
+        squares := 2.0 * f64(self.values[0])
         for lag in 0 ..< count {
             if squares > 0.0 {
-                self.values[lag] *= 2.0 / squares
-                squares -= samples[lag] * samples[lag] + samples[count - lag - 1] * samples[count - lag - 1]
+                self.values[lag] *= f32(2.0 / squares)
+                mirrored := samples[count - lag - 1]
+                squares -= f64(samples[lag] * samples[lag]) + f64(mirrored * mirrored)
             } else {
                 self.values[lag] = 0.0
             }
@@ -99,9 +101,10 @@ run_nsdf :: proc(self: ^NSDF, samples: []f32) -> (freq: f32, peak: Vec2) {
         IGNORED_LAGS :: 256
         // The first of the key maxima this close to the highest is the period, not a multiple of it
         CHOSEN_RATIO :: 0.95
+        // Lower maxima are no period, the NSDF of the zero lag is 1
+        MIN_PEAK_VALUE :: 0.5
 
         end := len(self.values) - IGNORED_LAGS
-        min_peak_value := 0.5 * self.values[0]
         max_peak: Vec2
 
         lag := 1
@@ -115,7 +118,7 @@ run_nsdf :: proc(self: ^NSDF, samples: []f32) -> (freq: f32, peak: Vec2) {
             highest := lag
             for lag < end - 1 && self.values[lag] > 0.0 {
                 value := self.values[lag]
-                if value > self.values[highest] && value > self.values[lag + 1] && value > min_peak_value {
+                if value > self.values[highest] && value > self.values[lag + 1] && value > MIN_PEAK_VALUE {
                     highest = lag
                 }
                 lag += 1
