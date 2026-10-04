@@ -92,6 +92,14 @@ PixelFont :: struct {
     size: f32,
 }
 
+// A size between small and large, drawn from the large font scaled down. At either end it's that font at its
+// own size.
+lerp_font :: proc(small, large: PixelFont, amount: f32) -> PixelFont {
+    if amount <= 0 do return small
+    if amount >= 1 do return large
+    return {large.font, math.lerp(small.size, large.size, amount)}
+}
+
 PixelFonts :: struct {
     scale:           f32, // the DPI scale they were loaded for
     ruler_scale:     f32, // the ruler's sizes relative to the desktop, see Layout

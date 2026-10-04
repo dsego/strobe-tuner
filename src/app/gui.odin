@@ -56,6 +56,21 @@ pill_violet := gfx.hex(0xA277FFFF)
 pill_yellow := gfx.hex(0xFFCA85FF)
 pill_dark := gfx.hex(0x2D2E35FF)
 
+lerp_color :: proc(from, to: gfx.Color, amount: f32) -> gfx.Color {
+    color: gfx.Color
+    for channel in 0 ..< 4 {
+        color[channel] = u8(math.round(math.lerp(f32(from[channel]), f32(to[channel]), amount)))
+    }
+    return color
+}
+
+// The color with its alpha times amount
+fade_color :: proc(color: gfx.Color, amount: f32) -> gfx.Color {
+    faded := color
+    faded.a = u8(f32(color.a) * amount)
+    return faded
+}
+
 // A label with an LED to its left that lights up while the toggle is on, like the indicator lamps on
 // old hardware. pos is the left edge, vertically centred.
 gui_led_toggle :: proc(pos: [2]f32, label: cstring, on: bool, color: gfx.Color) -> bool {
@@ -204,9 +219,24 @@ RULER_COAST_MAX :: 20 // notes per second
 RULER_COAST_MIN :: 2 // notes per second, let go slower than this it settles on the nearest note
 RULER_COAST_FRICTION :: 4 // how far a flick coasts, 1/4 of a second at the finger's speed, in about 1/2 a second
 
-// Where the middle of the ruler is, counted in its notes, it follows the target note a little behind
-ruler_position: f32
-ruler_initialized: bool
+// The ruler between frames
+NoteRuler :: struct {
+    position:    f32, // where the middle is, counted in its notes, it follows the target note a little behind
+    initialized: bool,
+    swipe:       RulerSwipe,
+}
+
+note_ruler: NoteRuler
+
+// Where the ruler's notes go in its rect. The gaps grow with the letters, the fonts were loaded at the
+// layout's size.
+RulerLayout :: struct {
+    rect:       gfx.Rect,
+    center:     [2]f32,
+    spacing:    f32, // between the letters of neighbouring notes
+    center_gap: f32, // extra room either side of the large note
+    per_side:   int, // as many neighbours as fit, up to 2 a side, the same distance apart in any width
+}
 
 // A press on the ruler. Let go where it was, a tap on a neighbour selects it. Moved sideways it's a swipe,
 // the row follows the finger, and let go it coasts on with the finger's speed and slows down. Only the
@@ -222,16 +252,14 @@ RulerGesture :: enum {
 RulerSwipe :: struct {
     gesture:  RulerGesture,
     press_x:  f32, // where the finger was when the row started following it
-    grab:     f32, // ruler_position then
+    grab:     f32, // the ruler's position then
     last_x:   f32,
     velocity: f32, // points per second, right is positive
     coast:    f32, // seconds the coast takes
     coasted:  f32, // seconds so far
-    from:     f32, // ruler_position when let go
+    from:     f32, // the ruler's position when let go
     stop_at:  f32, // the note it coasts to
 }
-
-ruler_swipe: RulerSwipe
 
 // notes[target] is the target note, none hides the ruler. Returns how many notes to step when another note is
 // tapped or the note in the middle of a swipe changes, whether the target itself was tapped, which toggles the
@@ -247,194 +275,210 @@ gui_note_ruler :: proc(
     toggle_lock: bool,
     swiping: bool,
 ) {
-    // Moves the row with the finger and the coast. settle is where it settles, the nearest note or the next one
-    // on the way, land a swipe or a coast that's over, tapped a press let go where it was.
-    follow_finger :: proc(swipe: ^RulerSwipe, rect: gfx.Rect, spacing, highest: f32) -> (settle: f32, land, tapped: bool) {
-        mouse := gfx.mouse_position()
-        dt := gfx.frame_time()
-        settle = math.round(ruler_position)
-
-        switch {
-        case gui_disabled:
-            // A sheet opened over it, a swipe on the way lands
-            land = swipe.gesture == .SWIPING || swipe.gesture == .COASTING || swipe.gesture == .CAUGHT
-            if !land do swipe^ = {}
-        case swipe.gesture == .COASTING && gfx.mouse_pressed():
-            // Caught on the ruler it stops there and can be swiped on, a press anywhere else settles it
-            if gui_background_pressed(rect) {
-                swipe^ = {
-                    gesture = .CAUGHT,
-                    press_x = mouse.x,
-                    last_x  = mouse.x,
-                }
-            } else {
-                land = true
-            }
-        case swipe.gesture == .COASTING:
-            // Slowing down steadily to a stop on the note, from the finger's speed
-            swipe.coasted += dt
-            left := max(1 - swipe.coasted / swipe.coast, 0)
-            ruler_position = swipe.stop_at + (swipe.from - swipe.stop_at) * left * left
-            settle = math.round(ruler_position)
-            land = left == 0
-        case swipe.gesture == .NONE:
-            if gui_background_pressed(rect) {
-                swipe^ = {
-                    gesture = .PRESSED,
-                    press_x = mouse.x,
-                    last_x  = mouse.x,
-                }
-            }
-        case gfx.mouse_down():
-            // Smoothed, a finger stops for a frame or two before it lets go
-            if dt > 0 do swipe.velocity += ((mouse.x - swipe.last_x) / dt - swipe.velocity) * 0.5
-            swipe.last_x = mouse.x
-            if swipe.gesture != .SWIPING && abs(mouse.x - swipe.press_x) > RULER_SWIPE_START {
-                // From here, the few points it took don't make the row jump
-                swipe.gesture = .SWIPING
-                swipe.press_x = mouse.x
-                swipe.grab = ruler_position
-            }
-            // The row under the finger, to the left brings in the notes on the right
-            if swipe.gesture == .SWIPING do ruler_position = swipe.grab + (swipe.press_x - mouse.x) / spacing
-            settle = math.round(ruler_position)
-        case swipe.gesture == .SWIPING:
-            // Let go, it coasts to where friction would stop it, rounded to a note on the way. Slowing down
-            // evenly from the finger's speed it takes twice as long as at that speed.
-            speed := clamp(-swipe.velocity / spacing, -RULER_COAST_MAX, RULER_COAST_MAX)
-            stop := ruler_position + speed / RULER_COAST_FRICTION
-            swipe.stop_at = clamp(math.round(stop), 0, highest)
-            if speed > 0 do swipe.stop_at = max(swipe.stop_at, math.ceil(ruler_position))
-            if speed < 0 do swipe.stop_at = min(swipe.stop_at, math.floor(ruler_position))
-            distance := swipe.stop_at - ruler_position
-            if abs(speed) < RULER_COAST_MIN || abs(distance) < 0.002 {
-                land = true
-            } else {
-                swipe.gesture = .COASTING
-                swipe.coast = 2 * distance / speed
-                swipe.coasted = 0
-                swipe.from = ruler_position
-            }
-        case swipe.gesture == .CAUGHT:
-            land = true
-        case:
-            tapped = true
-            swipe^ = {}
-        }
-
-        // Not past the ends
-        if ruler_position <= 0 || ruler_position >= highest {
-            ruler_position = clamp(ruler_position, 0, highest)
-            settle = math.round(ruler_position)
-            if swipe.gesture == .COASTING do land = true
-        }
-        return
-    }
-
-    swipe := &ruler_swipe
+    ruler := &note_ruler
     if len(notes) == 0 {
-        swipe^ = {}
+        ruler.swipe = {}
         return
     }
-
-    // The gaps grow with the letters, the fonts were loaded at the layout's size
-    scale := pixel_fonts.ruler_scale
-    center_gap := scale * RULER_CENTER_GAP
-
-    // As many neighbours as fit, up to 2 a side, the same distance apart in any width
-    room := rect.width / 2 - scale * RULER_EDGE - center_gap
-    spacing := scale * RULER_SPACING
-    per_side := clamp(int(room / spacing), 1, RULER_MAX_PER_SIDE)
-
-    if !ruler_initialized {
-        ruler_position = f32(target)
-        ruler_initialized = true
+    if !ruler.initialized {
+        ruler.position = f32(target)
+        ruler.initialized = true
     }
 
-    settle, land, tapped := follow_finger(swipe, rect, spacing, f32(len(notes) - 1))
-    swiping = swipe.gesture == .SWIPING || swipe.gesture == .COASTING || swipe.gesture == .CAUGHT
+    layout := ruler_layout(rect)
+    settle, land, tapped := ruler_follow_finger(ruler, rect, layout.spacing, f32(len(notes) - 1))
+    gesture := ruler.swipe.gesture
+    swiping = gesture == .SWIPING || gesture == .COASTING || gesture == .CAUGHT
 
     // The note in the middle is the target, already while the row follows the finger or coasts. Settled, the
     // ruler eases onto it from where it is.
     step = int(settle) - target if swiping || land else 0
-    if land do swipe^ = {}
+    if land do ruler.swipe = {}
     if !swiping || land {
         // Slide to the next note, and settle exactly on it, a jump further snaps
-        shown := target + step
-        if abs(f32(shown) - ruler_position) > 1 && step == 0 do ruler_position = f32(shown)
-        ruler_position += (f32(shown) - ruler_position) * min(1, RULER_SLIDE_SPEED * gfx.frame_time())
-        if abs(f32(shown) - ruler_position) < 0.002 do ruler_position = f32(shown)
+        shown := f32(target + step)
+        if abs(shown - ruler.position) > 1 && step == 0 do ruler.position = shown
+        ruler.position += (shown - ruler.position) * min(1, RULER_SLIDE_SPEED * gfx.frame_time())
+        if abs(shown - ruler.position) < 0.002 do ruler.position = shown
     }
-    mouse := gfx.mouse_position()
-
-    center := [2]f32{rect.x + rect.width / 2, rect.y + rect.height / 2}
 
     // The target note is white while there's a pitch, like the note without the ruler
-    note_color := text_color_white if active else text_color_muted
+    draw_ruler(layout, notes, ruler.position, text_color_white if active else text_color_muted)
 
-    // Notes slide in and out at the ends, fading, the next one out is only drawn while it slides
-    first := max(int(math.floor(ruler_position)) - per_side - 1, 0)
-    last := min(int(math.ceil(ruler_position)) + per_side + 1, len(notes) - 1)
-    for index in first ..= last {
-        offset := f32(index) - ruler_position
-        distance := abs(offset)
-        x := center.x + offset * spacing + math.sign(offset) * center_gap * min(distance, 1)
-
-        ruler_note := notes[index]
-
-        // Large in the middle and small a note away, in between it grows as it comes in and shrinks as it
-        // goes, drawn from the large letters scaled down. Settled they're the fonts' own sizes.
-        large := 1 - math.smoothstep(f32(0), 1, distance)
-        name_font, sharp_font := pixel_fonts.neighbour, pixel_fonts.neighbour_sharp
-        if large == 1 {
-            name_font, sharp_font = pixel_fonts.note, pixel_fonts.note_sharp
-        } else if large > 0 {
-            name_font = {pixel_fonts.note.font, math.lerp(pixel_fonts.neighbour.size, pixel_fonts.note.size, large)}
-            sharp_font = {pixel_fonts.note_sharp.font, math.lerp(pixel_fonts.neighbour_sharp.size, pixel_fonts.note_sharp.size, large)}
-        }
-        // The octave fades in on the way to the middle, gone halfway so there's only ever one
-        octave := 1 - math.smoothstep(f32(0), 0.5, distance)
-
-        // The sharp and the octave hang off to the right. Centred on the letter the note looks pushed right,
-        // centred with them the letter looks pushed left, they're small and thin and weigh less than their
-        // width. Halfway looks centred, once it's settled.
-        OPTICAL_WEIGHT :: 0.5
-        suffix := octave * measure_label(pixel_fonts.octave, fmt.ctprintf("%v", ruler_note.octave)).x
-        if ruler_note.is_accidental do suffix = max(suffix, gfx.measure_text(sharp_font.font, "♯", sharp_font.size, 0).x)
-        x -= large * OPTICAL_WEIGHT * suffix / 2
-
-        // Muted a note away, the ones at the ends fade out
-        color: gfx.Color
-        for channel in 0 ..< 4 {
-            color[channel] = u8(math.round(math.lerp(f32(text_color_muted[channel]), f32(note_color[channel]), large)))
-        }
-        color.a = u8(f32(color.a) * clamp(f32(per_side) + 1 - distance, 0, 1))
-        draw_ruler_note(ruler_note, {x, center.y}, name_font, sharp_font, octave, color)
-
-        // Tapping another note locks it, tapping the target toggles the lock. The target's touch area
-        // reaches over the gaps either side of it up to its neighbours'.
-        if tapped && index == target && distance < 0.5 {
-            half := spacing / 2 + center_gap
-            toggle_lock = gfx.point_in_rect(mouse, {x - half, rect.y, 2 * half, rect.height})
-        } else if tapped && index != target && distance <= f32(per_side) && gfx.point_in_rect(mouse, {x - spacing / 2, rect.y, spacing, rect.height}) {
-            step = index - target
-        }
-    }
-
+    if tapped do step, toggle_lock = ruler_tap(layout, notes, ruler.position, target)
     return
 }
 
-// The name centred on pos, the sharp and the octave (in the middle, octave is how much of it shows) to the
-// right, gui_note_ruler moves the note over to centre them all.
-// Drawn at the fonts' sizes, their own ones are texel for pixel.
-draw_ruler_note :: proc(note: core.Note, pos: [2]f32, name_font, sharp_font: PixelFont, octave: f32, color: gfx.Color) {
+// Moves the row with the finger and the coast. settle is where it settles, the nearest note or the next one
+// on the way, land a swipe or a coast that's over, tapped a press let go where it was.
+ruler_follow_finger :: proc(ruler: ^NoteRuler, rect: gfx.Rect, spacing, highest: f32) -> (settle: f32, land, tapped: bool) {
+    swipe := &ruler.swipe
+    mouse := gfx.mouse_position()
+    dt := gfx.frame_time()
+    settle = math.round(ruler.position)
+
+    switch {
+    case gui_disabled:
+        // A sheet opened over it, a swipe on the way lands
+        land = swipe.gesture == .SWIPING || swipe.gesture == .COASTING || swipe.gesture == .CAUGHT
+        if !land do swipe^ = {}
+    case swipe.gesture == .COASTING && gfx.mouse_pressed():
+        // Caught on the ruler it stops there and can be swiped on, a press anywhere else settles it
+        if gui_background_pressed(rect) {
+            swipe^ = {
+                gesture = .CAUGHT,
+                press_x = mouse.x,
+                last_x  = mouse.x,
+            }
+        } else {
+            land = true
+        }
+    case swipe.gesture == .COASTING:
+        // Slowing down steadily to a stop on the note, from the finger's speed
+        swipe.coasted += dt
+        left := max(1 - swipe.coasted / swipe.coast, 0)
+        ruler.position = swipe.stop_at + (swipe.from - swipe.stop_at) * left * left
+        settle = math.round(ruler.position)
+        land = left == 0
+    case swipe.gesture == .NONE:
+        if gui_background_pressed(rect) {
+            swipe^ = {
+                gesture = .PRESSED,
+                press_x = mouse.x,
+                last_x  = mouse.x,
+            }
+        }
+    case gfx.mouse_down():
+        // Smoothed, a finger stops for a frame or two before it lets go
+        if dt > 0 do swipe.velocity += ((mouse.x - swipe.last_x) / dt - swipe.velocity) * 0.5
+        swipe.last_x = mouse.x
+        if swipe.gesture != .SWIPING && abs(mouse.x - swipe.press_x) > RULER_SWIPE_START {
+            // From here, the few points it took don't make the row jump
+            swipe.gesture = .SWIPING
+            swipe.press_x = mouse.x
+            swipe.grab = ruler.position
+        }
+        // The row under the finger, to the left brings in the notes on the right
+        if swipe.gesture == .SWIPING do ruler.position = swipe.grab + (swipe.press_x - mouse.x) / spacing
+        settle = math.round(ruler.position)
+    case swipe.gesture == .SWIPING:
+        // Let go, it coasts to where friction would stop it, rounded to a note on the way. Slowing down
+        // evenly from the finger's speed it takes twice as long as at that speed.
+        speed := clamp(-swipe.velocity / spacing, -RULER_COAST_MAX, RULER_COAST_MAX)
+        stop := ruler.position + speed / RULER_COAST_FRICTION
+        swipe.stop_at = clamp(math.round(stop), 0, highest)
+        if speed > 0 do swipe.stop_at = max(swipe.stop_at, math.ceil(ruler.position))
+        if speed < 0 do swipe.stop_at = min(swipe.stop_at, math.floor(ruler.position))
+        distance := swipe.stop_at - ruler.position
+        if abs(speed) < RULER_COAST_MIN || abs(distance) < 0.002 {
+            land = true
+        } else {
+            swipe.gesture = .COASTING
+            swipe.coast = 2 * distance / speed
+            swipe.coasted = 0
+            swipe.from = ruler.position
+        }
+    case swipe.gesture == .CAUGHT:
+        land = true
+    case:
+        tapped = true
+        swipe^ = {}
+    }
+
+    // Not past the ends
+    if ruler.position <= 0 || ruler.position >= highest {
+        ruler.position = clamp(ruler.position, 0, highest)
+        settle = math.round(ruler.position)
+        if swipe.gesture == .COASTING do land = true
+    }
+    return
+}
+
+ruler_layout :: proc(rect: gfx.Rect) -> RulerLayout {
+    scale := pixel_fonts.ruler_scale
+    layout := RulerLayout {
+        rect       = rect,
+        center     = {rect.x + rect.width / 2, rect.y + rect.height / 2},
+        spacing    = scale * RULER_SPACING,
+        center_gap = scale * RULER_CENTER_GAP,
+    }
+    room := rect.width / 2 - scale * RULER_EDGE - layout.center_gap
+    layout.per_side = clamp(int(room / layout.spacing), 1, RULER_MAX_PER_SIDE)
+    return layout
+}
+
+// The notes around position, and the next one out at each end while it slides in or out
+ruler_shown_notes :: proc(layout: RulerLayout, position: f32, count: int) -> (first, last: int) {
+    first = max(int(math.floor(position)) - layout.per_side - 1, 0)
+    last = min(int(math.ceil(position)) + layout.per_side + 1, count - 1)
+    return
+}
+
+// Across the middle of a note offset notes from the middle of the ruler, past the gap on either side
+ruler_note_x :: proc(layout: RulerLayout, offset: f32) -> f32 {
+    return layout.center.x + offset * layout.spacing + math.sign(offset) * layout.center_gap * min(abs(offset), 1)
+}
+
+// Notes slide in and out at the ends, fading. note_color is the target's.
+draw_ruler :: proc(layout: RulerLayout, notes: []core.Note, position: f32, note_color: gfx.Color) {
+    first, last := ruler_shown_notes(layout, position, len(notes))
+    for index in first ..= last {
+        offset := f32(index) - position
+        distance := abs(offset)
+
+        // Large in the middle and small a note away, in between it grows as it comes in and shrinks as it goes
+        large := 1 - math.smoothstep(f32(0), 1, distance)
+        // The octave fades in on the way to the middle, gone halfway so there's only ever one
+        octave := 1 - math.smoothstep(f32(0), 0.5, distance)
+        // Muted a note away, the ones at the ends fade out
+        color := fade_color(lerp_color(text_color_muted, note_color, large), clamp(f32(layout.per_side) + 1 - distance, 0, 1))
+
+        draw_ruler_note(notes[index], {ruler_note_x(layout, offset), layout.center.y}, large, octave, color)
+    }
+}
+
+// Tapping another note locks it, tapping the target toggles the lock. The target's touch area reaches over the
+// gaps either side of it up to its neighbours'.
+ruler_tap :: proc(layout: RulerLayout, notes: []core.Note, position: f32, target: int) -> (step: int, toggle_lock: bool) {
+    mouse := gfx.mouse_position()
+    rect := layout.rect
+    first, last := ruler_shown_notes(layout, position, len(notes))
+    for index in first ..= last {
+        offset := f32(index) - position
+        distance := abs(offset)
+        x := ruler_note_x(layout, offset)
+        if index == target && distance < 0.5 {
+            half := layout.spacing / 2 + layout.center_gap
+            toggle_lock = gfx.point_in_rect(mouse, {x - half, rect.y, 2 * half, rect.height})
+        } else if index != target && distance <= f32(layout.per_side) {
+            if gfx.point_in_rect(mouse, {x - layout.spacing / 2, rect.y, layout.spacing, rect.height}) do step = index - target
+        }
+    }
+    return
+}
+
+// The name centred on pos, the sharp and the octave to the right, octave is how much of it shows (in the
+// middle). large is how far it's grown from a neighbour to the target, in between it's drawn from the large
+// letters scaled down, settled at the fonts' own sizes, texel for pixel.
+draw_ruler_note :: proc(note: core.Note, pos: [2]f32, large, octave: f32, color: gfx.Color) {
+    name_font := lerp_font(pixel_fonts.neighbour, pixel_fonts.note, large)
+    sharp_font := lerp_font(pixel_fonts.neighbour_sharp, pixel_fonts.note_sharp, large)
     size := name_font.size
 
     name := fmt.ctprintf("%v", note.name)
     name_size := gfx.measure_text(name_font.font, name, size, 0)
+    octave_label := fmt.ctprintf("%v", note.octave)
 
-    // Centred on the letter, the sharp hangs off to the right so the letters are evenly spaced
-    top_left := snap_to_pixels(pos - name_size / 2)
+    // The sharp and the octave hang off to the right. Centred on the letter the note looks pushed right,
+    // centred with them the letter looks pushed left, they're small and thin and weigh less than their
+    // width. Halfway looks centred, once it's settled. A neighbour is centred on its letter so the letters
+    // are evenly spaced.
+    OPTICAL_WEIGHT :: 0.5
+    suffix := octave * measure_label(pixel_fonts.octave, octave_label).x
+    if note.is_accidental do suffix = max(suffix, gfx.measure_text(sharp_font.font, "♯", sharp_font.size, 0).x)
+    center := pos - {large * OPTICAL_WEIGHT * suffix / 2, 0}
+
+    top_left := snap_to_pixels(center - name_size / 2)
     gfx.draw_text(name_font.font, name, top_left, size, 0, color)
 
     right := top_left.x + name_size.x
@@ -445,10 +489,8 @@ draw_ruler_note :: proc(note: core.Note, pos: [2]f32, name_font, sharp_font: Pix
 
     if octave > 0 {
         font := pixel_fonts.octave
-        octave_color := color
-        octave_color.a = u8(f32(color.a) * octave)
         octave_pos := snap_to_pixels({right, top_left.y + name_size.y - 1.3 * font.size})
-        gfx.draw_text(font.font, fmt.ctprintf("%v", note.octave), octave_pos, font.size, 0, octave_color)
+        gfx.draw_text(font.font, octave_label, octave_pos, font.size, 0, fade_color(color, octave))
     }
 }
 
@@ -517,8 +559,7 @@ draw_cents_gauge :: proc(top: [2]f32, cents: f32, lit: bool, semitones: bool, co
         height: f32 = GAUGE_HEIGHT if long else GAUGE_TICK
         width: f32 = 2 if red else 1
         // Red while there's a pitch
-        tick_color := color if red && lit else text_color_muted
-        tick_color.a = u8(f32(tick_color.a) * fade)
+        tick_color := fade_color(color if red && lit else text_color_muted, fade)
         gfx.draw_rect({top.x + along * spacing - width / 2, top.y + (GAUGE_HEIGHT - height) / 2}, {width, height}, tick_color)
     }
 }

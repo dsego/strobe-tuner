@@ -739,7 +739,7 @@ draw_sheets :: proc(app: ^App, layout: Layout) {
         if changed {
             app.config_changed = true
             // Other notes on the ruler, it starts again on the target
-            ruler_initialized = false
+            note_ruler.initialized = false
         }
         grab_sheet(sheet, sheet_layout)
         if close || closes(sheet_layout, swiped) {
@@ -768,7 +768,7 @@ limit_frame_rate :: proc(app: ^App) {
         if band.snr_db > core.STROBE_FADE_SNR_DB[0] do signal = true
     }
     touched := gfx.mouse_down() || gfx.mouse_pressed() || gfx.mouse_wheel() != 0
-    sliding := ruler_swipe.gesture == .COASTING
+    sliding := note_ruler.swipe.gesture == .COASTING
     for sheet in ([]Sheet{app.settings_sheet, app.track_sheet, app.instrument_sheet}) {
         if sheet.slide != f32(int(sheet.open)) do sliding = true
     }
