@@ -23,7 +23,7 @@ import "../gfx"
 
 Layout :: struct {
     strobe:         gfx.Rect,
-    strobe_top:     f32, // top of the visible strobe, below the notch
+    strobe_view:    gfx.Rect, // the visible strobe below the notch, where the trace and the scope's views go
     strobe_scale:   f32, // size of the strobe tracks relative to the desktop
     ruler:          gfx.Rect,
     gauge:          [2]f32, // under the ruler's note, the middle of its top, see draw_cents_gauge
@@ -67,8 +67,8 @@ compute_layout :: proc(window: [2]f32, safe: gfx.Rect, offsets: bool) -> (layout
 
     // The strobe takes about half of the safe area, its background runs up behind the notch
     layout.strobe_scale = clamp(0.5 * safe.height / STROBE_HEIGHT, 1, 1.4)
-    layout.strobe_top = safe.y
     layout.strobe = {0, 0, window.x, safe.y + layout.strobe_scale * STROBE_HEIGHT}
+    layout.strobe_view = {0, safe.y, window.x, layout.strobe_scale * STROBE_HEIGHT}
     panel := layout.strobe.y + layout.strobe.height
 
     layout.stats = {left + 131, panel + 80}

@@ -349,8 +349,6 @@ draw_strobe_display :: proc(
         draw_track_labels(rect, bands, geometry, config)
     }
 
-    draw_strobe_shadow(self, rect)
-
     // The partial of each track, e.g. 1×, 2×: on the right, on the curve of a curved track a little in from
     // the edge or in the middle of a flat one, and on the top of a wheel's ring, where the ring runs level
     // and the labels of the rings stack in a column
@@ -412,8 +410,7 @@ SHADOW_OVERHANG :: 2
 // The inner shadow that sets the strobe into the window, over the trace and the scope's views too
 draw_strobe_shadow :: proc(self: ^StrobeDisplay, strobe: gfx.Rect) {
     shape := gfx.Rect{strobe.x, strobe.y - SHADOW_TOP, strobe.width, strobe.height + SHADOW_TOP + SHADOW_BOTTOM}
-    area := gfx.Rect{strobe.x, strobe.y, strobe.width, strobe.height + SHADOW_OVERHANG}
-    draw_inner_shadow(self, area, shape)
+    draw_inner_shadow(self, strobe, shape)
 }
 
 // Just the bottom edge of the shadow, ending at bottom, where something covers the strobe from below

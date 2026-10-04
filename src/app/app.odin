@@ -281,8 +281,8 @@ handle_keys :: proc(app: ^App) {
         retune(app)
     }
 
-    // Debug builds only, Cmd+Shift+, reloads the config file and Cmd+, opens it in TextEdit, which can't be
-    // started from the Mac App Store sandbox
+    // Debug builds only, Cmd+Shift+, reloads the config file and Cmd+, opens it in TextEdit. The store builds
+    // edit everything in the settings, and the shell that starts TextEdit wouldn't run in the sandbox anyway.
     command := gfx.key_down(.LEFT_SUPER) || gfx.key_down(.RIGHT_SUPER)
 
     if ODIN_DEBUG && command && gfx.key_pressed(.COMMA) {
@@ -325,6 +325,7 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     steady := &reading.steady
     reading.strobe_readout =
         ready && tuner.active && !reading.out_of_range && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS
+
     if reading.strobe_readout {
         cents := app.phase_comparator.bands[app.readout_track].err_cents
         steady.detected_freq = core.cents_to_freq(cents - steady.err_cents, steady.detected_freq)
@@ -335,23 +336,29 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     // out every detection unaveraged. The track the readout followed carries on as the note decays and the
     // readout gives way, the line as lit as its stripes and dark with them, not the noisy weak detections.
     if reading.strobe_readout do app.traced_track = app.readout_track
+
     light: f32 = 1
+
     if app.traced_track >= 0 {
         band := app.phase_comparator.bands[app.traced_track]
         fade := core.STROBE_FADE_SNR_DB
         light = math.smoothstep(fade[0], fade[1], band.snr_db)
         if light == 0 || !band.in_range do app.traced_track = -1
     }
+
     detected := tuner.active && !reading.out_of_range && !reading.pitch.is_weak_pitch
     far := detected && abs(steady.err_cents) > core.READOUT_RANGE_CENTS
     traced_cents := math.nan_f32()
+
     if app.traced_track >= 0 && !reading.out_of_range && !far {
         traced_cents = app.phase_comparator.bands[app.traced_track].err_cents
     } else if detected {
         traced_cents = core.tuner_cents(tuner, reading.pitch.detected_freq, reading.pitch.detected_note)
         light = 1
     }
+
     record_trace(&app.cents_trace, traced_cents, light, reading.pitch.fresh, gfx.frame_time())
+
     return
 }
 
@@ -360,6 +367,7 @@ feed_scope :: proc(app: ^App) {
     scope, config := &app.scope, app.config
 
     type := config.strobe_display_type
+
     if type != .SCOPE && type != .LAMP && !(type == .STROBE && config.strobe_source == .LAMP) {
         core.skip_scope(scope)
         // The lamp's tracks start over on a dark screen too, the phases they turned by are stale
@@ -371,9 +379,11 @@ feed_scope :: proc(app: ^App) {
     // the strobe stays, and every change starts with a dark screen
     strobe_hz := f64(app.phase_comparator.base_freq_hz)
     if scope.freq_hz != strobe_hz do core.set_scope_freq(scope, strobe_hz)
+
     // The lamp is the screen from above, it needs the sweep over time, and so do the tracks it turns
     sweep := config.scope_sweep if config.strobe_display_type == .SCOPE else .TIME
     if scope.sweep != sweep do core.set_scope_sweep(scope, sweep)
+
     scope.persistence_seconds = f64(config.scope_persistence_ms) / 1000
     scope.gain = config.scope_gain
     scope.noise_floor = app.pitch_detector.noise_floor.level
@@ -404,16 +414,19 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
             core.set_phase_comparator_speed(app.phase_comparator, speed)
         }
     }
+
     // Opens on the settings, not the display's options it was closed on
     if gui_settings_button(layout.settings) {
         app.settings_sheet.open = true
         app.display_options = false
     }
+
     if gui_instrument_button(layout.instrument, config) do app.instrument_sheet.open = true
 
     // The input level, the microphone icon marks it as the input. The level is the rounded track cut off flat
     // where it ends.
     draw_icon(ICON_MICROPHONE, layout.level_meter + {0, -6}, icon_color)
+
     meter := layout.level_meter + {20, 0}
     track := gfx.Rect{meter.x, meter.y, 60, 4}
     gfx.draw_rounded_rect(track, 2, pill_dark)
@@ -428,50 +441,51 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
 // flips its sweep.
 draw_strobe_area :: proc(app: ^App, layout: Layout) {
     config, display := app.config, &app.strobe_display
-    type := config.strobe_display_type
+    strobe, view := layout.strobe, layout.strobe_view
 
     // The selected track stands out as its sheet comes up
     display.selected_track = app.selected_track
     display.selection = app.track_sheet.slide
 
-    if type == .STROBE {
+    // The background behind the notch. The strobe's tracks reach up behind it too, the trace and the scope's
+    // views start under it.
+    gfx.draw_rect({strobe.x, strobe.y}, {strobe.width, view.y - strobe.y}, gfx.hex(strobe_bg_color))
+
+    switch config.strobe_display_type {
+    case .STROBE:
         // Turned by the lock-in or by the lamp's screen
         comparator := app.phase_comparator
         bands := comparator.bands[:]
         if config.strobe_source == .LAMP {
             bands = lamp_bands(display, &app.scope, bands, app.pitch_detector.snr_db)
         }
-        draw_strobe_display(display, layout.strobe, layout.strobe_scale, bands, comparator.mode, config)
+        draw_strobe_display(display, strobe, layout.strobe_scale, bands, comparator.mode, config)
 
         // Vernier mode shows the same pitch on every track, there's nothing to set on one
-        if config.strobe_mode == .HARMONIC && !input_missing(app) && gui_button(layout.strobe) {
-            track := strobe_track_at(config.strobe_shape, layout.strobe, layout.strobe_scale, len(app.phase_comparator.bands), gfx.mouse_position())
+        if config.strobe_mode == .HARMONIC && !input_missing(app) && gui_button(strobe) {
+            track := strobe_track_at(config.strobe_shape, strobe, layout.strobe_scale, len(bands), gfx.mouse_position())
             if track >= 0 {
                 app.selected_track = track
                 app.track_sheet.open = true
             }
         }
-    } else {
-        // The trace and the scope's views start under the readout, the background behind it
-        view := layout.strobe
-        view.y = layout.strobe_top
-        view.height -= layout.strobe_top
-        gfx.draw_rect({layout.strobe.x, layout.strobe.y}, {layout.strobe.width, layout.strobe_top}, gfx.hex(strobe_bg_color))
 
-        if type == .TRACE {
-            colors := strobe_colors(config)
-            seconds, range := config.trace_seconds, config.trace_range_cents
-            draw_cents_trace(&app.cents_trace, view, seconds, range, gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color))
-        } else {
-            draw_scope_display(display, &app.scope, view, config, app.pitch_detector.snr_db)
-            // Between the wave over time and the Lissajous figure
-            if type == .SCOPE && !input_missing(app) && gui_button(layout.strobe) {
-                config.scope_sweep = .XY if config.scope_sweep == .TIME else .TIME
-            }
+    case .TRACE:
+        colors := strobe_colors(config)
+        seconds, range := config.trace_seconds, config.trace_range_cents
+        draw_cents_trace(&app.cents_trace, view, seconds, range, gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color))
+
+    case .SCOPE, .LAMP:
+        draw_scope_display(display, &app.scope, view, config, app.pitch_detector.snr_db)
+
+        // Between the wave over time and the Lissajous figure
+        if config.strobe_display_type == .SCOPE && !input_missing(app) && gui_button(strobe) {
+            config.scope_sweep = .XY if config.scope_sweep == .TIME else .TIME
         }
-        // Over the whole strobe area like the strobe's, the readout's part included
-        draw_strobe_shadow(display, layout.strobe)
     }
+
+    // Over the whole strobe area, the part behind the notch included
+    draw_strobe_shadow(display, strobe)
 
     // A denied microphone only gives silence, an input that didn't open gives nothing. The strobe would just
     // stand still, say why instead.
@@ -481,6 +495,7 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     } else if audio.input_failed(app.audio_capture) {
         title, hint = "The input didn't open", "Tap to try again"
     }
+
     if title != nil {
         strobe := layout.strobe
         gfx.draw_rect({strobe.x, strobe.y}, {strobe.width, strobe.height}, gfx.hex(strobe_bg_color))
@@ -489,6 +504,7 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         hint_size := measure_label(pixel_fonts.label, hint)
         draw_label(pixel_fonts.title, title, center - {title_size.x / 2, title_size.y + 4}, text_color_white)
         draw_label(pixel_fonts.label, hint, center - {hint_size.x / 2, -4}, text_color_muted)
+
         if gui_button(strobe) {
             if audio.microphone_denied() do audio.allow_microphone()
             else do app.restart_audio = true
@@ -521,7 +537,8 @@ draw_tuning_arrows :: proc(app: ^App, layout: Layout, reading: Reading) {
     app.sharp_arrow = core.schmitt_trigger(app.sharp_arrow, cents, 8, 10)
 
     arrow := pixel_fonts.strobe_arrow
-    arrow_y := layout.strobe_top + 10
+    arrow_y := layout.strobe_view.y + 10
+
     if app.flat_arrow {
         gfx.draw_text(arrow.font, "▶", snap_to_pixels({layout.strobe.x + 10, arrow_y}), arrow.size, 0, accent_color)
     } else if app.sharp_arrow {
@@ -570,7 +587,9 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     // pins it at the end on that side.
     cents := reading.steady.err_cents
     lit := tuner.active && (reading.steady.measured || reading.out_of_range)
+
     if reading.out_of_range do cents = 1200 * core.tuner_out_of_range_side(tuner)
+
     // Further than the gauge reaches from any string, e.g. a guitar's low E on a ukulele, it says so instead
     // of the gauge stuck at its end, and which way
     if string_mode && lit && abs(cents) > 100 * GAUGE_SEMITONE_TICKS {
@@ -588,6 +607,7 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
         if gfx.key_pressed(.LEFT) do step = -1
         if gfx.key_pressed(.RIGHT) do step = 1
     }
+
     // A swipe locks the note in the middle as it goes, the one it started on right away, rather than the
     // target following the detected note under the finger
     if swiping do lock_toggled = !tuner.locked
