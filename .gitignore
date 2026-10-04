@@ -3,7 +3,7 @@
 *.wav
 *.o
 *.a
-app.bin.dSYM/*
+*.dSYM/
 *.zip
 *.so
 
