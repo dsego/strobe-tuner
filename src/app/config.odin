@@ -78,7 +78,7 @@ TRACE_RANGE_STEPS_CENTS :: [2]f32{25, 50}
 // Only what the musician picks. What's tuned in the code, e.g. the pitch detection's thresholds, are
 // constants: every field is saved, a saved value would keep an install from getting a better one.
 Config :: struct {
-    // Tuning, what the strobe is tuned to
+    // --- Tuning ---
 
     // The strobe's note at the start, the one it was on at the end
     target_freq_hz:               f32,
@@ -109,7 +109,7 @@ Config :: struct {
     note_offset_notes:            [PRESET_SLOTS][MAX_NOTE_OFFSETS]int,
     note_offset_cents:            [PRESET_SLOTS][MAX_NOTE_OFFSETS]f32,
 
-    // Strobe, the tracks and how they turn
+    // --- Strobe ---
 
     // A track per partial, or every track on the fundamental at more and more speed
     strobe_mode:                  core.StrobeMode,
@@ -126,7 +126,7 @@ Config :: struct {
     // How fast the strobe turns per cent of detuning, the FAST toggle steps through RESPONSE_SPEEDS
     strobe_speed:                 f32,
 
-    // Display, how the strobe and the screen around it look
+    // --- Display ---
 
     strobe_display_type:          StrobeDisplayType,
     strobe_shape:                 StrobeShape,
@@ -161,14 +161,14 @@ Config :: struct {
 
 // In the order of Config
 config_defaults :: Config {
-    // Tuning
+    // --- Tuning ---
     target_freq_hz               = 110.0,
     pitch_standard               = 440.0,
     instrument                   = .CHROMATIC,
     preset                       = -1,
     transpose                    = 0,
 
-    // Strobe
+    // --- Strobe ---
     strobe_mode                  = .HARMONIC,
     strobe_source                = .LOCK_IN,
     strobe_intervals             = INTERVAL_OPTIONS[0],
@@ -177,7 +177,7 @@ config_defaults :: Config {
     strobe_speeds                = {1, 1, 1, 1, 1},
     strobe_speed                 = 0.0125,
 
-    // Display
+    // --- Display ---
     strobe_display_type          = .STROBE,
     strobe_shape                 = .CURVED,
     strobe_colorway              = .VIBRANT_RED,

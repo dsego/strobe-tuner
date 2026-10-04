@@ -210,7 +210,7 @@ failed :: proc(result: AAudioResult) -> bool {
 }
 
 
-// The part of AAudio used here, from the NDK's aaudio/AAudio.h
+// --- AAudio, from the NDK's aaudio/AAudio.h ---
 
 AAudioStream :: struct {}
 AAudioStreamBuilder :: struct {}
