@@ -117,9 +117,20 @@ draw_cents_trace :: proc(self: ^Trace, rect: gfx.Rect, seconds, range_cents: f32
     glow := line_color
     glow.a = 16
 
-    // Placed by time, the newest reading is at the right edge now and scrolls left
     // The plot's scales, seconds and cents to points
     scale := [2]f32{plot.width / seconds, plot.height / 2 / range_cents}
+
+    gfx.begin_scissor(rect)
+    defer gfx.end_scissor()
+
+    draw_trace_line(self, plot, middle, scale, GLOW_RADIUS, glow)
+    draw_trace_line(self, plot, middle, scale, LINE_RADIUS, line_color)
+}
+
+// A curve through the readings, dimmed along the line as the readings' light, with a gap where the pitch
+// was lost
+draw_trace_line :: proc(self: ^Trace, plot: gfx.Rect, middle: f32, scale: [2]f32, radius: f32, color: gfx.Color) {
+    // Placed by time, the newest reading is at the right edge now and scrolls left
     point :: proc(sample: TraceSample, clock: f32, plot: gfx.Rect, middle: f32, scale: [2]f32) -> [2]f32 {
         x := plot.x + plot.width - (clock - sample.time) * scale.x
         limit := plot.height / 2
@@ -129,41 +140,28 @@ draw_cents_trace :: proc(self: ^Trace, rect: gfx.Rect, seconds, range_cents: f32
         return i >= 0 && i < self.count && !math.is_nan(trace_sample(self, i).cents)
     }
 
-    gfx.begin_scissor(rect)
-    defer gfx.end_scissor()
+    pen := Pen {
+        radius = radius,
+        color  = color,
+    }
+    alpha := f32(color.a)
 
-    for pass in 0 ..< 2 {
-        // Dimmed along the line as the readings' light
-        pass_color := glow if pass == 0 else line_color
-        pen := Pen {
-            radius = GLOW_RADIUS if pass == 0 else LINE_RADIUS,
-            color  = pass_color,
+    for i in 0 ..< self.count {
+        if !usable(self, i) do continue
+        p1 := point(trace_sample(self, i), self.clock, plot, middle, scale)
+        if !usable(self, i - 1) {
+            // the start of a run
+            pen.color.a = u8(alpha * trace_sample(self, i).light)
+            pen_start(&pen, p1)
         }
+        if !usable(self, i + 1) do continue
+        p2 := point(trace_sample(self, i + 1), self.clock, plot, middle, scale)
 
-        for i in 0 ..< self.count {
-            if !usable(self, i) do continue
-            p1 := point(trace_sample(self, i), self.clock, plot, middle, scale)
-            if !usable(self, i - 1) {
-                // the start of a run
-                pen.color.a = u8(f32(pass_color.a) * trace_sample(self, i).light)
-                pen_start(&pen, p1)
-            }
-            if !usable(self, i + 1) do continue
-            p2 := point(trace_sample(self, i + 1), self.clock, plot, middle, scale)
-
-            // A curve through the readings (Catmull-Rom), the neighbours on either side set its direction
-            p0 := point(trace_sample(self, i - 1), self.clock, plot, middle, scale) if usable(self, i - 1) else p1
-            p3 := point(trace_sample(self, i + 2), self.clock, plot, middle, scale) if usable(self, i + 2) else p2
-            light1, light2 := trace_sample(self, i).light, trace_sample(self, i + 1).light
-            for step in 1 ..= TRACE_CURVE_STEPS {
-                progress := f32(step) / TRACE_CURVE_STEPS
-                pen.color.a = u8(f32(pass_color.a) * math.lerp(light1, light2, progress))
-                bend := 2 * p0 - 5 * p1 + 4 * p2 - p3
-                twist := 3 * p1 - p0 - 3 * p2 + p3
-                on_curve := 0.5 * (2 * p1 + (p2 - p0) * progress + bend * progress * progress + twist * progress * progress * progress)
-                pen_line_to(&pen, on_curve)
-            }
-        }
+        // The neighbours on either side set the curve's direction
+        p0 := point(trace_sample(self, i - 1), self.clock, plot, middle, scale) if usable(self, i - 1) else p1
+        p3 := point(trace_sample(self, i + 2), self.clock, plot, middle, scale) if usable(self, i + 2) else p2
+        light1, light2 := trace_sample(self, i).light, trace_sample(self, i + 1).light
+        pen_curve_to(&pen, p0, p1, p2, p3, alpha * light1, alpha * light2)
     }
 }
 
@@ -196,4 +194,17 @@ pen_line_to :: proc(pen: ^Pen, to: [2]f32) {
     }
     pen.until_next -= length - travelled
     pen.position = to
+}
+
+// A curve from p1 to p2 (Catmull-Rom), p0 before it and p3 after it set its direction. The pen fades from
+// alpha1 to alpha2 along it.
+pen_curve_to :: proc(pen: ^Pen, p0, p1, p2, p3: [2]f32, alpha1, alpha2: f32) {
+    bend := 2 * p0 - 5 * p1 + 4 * p2 - p3
+    twist := 3 * p1 - p0 - 3 * p2 + p3
+    for step in 1 ..= TRACE_CURVE_STEPS {
+        progress := f32(step) / TRACE_CURVE_STEPS
+        pen.color.a = u8(math.lerp(alpha1, alpha2, progress))
+        on_curve := 0.5 * (2 * p1 + (p2 - p0) * progress + bend * progress * progress + twist * progress * progress * progress)
+        pen_line_to(pen, on_curve)
+    }
 }

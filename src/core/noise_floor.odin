@@ -26,12 +26,15 @@ NOISE_FLOOR_SNR_DB_THRESHOLD :: 10
 NOISE_FLOOR_TIME_S :: 0.5
 NOISE_FLOOR_RISE_DB_PER_S :: 1.0
 NOISE_FLOOR_WARMUP_S :: 1.0 // follows ungated at first, the level isn't known yet
+
 // The warmup waits out a clear pitch, a note ringing when the app starts isn't the background. One that
 // goes on this long is after all, e.g. hum. Most of a plucked string has died away by then.
 NOISE_FLOOR_WARMUP_MAX_TONAL_S :: 8.0
 // The floor is known once it learned this much of the background, a note starting in the first measurements
+
 // (the attack isn't a clear pitch yet) passes for the background otherwise
 NOISE_FLOOR_KNOWN_AFTER_S :: 0.25
+
 // Over a floor that isn't known yet, a note stands out clearly
 NOISE_FLOOR_UNKNOWN_SNR_DB :: 40.0
 MIN_NOISE_FLOOR :: 1e-6 // -120 dB, a level of digital silence doesn't pull it down to zero
