@@ -168,8 +168,9 @@ draw_trace_line :: proc(self: ^Trace, plot: gfx.Rect, middle: f32, scale: [2]f32
     }
 }
 
+// The round shape in one quad, a rounded rect as round draws its four corners
 draw_dot :: proc(center: [2]f32, radius: f32, color: gfx.Color) {
-    gfx.draw_rounded_rect({center.x - radius, center.y - radius, 2 * radius, 2 * radius}, radius, color)
+    gfx.draw_disc({center.x - radius, center.y - radius, 2 * radius, 2 * radius}, color)
 }
 
 // Draws a line as dots half a radius apart, the spacing carries over from one piece of the line to the next

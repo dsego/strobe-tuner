@@ -53,6 +53,7 @@ SCOPE_PERIODS :: 2 // reference periods across the screen
 SCOPE_FILL :: 0.9 // how much of the height a full scale sample takes
 SCOPE_CHUNK_SIZE :: 4096
 SCOPE_MAX_BEAM_DOTS :: 256 // between two samples
+SCOPE_MAX_FADE_GAIN :: 1e15 // divided back into the cells at this, far under an f32's range, see sweep_samples
 
 // The level follows the peaks at once and falls back this slowly, the wave is drawn against it
 SCOPE_LEVEL_RELEASE_SECONDS :: 1.0
@@ -104,8 +105,9 @@ Scope :: struct {
     sample_clock:        i64,
     step:                f64, // how far across the screen one sample moves, 0..1
 
-    // How long the beam stayed in each cell, row 0 on top
+    // How long the beam stayed in each cell, row 0 on top, scaled up by fade_gain, see sweep_samples
     screen:              []f32,
+    fade_gain:           f64,
     columns:             int,
     rows:                int,
     recent:              [3]f32, // the samples before the newest, the beam is drawn through them
@@ -135,6 +137,7 @@ init_scope :: proc(columns, rows: int) -> (self: Scope) {
     self.dwell = make([]f32, columns)
     self.chunk = make([]f32, SCOPE_CHUNK_SIZE)
     self.level = SCOPE_MIN_LEVEL
+    self.fade_gain = 1
 
     for &dft, index in self.noise_dfts {
         set_dft_freq(&dft, f32(2 * index + 1) / f32(columns), flat_window(columns))
@@ -165,6 +168,7 @@ set_scope_freq :: proc(self: ^Scope, freq_hz: f64) {
 
 clear_scope :: proc(self: ^Scope) {
     for &cell in self.screen do cell = 0
+    self.fade_gain = 1
 }
 
 // Starts with a dark screen, the old figure would linger under the new one
@@ -223,28 +227,32 @@ skip_scope :: proc(self: ^Scope) {
     self.skipping = true
 }
 
-// Draws the samples over what is on the screen, which fades by the persistence
+// Draws the samples over what is on the screen, which fades by the persistence. Instead of fading every cell
+// for every sample, the new light is scaled up as much as the old would have faded since: fade_gain grows
+// by 1 / decay a sample and the cells hold their light times it. The screen's readers take ratios of cells,
+// where it cancels out. Before it outgrows the cells it's divided back into them.
 sweep_samples :: proc(self: ^Scope, samples: []f32) {
     self.sample_clock += i64(len(samples))
     if self.step <= 0 || len(samples) == 0 do return
 
-    // Of one sample, the older samples of the same chunk have faded by it too
+    // Of one sample
     decay: f64 = 1
-    if self.persistence_seconds > 0 {
-        decay = math.exp(-1 / (self.persistence_seconds * SAMPLERATE))
-        fade := f32(math.pow(decay, f64(len(samples))))
-        for &cell in self.screen do cell *= fade
-    }
+    if self.persistence_seconds > 0 do decay = math.exp(-1 / (self.persistence_seconds * SAMPLERATE))
 
     release: f32 = 1 if self.gain == .HOLD else f32(math.exp(f64(-1 / (SCOPE_LEVEL_RELEASE_SECONDS * SAMPLERATE))))
     clock := self.sample_clock - i64(len(samples))
-    brightness := math.pow(decay, f64(len(samples) - 1))
     min_level := max(self.noise_floor * SCOPE_NOISE_HEADROOM, SCOPE_MIN_LEVEL)
 
     for sample, i in samples {
         self.level = max(abs(sample), self.level * release, min_level)
-        move_beam(self, f64(clock + i64(i)) * self.step, sample, brightness)
-        brightness /= decay
+        self.fade_gain /= decay
+        move_beam(self, f64(clock + i64(i)) * self.step, sample, self.fade_gain)
+    }
+
+    if self.fade_gain > SCOPE_MAX_FADE_GAIN {
+        scale := f32(1 / self.fade_gain)
+        for &cell in self.screen do cell *= scale
+        self.fade_gain = 1
     }
 }
 
