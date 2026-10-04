@@ -475,14 +475,19 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
 
     // The readout fits the rate while the stripes fully show, a fading note keeps the last of it, the dimming
     // stripes drift with the noise. Each measurement is weighted by its samples, a stalled frame counts for as
-    // long as it took. A single one has no slope yet, the rate is its advance.
+    // long as it took, and by the partial's power against its envelope. Where two components beat, the phase
+    // swings fast through the dips; weighted by power the rate settles on their mean pitch by energy instead
+    // of following the swings. Against the envelope, not the absolute power: a decaying note's newest
+    // moments are its weakest, and they still count as much. A single one has no slope yet, the rate is its
+    // advance.
     if had_phase && band.snr_db >= READOUT_MIN_SNR_DB {
         if band.rate_time_s == 0 do band.fit = {}
 
         band.rate_time_s += f32(self.available) / SAMPLERATE
 
         // The new measurement at time 0 and phase 0 only adds its weight
-        band.fit.weight += step
+        level := f64(band.amp / band.envelope) if band.envelope > 0 else 1
+        band.fit.weight += step * level * level
         slope, has_slope := fit_slope(band.fit)
         band.rate = slope if has_slope else phase_advance / step
     }
