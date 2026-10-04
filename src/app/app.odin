@@ -39,12 +39,31 @@ IDLE_FPS :: 30
 // Otherwise the display's rate up to ProMotion's, a faster monitor would only redraw the strobe more often
 MAX_FPS :: 120
 
+// The input and the pitch detection, tuned on test recordings with the sandbox tools, not in the settings,
+// see Config
+SAMPLERATE :: 48_000 // the input's, miniaudio converts the device's own
+PITCH_FFT_SIZE :: 8192 // the window is half of it, 4096 samples
+// Under a guitar's low E (82 Hz), it takes out DC and low frequency rumble. A lower note like a bass's E1
+// (41 Hz) loses its fundamental here, it's still found from its harmonics.
+HIGHPASS_CUTOFF_HZ :: 60
+// A strong pitch is this clear at least and this far over the noise floor, a weak one less clear than
+// PITCH_CLARITY_LOW. The noise floors don't learn the level over their threshold.
+PITCH_CLARITY_LOW :: 0.9
+PITCH_CLARITY_HIGH :: 0.98
+PITCH_MIN_SNR_DB :: 2
+NOISE_FLOOR_SNR_DB_THRESHOLD :: 10
+// How long a new note is detected in a row before the strobe switches to it, the last detection strong or
+// the run steady. At 0 a note under hum flickers.
+NOTE_SWITCH_S :: 0.05
+// Vernier mode, each track turns this much faster than the one under it
+VERNIER_SPEED_MULTIPLIER :: 2
+
 
 // What the main loop keeps from one frame to the next
 App :: struct {
     config:             ^Config,
     tuner:              core.Tuner,
-    pitch_detector:     core.PitchDetector, // follows the config, see apply_config
+    pitch_detector:     core.PitchDetector, // follows the pitch standard, see apply_config
     phase_comparator:   ^core.PhaseComparator,
     scope:              core.Scope, // of the scope and the lamp display types, and the tracks the lamp turns
     audio_capture:      ^audio.Capture,
@@ -70,6 +89,9 @@ App :: struct {
     unsaved:            bool, // the config changed since it was saved, see save_when_settled
     restart_audio:      bool, // opens the input again, after the background or an interruption
     quiet_time:         f32, // seconds with no signal and nobody touching anything, see IDLE_AFTER_S
+    // Add in the DFT bins 5 cents either side, a slightly detuned note keeps its level, see set_dft_freq.
+    // Debug builds toggle it with the X key to compare, it isn't saved.
+    phase_average:      bool,
 }
 
 // This frame's measurements, for the main screen
@@ -87,9 +109,10 @@ run_app :: proc(config: ^Config) {
         config        = config,
         readout_track = -1,
         traced_track  = -1,
+        phase_average = true,
     }
     tuner := &app.tuner
-    tuner^ = core.init_tuner(config.target_freq_hz, config.pitch_standard, config.note_switch_s, config.prevent_strobe_octave_jumps)
+    tuner^ = core.init_tuner(config.target_freq_hz, config.pitch_standard, NOTE_SWITCH_S, prevent_octave_jumps = true)
     configure_tuner(&app)
     // Saved for the next start
     defer config.target_freq_hz = tuner.target_note.frequency
@@ -103,22 +126,31 @@ run_app :: proc(config: ^Config) {
 
     app.phase_comparator = core.init_phase_comparator(
         config.target_freq_hz,
-        f32(config.samplerate),
+        SAMPLERATE,
         config.strobe_intervals[:],
         config.strobe_mode,
-        config.noise_floor_snr_db_threshold,
+        NOISE_FLOOR_SNR_DB_THRESHOLD,
     )
     defer core.destroy_phase_comparator(app.phase_comparator)
-    app.pitch_detector = pitch_detector_from_config(config)
+    app.pitch_detector = core.init_pitch_detector(
+        SAMPLERATE,
+        PITCH_FFT_SIZE,
+        PITCH_CLARITY_HIGH,
+        PITCH_CLARITY_LOW,
+        PITCH_MIN_SNR_DB,
+        NOISE_FLOOR_SNR_DB_THRESHOLD,
+        HIGHPASS_CUTOFF_HZ,
+    )
+    app.pitch_detector.pitch_standard = config.pitch_standard
     defer core.destroy_pitch_detector(&app.pitch_detector)
-    app.scope = core.init_scope(f64(config.samplerate), SCOPE_COLUMNS, SCOPE_ROWS)
+    app.scope = core.init_scope(SAMPLERATE, SCOPE_COLUMNS, SCOPE_ROWS)
     defer core.destroy_scope(&app.scope)
     app.strobe_display = init_strobe_display(strobe_colors(config), strobe_bg_color)
     defer destroy_strobe_display(&app.strobe_display)
     app.cents_trace = create_trace()
     defer destroy_trace(&app.cents_trace)
 
-    audio_capture, ok := audio.init(u32(config.samplerate))
+    audio_capture, ok := audio.init(SAMPLERATE)
     if !ok do return
     defer audio.destroy(audio_capture)
     app.audio_capture = audio_capture
@@ -200,30 +232,14 @@ retune :: proc(app: ^App) {
         core.tuner_target_freq(&app.tuner),
         config.pitch_standard,
         config.strobe_speed,
-        config.speed_multiplier,
+        VERNIER_SPEED_MULTIPLIER,
         config.strobe_mode,
     )
-}
-
-pitch_detector_from_config :: proc(config: ^Config) -> (detector: core.PitchDetector) {
-    detector = core.init_pitch_detector(
-        config.samplerate,
-        config.pitch_detect_fft_size,
-        config.pitch_detection_clarity_high,
-        config.pitch_detection_clarity_low,
-        config.pitch_detection_min_snr_db,
-        config.noise_floor_snr_db_threshold,
-        config.highpass_cutoff_hz,
-    )
-    detector.pitch_standard = config.pitch_standard
-    return
 }
 
 // The tuner's settings from the config, all but the pitch standard, see apply_config
 configure_tuner :: proc(app: ^App) {
     tuner, config := &app.tuner, app.config
-    tuner.confirm_s = config.note_switch_s
-    tuner.prevent_octave_jumps = config.prevent_strobe_octave_jumps
     tuner.octave_track = config.strobe_mode == .HARMONIC
     tuner.offsets_cents = active_note_offsets(config)
     core.set_tuner_strings(tuner, tuning_strings(config))
@@ -231,23 +247,10 @@ configure_tuner :: proc(app: ^App) {
 
 // The pitch detection, the tuner and the strobe brought up to the config
 apply_config :: proc(app: ^App) {
-    config, detector := app.config, &app.pitch_detector
-
-    // A new FFT size needs new buffers. The device is closed while they're swapped, it waits for the audio
-    // thread to finish with the old ones, and it's opened again later in the frame.
-    if config.pitch_detect_fft_size != detector.nsdf.fft_size {
-        audio.close_device(app.audio_capture)
-        core.destroy_pitch_detector(detector)
-        detector^ = pitch_detector_from_config(config)
-        app.restart_audio = true
-    }
-    detector.clarity_high = config.pitch_detection_clarity_high
-    detector.clarity_low = config.pitch_detection_clarity_low
-    detector.min_snr_db = config.pitch_detection_min_snr_db
-    detector.noise_floor.snr_threshold_db = config.noise_floor_snr_db_threshold
+    config := app.config
 
     // Same notes, retuned to the pitch standard
-    detector.pitch_standard = config.pitch_standard
+    app.pitch_detector.pitch_standard = config.pitch_standard
     core.set_tuner_pitch_standard(&app.tuner, config.pitch_standard)
     configure_tuner(app)
 
@@ -282,7 +285,7 @@ handle_keys :: proc(app: ^App) {
         reset_config(config)
         app.config_changed = true
     }
-    if gfx.key_pressed(.X) do config.use_phase_average = !config.use_phase_average
+    if ODIN_DEBUG && gfx.key_pressed(.X) do app.phase_average = !app.phase_average
     if gfx.key_pressed(.G) do config.strobe_glow = !config.strobe_glow
     if gfx.key_pressed(.TAB) {
         config.strobe_display_type = StrobeDisplayType((int(config.strobe_display_type) + 1) % len(StrobeDisplayType))
@@ -318,7 +321,7 @@ handle_keys :: proc(app: ^App) {
 measure :: proc(app: ^App) -> (reading: Reading) {
     tuner := &app.tuner
     reading.pitch = core.run_pitch_detection(&app.pitch_detector, tuner.pitch)
-    core.run_phase_detection(app.phase_comparator, app.config.use_phase_average, reading.pitch.is_tonal)
+    core.run_phase_detection(app.phase_comparator, app.phase_average, reading.pitch.is_tonal)
 
     // The track the readout follows. The strobe keeps the note lit while it shows it.
     ready: bool

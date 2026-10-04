@@ -162,7 +162,7 @@ gui_settings :: proc(
     }
 
     {
-        // Everything back to the defaults like the R key, including what's only in the config file
+        // Everything back to the defaults like the R key
         rect := settings_row(sheet_layout, row, "Reset to defaults", 0)
         row += 1
         if gui_small_button(rect.x, rect, "RESET") {
@@ -203,6 +203,8 @@ gui_settings :: proc(
             }
             harmonic := config.strobe_mode == .HARMONIC
             gui_settings_segmented(sheet_layout, &row, "Partials", {"Off", "1×", "Hz", "Note"}, &config.partial_labels, enabled = harmonic)
+            // How far off each track's partial is, next to the track
+            gui_settings_segmented(sheet_layout, &row, "Cents", {"Off", "On"}, &config.show_band_cents)
         case .SCOPE:
             // Tapping the scope flips it too
             gui_settings_segmented(sheet_layout, &row, "Sweep", {"Time", "X-Y"}, &config.scope_sweep)

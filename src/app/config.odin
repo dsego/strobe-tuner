@@ -75,6 +75,8 @@ TRACE_RANGE_STEPS_CENTS :: [2]f32{25, 50}
 
 
 // Grouped by topic. The order is free, every field is its own key in the ini, see load_config.
+// Only what the musician picks. What's tuned in the code, e.g. the pitch detection's thresholds, are
+// constants: every field is saved, a saved value would keep an install from getting a better one.
 Config :: struct {
     // Tuning, what the strobe is tuned to
 
@@ -124,23 +126,12 @@ Config :: struct {
     // How fast the strobe turns per cent of detuning, the FAST toggle steps through RESPONSE_SPEEDS
     strobe_speed:                 f32,
 
-    // Vernier mode, each track turns this much faster than the one under it
-    speed_multiplier:             f32,
-
-    prevent_strobe_octave_jumps:  bool,
-
-    // Add in the DFT bins 5 cents either side, a slightly detuned note keeps its level, see set_dft_freq
-    use_phase_average:            bool,
-
     // Display, how the strobe and the screen around it look
 
     strobe_display_type:          StrobeDisplayType,
     strobe_shape:                 StrobeShape,
 
     strobe_colorway:              StrobeColorway,
-    strobe_blur:                  bool,
-    // average the strobe pattern over its movement since the previous frame, reduces shimmer when it spins fast
-    motion_blur:                  bool,
     // lamp-lit look of the old mechanical strobe tuners in the colorway's hue, see glow_params
     strobe_glow:                  bool,
 
@@ -166,27 +157,6 @@ Config :: struct {
     // Trace display: how many seconds it shows, and how many cents from the middle to its edges
     trace_seconds:                f32,
     trace_range_cents:            f32,
-
-    // Input and pitch detection
-
-    // The input's sample rate, e.g. 48000 Hz
-    samplerate:                   int,
-
-    // The high-pass before the pitch detection, it takes out DC and low frequency rumble, 0 for none
-    highpass_cutoff_hz:           f32,
-
-    // FFT length for the pitch detection, the window is half of it, e.g. 8192 for 4096 samples
-    pitch_detect_fft_size:        int,
-
-    // The pitch detection: a strong pitch is this clear at least and this far over the noise floor, a weak one
-    // less clear than clarity_low. The noise floors don't learn the level over their threshold.
-    pitch_detection_clarity_low:  f32,
-    pitch_detection_clarity_high: f32,
-    noise_floor_snr_db_threshold: f32,
-    pitch_detection_min_snr_db:   f32,
-
-    // How long a new note is detected in a row before the strobe switches to it
-    note_switch_s:                f32,
 }
 
 // In the order of Config
@@ -206,16 +176,11 @@ config_defaults :: Config {
     strobe_offsets_cents         = {0, 0, 0, 0, 0},
     strobe_speeds                = {1, 1, 1, 1, 1},
     strobe_speed                 = 0.0125,
-    speed_multiplier             = 2.0,
-    prevent_strobe_octave_jumps  = true,
-    use_phase_average            = true,
 
     // Display
     strobe_display_type          = .STROBE,
     strobe_shape                 = .CURVED,
     strobe_colorway              = .VIBRANT_RED,
-    strobe_blur                  = true,
-    motion_blur                  = true,
     strobe_glow                  = true,
     partial_labels               = .MULTIPLES,
     show_band_cents              = false,
@@ -226,18 +191,6 @@ config_defaults :: Config {
     scope_gain                   = .AUTO,
     trace_seconds                = 2,
     trace_range_cents            = 25,
-
-    // Input and pitch detection
-    samplerate                   = 48_000,
-    // Under a guitar's low E (82 Hz). A lower note like a bass's E1 (41 Hz) loses its fundamental here,
-    // it's still found from its harmonics.
-    highpass_cutoff_hz           = 60,
-    pitch_detect_fft_size        = 8192,
-    pitch_detection_clarity_low  = 0.9,
-    pitch_detection_clarity_high = 0.98,
-    noise_floor_snr_db_threshold = 10,
-    pitch_detection_min_snr_db   = 2,
-    note_switch_s                = 0.05, // the last detection strong or the run steady, at 0 a note under hum flickers
 }
 
 

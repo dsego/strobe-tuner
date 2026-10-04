@@ -76,7 +76,7 @@ What falls short is around it, in this order:
 2. Done, the pitch detection hears up to 5 kHz, a low-pass on its own samples. With white hiss
    40 dB down the Strat's A2 reads strong 14 times instead of 2, the acoustic's at 35 dB down
    stays lit to 12 s instead of 2.8 s, the clean recordings don't change.
-3. Done, 60 detections a second and the tuner confirms by time, `note_switch_s` instead of a
+3. Done, 60 detections a second and the tuner confirms by time, `NOTE_SWITCH_S` instead of a
    count, the readout smoothing a time constant, a steady run held to its first detection
    instead of each previous one. At the old 0.1 s a note shows about 70 ms sooner, 0.20 s
    instead of 0.27 s, at 0.05 s from 0.12 to 0.15 s, the same notes right everywhere. At 0 the

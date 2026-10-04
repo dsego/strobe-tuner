@@ -29,6 +29,11 @@ BLOOM_TAP_SPACING :: 1.5 // blur taps spaced apart for a wider glow at the same 
 BLOOM_ITERATIONS :: 2
 BLOOM_STRENGTH :: 0.2
 
+// The stripes shaped from the sine, off a hard square wave. Motion blur averages the pattern over its
+// movement since the previous frame, it reduces shimmer when it spins fast.
+STROBE_BLUR :: true
+MOTION_BLUR :: true
+
 StrobeDisplay :: struct {
     strobe_shader:   gfx.Shader,
     bloom_shader:    gfx.Shader,
@@ -289,8 +294,8 @@ draw_strobe_display :: proc(
     // Shared by all bands, draw_strobe_bands fills in the rest
     uniforms := gfx.StrobeUniforms {
         band_height     = band_height,
-        strobe_blur     = i32(config.strobe_blur),
-        motion_blur     = i32(config.motion_blur),
+        strobe_blur     = i32(STROBE_BLUR),
+        motion_blur     = i32(MOTION_BLUR),
         glow            = i32(glow_enabled),
         flat_track      = i32(shape == .FLAT),
         // The wheel is lit evenly all around, the tracks only show the top of the disc
