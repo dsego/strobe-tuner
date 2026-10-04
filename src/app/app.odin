@@ -236,7 +236,7 @@ retune :: proc(app: ^App) {
         app.phase_comparator,
         core.tuner_target_freq(&app.tuner),
         config.pitch_standard,
-        config.strobe_speed,
+        strobe_speed(config),
         VERNIER_SPEED_MULTIPLIER,
         config.strobe_mode,
     )
@@ -440,9 +440,9 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
 
     // The trace and the scope's views don't spin
     if config.strobe_display_type == .STROBE {
-        if speed, speed_changed := gui_response_toggle(layout.response, config.strobe_speed); speed_changed {
-            config.strobe_speed = speed
-            core.set_phase_comparator_speed(app.phase_comparator, speed)
+        if gui_led_toggle(layout.response, "FAST", config.strobe_fast, pill_mint) {
+            config.strobe_fast = !config.strobe_fast
+            core.set_phase_comparator_speed(app.phase_comparator, strobe_speed(config))
         }
     }
 

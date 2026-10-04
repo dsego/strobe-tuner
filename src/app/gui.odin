@@ -533,23 +533,6 @@ draw_cents_gauge :: proc(top: [2]f32, cents: f32, lit: bool, semitones: bool, co
     }
 }
 
-// Slow unless the LED is lit
-gui_response_toggle :: proc(pos: [2]f32, speed: f32) -> (f32, bool) {
-    speeds := RESPONSE_SPEEDS
-
-    // The config can hold any speed, show the closest step
-    step := 0
-    for option, i in speeds {
-        if abs(math.log2(option / speed)) < abs(math.log2(speeds[step] / speed)) do step = i
-    }
-
-    if gui_led_toggle(pos, "FAST", step == 1, pill_mint) {
-        return speeds[(step + 1) % len(speeds)], true
-    }
-
-    return speed, false
-}
-
 gui_button :: proc(bounds: gfx.Rect) -> bool {
     if !gui_background_pressed(bounds) do return false
 

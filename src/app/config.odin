@@ -60,7 +60,12 @@ TRACK_OFFSET_MAX_CENTS :: 50
 TRACK_OFFSET_STEP_CENTS :: 0.5
 
 // Strobe speeds per cent of detuning, fast spins 4× faster for the final adjustment
-RESPONSE_SPEEDS :: [2]f32{0.0125, 0.05}
+STROBE_SPEED :: 0.025
+STROBE_SPEED_FAST :: 0.1
+
+strobe_speed :: proc(config: ^Config) -> f32 {
+    return STROBE_SPEED_FAST if config.strobe_fast else STROBE_SPEED
+}
 
 PITCH_STANDARD_MIN :: 400
 PITCH_STANDARD_MAX :: 480
@@ -124,8 +129,8 @@ Config :: struct {
     // per track, harmonic mode: on top of strobe_speed, 1 leaves it as is
     strobe_speeds:                [core.MAX_BANDS]f32,
 
-    // How fast the strobe turns per cent of detuning, the FAST toggle steps through RESPONSE_SPEEDS
-    strobe_speed:                 f32,
+    // The FAST toggle, the strobe turns at STROBE_SPEED_FAST per cent of detuning instead of STROBE_SPEED
+    strobe_fast:                  bool,
 
     // --- Display ---
 
@@ -173,7 +178,7 @@ config_defaults :: Config {
     strobe_intervals_index       = 0,
     strobe_offsets_cents         = {0, 0, 0, 0, 0},
     strobe_speeds                = {1, 1, 1, 1, 1},
-    strobe_speed                 = 0.0125,
+    strobe_fast                  = false,
 
     // --- Display ---
     strobe_display_type          = .STROBE,
