@@ -25,7 +25,8 @@ STROBE_SPEED :: 0.0125
 
 // The app draws at 60 fps and the pitch detection runs on every frame's new samples
 FRAME_SAMPLES :: SAMPLERATE / 60
-PRINT_EVERY_S :: 0.25
+// e.g. -define:PRINT_EVERY_MS=20 to follow an attack frame by frame
+PRINT_EVERY_MS :: #config(PRINT_EVERY_MS, 250)
 
 LEAD_IN_S :: 2
 
@@ -83,7 +84,7 @@ main :: proc() {
         // Every so often, and whenever the tuner lets go of the note or picks it up
         t := f32(start + FRAME_SAMPLES) / SAMPLERATE
         if t < next_print && tuner.active == was_active do continue
-        next_print = t + PRINT_EVERY_S
+        next_print = t + PRINT_EVERY_MS / 1000.0
         was_active = tuner.active
 
         kind := "strong" if pitch.is_strong_pitch else "weak" if pitch.is_weak_pitch else "-"
@@ -108,7 +109,7 @@ main :: proc() {
         )
         steady := core.tuner_readout(&tuner)
         readout := fmt.tprintf("%+.1f¢", steady.err_cents)
-        if readout_ready && tuner.active && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS {
+        if readout_ready && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS {
             band := strobe.bands[readout_track]
             readout = fmt.tprintf("%+.1f¢ %v×", band.err_cents, band.interval)
         }

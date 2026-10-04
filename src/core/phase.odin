@@ -54,11 +54,10 @@ STROBE_REFERENCE_HZ :: 656.5
 // twice that on average, steady but a turned peg shows that much later than on the stripes.
 READOUT_FIT_S :: 0.15
 
-// The pitch of a plucked string glides down from sharp during the attack. The readout's average starts
-// over once the attack has passed through the analysis window.
+// The readout's average starts over on each pluck, the previous note's rate doesn't carry over. It follows
+// the attack like the stripes do, a plucked string glides down from sharp.
 ONSET_RATIO :: 1.5 // amp jump over the slow envelope that counts as a new pluck (~3.5 dB)
 ONSET_ENVELOPE_TIME_S :: 0.3
-ONSET_HOLD_S :: 0.1 // extra time after the attack reaches the window centre
 
 
 StrobeMode :: enum {
@@ -76,7 +75,6 @@ PhaseBand :: struct {
     note:         Note,
     norm_freq:    f32,
     dft:          SingleFreqDFT,
-    window_delay: int, // samples, how far back the DFTs measure, see gamma_comb_delay
     time_stretch: f32, // samples in a period of the base note, the strobe shader's time scale
     phase:        f32, // measured lock-in phase, relative to the reference oscillator
     amp:          f32,
@@ -98,7 +96,7 @@ PhaseBand :: struct {
 
     // Onset detection
     envelope:     f32,
-    onset_hold:   int, // samples left during which the attack is distrusted
+    onset:        bool, // a new pluck in this frame
 }
 
 // The weighted sums of the least squares line through the phase since the last pluck. The newest
@@ -268,7 +266,6 @@ set_phase_comparator_freq :: proc(
             // window would be shorter, its band wider in Hz for a weaker partial, and it shimmers.
             gamma_size := dft_window_size(base_freq_hz, SAMPLERATE, DFT_RESOLUTION_CENTS)
             set_dft_freq(&band.dft, band.norm_freq, gamma_comb_window(gamma_size, comb_samples))
-            band.window_delay = gamma_comb_delay(gamma_size, comb_samples)
         }
     }
 
@@ -298,7 +295,7 @@ restart_band :: proc(band: ^PhaseBand) {
     band.rate_time_s = 0
     band.fit = {}
     band.envelope = 0
-    band.onset_hold = 0
+    band.onset = false
 }
 
 // Another input's signal is unrelated to the previous one's, everything starts over like at launch: the
@@ -476,10 +473,10 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
         shift_fit(&band.fit, step, phase_advance, decay)
     }
 
-    // The readout fits the rate once the attack has passed, and while the stripes show, a fading note
-    // keeps the last of it. Each measurement is weighted by its samples, a stalled frame counts for as long
-    // as it took. A single one has no slope yet, the rate is its advance.
-    if had_phase && band.onset_hold == 0 && band.snr_db >= STROBE_FADE_SNR_DB[0] {
+    // The readout fits the rate while the stripes fully show, a fading note keeps the last of it, the dimming
+    // stripes drift with the noise. Each measurement is weighted by its samples, a stalled frame counts for as
+    // long as it took. A single one has no slope yet, the rate is its advance.
+    if had_phase && band.snr_db >= READOUT_MIN_SNR_DB {
         if band.rate_time_s == 0 do band.fit = {}
 
         band.rate_time_s += f32(self.available) / SAMPLERATE
@@ -520,17 +517,15 @@ strobe_rescale :: proc(freq_hz: f32) -> f64 {
 }
 
 
-// Detect a new pluck (sudden amplitude jump) and distrust the phase until the attack has passed
+// Detect a new pluck (sudden amplitude jump), the readout's average starts over. The envelope jumps along,
+// while the attack rises through the window each jump starts it over again.
 update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
-    band.onset_hold = max(band.onset_hold - self.available, 0)
-
     is_loud := band.snr_db > NOISE_FLOOR_SNR_DB_THRESHOLD
-    if is_loud && band.amp > ONSET_RATIO * band.envelope {
-        // The attack affects the phase until it has passed the window's delay
-        band.onset_hold = band.window_delay + int(ONSET_HOLD_S * SAMPLERATE)
-
-        // The readout's average starts over on each pluck
+    band.onset = is_loud && band.amp > ONSET_RATIO * band.envelope
+    if band.onset {
         band.rate_time_s = 0
+        band.envelope = band.amp
+        return
     }
 
     alpha := 1.0 - math.exp(-f32(self.available) / (ONSET_ENVELOPE_TIME_S * SAMPLERATE))
@@ -545,45 +540,43 @@ STROBE_FADE_SNR_DB :: [2]f32{8, 16}
 // The readout follows a track this loud, where its stripes are fully there
 READOUT_MIN_SNR_DB :: STROBE_FADE_SNR_DB[1]
 READOUT_WEAK_FUNDAMENTAL_DB :: 20 // this far under the loudest partial the fundamental gives way to it
-READOUT_SWITCH_DB :: 6 // another partial takes over once it's this much louder, the fundamental this much nearer
 READOUT_RANGE_CENTS :: 30 // the pitch detection's distance from the note, further out the tracks can't follow
+READOUT_SETTLE_S :: 0.05 // the track's fit since the pluck before the readout follows it
 
 // The track the readout follows, the fundamental. A weak or missing fundamental gives way to the loudest
-// partial, a weak one wanders with the loud partials around it. The partials read a few cents apart, the
-// current one stays until another is clearly louder, and the fundamental takes over again once it's
-// clearly back. -1 for none.
+// partial. The partials read a few cents apart, so once its track is ready the readout stays on it for the
+// rest of the note and keeps its last reading as it fades, until a pluck or another note starts the
+// tracks over. -1 for none.
 //
-// ready once its averaged rate has settled after the attack, until then the readout is the pitch detection's. Not another
-// track's that settles sooner, the fundamental's window is the longest and the readout would hop from
-// one to the other after every pluck.
+// ready once its track has fitted a little since the pluck, until then the readout is the pitch detection's.
 strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: int, ready: bool) {
-    loud :: proc(band: PhaseBand) -> bool {
-        return band.in_range && band.snr_db >= READOUT_MIN_SNR_DB
+    settled :: proc(band: PhaseBand) -> bool {
+        return band.rate_time_s >= READOUT_SETTLE_S
     }
 
     // Vernier mode measures the first track, the others show it at other speeds
     count := 1 if self.mode == .VERNIER else len(self.bands)
+
+    plucked := false
     loudest, fundamental := -1, -1
     for band, index in self.bands[:count] {
-        if !loud(band) do continue
+        if band.onset do plucked = true
+        if !band.in_range || band.snr_db < READOUT_MIN_SNR_DB do continue
         if loudest < 0 || band.snr_db > self.bands[loudest].snr_db do loudest = index
         if band.interval == 1 do fundamental = index
     }
+
+    // Held, unless a pluck brings another track to pick
+    held := current >= 0 && current < count && settled(self.bands[current])
+    if held && (!plucked || loudest < 0) do return current, true
+
     if loudest < 0 do return -1, false
 
     track = loudest
-    weak_db: f32 = READOUT_WEAK_FUNDAMENTAL_DB
-    if current != fundamental do weak_db -= READOUT_SWITCH_DB
-
-    if fundamental >= 0 && self.bands[loudest].snr_db - self.bands[fundamental].snr_db < weak_db {
+    if fundamental >= 0 && self.bands[loudest].snr_db - self.bands[fundamental].snr_db < READOUT_WEAK_FUNDAMENTAL_DB {
         track = fundamental
-    } else if current >= 0 && current < count && current != loudest && current != fundamental && loud(self.bands[current]) {
-        if self.bands[loudest].snr_db - self.bands[current].snr_db < READOUT_SWITCH_DB do track = current
     }
-
-    band := self.bands[track]
-    ready = band.onset_hold == 0 && band.rate_time_s >= 2 * READOUT_FIT_S
-    return
+    return track, settled(self.bands[track])
 }
 
 // Whether any track's stripes are at least half faded in, the note is still ringing. The background noise
@@ -628,7 +621,8 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
                 clock += 1
             }
             audio_capture_write(pc, chunk[:])
-            run_phase_detection(pc)
+            // A clear pitch like the pitch detection's, the noise floors don't learn the tone
+            run_phase_detection(pc, is_tonal = true)
         }
         return {pc.bands[0].err_cents, pc.bands[1].err_cents}, pc.bands[0].phase_diff
     }

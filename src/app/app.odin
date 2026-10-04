@@ -347,10 +347,10 @@ measure :: proc(app: ^App) -> (reading: Reading) {
 
     // Close to the note the readout is the strobe's, 0 where the fundamental's track stands still. The pitch
     // detection reads the whole wave, a real string's partials are a little sharp and pull it a few cents off
-    // the track you see. The Hz move along with the cents.
+    // the track you see. The Hz move along with the cents. A fading note keeps its track's last reading, also
+    // once the tuner lets go of it.
     steady := &reading.steady
-    reading.strobe_readout =
-        ready && tuner.active && !reading.out_of_range && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS
+    reading.strobe_readout = ready && !reading.out_of_range && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS
 
     if reading.strobe_readout {
         cents := app.phase_comparator.bands[app.readout_track].err_cents

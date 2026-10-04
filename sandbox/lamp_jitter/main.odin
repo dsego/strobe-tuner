@@ -129,7 +129,7 @@ main :: proc() {
         // The tracks, as strobe_tracks turns them, in fundamental stripes: a track's phase moves its
         // stripes by the phase over its partial
         for &band, index in strobe.bands {
-            shown := tuner.active && band.onset_hold == 0 && band.snr_db >= fully_lit
+            shown := tuner.active && band.snr_db >= fully_lit
             if shown do add_movement(&tracks[index], f64(band.phase_diff * band.speed) * TRACKS_PERIODS / f64(band.interval) / math.TAU)
             else do skip_movement(&tracks[index])
         }
@@ -174,7 +174,7 @@ main :: proc() {
                     )
                 }
 
-                shown := tuner.active && band.onset_hold == 0 && band.snr_db >= fully_lit && snr_db >= f64(fully_lit)
+                shown := tuner.active && band.snr_db >= fully_lit && snr_db >= f64(fully_lit)
                 shown &&= lamp.settle <= 0
                 if !shown {
                     skip_movement(&lamp.movements[index])
