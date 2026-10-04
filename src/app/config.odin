@@ -59,9 +59,9 @@ TRACK_PARTIALS :: [?]f32{1, 1.5, 2, 3, 4, 5, 6, 7, 8}
 TRACK_OFFSET_MAX_CENTS :: 50
 TRACK_OFFSET_STEP_CENTS :: 0.5
 
-// Strobe speeds per cent of detuning, fast spins 4× faster for the final adjustment
+// Strobe speeds per cent of detuning, fast spins 2× faster for the final adjustment
 STROBE_SPEED :: 0.025
-STROBE_SPEED_FAST :: 0.1
+STROBE_SPEED_FAST :: 0.05
 
 strobe_speed :: proc(config: ^Config) -> f32 {
     return STROBE_SPEED_FAST if config.strobe_fast else STROBE_SPEED
