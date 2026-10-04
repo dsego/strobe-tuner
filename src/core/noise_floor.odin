@@ -30,8 +30,8 @@ NOISE_FLOOR_WARMUP_S :: 1.0 // follows ungated at first, the level isn't known y
 // The warmup waits out a clear pitch, a note ringing when the app starts isn't the background. One that
 // goes on this long is after all, e.g. hum. Most of a plucked string has died away by then.
 NOISE_FLOOR_WARMUP_MAX_TONAL_S :: 8.0
-// The floor is known once it learned this much of the background, a note starting in the first measurements
 
+// The floor is known once it learned this much of the background, a note starting in the first measurements
 // (the attack isn't a clear pitch yet) passes for the background otherwise
 NOISE_FLOOR_KNOWN_AFTER_S :: 0.25
 
@@ -78,6 +78,7 @@ update_noise_floor :: proc(
         self.tonal_time += dt
         known := self.level != 0 && NOISE_FLOOR_WARMUP_S - self.warmup >= NOISE_FLOOR_KNOWN_AFTER_S
         if !known do return NOISE_FLOOR_UNKNOWN_SNR_DB
+
         return 20 * math.log10(level / self.level)
     }
 
@@ -110,17 +111,20 @@ test_noise_floor :: proc(t: ^testing.T) {
 
     // Learns the background
     for _ in 0 ..< 100 do update_noise_floor(&floor, 0.001, DT)
+
     testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "background, got %v", floor.level)
 
     // A loud note stands out and barely moves it, only the slow creep
     snr: f32
     for _ in 0 ..< 20 do snr = update_noise_floor(&floor, 0.1, DT)
+
     testing.expectf(t, snr > 35, "note SNR, got %v dB", snr)
     rise_db := 20 * math.log10(floor.level / 0.001)
     testing.expectf(t, abs(rise_db - NOISE_FLOOR_RISE_DB_PER_S * 20 * DT) < 0.01, "rise, got %v dB", rise_db)
 
     // Back down after the note
     for _ in 0 ..< 200 do update_noise_floor(&floor, 0.001, DT)
+
     testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "after the note, got %v", floor.level)
 }
 
@@ -134,13 +138,16 @@ test_noise_floor_warmup_on_a_note :: proc(t: ^testing.T) {
     snr: f32
     update_noise_floor(&floor, 0.2, DT)
     for _ in 0 ..< 40 do snr = update_noise_floor(&floor, 0.1, DT, is_tonal = true)
+
     testing.expectf(t, snr >= NOISE_FLOOR_UNKNOWN_SNR_DB, "note SNR, got %v dB", snr)
     for _ in 0 ..< 100 do update_noise_floor(&floor, 0.001, DT)
+
     testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "background, got %v", floor.level)
 
     // A tone that never stops is the background after all
     floor = init_noise_floor()
     for _ in 0 ..< 300 do snr = update_noise_floor(&floor, 0.01, DT, is_tonal = true)
+
     testing.expectf(t, abs(floor.level - 0.01) < 1e-4, "hum, got %v", floor.level)
     testing.expectf(t, abs(snr) < 1, "hum SNR, got %v dB", snr)
 }

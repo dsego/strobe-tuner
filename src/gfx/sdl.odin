@@ -275,6 +275,7 @@ shutdown :: proc() {
         }
     }
     for shader in gpu.fragment_shaders do sdl.ReleaseGPUShader(gpu.device, shader)
+
     sdl.ReleaseGPUShader(gpu.device, gpu.vertex_shader)
     if gpu.vertex_buffer != nil {
         sdl.ReleaseGPUBuffer(gpu.device, gpu.vertex_buffer)
@@ -304,13 +305,16 @@ should_close :: proc() -> bool {
             gpu.quit = true
         case .KEY_DOWN:
             if event.key.repeat do break
+
             for scancode, key in scancodes {
                 if scancode == event.key.scancode do gpu.keys_pressed += {key}
             }
+
             // Android's back button, see system_back
             if event.key.scancode == .AC_BACK do gpu.keys_pressed += {.ESCAPE}
         case .MOUSE_BUTTON_DOWN:
             if event.button.button == sdl.BUTTON_LEFT do gpu.mouse_clicked = true
+
             gpu.touch = event.button.which == sdl.TOUCH_MOUSEID
         case .MOUSE_WHEEL:
             // Undo natural scrolling, scrolling up always means up
@@ -335,6 +339,7 @@ wait_for_foreground :: proc() {
     for gpu.background && !gpu.quit {
         if sdl.WaitEvent(&event) && event.type == .QUIT do gpu.quit = true
     }
+
     // Not a frame that took as long as the app was away
     gpu.last_counter = sdl.GetPerformanceCounter()
 }
@@ -379,6 +384,7 @@ end_frame :: proc() {
     pass_commands :: proc(pass_index: int) -> []DrawCommand {
         last_command := len(gpu.commands)
         if pass_index + 1 < len(gpu.passes) do last_command = gpu.passes[pass_index + 1].first_command
+
         return gpu.commands[gpu.passes[pass_index].first_command:last_command]
     }
 
@@ -391,6 +397,7 @@ end_frame :: proc() {
         sdl.SetGPUViewport(render_pass, {0, 0, target_size.x, target_size.y, 0, 1})
         binding := sdl.GPUBufferBinding{gpu.vertex_buffer, 0}
         if gpu.vertex_buffer != nil do sdl.BindGPUVertexBuffers(render_pass, 0, &binding, 1)
+
         return render_pass
     }
 
@@ -413,6 +420,7 @@ end_frame :: proc() {
         uniforms: UniformRange
         for command in commands {
             if command.vertex_count == 0 do continue
+
             // A texture that failed to load
             if command.program != .STROBE && command.texture == nil do continue
 
@@ -487,6 +495,7 @@ end_frame :: proc() {
     // never sampled, and each target is finished before the window draws it, the order stays right.
     for pass, pass_index in gpu.passes {
         if pass.target == nil do continue
+
         commands := pass_commands(pass_index)
         if len(commands) == 0 && pass.clear == nil do continue
 
@@ -528,6 +537,7 @@ end_frame :: proc() {
     render_pass := begin_render_pass(command_buffer, &color_target, window_size)
     for pass, pass_index in gpu.passes {
         if pass.target != nil do continue
+
         draw_commands(
             command_buffer,
             render_pass,
@@ -695,6 +705,7 @@ load_font :: proc(ttf: []u8, size: i32, codepoints: string) -> (font: Font) {
     alpha := make([]u8, atlas_width * atlas_height, context.temp_allocator)
     for box in boxes {
         if box.width <= 0 || box.height <= 0 do continue
+
         stbtt.MakeCodepointBitmap(
             &info,
             &alpha[box.atlas.y * atlas_width + box.atlas.x],
@@ -718,6 +729,7 @@ load_font :: proc(ttf: []u8, size: i32, codepoints: string) -> (font: Font) {
     font.texture = create_texture(atlas_width, atlas_height, pixels)
     font.base_size = f32(size)
     if len(boxes) > 0 do font.fallback = font.glyphs[boxes[0].codepoint]
+
     return
 }
 
@@ -759,6 +771,7 @@ draw_line :: proc(start, end: [2]f32, thickness: f32, color: Color) {
     delta := end - start
     length := math.sqrt(delta.x * delta.x + delta.y * delta.y)
     if length == 0 do return
+
     normal := [2]f32{-delta.y, delta.x} * (0.5 * thickness / length)
 
     push_vertices(
@@ -824,6 +837,7 @@ measure_text :: proc(font: Font, text: cstring, size: f32, spacing: f32) -> [2]f
     for codepoint in string(text) {
         glyph, ok := font.glyphs[codepoint]
         if !ok do glyph = font.fallback
+
         width += glyph.advance * scale
         count += 1
     }
@@ -986,11 +1000,13 @@ push_vertices :: proc(texture: ^sdl.GPUTexture, vertices: []Vertex) {
 // False when the buffers couldn't be made, nothing can be drawn then
 upload_vertices :: proc(command_buffer: ^sdl.GPUCommandBuffer) -> bool {
     if len(gpu.vertices) == 0 do return true
+
     size := len(gpu.vertices) * size_of(Vertex)
 
     if size > gpu.vertex_capacity {
         if gpu.vertex_buffer != nil do sdl.ReleaseGPUBuffer(gpu.device, gpu.vertex_buffer)
         if gpu.transfer_buffer != nil do sdl.ReleaseGPUTransferBuffer(gpu.device, gpu.transfer_buffer)
+
         gpu.vertex_capacity = max(size, 2 * gpu.vertex_capacity, 64 * 1024)
         gpu.vertex_buffer = sdl.CreateGPUBuffer(
             gpu.device,
@@ -1051,6 +1067,7 @@ create_texture :: proc(width, height: i32, pixels: []u8) -> Texture {
     if mapped == nil {
         fmt.eprintln("Could not upload the texture:", sdl.GetError())
         if transfer != nil do sdl.ReleaseGPUTransferBuffer(gpu.device, transfer)
+
         sdl.ReleaseGPUTexture(gpu.device, handle)
         return {}
     }

@@ -67,6 +67,7 @@ PITCH_STANDARD_MAX :: 480
 
 // The scope's and the lamp's persistence, short, medium and long
 SCOPE_PERSISTENCE_STEPS_MS :: [3]f32{15, 40, 150}
+
 // The trace's span, short, medium and long, and its range from the middle to the edge, narrow and wide.
 // Narrow for an instrument's pluck settling, wide for a voice's vibrato, half a semitone is as far as a
 // note can be off before it's the next one.

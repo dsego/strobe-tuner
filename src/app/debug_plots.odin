@@ -134,6 +134,7 @@ draw_freq_plot :: proc(rect: gfx.Rect,nsdf: ^core.NSDF, font: gfx.Font) {
     candidate_count := 0
     for bin in 1 ..< BINS - 1 {
         if magnitudes[bin] <= magnitudes[bin - 1] || magnitudes[bin] <= magnitudes[bin + 1] do continue
+
         offset, magnitude := core.parabolic(magnitudes[bin - 1], magnitudes[bin], magnitudes[bin + 1])
         frequency := (f32(bin) + offset) * core.SAMPLERATE / f32(nsdf.fft_size)
         candidates[candidate_count] = {points[bin], magnitude, frequency}

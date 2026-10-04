@@ -47,6 +47,7 @@ ICON_MICROPHONE: cstring : "\ue326"
 ICON_CARET_DOWN: cstring : "\ue136"
 ICON_MINUS: cstring : "\ue32a"
 ICON_PLUS: cstring : "\ue3d4"
+
 // Bold only, see ICON_SHEET_CODEPOINTS
 ICON_CARET_LEFT: cstring : "\ue138"
 ICON_CARET_RIGHT: cstring : "\ue13a"
@@ -70,10 +71,12 @@ TITLE_SIZE :: 18
 ICON_SIZE :: 16
 ICON_SHEET_SIZE :: 20 // bold, the sheet's ✕, ‹ and ›
 ICON_LARGE_SIZE :: 24
+
 // The ruler, scaled by the layout
 RULER_NOTE_SIZE :: 88 // the target note
 RULER_NEIGHBOUR_SIZE :: 52
 RULER_OCTAVE_SIZE :: 26
+
 // The sharps 3/8 of their letter
 RULER_NOTE_SHARP_SIZE :: 33
 RULER_NEIGHBOUR_SHARP_SIZE :: 20
@@ -92,6 +95,7 @@ PixelFont :: struct {
 lerp_font :: proc(small, large: PixelFont, amount: f32) -> PixelFont {
     if amount <= 0 do return small
     if amount >= 1 do return large
+
     return {large.font, math.lerp(small.size, large.size, amount)}
 }
 
@@ -124,6 +128,7 @@ pixel_fonts: PixelFonts
 update_pixel_fonts :: proc() {
     scale := gfx.dpi_scale()
     if scale == pixel_fonts.scale do return
+
     unload_pixel_fonts()
 
     inter_medium := #load("../../assets/fonts/inter/Inter-Medium.ttf")
@@ -163,6 +168,7 @@ update_pixel_fonts :: proc() {
 
 unload_pixel_fonts :: proc() {
     if pixel_fonts.scale == 0 do return
+
     gfx.unload_font(pixel_fonts.label.font)
     gfx.unload_font(pixel_fonts.label_large.font)
     gfx.unload_font(pixel_fonts.label_small.font)

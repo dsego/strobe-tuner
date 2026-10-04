@@ -40,6 +40,7 @@ import "core:testing"
 MIN_STROBE_FREQ_HZ :: 16.0
 MAX_BANDS :: 5 // the strobe's tracks, the config holds as many
 MAX_WINDOW_SIZE :: 262_144 // the sample buffer, the window for the lowest note fits in it
+
 // A band goes up to 90% of Nyquist (21.6 kHz at 48 kHz), above it the audio can't hold the frequency and
 // the input filters roll off before that anyway
 MAX_BAND_NORM_FREQ :: 0.45
@@ -146,6 +147,7 @@ destroy_phase_comparator :: proc(self: ^PhaseComparator) {
     destroy_audio_capture_node(self)
     delete(self.sample_buffer)
     for &band in self.bands do destroy_phase_band(&band)
+
     delete(self.bands)
     free(self)
 }
@@ -192,9 +194,11 @@ set_phase_comparator_tracks :: proc(
     band_index := 0
     for interval, slot in strobe_intervals {
         if interval < 1.0 do continue
+
         band := &self.bands[band_index]
         band.interval = interval
         band.offset_cents = offsets_cents[slot]
+
         // a missing speed would freeze the track
         band.speed_scale = speeds[slot] if speeds[slot] > 0 else 1
         band_index += 1
@@ -275,6 +279,7 @@ set_phase_comparator_freq :: proc(
 // two for a fifth (3/2): with a chord the root's partials and the fifth's are all multiples of half the root
 comb_periods :: proc(bands: []PhaseBand, mode: StrobeMode) -> f32 {
     if mode != .HARMONIC do return 1
+
     search: for periods: f32 = 1; periods < 4; periods += 1 {
         for band in bands {
             multiple := band.interval * periods
@@ -329,6 +334,7 @@ run_phase_detection :: proc(self: ^PhaseComparator, is_tonal := false) {
         // noise floors don't learn the silence while the window fills again.
         self.sample_clock = 0
         for &band in self.bands do restart_band(&band)
+
         return
     }
     if read == 0 do return
@@ -425,6 +431,7 @@ resize_sample_buffer :: proc(self: ^PhaseComparator, size: int) {
         copy(self.sample_buffer[:size], self.sample_buffer[self.buffer_len - size:self.buffer_len])
     } else {
         copy(self.sample_buffer[size - self.buffer_len:size], self.sample_buffer[:self.buffer_len])
+
         // Older audio is unknown, fill with silence
         slice.zero(self.sample_buffer[:size - self.buffer_len])
     }
@@ -474,6 +481,7 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
     // as it took. A single one has no slope yet, the rate is its advance.
     if had_phase && band.onset_hold == 0 && band.snr_db >= STROBE_FADE_SNR_DB[0] {
         if band.rate_time_s == 0 do band.fit = {}
+
         band.rate_time_s += f32(self.available) / SAMPLERATE
 
         // The new measurement at time 0 and phase 0 only adds its weight
@@ -501,6 +509,7 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
     fit_slope :: proc(fit: RateFit) -> (slope: f64, ok: bool) {
         time_variance := fit.weight * fit.time_sq - fit.time * fit.time
         if time_variance <= 0 do return 0, false
+
         return (fit.weight * fit.time_phase - fit.time * fit.phase) / time_variance, true
     }
 }
@@ -519,6 +528,7 @@ update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
     if is_loud && band.amp > ONSET_RATIO * band.envelope {
         // The attack affects the phase until it has passed the window's delay
         band.onset_hold = band.window_delay + int(ONSET_HOLD_S * SAMPLERATE)
+
         // The readout's average starts over on each pluck
         band.rate_time_s = 0
     }
@@ -564,6 +574,7 @@ strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: in
     track = loudest
     weak_db: f32 = READOUT_WEAK_FUNDAMENTAL_DB
     if current != fundamental do weak_db -= READOUT_SWITCH_DB
+
     if fundamental >= 0 && self.bands[loudest].snr_db - self.bands[fundamental].snr_db < weak_db {
         track = fundamental
     } else if current >= 0 && current < count && current != loudest && current != fundamental && loud(self.bands[current]) {
@@ -589,6 +600,7 @@ strobe_shows_note :: proc(self: ^PhaseComparator, fundamental_only := false) -> 
 // Keep an up-to-date estimate of background noise (i.e. when no note is playing)
 update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, is_tonal: bool) {
     dt := f32(self.available) / SAMPLERATE
+
     // The window starts out on the silence the sample buffer is filled with
     window_full := self.sample_clock >= i64(band.dft.window_size)
     band.snr_db = update_noise_floor(&band.noise_floor, band.amp, dt, window_full, is_tonal)
@@ -660,6 +672,7 @@ test_strobe_turn_rate :: proc(t: ^testing.T) {
         start: f32
         for frame in 0 ..< 3 * frames_per_s {
             if frame == 2 * frames_per_s do start = pc.bands[0].scaled_phase
+
             for &sample in chunk {
                 sample = f32(0.1 * math.sin(math.TAU * freq * f64(clock) / SAMPLERATE))
                 clock += 1

@@ -150,6 +150,7 @@ destroy_scope :: proc(self: ^Scope) {
     delete(self.chunk)
 
     for &dft in self.partial_dfts do destroy_dft(&dft)
+
     delete(self.partial_dfts)
     for &dft in self.noise_dfts do destroy_dft(&dft)
 }
@@ -218,6 +219,7 @@ skip_scope :: proc(self: ^Scope) {
     skip_ringbuffer(&self.ringbuffer, available)
     self.sample_clock += i64(available)
     if !self.skipping do clear_scope(self)
+
     self.skipping = true
 }
 
@@ -263,8 +265,10 @@ move_beam :: proc(self: ^Scope, position: f64, sample: f32, brightness: f64) {
     self.recent = {from, to, after}
 
     columns := self.step * f64(self.columns)
+
     // The cosine moves the beam fastest through the middle
     if self.sweep == .XY do columns = math.TAU * SCOPE_PERIODS * self.step * 0.5 * SCOPE_FILL * f64(scope_width(self))
+
     rows := f64(abs(to - from) / self.level) * 0.5 * SCOPE_FILL * f64(self.rows)
     dots := clamp(int(math.ceil(max(columns, rows))), 1, SCOPE_MAX_BEAM_DOTS)
 
@@ -282,12 +286,15 @@ beam_dot :: proc(self: ^Scope, position: f64, value: f32, brightness: f64) {
     // The columns wrap around, the sweep starts over on the left. There's nothing above and below the screen.
     light_cell :: proc(self: ^Scope, column, row: int, brightness: f64) {
         if row < 0 || row >= self.rows do return
+
         self.screen[row * self.columns + column %% self.columns] += f32(brightness)
     }
 
     across := position - math.floor(position)
+
     // The reference at the sample, a cosine with the same reach as the wave
     if self.sweep == .XY do across = 0.5 + 0.5 * SCOPE_FILL * math.cos(math.TAU * SCOPE_PERIODS * position)
+
     height := f64(clamp(value / self.level, -1, 1))
 
     // In cells, from the middle of the first column and of the top row
@@ -319,6 +326,7 @@ scope_from_above :: proc(self: ^Scope, shape: ScopeShape) -> (heights: []f32, dw
 
     for cell, i in self.screen {
         if cell == 0 do continue
+
         value := row_value(self, i / self.columns)
         if shape == .HALF_RECTIFIED do value = half_rectify(value)
         else do value = raw_waveform(value)
@@ -349,6 +357,7 @@ scope_partials :: proc(self: ^Scope, periods: []int, partials: []ScopePartial) -
     // Retuned when the periods asked for change
     if len(self.partial_dfts) != len(periods) {
         for &dft in self.partial_dfts do destroy_dft(&dft)
+
         delete(self.partial_dfts)
         self.partial_dfts = make([]SingleFreqDFT, len(periods))
     }
@@ -389,6 +398,7 @@ scope_test_fundamental :: proc(heights: []f32) -> (phase: f64, amp: f64) {
     set_dft_freq(&dft, SCOPE_PERIODS / f32(len(heights)), flat_window(len(heights)))
 
     bin := scope_bin(&dft, heights)
+
     // a sine at phase 0 comes out at -90°
     return wrap_phase(math.atan2(imag(bin), real(bin)) + math.PI / 2), abs(bin)
 }
@@ -495,6 +505,7 @@ test_scope_beam_is_continuous :: proc(t: ^testing.T) {
         for row in 0 ..< scope.rows {
             if scope.screen[row * scope.columns + column] == 0 do continue
             if top < 0 do top = row
+
             bottom = row
         }
         return
@@ -544,6 +555,7 @@ test_scope_noise_stays_low :: proc(t: ^testing.T) {
     for _ in 0 ..< 120 {
         scope_test_sine(samples[:], FREQ, scope.sample_clock)
         for &sample in samples do sample *= NOISE
+
         clear_scope(&scope)
         sweep_samples(&scope, samples[:])
     }
@@ -573,6 +585,7 @@ test_scope_persistence :: proc(t: ^testing.T) {
 
     for &sample in samples do sample = 0
     for _ in 0 ..< 3 do sweep_samples(&scope, samples[:])
+
     heights, _ = scope_from_above(&scope, .HALF_RECTIFIED)
     _, faded := scope_test_fundamental(heights)
     expected := 0.5 * math.exp(f64(-0.05 / 0.05))
@@ -592,6 +605,7 @@ test_scope_xy_in_tune_stands_still :: proc(t: ^testing.T) {
         total, dwell: f64
         for cell, i in scope.screen {
             if cell == 0 do continue
+
             x := f64(i % scope.columns) + 0.5 - 0.5 * f64(width)
             y := f64(i / scope.columns) + 0.5 - 0.5 * f64(scope.rows)
             total += f64(cell) * abs(math.sqrt(x * x + y * y) - radius)
@@ -638,6 +652,7 @@ test_scope_gain :: proc(t: ^testing.T) {
         for frame in 0 ..< 180 {
             scope_test_sine(samples[:], FREQ, scope.sample_clock)
             if frame >= 60 do for &sample in samples do sample *= 0.1
+
             sweep_samples(&scope, samples[:])
         }
         return scope.level

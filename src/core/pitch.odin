@@ -187,6 +187,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
 calculate_rms :: proc(samples: []f32) -> f32 {
     square_sum: f32 = 0
     for sample in samples do square_sum += sample * sample
+
     return math.sqrt(square_sum / f32(len(samples)))
 }
 
@@ -202,6 +203,7 @@ test_mains_hum :: proc(t: ^testing.T) {
     detect :: proc(fundamental: f32) -> PitchInfo {
         detector := init_pitch_detector()
         defer destroy_pitch_detector(&detector)
+
         // Half a second a display frame at a time like the app, the high-pass settles from its start
         FRAME :: SAMPLERATE / DETECTIONS_PER_SECOND
         info: PitchInfo

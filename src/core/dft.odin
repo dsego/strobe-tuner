@@ -40,6 +40,7 @@ gamma_comb_window :: proc(gamma_size: int, comb_samples: f32 = 0, allocator := c
     weights := make([]f64, gamma_size + taps - 1, allocator)
     for &weight, index in weights[:gamma_size] do weight = f64(gamma_window(f32(index), f32(gamma_size)))
     if comb_samples > 0 do comb_box(weights, gamma_size, comb_samples)
+
     return weights
 }
 
@@ -75,6 +76,7 @@ gamma_comb_delay :: proc(gamma_size: int, comb_samples: f32 = 0) -> int {
 flat_window :: proc(size: int, allocator := context.temp_allocator) -> []f64 {
     weights := make([]f64, size, allocator)
     for &weight in weights do weight = 1
+
     return weights
 }
 
@@ -140,6 +142,7 @@ test_comb_rejects_partials :: proc(t: ^testing.T) {
     amp :: proc(dft: ^SingleFreqDFT, freq: f32) -> f32 {
         samples := make([]f32, dft.window_size, context.temp_allocator)
         for &sample, index in samples do sample = math.sin(math.TAU * freq * f32(index) / SAMPLERATE)
+
         return abs(run_single_dft(dft, samples))
     }
 

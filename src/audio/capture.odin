@@ -79,6 +79,7 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
     when !IOS do config.capture.pDeviceID = &self.capture_infos[self.active_device].id
 
     if failed(ma.device_init(&self.ctx, &config, &self.device)) do return false
+
     self.device_open = true
 
     fmt.println("Opened input stream")
@@ -149,6 +150,7 @@ input_failed :: proc(self: ^Capture) -> bool {
 
 close_device :: proc(self: ^Capture) {
     if !self.device_open do return
+
     // Stops the device and waits for any in-flight callback to finish
     ma.device_uninit(&self.device)
     self.device_open = false
@@ -223,6 +225,7 @@ when IOS {
 // Prints what went wrong
 failed :: proc(result: ma.result) -> bool {
     if result == .SUCCESS do return false
+
     fmt.println("miniaudio error:", ma.result_description(result))
     return true
 }

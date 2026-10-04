@@ -96,6 +96,7 @@ draw_cents_trace :: proc(self: ^Trace, rect: gfx.Rect, seconds, range_cents: f32
     // The in tune band and a line through the middle of it
     band := band_color
     band.a = 110
+
     // ±TRACE_BAND of the ±range_cents the plot covers
     band_height := TRACE_BAND / range_cents * plot.height
     gfx.draw_rect({plot.x, middle - band_height / 2}, {plot.width, band_height}, band)
@@ -148,6 +149,7 @@ draw_trace_line :: proc(self: ^Trace, plot: gfx.Rect, middle: f32, scale: [2]f32
 
     for i in 0 ..< self.count {
         if !usable(self, i) do continue
+
         p1 := point(trace_sample(self, i), self.clock, plot, middle, scale)
         if !usable(self, i - 1) {
             // the start of a run
@@ -155,6 +157,7 @@ draw_trace_line :: proc(self: ^Trace, plot: gfx.Rect, middle: f32, scale: [2]f32
             pen_start(&pen, p1)
         }
         if !usable(self, i + 1) do continue
+
         p2 := point(trace_sample(self, i + 1), self.clock, plot, middle, scale)
 
         // The neighbours on either side set the curve's direction

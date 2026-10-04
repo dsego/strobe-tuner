@@ -36,6 +36,7 @@ VERSION :: #config(VERSION, "dev")
 // With nothing to show the screen updates less often, it saves the battery of a tuner left open, see App.quiet_time
 IDLE_AFTER_S :: 2
 IDLE_FPS :: 30
+
 // Otherwise the display's rate up to ProMotion's, a faster monitor would only redraw the strobe more often
 MAX_FPS :: 120
 
@@ -93,10 +94,12 @@ run_app :: proc(config: ^Config) {
     tuner := &app.tuner
     tuner^ = core.init_tuner(config.target_freq_hz, config.pitch_standard, prevent_octave_jumps = true)
     configure_tuner(&app)
+
     // Saved for the next start
     defer config.target_freq_hz = tuner.target_note.frequency
 
     if !gfx.init(1200 when DEBUG_STATS else STROBE_WIDTH, DESKTOP_HEIGHT, APP_NAME) do return
+
     defer gfx.shutdown()
 
     // Loaded each frame for the screen's scale, see update_pixel_fonts
@@ -126,6 +129,7 @@ run_app :: proc(config: ^Config) {
 
     audio_capture, ok := audio.init()
     if !ok do return
+
     defer audio.destroy(audio_capture)
     app.audio_capture = audio_capture
 
@@ -150,12 +154,14 @@ run_app :: proc(config: ^Config) {
             wait_in_background(&app)
             continue
         }
+
         if audio.interruption_ended(audio_capture) do app.restart_audio = true
 
         config_before := config^
         handle_keys(&app)
 
         if app.config_changed do apply_config(&app)
+
         reading := measure(&app)
 
         feed_scope(&app)
@@ -191,6 +197,7 @@ run_app :: proc(config: ^Config) {
         draw_sheets(&app, layout)
 
         if config^ != config_before do app.unsaved = true
+
         save_when_settled(&app)
         limit_frame_rate(&app)
     }
@@ -370,6 +377,7 @@ feed_scope :: proc(app: ^App) {
 
     if type != .SCOPE && type != .LAMP && !(type == .STROBE && config.strobe_source == .LAMP) {
         core.skip_scope(scope)
+
         // The lamp's tracks start over on a dark screen too, the phases they turned by are stale
         app.strobe_display.lamp_freq_hz = 0
         return
@@ -380,9 +388,11 @@ feed_scope :: proc(app: ^App) {
     strobe_hz := f64(app.phase_comparator.base_freq_hz)
     if scope.freq_hz != strobe_hz do core.set_scope_freq(scope, strobe_hz)
 
+
     // The lamp is the screen from above, it needs the sweep over time, and so do the tracks it turns
     sweep := config.scope_sweep if config.strobe_display_type == .SCOPE else .TIME
     if scope.sweep != sweep do core.set_scope_sweep(scope, sweep)
+
 
     scope.persistence_seconds = f64(config.scope_persistence_ms) / 1000
     scope.gain = config.scope_gain
@@ -527,6 +537,7 @@ draw_tuning_arrows :: proc(app: ^App, layout: Layout, reading: Reading) {
     cents := core.tuner_cents_off(tuner, tuner.last_good_pitch.detected_freq)
     if reading.strobe_readout do cents = reading.steady.err_cents
     if reading.out_of_range do cents = f32(tuner.detected_note.cents - tuner.target_note.cents)
+
     distance := abs(cents)
     measures_target := core.measures_target(tuner)
 
@@ -560,6 +571,7 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     setup := current_setup(config)
     transpose := -capo_fret(setup) if string_mode else transpose_key(setup)
     shown_note := core.cents_to_note(f32(tuner.target_note.cents + 100 * transpose), tuner.target_note.pitch_standard)
+
     // No pitch yet, nothing to show
     if tuner.target_note.frequency == 0 do shown_note.frequency = 0
 
@@ -623,6 +635,7 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     if offset := core.note_offset_cents(tuner, tuner.target_note); offset != 0 && shown_note.frequency != 0 {
         text := fmt.ctprintf("%+.1f¢", offset)
         width := measure_label(pixel_fonts.label, text, 1).x
+
         // Like the note, white while there's a pitch
         color := text_color_white if tuner.active else text_color_muted
         draw_label(pixel_fonts.label, text, layout.note_offset - {width / 2, LABEL_SIZE / 2}, color, 1)
@@ -650,6 +663,7 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo, meter
     stat(fmt.ctprintf("Clarity %.3f", pitch.clarity), {500, 10}, large = true)
     if pitch.is_strong_pitch do stat("strong", {600, 10}, gfx.ORANGE, large = true)
     if pitch.is_weak_pitch do stat("weak", {600, 10}, gfx.PURPLE, large = true)
+
 
     font := pixel_fonts.label_small.font
     draw_nsdf(gfx.Rect{520, 40, 660, 200}, &app.pitch_detector.nsdf, font)
@@ -683,6 +697,7 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
         &app.display_options,
     )
     if changed do app.config_changed = true
+
     grab_sheet(sheet, sheet_layout)
 
     // Escape goes back from the display's options like the ‹
@@ -705,6 +720,7 @@ draw_track_sheet :: proc(app: ^App, layout: Layout) {
     app.selected_track = min(app.selected_track, len(bands) - 1)
     close, changed := gui_track_settings(sheet_layout, config, app.selected_track, bands[app.selected_track])
     if changed do app.config_changed = true
+
     grab_sheet(sheet, sheet_layout)
 
     // Tapping another track above the sheet switches to it, anywhere else closes the sheet
@@ -713,6 +729,7 @@ draw_track_sheet :: proc(app: ^App, layout: Layout) {
         if track >= 0 do app.selected_track = track
         else do close = true
     }
+
     if close || gfx.key_pressed(.ESCAPE) || swiped do close_sheet(sheet)
 }
 
@@ -731,6 +748,7 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
     close, changed := gui_instrument(sheet_layout, app.config, &app.settings_menu, target)
     if changed {
         app.config_changed = true
+
         // Other notes on the ruler, it starts again on the target
         note_ruler.initialized = false
     }
@@ -749,6 +767,7 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
 save_when_settled :: proc(app: ^App) {
     sheets_open := app.settings_sheet.open || app.track_sheet.open || app.instrument_sheet.open
     if !app.unsaved || sheets_open do return
+
     save_config(app.config^)
     app.unsaved = false
 }

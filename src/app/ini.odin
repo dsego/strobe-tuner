@@ -61,6 +61,7 @@ load_config :: proc() -> Config {
 
     ini_map, loaded := load_ini()
     defer if loaded do ini.delete_map(ini_map)
+
     section := ini_map[""]
 
     fields := reflect.struct_fields_zipped(Config)
@@ -90,6 +91,7 @@ load_config :: proc() -> Config {
             if len(listed) > 0 {
                 split := strings.split(listed, ",")
                 defer delete(split)
+
                 // Of f32 or int, an array of arrays is read in the order it's written out
                 // Unwraps the arrays one level a pass down to the f32 or int, [3][8]int ends on int
                 element_type := field.type
@@ -188,6 +190,7 @@ save_ini :: proc(ini_map: ini.Map) {
         // Truncate so a shorter config doesn't leave stale bytes at the end of the file
         file, err := os.open(path, {.Write, .Create, .Trunc})
         if err != nil do return false
+
         defer os.close(file)
 
         // The stream wraps the file handle, which is closed above
@@ -197,6 +200,7 @@ save_ini :: proc(ini_map: ini.Map) {
 
         keys, keys_err := slice.map_keys(section)
         if keys_err != nil do return false
+
         defer delete(keys)
 
         // Keep order the same in the ini file

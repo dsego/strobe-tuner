@@ -34,8 +34,10 @@ import "../gfx"
 // too, see Config.note_offset_notes.
 
 NOTE_OFFSET_STEP_CENTS :: 0.5
+
 // A string this far from its note is still detected as that note once it's nearly in tune
 NOTE_OFFSET_MAX_CENTS :: 25
+
 // Rows in a preset, a 12 string guitar has 10 notes. The sheet shows them all without scrolling.
 MAX_NOTE_OFFSETS :: 10
 
@@ -44,6 +46,7 @@ MAX_NOTE_OFFSETS :: 10
 active_note_offsets :: proc(config: ^Config) -> (offsets: [core.NOTE_COUNT]f32) {
     preset := selected_preset(config)
     if preset < 0 do return
+
     cents := config.note_offset_cents[preset]
     if strings := tuning_strings(config); len(strings) > 0 {
         for semitone, row in strings {
@@ -52,6 +55,7 @@ active_note_offsets :: proc(config: ^Config) -> (offsets: [core.NOTE_COUNT]f32) 
         }
         return
     }
+
     // A note in more than one row is tuned by the first
     for row := clamp(config.note_offset_counts[preset], 0, MAX_NOTE_OFFSETS) - 1; row >= 0; row -= 1 {
         index := config.note_offset_notes[preset][row]
@@ -96,6 +100,7 @@ reset_note_offsets_editing :: proc() {
 // with the steppers large.
 gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Config, target: int) -> (changed: bool) {
     NAMES :: [12]cstring{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
+
     // From C0 as it's shown, the octave changes at C
     FROM_C0 :: 57 + core.LOWEST_NOTE
     MIDDLE_C :: 39 // from A0
@@ -163,6 +168,7 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
     // A string by its name in the tuning, like the ruler with a capo on
     row_name :: proc(rows: Rows, row: int) -> cstring {
         if len(rows.strings) > 0 do return fmt.ctprintf("%s", rows.strings[row])
+
         names, shown := NAMES, shown_semitone(rows, row)
         return fmt.ctprintf("%s%d", names[shown %% 12], shown / 12)
     }
@@ -208,6 +214,7 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
         middle := rect.x + rect.width / 2
         if gui_button_repeat({reach[0], rect.y, middle - reach[0], rect.height}) do step = -1
         if gui_button_repeat({middle, rect.y, reach[1] - middle, rect.height}) do step = 1
+
         return
     }
 
@@ -252,6 +259,7 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
         x := clamp(popup_anchor(grid, popup) - width / 2, sheet.x + POPUP_PAD, sheet.x + sheet.width - POPUP_PAD - width)
         y := row_y(grid, row) - GAP - POPUP_HEIGHT
         if y < grid.top do y = row_y(grid, row) + grid.row_height + GAP
+
         return {x, y, width, POPUP_HEIGHT}
     }
 
@@ -327,6 +335,7 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
         start := MIDDLE_C
         if count > 0 do start = rows.notes[count - 1]
         if target >= 0 do start = target
+
         for try in 0 ..< core.NOTE_COUNT {
             candidate := start + try if start + try < core.NOTE_COUNT else start - (start + try - core.NOTE_COUNT + 1)
             if !slice.contains(rows.notes[:count], candidate) do return candidate
@@ -346,6 +355,7 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
         clear_right := grid.right if stringed else add_x - 12 - small_button_width("REMOVE") - 8
         clearable := !stringed && count > 0
         for cents in rows.cents[:count] do if cents != 0 do clearable = true
+
         if gui_small_button(clear_right, header, "SURE?" if editing.clearing else "CLEAR", clearable) {
             if editing.clearing {
                 rows.count^ = 0
@@ -378,6 +388,7 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
             rows.notes[count] = new_row_note(rows, target)
             rows.cents[count] = 0
             rows.count^ = count + 1
+
             // Selected, it's set next
             editing.selected = count
             editing.popup = .NONE
@@ -482,6 +493,7 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
     if editing.popup != .NONE {
         if gfx.point_in_rect(gfx.mouse_position(), popup_rect(grid, editing.popup, editing.selected)) {
             if gfx.mouse_pressed() do gui_press_taken = true
+
             gui_disabled = true
         } else if gui_background_pressed(grid.sheet) {
             editing.popup = .NONE
@@ -505,5 +517,6 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
 
     // The popup, over everything
     if editing.popup != .NONE && gui_popup(rows, grid, editing^) do changed = true
+
     return
 }

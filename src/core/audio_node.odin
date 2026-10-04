@@ -66,6 +66,7 @@ audio_capture_skip_stale :: proc(self: ^AudioCaptureNode) -> (lost: i64) {
 
     available := ringbuffer_available(&self.ringbuffer)
     skip_ringbuffer(&self.ringbuffer, available)
+
     // Also what was dropped until the skip made room
     return i64(available) + dropped + intrinsics.atomic_exchange(&self.dropped, 0)
 }

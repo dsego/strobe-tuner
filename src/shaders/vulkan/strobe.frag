@@ -125,6 +125,7 @@ float generate_blurred_signal(
     float sum = 0.0;
     for (int i = 0; i < MAX_SAMPLES; i++) {
         if (i >= n) break;
+
         float t = (float(i) + 0.5) / float(n);
         sum += generate_signal(
             freq, phase - t * phase_step, amplitude, visibility, time, time_stretch, period_count, strobe_blur

@@ -250,10 +250,12 @@ gui_note_ruler :: proc(
     // ruler eases onto it from where it is.
     step = int(settle) - target if swiping || land else 0
     if land do ruler.swipe = {}
+
     if !swiping || land {
         // Slide to the next note, and settle exactly on it, a jump further snaps
         shown := f32(target + step)
         if abs(shown - ruler.position) > 1 && step == 0 do ruler.position = shown
+
         ruler.position += (shown - ruler.position) * min(1, RULER_SLIDE_SPEED * gfx.frame_time())
         if abs(shown - ruler.position) < 0.002 do ruler.position = shown
     }
@@ -262,6 +264,7 @@ gui_note_ruler :: proc(
     draw_ruler(layout, notes, ruler.position, text_color_white if active else text_color_muted)
 
     if tapped do step, toggle_lock = ruler_tap(layout, notes, ruler.position, target)
+
     return
 }
 
@@ -307,6 +310,7 @@ ruler_follow_finger :: proc(ruler: ^NoteRuler, rect: gfx.Rect, spacing, highest:
     case gfx.mouse_down():
         // Smoothed, a finger stops for a frame or two before it lets go
         if dt > 0 do swipe.velocity += ((mouse.x - swipe.last_x) / dt - swipe.velocity) * 0.5
+
         swipe.last_x = mouse.x
         if swipe.gesture != .SWIPING && abs(mouse.x - swipe.press_x) > RULER_SWIPE_START {
             // From here, the few points it took don't make the row jump
@@ -314,8 +318,10 @@ ruler_follow_finger :: proc(ruler: ^NoteRuler, rect: gfx.Rect, spacing, highest:
             swipe.press_x = mouse.x
             swipe.grab = ruler.position
         }
+
         // The row under the finger, to the left brings in the notes on the right
         if swipe.gesture == .SWIPING do ruler.position = swipe.grab + (swipe.press_x - mouse.x) / spacing
+
         settle = math.round(ruler.position)
     case swipe.gesture == .SWIPING:
         // Let go, it coasts to where friction would stop it, rounded to a note on the way. Slowing down
@@ -325,6 +331,7 @@ ruler_follow_finger :: proc(ruler: ^NoteRuler, rect: gfx.Rect, spacing, highest:
         swipe.stop_at = clamp(math.round(stop), 0, highest)
         if speed > 0 do swipe.stop_at = max(swipe.stop_at, math.ceil(ruler.position))
         if speed < 0 do swipe.stop_at = min(swipe.stop_at, math.floor(ruler.position))
+
         distance := swipe.stop_at - ruler.position
         if abs(speed) < RULER_COAST_MIN || abs(distance) < 0.002 {
             land = true
@@ -384,8 +391,10 @@ draw_ruler :: proc(layout: RulerLayout, notes: []core.Note, position: f32, note_
 
         // Large in the middle and small a note away, in between it grows as it comes in and shrinks as it goes
         large := 1 - math.smoothstep(f32(0), 1, distance)
+
         // The octave fades in on the way to the middle, gone halfway so there's only ever one
         octave := 1 - math.smoothstep(f32(0), 0.5, distance)
+
         // Muted a note away, the ones at the ends fade out
         color := fade_color(lerp_color(text_color_muted, note_color, large), clamp(f32(layout.per_side) + 1 - distance, 0, 1))
 
@@ -432,6 +441,7 @@ draw_ruler_note :: proc(note: core.Note, pos: [2]f32, large, octave: f32, color:
     OPTICAL_WEIGHT :: 0.5
     suffix := octave * measure_label(pixel_fonts.octave, octave_label).x
     if note.is_accidental do suffix = max(suffix, gfx.measure_text(sharp_font.font, "♯", sharp_font.size, 0).x)
+
     center := pos - {large * OPTICAL_WEIGHT * suffix / 2, 0}
 
     top_left := snap_to_pixels(center - name_size / 2)
@@ -480,6 +490,7 @@ gauge_snap :: proc(cents: f32, per_side: int) -> f32 {
         upper := tick_cents(index + 1)
         halfway := upper if index == 0 else (tick_cents(index) + upper) / 2
         if abs(cents) < halfway do break
+
         index += 1
     }
     return math.sign(cents) * f32(index)
@@ -510,10 +521,12 @@ draw_cents_gauge :: proc(top: [2]f32, cents: f32, lit: bool, semitones: bool, co
         along := f32(offset) + gauge_position
         fade := clamp(f32(per_side) + 1 - abs(along), 0, 1)
         if fade == 0 do continue
+
         red := offset == 0
         long := red || offset % LONG_EVERY == 0
         height: f32 = GAUGE_HEIGHT if long else GAUGE_TICK
         width: f32 = 2 if red else 1
+
         // Red while there's a pitch
         tick_color := fade_color(color if red && lit else text_color_muted, fade)
         gfx.draw_rect({top.x + along * spacing - width / 2, top.y + (GAUGE_HEIGHT - height) / 2}, {width, height}, tick_color)
@@ -539,6 +552,7 @@ gui_response_toggle :: proc(pos: [2]f32, speed: f32) -> (f32, bool) {
 
 gui_button :: proc(bounds: gfx.Rect) -> bool {
     if !gui_background_pressed(bounds) do return false
+
     gui_press_taken = true
     return true
 }
@@ -563,6 +577,7 @@ gui_button_repeat :: proc(bounds: gfx.Rect) -> bool {
 
     now := time.tick_now()
     if time.tick_diff(repeat_next, now) < 0 do return false
+
     repeat_next = time.tick_add(now, REPEAT_INTERVAL)
     return true
 }
@@ -655,6 +670,7 @@ gui_dropdown :: proc(
             first, last := index == 0, index == len(options) - 1
             divider := is_divider(dividers, index, len(options))
             if divider do spaced += DIVIDER_SPACE
+
             option_y := menu_position.y + MENU_PAD + f32(index * 24) + spaced
             text_y := option_y + 4
 
@@ -718,14 +734,17 @@ draw_measurements :: proc(pos: [2]f32, hz, cents: f32, shown: bool, active: bool
     VALUE_Y :: READOUT_VALUE_Y
     label_font := pixel_fonts.label.font
     hz_str := fmt.ctprintf("%.1f", hz) if shown else "-"
+
     // A semitone or more off the cents don't fit the column, the gauge shows how many semitones it is
     cents_shown := shown && abs(cents) < 99.95
     cents_str := fmt.ctprintf("%.1f", abs(cents)) if cents_shown else "-"
+
     // No sign on a rounded zero
     sign: cstring = "-" if cents < 0 else "+"
     signed := cents_shown && cents_str != "0.0"
 
     hz_right := pos + {-READOUT_GUTTER / 2, 0}
+
     // The label left aligned after the gutter, the values in a column as wide as the widest
     cents_left := pos + {READOUT_GUTTER / 2, 0}
     gfx.draw_text(label_font, "Cents", snap_to_pixels(cents_left), pixel_fonts.label.size, 1, text_color_muted)

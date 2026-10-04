@@ -123,6 +123,7 @@ preset_setup :: proc(config: ^Config, preset: int) -> Setup {
 // What's tuned to, the selected preset or the built-in instrument
 current_setup :: proc(config: ^Config) -> Setup {
     if preset := selected_preset(config); preset >= 0 do return preset_setup(config, preset)
+
     index := int(config.instrument)
     return {config.instrument, config.instrument_tunings[index], config.instrument_capos[index], config.transpose, -1}
 }
@@ -131,6 +132,7 @@ current_setup :: proc(config: ^Config) -> Setup {
 setup_tuning :: proc(setup: Setup) -> (tuning: Tuning, index: int) {
     tunings := TUNINGS[setup.instrument]
     if len(tunings) == 0 do return
+
     index = clamp(setup.tuning, 0, len(tunings) - 1)
     return tunings[index], index
 }
@@ -157,6 +159,7 @@ tuning_strings :: proc(config: ^Config) -> []int {
     setup := current_setup(config)
     tuning, _ := setup_tuning(setup)
     if len(tuning.strings) == 0 do return nil
+
     semitones := make([]int, len(tuning.strings), context.temp_allocator)
     for name, i in tuning.strings {
         note, _ := core.parse_note(name)
@@ -173,6 +176,7 @@ setup_label :: proc(setup: Setup) -> string {
     abbreviations := INSTRUMENT_ABBREVIATIONS
     keys := TRANSPOSE_KEYS
     prefix := fmt.tprintf("P%d - ", setup.preset + 1) if setup.preset >= 0 else ""
+
     // A Bb instrument, the way it's said
     if transpose := transpose_key(setup); transpose != 0 {
         return fmt.tprintf("%s%s IN %s", prefix, abbreviations[setup.instrument], keys[transpose])
@@ -182,8 +186,10 @@ setup_label :: proc(setup: Setup) -> string {
     if tuning, index := setup_tuning(setup); index > 0 {
         name = fmt.tprintf("%s %s", abbreviations[setup.instrument], strings.to_upper(tuning.name, context.temp_allocator))
     }
+
     // The capo's fret alone, a C2 would read like a note
     if capo := capo_fret(setup); capo > 0 do name = fmt.tprintf("%s · %d", name, capo)
+
     return strings.concatenate({prefix, name}, context.temp_allocator)
 }
 
@@ -235,11 +241,13 @@ gui_instrument :: proc(
         capo_value = &config.preset_capos[preset]
         transpose_value = &config.preset_transposes[preset]
     }
+
     // On top with no label what's tuned to. Under a preset its instrument. Then a stringed instrument's
     // tuning and capo, or the transpose.
     PICK_WIDTH :: 240
     top_row := settings_row(sheet_layout, 0, "", 0)
     pick_rect := gfx.Rect{sheet_layout.rows.x, top_row.y, PICK_WIDTH, top_row.height}
+
     // No tuning row with only the standard one, a baritone ukulele's
     tunable := len(TUNINGS[setup.instrument]) > 1
     tuning_row := 2 if preset >= 0 else 1
@@ -248,6 +256,7 @@ gui_instrument :: proc(
     // The strings next to the title
     details: cstring
     if stringed do details = fmt.ctprintf("%s", strings.join(tuning.strings, " ", context.temp_allocator))
+
     close = draw_sheet_header(sheet_layout, "Instrument", details)
 
     if stringed {
@@ -265,6 +274,7 @@ gui_instrument :: proc(
         transpose := transpose_key(setup)
         steps, reset := gui_stepper_buttons(rect, fmt.ctprintf("%s", keys[transpose]))
         if reset do transpose = 0
+
         transpose = (transpose - int(steps)) %% 12
         if transpose != transpose_value^ {
             transpose_value^ = transpose
@@ -281,6 +291,7 @@ gui_instrument :: proc(
         tunings := TUNINGS[setup.instrument]
         options := make([]GuiOption, len(tunings), context.temp_allocator)
         for listed, i in tunings do options[i] = {i32(i), listed.name}
+
         rect := settings_row(sheet_layout, tuning_row, "Tuning", 176)
         selected := tuning_index
         gui_settings_dropdown(menu, .TUNING, rect, options, &selected, down = true)
@@ -295,6 +306,7 @@ gui_instrument :: proc(
         names := INSTRUMENT_NAMES
         options := make([]GuiOption, len(Instrument), context.temp_allocator)
         for instrument in Instrument do options[int(instrument)] = {i32(instrument), names[instrument]}
+
         rect := settings_row(sheet_layout, 1, "Instrument", 176)
         selected := int(setup.instrument)
         gui_settings_dropdown(menu, .INSTRUMENT, rect, options, &selected, down = true)
@@ -318,6 +330,7 @@ gui_instrument :: proc(
         names := INSTRUMENT_NAMES
         options := make([]GuiOption, len(Instrument) + PRESET_SLOTS, context.temp_allocator)
         for instrument in Instrument do options[int(instrument)] = {i32(instrument), names[instrument]}
+
         for slot in 0 ..< PRESET_SLOTS {
             option := len(Instrument) + slot
             held := preset_setup(config, slot)

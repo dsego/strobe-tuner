@@ -94,11 +94,13 @@ test_butterworth :: proc(t: ^testing.T) {
 
         // The phase in f64, in f32 it's off by a radian a second in
         for &sample, i in input do sample = f32(math.sin(math.TAU * f64(freq_hz) * f64(i) / f64(samplerate)))
+
         biquad_process(&bq, input, output)
 
         // skip the transient, measure the peak of the second half
         peak: f32 = 0
         for sample in output[len(output) / 2:] do peak = max(peak, abs(sample))
+
         return peak
     }
 

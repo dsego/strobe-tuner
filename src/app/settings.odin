@@ -95,6 +95,7 @@ gui_settings :: proc(
         back: bool
         close, back = draw_back_header(sheet_layout, display_names[int(config.strobe_display_type)])
         if back do display_options^ = false
+
         changed = gui_display_options(sheet_layout, config)
         return
     }
@@ -135,6 +136,7 @@ gui_settings :: proc(
 
         right := rect.x + rect.width
         draw_centered_icon(ICON_CARET_RIGHT, {right + CHEVRON_GAP, rect.y, ICON_SHEET_SIZE, rect.height}, icon_color, .SHEET)
+
         // From the control to the sheet's edge, the row's height
         sheet_right := sheet_layout.sheet.x + sheet_layout.sheet.width
         if gui_button(touch_area({right, rect.y, sheet_right - right, rect.height})) {
@@ -145,10 +147,12 @@ gui_settings :: proc(
     if gui_settings_segmented(sheet_layout, &row, "Colors", {"Red", "Mint", "Amber", "Mono"}, &config.strobe_colorway) {
         changed = true
     }
+
     // Lights the stripes like a lamp behind the disc, in the hue of the colors above
     if gui_settings_segmented(sheet_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow) {
         changed = true
     }
+
     // A phone routes the input itself: built-in mic, headset or an audio interface
     when !gfx.MOBILE {
         // The menu opens upwards over the rows above
@@ -196,14 +200,17 @@ gui_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (chan
     switch config.strobe_display_type {
     case .STROBE:
         gui_settings_segmented(sheet_layout, &row, "Shape", {"Flat", "Wheel", "Curved"}, &config.strobe_shape, WIDE_SEGMENT_WIDTH)
+
         // What turns the tracks: their own DFT, or the lamp's screen, the strobe the other way
         gui_settings_segmented(sheet_layout, &row, "Turned by", {"Lock-in", "Lamp"}, &config.strobe_source, WIDE_SEGMENT_WIDTH)
+
         // Harmonic shows a track per partial, vernier the same frequency at different sensitivities
         if gui_settings_segmented(sheet_layout, &row, "Mode", {"Harmonic", "Vernier"}, &config.strobe_mode, WIDE_SEGMENT_WIDTH) {
             changed = true
         }
         harmonic := config.strobe_mode == .HARMONIC
         gui_settings_segmented(sheet_layout, &row, "Partials", {"Off", "1×", "Hz", "Note"}, &config.partial_labels, enabled = harmonic)
+
         // How far off each track's partial is, next to the track
         gui_settings_segmented(sheet_layout, &row, "Cents", {"Off", "On"}, &config.show_band_cents)
     case .SCOPE:
@@ -293,10 +300,12 @@ gui_track_settings :: proc(
         rect := settings_row(sheet_layout, row, "Target offset", 176)
         row += 1
         offset := config.strobe_offsets_cents[slot]
+
         // No sign on the exact partial
         label := fmt.ctprintf("%+.1f¢", offset) if offset != 0 else "0¢"
         steps, reset := gui_stepper_buttons(rect, label)
         if reset do offset = 0
+
         offset = clamp(offset + steps * TRACK_OFFSET_STEP_CENTS, -TRACK_OFFSET_MAX_CENTS, TRACK_OFFSET_MAX_CENTS)
         if offset != config.strobe_offsets_cents[slot] {
             config.strobe_offsets_cents[slot] = offset
@@ -338,6 +347,7 @@ gui_track_settings :: proc(
         count, top := 0, 0
         for interval, index in config.strobe_intervals {
             if interval < 1 do continue
+
             count += 1
             top = index
         }
@@ -355,6 +365,7 @@ gui_track_settings :: proc(
             changed = true
         } else if remove {
             config.strobe_intervals[top] = 0
+
             // Cleared so a track added there later starts fresh
             config.strobe_offsets_cents[top] = 0
             config.strobe_speeds[top] = 1
@@ -371,6 +382,7 @@ track_slot :: proc(config: ^Config, track: int) -> int {
     for interval, slot in config.strobe_intervals {
         if interval < 1 do continue
         if count == track do return slot
+
         count += 1
     }
     return -1
@@ -423,6 +435,7 @@ gui_settings_segmented :: proc(
     row^ += 1
     selected, ok := gui_segmented(rect, labels, int(value^), enabled)
     if !ok do return false
+
     when T == bool {
         value^ = selected == 1
     } else {
@@ -548,6 +561,7 @@ gui_stepper :: proc(rect: gfx.Rect, value, step, low, high, default: f32, format
     steps, reset := gui_stepper_buttons(rect, fmt.ctprintf(format, value))
     if reset do return default, true
     if steps != 0 do return clamp(value + steps * step, low, high), true
+
     return value, false
 }
 
@@ -605,6 +619,7 @@ gui_stepper_buttons :: proc(
     // Only the stepper under the mouse keeps the fraction, with a few on a sheet.
     if gfx.point_in_rect(gfx.mouse_position(), touch_area(rect)) && !exclusive_control_mode && !gui_disabled {
         if stepper_scroll_rect != rect do stepper_scroll = 0
+
         stepper_scroll_rect = rect
         stepper_scroll += gfx.mouse_wheel()
         steps = math.trunc(stepper_scroll)

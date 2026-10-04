@@ -112,6 +112,7 @@ update_tuner :: proc(self: ^Tuner, pitch: PitchInfo, strobe_hears := false) -> (
             self.steady_s = 0
             self.run_freq = pitch.detected_freq
         }
+
         // A guess at a multiple of the period isn't a steady pitch however close it holds, the wave can
         // repeat better over a few periods for a moment
         if !pitch.shortest_period do self.steady_s = -1
@@ -133,6 +134,7 @@ update_tuner :: proc(self: ^Tuner, pitch: PitchInfo, strobe_hears := false) -> (
             new_target := self.target_note
             if self.string_count > 0 {
                 if !self.locked do self.string_index = nearest_string(self, self.detected_note)
+
                 new_target = string_note(self, self.string_index)
             } else if !self.locked {
                 new_target = self.detected_note
@@ -169,6 +171,7 @@ update_tuner :: proc(self: ^Tuner, pitch: PitchInfo, strobe_hears := false) -> (
         }
         if follows {
             if pitch.fresh do steady_readout(self, pitch.detected_freq, pitch.elapsed_s)
+
             self.last_good_pitch = pitch
         }
         self.active = true
@@ -226,6 +229,7 @@ step_target_note :: proc(self: ^Tuner, steps: int) -> (retune: bool) {
             self.target_note = prev_chromatic_note(self.target_note) if steps < 0 else next_chromatic_note(self.target_note)
         }
     }
+
     // Nothing to do at the end of the range
     return self.target_note.cents != prev.cents
 }
@@ -268,10 +272,12 @@ nearest_string :: proc(self: ^Tuner, note: Note) -> int {
     for string_semitone, index in self.strings[:self.string_count] {
         if abs(semitone - string_semitone) < abs(semitone - self.strings[best]) do best = index
     }
+
     // In semitones, from the target string and from the nearest one
     from_target := abs(semitone - self.strings[self.string_index])
     from_nearest := abs(semitone - self.strings[best])
     if self.prevent_octave_jumps && abs(from_target - 12) <= 1 && from_nearest > 1 do return self.string_index
+
     return best if from_target - from_nearest > 1 else self.string_index
 }
 
@@ -330,6 +336,7 @@ locked_note :: proc(self: ^Tuner) -> bool {
 tuner_readout :: proc(self: ^Tuner) -> (steady_pitch: PitchInfo) {
     steady_pitch = self.last_good_pitch
     if self.steady_freq != 0 do steady_pitch.detected_freq = self.steady_freq
+
     steady_pitch.err_cents = tuner_cents(self, steady_pitch.detected_freq, steady_pitch.detected_note)
     return
 }
@@ -338,6 +345,7 @@ tuner_readout :: proc(self: ^Tuner) -> (steady_pitch: PitchInfo) {
 // instead of the nearest note. Either way from where the note is tuned to, 0 where the strobe stands still.
 tuner_cents :: proc(self: ^Tuner, freq: f32, note: Note) -> f32 {
     if measures_target(self) do return tuner_cents_off(self, freq)
+
     return cents_deviation(freq, note.frequency) - note_offset_cents(self, note)
 }
 
@@ -372,6 +380,7 @@ test_tuner :: proc(t: ^testing.T) {
     fast := detection(A2)
     fast.elapsed_s = 1.0 / 60
     for _ in 0 ..< 6 do testing.expect(t, !update_tuner(&tuner, fast))
+
     testing.expect(t, update_tuner(&tuner, fast))
 
     // A weak detection starts the count again
@@ -514,6 +523,7 @@ test_tuner :: proc(t: ^testing.T) {
     held := init_tuner(A3, 440, true, 0.1)
     set_tuner_strings(&held, guitar)
     for _ in 0 ..< 3 do update_tuner(&held, detection(196.0)) // G3, the target
+
     update_tuner(&held, detection(E2))
     testing.expect_value(t, held.string_index, 3)
     steady = tuner_readout(&held)

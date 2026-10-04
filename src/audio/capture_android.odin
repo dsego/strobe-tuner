@@ -49,6 +49,7 @@ MicrophonePermission :: enum i32 {
 
 // Set from SDL's thread when the permission dialog is answered
 microphone_permission: MicrophonePermission
+
 // Set with the permission granted, the input is opened then
 microphone_granted: bool
 
@@ -84,6 +85,7 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
     for preset in ([]AAudioInputPreset{.UNPROCESSED, .VOICE_RECOGNITION}) {
         builder: ^AAudioStreamBuilder
         if failed(AAudio_createStreamBuilder(&builder)) do return false
+
         defer AAudioStreamBuilder_delete(builder)
 
         AAudioStreamBuilder_setDirection(builder, .INPUT)
@@ -154,6 +156,7 @@ input_failed :: proc(self: ^Capture) -> bool {
 
 close_device :: proc(self: ^Capture) {
     if !self.device_open do return
+
     // Stops the stream and waits for any in-flight callback to finish
     failed(AAudioStream_close(self.stream))
     self.stream = nil
@@ -203,6 +206,7 @@ microphone_denied :: proc() -> bool {
 // Prints what went wrong
 failed :: proc(result: AAudioResult) -> bool {
     if result >= .OK do return false
+
     fmt.println("AAudio error:", AAudio_convertResultToText(result))
     return true
 }

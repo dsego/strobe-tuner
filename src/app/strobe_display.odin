@@ -77,6 +77,7 @@ StrobeGeometry :: struct {
 // The strobe shader draws a curved track or a wheel's ring this far below the top of its quad, a flat one
 // at the top
 CURVED_TRACK_DROP :: 10
+
 // Between the tracks, a track is this much thinner than band_height, as in the strobe shader
 STROBE_TRACK_GAP :: 4
 
@@ -130,10 +131,12 @@ strobe_track_at :: proc(shape: StrobeShape, rect: gfx.Rect, scale: f32, band_cou
     geometry := strobe_geometry(shape, rect, scale, band_count)
     if !gfx.point_in_rect(point, rect) do return -1
 
+
     if shape == .FLAT {
         // The first track is the bottom one
         order := int(math.floor((point.y - geometry.y) / geometry.band_height))
         if order < 0 || order >= band_count do return -1
+
         return band_count - 1 - order
     }
 
@@ -144,6 +147,7 @@ strobe_track_at :: proc(shape: StrobeShape, rect: gfx.Rect, scale: f32, band_cou
 
     track := int(math.ceil((distance - geometry.curvature_radius) / geometry.band_height))
     if track < 0 || track >= band_count do return -1
+
     return track
 }
 
@@ -168,6 +172,7 @@ destroy_strobe_display :: proc(self: ^StrobeDisplay) {
 
 unload_glow_targets :: proc(self: ^StrobeDisplay) {
     if self.glow_scale == 0 do return
+
     gfx.unload_render_target(self.scene_rt)
     for rt in self.bloom_rt {
         gfx.unload_render_target(rt)
@@ -263,6 +268,7 @@ render_bloom :: proc(self: ^StrobeDisplay) {
     }
     gfx.set_shader_uniforms(self.bloom_shader, &uniforms)
     bloom_size := gfx.render_target_size(self.bloom_rt[0])
+
     // Each pass replaces every pixel of its target, nothing to clear
     gfx.begin_render_target(self.bloom_rt[0], nil)
     gfx.draw_render_target(self.scene_rt, {0, 0, bloom_size.x, bloom_size.y})
@@ -354,8 +360,10 @@ draw_strobe_display :: proc(
     // and the labels of the rings stack in a column
     draw_track_labels :: proc(rect: gfx.Rect, bands: []core.PhaseBand, geometry: StrobeGeometry, config: ^Config) {
         band_height := geometry.band_height
+
         // The middle of a track down from its top, see STROBE_TRACK_GAP
         track_middle := 0.5 * (band_height - STROBE_TRACK_GAP)
+
         // The wheel's centre, see draw_strobe_bands and the strobe shader
         center := [2]f32 {
             rect.x + 0.5 * rect.width,
@@ -482,6 +490,7 @@ draw_strobe_bands :: proc(
         height := min(strobe_rect.y + strobe_rect.height - band_y, arc_height + 4)
         offset: f32 = CURVED_TRACK_DROP
         if geometry.shape == .FLAT do height, offset = band_height, 0
+
         rect := gfx.Rect{strobe_rect.x, band_y, strobe_rect.width, height}
 
         uniforms.bounding_rect = {rect.x, rect.y, rect.width, rect.height}
@@ -492,6 +501,7 @@ draw_strobe_bands :: proc(
 
         uniforms.period_count = period_count
         uniforms.time_stretch = band.time_stretch
+
         // The shader multiplies the phase by the period count, a denser pattern turns slower to drift as
         // many stripes a second as the desktop's
         uniforms.phase = band.scaled_phase / density

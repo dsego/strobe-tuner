@@ -71,8 +71,10 @@ note_name :: proc(note: Note, allocator := context.temp_allocator) -> string {
 // The note named by a letter, an optional sharp and a single digit octave, e.g. "A#2"
 parse_note :: proc(name: string, pitch_standard: f32 = 440.0) -> (note: Note, ok: bool) {
     if len(name) < 2 || len(name) > 3 do return
+
     is_accidental := len(name) == 3
     if is_accidental && name[1] != '#' do return
+
     digit := name[len(name) - 1]
     if digit < '0' || digit > '9' do return
 
@@ -89,6 +91,7 @@ parse_note :: proc(name: string, pitch_standard: f32 = 440.0) -> (note: Note, ok
     case: return
     }
     if is_accidental do semitone += 1
+
     octave := int(digit - '0')
     return cents_to_note(f32(100 * (semitone + 12 * (octave - 4))), pitch_standard), true
 }
@@ -219,11 +222,13 @@ test_freq_to_note :: proc(t: ^testing.T) {
 // A semitone up or down, it stays at C8 and A0. The range is in cents, in Hz it moves with the pitch standard.
 next_chromatic_note :: proc(note: Note) -> Note {
     if note.cents >= HIGHEST_NOTE * 100 do return note
+
     return cents_to_note(f32(note.cents + 100), note.pitch_standard)
 }
 
 prev_chromatic_note :: proc(note: Note) -> Note {
     if note.cents <= LOWEST_NOTE * 100 do return note
+
     return cents_to_note(f32(note.cents - 100), note.pitch_standard)
 }
 

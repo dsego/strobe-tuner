@@ -53,8 +53,10 @@ import "core:math/linalg"
 
 // Building for iOS, see platform/ios/build-sim.sh
 IOS :: #config(IOS, false)
+
 // Building for Android, see platform/android/build.sh
 ANDROID :: ODIN_PLATFORM_SUBTARGET == .Android
+
 // A phone: touch sized controls, portrait, suspended in the background, the system picks the input
 MOBILE :: IOS || ANDROID
 

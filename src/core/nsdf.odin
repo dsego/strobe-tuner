@@ -48,6 +48,7 @@ NSDF :: struct {
 init_nsdf :: proc(fft_size: int) -> (self: NSDF) {
     self.fft_size = fft_size
     self.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
+
     // A real transform of fft_size samples has fft_size / 2 complex bins, see nsdf_autocorrelate
     self.spectrum = runtime.make_aligned([]complex64, fft_size / 2, 16)
     self.autocorr = runtime.make_aligned([]f32, fft_size, 16)
@@ -71,6 +72,7 @@ run_nsdf :: proc(self: ^NSDF, samples: []f32) -> (freq: f32, peak: Vec2) {
     normalize(self, samples)
     peak = find_peak(self)
     if peak.x > 0 do freq = SAMPLERATE / peak.x
+
     return
 
     // The NSDF through the autocorrelation, the left-hand sum of the squares runs down as the lag grows.
@@ -97,8 +99,10 @@ run_nsdf :: proc(self: ^NSDF, samples: []f32) -> (freq: f32, peak: Vec2) {
 
         // The far lags rest on few samples, their peaks are left out
         IGNORED_LAGS :: 256
+
         // The first of the key maxima this close to the highest is the period, not a multiple of it
         CHOSEN_RATIO :: 0.95
+
         // Lower maxima are no period, the NSDF of the zero lag is 1
         MIN_PEAK_VALUE :: 0.5
 
@@ -204,6 +208,7 @@ test_autocorrelation :: proc(t: ^testing.T) {
     for lag in 0 ..< len(samples) {
         expected: f32
         for i in 0 ..< len(samples) - lag do expected += samples[i] * samples[i + lag]
+
         testing.expectf(t, abs(self.autocorr[lag] - expected) < 1e-3, "lag %v: %v, expected %v", lag, self.autocorr[lag], expected)
     }
 }

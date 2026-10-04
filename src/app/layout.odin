@@ -45,8 +45,10 @@ DESKTOP_HEIGHT :: 620 // the window, as wide as the strobe, most of the strobe s
 LEVEL_METER_WIDTH :: 80 // the microphone icon and the bar after it
 
 RULER_HEIGHT :: 110
+
 // Larger notes and readout values than the ruler was drawn at, they're read from a music stand
 RULER_SCALE :: 1.3
+
 // Inter's letters and digits fill less than their font size: the cap height is 0.6 of it, the baseline
 // 0.8 down from the top. The ruler is spaced by what's drawn.
 CAP_HALF :: 0.3 // the letter's top and baseline from its middle, in font sizes
@@ -56,6 +58,7 @@ LOCK_BUTTON_HEIGHT :: 24
 
 // Between the columns of the readout, room for the sign
 READOUT_GUTTER :: 40
+
 // From the top of the labels to the top of the values
 READOUT_VALUE_Y :: 18
 
@@ -116,6 +119,7 @@ panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, offsets: bool) {
     middle := readout_bottom + gap - note_top
 
     center := (left + right) / 2
+
     // Centred on the notes and stopping above the gauge, a press on the gauge doesn't swipe the notes
     height := min(RULER_SCALE * RULER_HEIGHT, 2 * gauge_y)
     layout.ruler = {left, middle - height / 2, right - left, height}

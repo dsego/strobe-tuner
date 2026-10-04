@@ -108,6 +108,7 @@ draw_scope_screen :: proc(rect: gfx.Rect, scope: ^core.Scope, beam_color, grid_c
     total: f32 = 0
     for dwell in scope.screen do total += dwell
     if total == 0 do return
+
     full := total / f32(width)
 
     // A steady beam is shared by a few cells of its column, more where the wave is steep. A third of
@@ -199,6 +200,7 @@ draw_lamp :: proc(rect: gfx.Rect, heights, dwell: []f32, shape: core.ScopeShape,
         // The wave as it is goes below zero, zero is halfway
         brightness := height
         if shape == .RAW_WAVEFORM do brightness = 0.5 + 0.5 * height
+
         color := gfx.color_from_normalized(math.lerp(dark, bright, clamp(brightness, 0, 1)))
 
         x := rect.x + rect.width - f32(i + 1) * column_width

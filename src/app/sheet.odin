@@ -71,6 +71,7 @@ compute_sheet_layout :: proc(
 
     top := sheet_layout.sheet.y + SHEET_TOP_PADDING
     sheet_layout.title = {left, top}
+
     // Right aligned with the rows, centred on the title, the touch area from the sheet's edge down as far
     CLOSE_WIDTH :: 60
     close_x := left + sheet_layout.width - (ICON_SHEET_SIZE + CLOSE_WIDTH) / 2
@@ -106,6 +107,7 @@ SHEET_DISMISS_VELOCITY :: 600
 // finger left it, the frame the finger lets go draws it there and not eased back up a bit.
 slide_sheet :: proc(sheet: ^Sheet) {
     if sheet.drag.active && sheet.slide == 0 do close_sheet(sheet)
+
     sheet.was_open = sheet.open
     if !sheet.drag.active do slide_toward(&sheet.slide, f32(int(sheet.open)))
 }
@@ -138,6 +140,7 @@ begin_sheet :: proc(
     drag_sheet :: proc(sheet: ^Sheet, sheet_layout: SheetLayout) -> (close: bool) {
         drag := &sheet.drag
         if !drag.active do return false
+
         mouse := gfx.mouse_position()
 
         if !gfx.mouse_down() {
@@ -175,6 +178,7 @@ begin_sheet :: proc(
 grab_sheet :: proc(sheet: ^Sheet, sheet_layout: SheetLayout) {
     mouse := gfx.mouse_position()
     if gui_press_taken || sheet.drag.active || !gui_background_pressed(sheet_layout.sheet) do return
+
     sheet.drag = {
         active = true,
         grab   = mouse.y - sheet_layout.sheet.y,
