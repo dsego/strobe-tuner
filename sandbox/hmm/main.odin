@@ -13,9 +13,9 @@ import "core:os"
 import "core:strconv"
 import ma "vendor:miniaudio"
 
-import "../../core"
+import "../../src/core"
 
-// The app's defaults, see config_defaults in app/config.odin
+// The app's defaults, see config_defaults in src/app/config.odin
 SAMPLERATE :: 48_000
 FFT_SIZE :: 8192
 CLARITY_HIGH :: 0.98

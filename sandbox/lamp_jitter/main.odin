@@ -1,5 +1,5 @@
 // Compares the strobe tracks turned by the lock-in with the ones turned by the lamp (lamp_comparator in
-// app/scope_display.odin) on a recording, at the same speed: how much each track's stripes move from frame
+// src/app/scope_display.odin) on a recording, at the same speed: how much each track's stripes move from frame
 // to frame, and how much of that is jitter.
 //
 //   odin run sandbox/lamp_jitter -- <file.wav|mp3|flac>
@@ -22,9 +22,9 @@ import "core:math"
 import "core:os"
 import ma "vendor:miniaudio"
 
-import "../../core"
+import "../../src/core"
 
-// The app's defaults, see config_defaults in app/config.odin
+// The app's defaults, see config_defaults in src/app/config.odin
 SAMPLERATE :: 48_000
 FFT_SIZE :: 8192
 CLARITY_HIGH :: 0.98

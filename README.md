@@ -97,10 +97,10 @@ The first run clones and compiles the dependencies into `external/`, later runs 
 | `just dev` | Debug build, then runs it |
 | `just dev stats` | Also shows the signal stats and NSDF plots |
 | `just dev ios` | Builds for the iOS simulator and runs it there, needs Xcode |
-| `just ipa` | Signed build for iPhone, see `ios/build-device.sh`, needs Xcode and a provisioning profile |
+| `just ipa` | Signed build for iPhone, see `platform/ios/build-device.sh`, needs Xcode and a provisioning profile |
 | `just apk` | Debug signed build for Android, see [Android](#android) |
 | `just build` | Optimized build for this machine |
-| `just pkg` | Signed build for the Mac App Store, see `macos/build-pkg.sh`, links SDL in statically |
+| `just pkg` | Signed build for the Mac App Store, see `platform/macos/build-pkg.sh`, links SDL in statically |
 | `just test` | Unit tests of the pitch detection and strobe code |
 
 Debug builds also have <kbd>Cmd</kbd><kbd>,</kbd> to open the config file and <kbd>Cmd</kbd><kbd>Shift</kbd><kbd>,</kbd> to reload it.
@@ -119,7 +119,7 @@ The config is saved to `$XDG_CONFIG_HOME/Strobie/config.ini`, or `~/.config/Stro
 
 #### Android
 
-`just apk` builds a debug signed `build/android/Strobie.apk`, see `android/build.sh`. No Android Studio or Gradle, only the command line SDK, adb and a JDK for SDL's Java classes and the build tools. The first build compiles SDL into `external/android`, and stb into the Odin folder with the NDK, where Odin's bindings look for it.
+`just apk` builds a debug signed `build/android/Strobie.apk`, see `platform/android/build.sh`. No Android Studio or Gradle, only the command line SDK, adb and a JDK for SDL's Java classes and the build tools. The first build compiles SDL into `external/android`, and stb into the Odin folder with the NDK, where Odin's bindings look for it.
 
 ```sh
 brew install --cask android-platform-tools android-commandlinetools

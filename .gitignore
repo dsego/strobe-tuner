@@ -10,6 +10,9 @@ app.bin.dSYM/*
 
 build/
 
+# Odin names a sandbox build after its folder, without an extension
+sandbox/pattern/pattern
+
 # Provisioning profiles, they carry the team id, certificates and device ids
 *.mobileprovision
 *.provisionprofile

@@ -133,7 +133,7 @@ and not a preset:
 - The main screen shows the temperament's name, the note's offset under the letter stays the
   preset's own offset only.
 - The readout and the strobe measure from the tempered target, 0 is in tune.
-- The note names, the ruler and the detection stay on the equal tempered grid in `core/note.odin`,
+- The note names, the ruler and the detection stay on the equal tempered grid in `src/core/note.odin`,
   the offsets are all under 50 cents so the nearest note is still the right one. The temperament
   is one more term in `tuner_target_freq`, next to `note_offset_cents`.
 - Only 12-note scales with a 2/1 octave load, anything else is turned away with a message.

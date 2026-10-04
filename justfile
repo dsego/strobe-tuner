@@ -34,7 +34,7 @@ setup:
         [ -f "$vendor/stb/lib/stb_image.a" ] || sh "$vendor/stb/src/build_stb.sh"
         [ -f "$vendor/miniaudio/lib/miniaudio.a" ] || sh "$vendor/miniaudio/src/build_miniaudio.sh"
         # Vulkan there, the SPIR-V the app embeds
-        sh ../shaders/vulkan/compile.sh
+        sh ../src/shaders/vulkan/compile.sh
     fi
 
 # just dev [target]
@@ -44,28 +44,28 @@ setup:
 dev target="": setup
     #!/usr/bin/env sh
     case "{{target}}" in
-        "") odin run app -debug ;;
-        stats) odin run app -debug -define:DEBUG_STATS=true ;;
-        ios) sh ios/build-sim.sh ;;
+        "") odin run src/app -debug ;;
+        stats) odin run src/app -debug -define:DEBUG_STATS=true ;;
+        ios) sh platform/ios/build-sim.sh ;;
         *) echo "Unknown target '{{target}}', use stats or ios"; exit 1 ;;
     esac
 
 # Optimized build for this machine
 build: setup
-    odin build app -o:speed -microarch:native
+    odin build src/app -o:speed -microarch:native
 
 # Signed .ipa for iPhone: IOS_PROFILE=path/to/profile.mobileprovision [IOS_DEVICE=<name>] just ipa
 ipa: setup
-    sh ios/build-device.sh
+    sh platform/ios/build-device.sh
 
 # Debug signed .apk for Android: [ANDROID_DEVICE=usb] just apk
 apk: setup
-    sh android/build.sh
+    sh platform/android/build.sh
 
 # Signed .pkg for the Mac App Store: MAC_PROFILE=path/to/profile.provisionprofile just pkg
 pkg: setup
-    sh macos/build-pkg.sh
+    sh platform/macos/build-pkg.sh
 
 # Runs the unit tests in core
 test:
-    odin test core
+    odin test src/core
