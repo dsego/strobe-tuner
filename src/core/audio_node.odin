@@ -16,6 +16,9 @@
 
 package core
 
+import "base:intrinsics"
+import "core:testing"
+
 
 // The input's, miniaudio and AAudio convert the device's own. PITCH_FFT_SIZE, MAX_WINDOW_SIZE and the values
 // tuned with the sandbox tools are for it.
@@ -27,6 +30,9 @@ AudioCaptureNode :: struct {
     name:            string, // debugging info
     ringbuffer:      RingBuffer,
     ringbuffer_data: []u8,
+    // Samples that didn't fit, the main loop stalled for longer than the ring buffer holds. Written by the
+    // audio thread, see audio_capture_dropped.
+    dropped:         i64,
 }
 
 init_audio_capture_node :: proc(self: ^AudioCaptureNode, name: string) {
@@ -35,8 +41,10 @@ init_audio_capture_node :: proc(self: ^AudioCaptureNode, name: string) {
     self.ringbuffer, self.ringbuffer_data = init_ringbuffer(65536)
 }
 
+// Only while the input is closed, the audio thread doesn't write
 flush_audio_capture_ringbuffer :: proc(self: ^AudioCaptureNode) {
     flush_ringbuffer(&self.ringbuffer)
+    intrinsics.atomic_store(&self.dropped, 0)
 }
 
 destroy_audio_capture_node :: proc(self: ^AudioCaptureNode) {
@@ -45,7 +53,14 @@ destroy_audio_capture_node :: proc(self: ^AudioCaptureNode) {
 
 // From the audio thread, or a test feeding the samples
 audio_capture_write :: proc(self: ^AudioCaptureNode, input: []f32) {
-    write_ringbuffer(&self.ringbuffer, input)
+    written := write_ringbuffer(&self.ringbuffer, input)
+    if written < len(input) do intrinsics.atomic_add(&self.dropped, i64(len(input) - written))
+}
+
+// The samples dropped since the last call. A sample clock adds them, the newest sample is that much later
+// than the ones read before it.
+audio_capture_dropped :: proc(self: ^AudioCaptureNode) -> i64 {
+    return intrinsics.atomic_exchange(&self.dropped, 0)
 }
 
 // Fill the buffer with new audio samples.
@@ -75,4 +90,24 @@ audio_capture_read :: proc(
     }
 
     return available
+}
+
+
+// A stall longer than the ring buffer holds, what didn't fit is counted once
+@(test)
+test_audio_capture_dropped :: proc(t: ^testing.T) {
+    node: AudioCaptureNode
+    init_audio_capture_node(&node, "test")
+    defer destroy_audio_capture_node(&node)
+
+    SAMPLES :: 70_000
+    input := make([]f32, SAMPLES)
+    defer delete(input)
+    audio_capture_write(&node, input)
+
+    available := i64(ringbuffer_available(&node.ringbuffer))
+    dropped := audio_capture_dropped(&node)
+    testing.expect(t, dropped > 0, "dropped none")
+    testing.expect_value(t, available + dropped, SAMPLES)
+    testing.expect_value(t, audio_capture_dropped(&node), 0)
 }

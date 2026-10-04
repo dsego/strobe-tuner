@@ -332,7 +332,7 @@ run_phase_detection :: proc(self: ^PhaseComparator, use_phase_average: bool, is_
     if available <= 0 do return
 
     self.available = int(available)
-    self.sample_clock += i64(available)
+    self.sample_clock += i64(available) + audio_capture_dropped(self)
 
     for &band, band_index in self.bands {
         if !measures_band(self, band_index) {

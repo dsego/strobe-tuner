@@ -49,8 +49,9 @@ flush_ringbuffer :: proc(self: ^RingBuffer) {
     pa_rb.FlushRingBuffer(self)
 }
 
-write_ringbuffer :: proc(self: ^RingBuffer, input: []f32) {
-    pa_rb.WriteRingBuffer(self, raw_data(input), i32(len(input)))
+// Writes as much as fits, returns how many frames were written
+write_ringbuffer :: proc(self: ^RingBuffer, input: []f32) -> int {
+    return int(pa_rb.WriteRingBuffer(self, raw_data(input), i32(len(input))))
 }
 
 // Fills the buffer, or as much of it as there is, returns how many frames were read
