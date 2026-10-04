@@ -194,6 +194,10 @@ The strobe went through four versions, each one fixing what the one before could
 3. **Folding, the lamp**: instead of cutting frames, every sample is placed on the screen at its phase of the reference, on the absolute sample clock, and the screen fades like phosphor. Each column averages the wave at that phase over the persistence time. Nothing is rounded or resampled, and the smear comes by itself: a slow drift stays sharp, a fast one washes out. Folding at the reference period is itself a comb, only its harmonics add up. This is the Lamp and the Scope display today. The picture itself drifts by the actual phase the note slips, as fast as it slips, but a DFT bin of the screen per partial gives that phase as a number, and that can be scaled: that's how the lamp turns the strobe tracks. It's measured on a picture made for the eye though: the screen's persistence and a pluck or a weak partial show up in it, and the stripes can jump.
 4. **Phase lock**: the lock-in compares the phase of each partial with the reference and the strobe turns by that phase, see [Stroboscopic effect](#stroboscopic-effect). It measures the phase on the samples themselves rather than on a screen: the single-bin DFT is a bandpass whose phase shifts alike in every band, and the phase is continuous, so the stripes move smoothly at any pitch.
 
+#### Other approaches
+
+- **A square-wave slot**: [strobeTuner](https://sourceforge.net/projects/strobetuner/) (Scott Duplichan, GPLv3) builds each band the other way round from the lamp. Every frame, each column multiplies the last 6 periods by a ±1 square wave at the band's pitch, shifted by the column's place on the wheel, and clips the average. That's the same fold, seen through a slot half a period wide instead of a thin slit, and recomputed from the raw audio for every column. The slot softens the stripes a lot: tried on the lamp, they were too soft to read, so the thin slit stayed.
+
 
 #### Noise floor
 
