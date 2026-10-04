@@ -46,6 +46,7 @@ StrobeDisplay :: struct {
     bloom_rt:        [2]gfx.RenderTarget,
     glow_scale:      f32, // DPI scale the render targets were created for
     glow_size:       [2]f32, // and the strobe size in points
+    glow_drawn:      GlowFrame, // what the render targets hold, see draw_strobe_display
 
     // per band stripe visibility, smoothed so it doesn't flicker, see update_band_visibility
     band_visibility: [core.MAX_BANDS]f32,
@@ -62,6 +63,21 @@ StrobeDisplay :: struct {
     // the sheet, 0 is no selection.
     selected_track:  int,
     selection:       f32,
+}
+
+// The strobe in the glow's render targets, drawn again as it is while it's the same, see draw_strobe_display
+GlowFrame :: struct {
+    rect:       gfx.Rect,
+    scale:      f32,
+    background: gfx.Color,
+    tracks:     StrobeTracks,
+}
+
+// Each track's uniforms from the centre outwards, a track too high for the sample rate isn't drawn
+StrobeTracks :: struct {
+    uniforms: [core.MAX_BANDS]gfx.StrobeUniforms,
+    shown:    [core.MAX_BANDS]bool,
+    count:    int,
 }
 
 // Where the tracks go in the strobe, the drawing and strobe_track_at share it
@@ -140,7 +156,7 @@ strobe_track_at :: proc(shape: StrobeShape, rect: gfx.Rect, scale: f32, band_cou
         return band_count - 1 - order
     }
 
-    // The centre of the circles, see draw_strobe_bands and the strobe shader
+    // The centre of the circles, see strobe_tracks and the strobe shader
     outer_radius := geometry.curvature_radius + geometry.band_height * f32(band_count - 1)
     center := [2]f32{rect.x + rect.width / 2, geometry.y + CURVED_TRACK_DROP + outer_radius}
     distance := linalg.length(point - center)
@@ -178,6 +194,7 @@ unload_glow_targets :: proc(self: ^StrobeDisplay) {
         gfx.unload_render_target(rt)
     }
     self.glow_scale = 0
+    self.glow_drawn = {}
 }
 
 // (Re)create the glow render targets, the scene is rendered at the display's DPI scale to stay sharp
@@ -297,7 +314,7 @@ draw_strobe_display :: proc(
     glow_enabled := config.strobe_glow
     glow := glow_params(config)
 
-    // Shared by all bands, draw_strobe_bands fills in the rest
+    // Shared by all bands, strobe_tracks fills in the rest
     uniforms := gfx.StrobeUniforms {
         band_height     = band_height,
         strobe_blur     = i32(STROBE_BLUR),
@@ -317,21 +334,22 @@ draw_strobe_display :: proc(
     uniforms.glow_filter.rgb = glow_filter(glow.color)
     uniforms.glow_dark_filter.rgb = glow_filter(glow.dark_color) * glow.dark_level
     uniforms.highlight_color = gfx.normalize_color(accent_color)
+    tracks := strobe_tracks(self, rect, bands, mode, uniforms, geometry)
 
     if glow_enabled {
-        // Render the strobe offscreen so the bright parts can bloom over the surroundings
+        // Render the strobe offscreen so the bright parts can bloom over the surroundings. A dark strobe
+        // stays the same from frame to frame, what the render targets hold is drawn again.
         ensure_glow_targets(self, {rect.width, rect.height})
+        frame := GlowFrame{rect, self.glow_scale, glow_background(self.background, glow), tracks}
 
-        gfx.begin_render_target(
-            self.scene_rt,
-            glow_background(self.background, glow),
-            {rect.x, rect.y},
-            self.glow_scale,
-        )
-        draw_strobe_bands(self, rect, bands, mode, &uniforms, geometry)
-        gfx.end_render_target()
+        if frame != self.glow_drawn || gfx.last_frame_dropped() {
+            gfx.begin_render_target(self.scene_rt, frame.background, {rect.x, rect.y}, self.glow_scale)
+            draw_strobe_tracks(self, &tracks)
+            gfx.end_render_target()
 
-        render_bloom(self)
+            render_bloom(self)
+            self.glow_drawn = frame
+        }
     }
 
     gfx.begin_scissor(rect)
@@ -348,7 +366,7 @@ draw_strobe_display :: proc(
         gfx.set_blend_mode(.ALPHA)
     } else {
         gfx.draw_rect({rect.x, rect.y}, {rect.width, rect.height}, self.background)
-        draw_strobe_bands(self, rect, bands, mode, &uniforms, geometry)
+        draw_strobe_tracks(self, &tracks)
     }
 
     if config.strobe_mode == .HARMONIC && config.partial_labels != .NONE {
@@ -364,7 +382,7 @@ draw_strobe_display :: proc(
         // The middle of a track down from its top, see STROBE_TRACK_GAP
         track_middle := 0.5 * (band_height - STROBE_TRACK_GAP)
 
-        // The wheel's centre, see draw_strobe_bands and the strobe shader
+        // The wheel's centre, see strobe_tracks and the strobe shader
         center := [2]f32 {
             rect.x + 0.5 * rect.width,
             geometry.y + CURVED_TRACK_DROP + geometry.curvature_radius + band_height * f32(len(bands) - 1),
@@ -454,28 +472,36 @@ update_band_visibility :: proc(self: ^StrobeDisplay, band: ^core.PhaseBand, band
     target := math.smoothstep(fade[0], fade[1], band.snr_db)
 
     alpha := 1.0 - math.exp(-gfx.frame_time() / STROBE_LOOK_TIME_S)
-    self.band_visibility[band_index] += alpha * (target - self.band_visibility[band_index])
-    return self.band_visibility[band_index]
+    visibility := &self.band_visibility[band_index]
+    visibility^ += alpha * (target - visibility^)
+
+    // Dark all the way in the end, a dark strobe's glow is drawn again as it was, see draw_strobe_display
+    if target == 0 && visibility^ < 0.001 do visibility^ = 0
+
+    return visibility^
 }
 
 // The circular bands from the centre outwards, the lowest frequency is the bottom one
-draw_strobe_bands :: proc(
+strobe_tracks :: proc(
     self: ^StrobeDisplay,
     strobe_rect: gfx.Rect,
     bands: []core.PhaseBand,
     mode: core.StrobeMode,
-    uniforms: ^gfx.StrobeUniforms,
+    shared: gfx.StrobeUniforms,
     geometry: StrobeGeometry,
+) -> (
+    tracks: StrobeTracks,
 ) {
     curvature_radius := geometry.curvature_radius
     band_height := geometry.band_height
     period_count := geometry.period_count
     density := geometry.density
-
-    gfx.begin_shader(self.strobe_shader)
-    defer gfx.end_shader()
+    tracks.count = len(bands)
 
     for &band, band_index in bands {
+        uniforms := &tracks.uniforms[band_index]
+        uniforms^ = shared
+
         order := len(bands) - 1 - band_index
 
         // Down to where the arc ends, it drops towards the sides. The inner edge meets the sides of the strobe
@@ -488,12 +514,9 @@ draw_strobe_bands :: proc(
             arc_height = curvature_radius - math.sqrt(inner_radius * inner_radius - half_width * half_width)
         }
         height := min(strobe_rect.y + strobe_rect.height - band_y, arc_height + 4)
-        offset: f32 = CURVED_TRACK_DROP
-        if geometry.shape == .FLAT do height, offset = band_height, 0
+        if geometry.shape == .FLAT do height = band_height
 
-        rect := gfx.Rect{strobe_rect.x, band_y, strobe_rect.width, height}
-
-        uniforms.bounding_rect = {rect.x, rect.y, rect.width, rect.height}
+        uniforms.bounding_rect = {strobe_rect.x, band_y, strobe_rect.width, height}
 
         // Note, for concentric circles the radius needs to expand as the bands move from the bottom up
         uniforms.curvature_radius = curvature_radius
@@ -514,17 +537,33 @@ draw_strobe_bands :: proc(
         uniforms.norm_freq = band.norm_freq
         uniforms.err_cents = band.err_cents
 
+        // Without stripes the track looks the same whatever its phase, and doesn't change from frame to frame
+        if uniforms.visibility == 0 do uniforms.phase, uniforms.phase_step, uniforms.err_cents = 0, 0, 0
+
         selected := band_index == self.selected_track
         uniforms.highlight = self.selection if selected else 0
         uniforms.dim = 0 if selected else self.selection
 
         // A partial too high for the sample rate leaves a gap, its sheet still opens there
-        if band.in_range {
-            gfx.set_shader_uniforms(self.strobe_shader, uniforms)
-            gfx.draw_shader_quad({rect.x, rect.y + offset, rect.width, rect.height})
-        }
+        tracks.shown[band_index] = band.in_range
 
         // Each vernier track turns faster, its stripes are packed twice as tight
         if mode == .VERNIER do period_count *= 2.0
+    }
+    return
+}
+
+draw_strobe_tracks :: proc(self: ^StrobeDisplay, tracks: ^StrobeTracks) {
+    gfx.begin_shader(self.strobe_shader)
+    defer gfx.end_shader()
+
+    for &uniforms, index in tracks.uniforms[:tracks.count] {
+        if !tracks.shown[index] do continue
+
+        // A curved track drops below the top of its quad, see CURVED_TRACK_DROP
+        rect := uniforms.bounding_rect
+        offset: f32 = 0 if uniforms.flat_track != 0 else CURVED_TRACK_DROP
+        gfx.set_shader_uniforms(self.strobe_shader, &uniforms)
+        gfx.draw_shader_quad({rect.x, rect.y + offset, rect.z, rect.w})
     }
 }

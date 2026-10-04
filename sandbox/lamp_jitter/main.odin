@@ -126,7 +126,7 @@ main :: proc() {
         off_target := strobe.base_freq_hz != tuner.target_note.frequency
         if off_target && !core.strobe_shows_note(strobe, fundamental_only = true) do retune(strobe, tuner.target_note.frequency)
 
-        // The tracks, as draw_strobe_bands turns them, in fundamental stripes: a track's phase moves its
+        // The tracks, as strobe_tracks turns them, in fundamental stripes: a track's phase moves its
         // stripes by the phase over its partial
         for &band, index in strobe.bands {
             shown := tuner.active && band.onset_hold == 0 && band.snr_db >= fully_lit

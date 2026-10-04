@@ -155,6 +155,15 @@ run_app :: proc(config: ^Config) {
             continue
         }
 
+        // Nothing to measure for, the input keeps running and the measurements start over on the audio after
+        // the gap, see core.audio_capture_skip_stale
+        when !gfx.MOBILE {
+            if gfx.window_hidden() {
+                gfx.wait_while_hidden()
+                continue
+            }
+        }
+
         if audio.interruption_ended(audio_capture) do app.restart_audio = true
 
         config_before := config^
@@ -163,8 +172,6 @@ run_app :: proc(config: ^Config) {
         if app.config_changed do apply_config(&app)
 
         reading := measure(&app)
-
-        feed_scope(&app)
 
         window, safe := gfx.window_size(), gfx.safe_area()
 
@@ -193,7 +200,19 @@ run_app :: proc(config: ^Config) {
             if sheet.open || sheet.slide > 0 do gui_disabled = true
         }
 
-        draw_main_screen(&app, layout, reading)
+        // The instrument sheet all the way up covers the main screen. A phone's strobe area still shows
+        // above it, behind the notch. Not while it's dragged, it may move down later in the frame.
+        instrument_sheet := app.instrument_sheet
+        covered := instrument_sheet.slide == 1 && !instrument_sheet.drag.active
+        strobe_shows := !covered || safe.y > 0
+
+        feed_scope(&app, strobe_shows)
+
+        if !covered {
+            draw_main_screen(&app, layout, reading)
+        } else if strobe_shows {
+            draw_strobe_area(&app, layout)
+        }
         draw_sheets(&app, layout)
 
         if config^ != config_before do app.unsaved = true
@@ -369,13 +388,15 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     return
 }
 
-// The new audio onto the scope's screen, while its views or the tracks the lamp turns show it
-feed_scope :: proc(app: ^App) {
+// The new audio onto the scope's screen, while its views or the tracks the lamp turns show it. strobe_shows
+// is false while a sheet covers the whole strobe area.
+feed_scope :: proc(app: ^App, strobe_shows: bool) {
     scope, config := &app.scope, app.config
 
     type := config.strobe_display_type
+    shown := type == .SCOPE || type == .LAMP || (type == .STROBE && config.strobe_source == .LAMP)
 
-    if type != .SCOPE && type != .LAMP && !(type == .STROBE && config.strobe_source == .LAMP) {
+    if !shown || !strobe_shows {
         core.skip_scope(scope)
 
         // The lamp's tracks start over on a dark screen too, the phases they turned by are stale

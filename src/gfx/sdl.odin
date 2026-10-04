@@ -170,6 +170,7 @@ gpu: struct {
     uniforms:         [Program]UniformRange,
     clear:            Color,
     acquire_failed:   bool, // the last frame's swapchain, reported once
+    dropped:          bool, // the last frame wasn't drawn, the render targets hold what they had before it
 
     // input
     quit:             bool,
@@ -344,6 +345,27 @@ wait_for_foreground :: proc() {
     gpu.last_counter = sdl.GetPerformanceCounter()
 }
 
+// A desktop window minimized or covered by other windows, nothing of it would show
+window_hidden :: proc() -> bool {
+    return sdl.GetWindowFlags(gpu.window) & {.MINIMIZED, .HIDDEN, .OCCLUDED} != {}
+}
+
+// Blocks until the window shows again, or quit
+wait_while_hidden :: proc() {
+    event: sdl.Event
+    for window_hidden() && !gpu.quit {
+        if sdl.WaitEvent(&event) && (event.type == .QUIT || event.type == .WINDOW_CLOSE_REQUESTED) do gpu.quit = true
+    }
+
+    // Not a frame that took as long as the window was hidden
+    gpu.last_counter = sdl.GetPerformanceCounter()
+}
+
+// The last frame wasn't drawn, what was drawn into the render targets during it isn't there
+last_frame_dropped :: proc() -> bool {
+    return gpu.dropped
+}
+
 open_url :: proc(url: cstring) {
     if !sdl.OpenURL(url) do fmt.eprintln("SDL_OpenURL failed:", sdl.GetError())
 }
@@ -483,7 +505,8 @@ end_frame :: proc() {
     gpu.acquire_failed = !acquired
 
     // Minimized or hidden, nothing to draw into. Or no vertex buffer, nothing to draw with.
-    if swapchain == nil || !upload_vertices(command_buffer) {
+    gpu.dropped = swapchain == nil || !upload_vertices(command_buffer)
+    if gpu.dropped {
         _ = sdl.SubmitGPUCommandBuffer(command_buffer)
         sdl.Delay(16)
         return

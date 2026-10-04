@@ -62,6 +62,9 @@ draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: gf
         gfx.end_render_target()
         render_bloom(display)
 
+        // Not the strobe's any more
+        display.glow_drawn = {}
+
         gfx.set_blend_mode(.REPLACE)
         gfx.draw_render_target(display.scene_rt, rect)
         gfx.set_blend_mode(.ADD)
