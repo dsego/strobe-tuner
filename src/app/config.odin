@@ -229,7 +229,9 @@ config_defaults :: Config {
 
     // Input and pitch detection
     samplerate                   = 48_000,
-    highpass_cutoff_hz           = 60, // below guitar low E (82Hz), lower notes read from their harmonics
+    // Under a guitar's low E (82 Hz). A lower note like a bass's E1 (41 Hz) loses its fundamental here,
+    // it's still found from its harmonics.
+    highpass_cutoff_hz           = 60,
     pitch_detect_fft_size        = 8192,
     pitch_detection_clarity_low  = 0.9,
     pitch_detection_clarity_high = 0.98,

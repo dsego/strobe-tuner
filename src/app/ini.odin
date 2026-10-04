@@ -53,6 +53,9 @@ config_path :: proc() -> string {
 
 // From the standard OS path, e.g. ~/Library/Application Support/<APP_NAME>/config.ini on macOS, see
 // config_directory. What's missing or doesn't parse keeps its default.
+// A field is an enum, a float, an integer, a bool or a fixed array of f32 or integers, an array of arrays
+// too, e.g. the note offsets per preset. Others keep their default: slices, dynamic and enumerated arrays,
+// arrays of anything else. An array of f64 would be read wrong, as f32.
 load_config :: proc() -> Config {
     config := config_defaults
 
@@ -88,6 +91,7 @@ load_config :: proc() -> Config {
                 split := strings.split(listed, ",")
                 defer delete(split)
                 // Of f32 or int, an array of arrays is read in the order it's written out
+                // Unwraps the arrays one level a pass down to the f32 or int, [3][8]int ends on int
                 element_type := field.type
                 for {
                     array, is_array := reflect.type_info_base(element_type).variant.(reflect.Type_Info_Array)
