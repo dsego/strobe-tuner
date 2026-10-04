@@ -86,8 +86,6 @@ reset_note_offsets_editing :: proc() {
     }
 }
 
-note_offset_selected_color := gfx.hex(0x4D4E58FF)
-
 
 // The selected preset's offsets on the instrument's sheet, under its first_row rows: a row with the title and
 // the buttons, then a row an offset. target is the note the tuner is on counted from A0, a new row starts

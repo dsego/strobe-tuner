@@ -36,6 +36,11 @@ gui_disabled := false
 // A control took this frame's press, one that nothing took drags a sheet down
 gui_press_taken := false
 
+sheet_bg_color: u32 = 0x40414AFF
+strobe_bg_color: u32 = 0x15161AFF
+settings_separator_color := gfx.hex(0x35363EFF)
+note_offset_selected_color := gfx.hex(0x4D4E58FF)
+
 text_color_dark := gfx.hex(0x15141BFF)
 text_color_light := gfx.hex(0xBDBDBDFF)
 text_color_white := gfx.hex(0xFBFBFBFF) // the note and readout while there's a pitch, titles
@@ -80,8 +85,6 @@ draw_led :: proc(led: gfx.Rect, on: bool, color: gfx.Color) {
     }
     gfx.draw_pill(led, color if on else pill_dark)
 }
-
-LOCK_BUTTON_HEIGHT :: 24
 
 // The most important toggle gets a whole button, gray while off and violet while locked. center is the
 // middle of the button.
@@ -140,14 +143,6 @@ draw_strobe_partial :: proc(position: [2]f32, type: PartialLabelType, band: core
     }
 }
 
-
-// Without the ruler: the note on its own with arrows either side to step it, the layout leaves room for them
-NOTE_ARROW_SLOT :: 32
-NOTE_WIDTH :: 112
-NOTE_HEIGHT :: 116
-NOTE_BASELINE :: 98 // bottom of the letter, from the top of the note
-// The octave number ends short of NOTE_WIDTH, the right arrow moves in to be as far from it as the left one
-NOTE_RIGHT_ARROW_INSET :: 13
 
 // White while there's a pitch
 draw_note :: proc(note: core.Note, pos: [2]f32, active: bool) {
@@ -528,9 +523,6 @@ draw_cents_gauge :: proc(top: [2]f32, cents: f32, lit: bool, semitones: bool, co
     }
 }
 
-// Strobe speeds per cent of detuning, fast spins 4× faster for the final adjustment
-RESPONSE_SPEEDS :: [2]f32{0.0125, 0.05}
-
 // Slow unless the LED is lit
 gui_response_toggle :: proc(pos: [2]f32, speed: f32) -> (f32, bool) {
     speeds := RESPONSE_SPEEDS
@@ -759,15 +751,6 @@ draw_measurements :: proc(pos: [2]f32, align: ReadoutAlign, hz, cents: f32, show
     width := draw_text_right(value.font, cents_str, cents_right + {0, VALUE_Y}, value.size, 0, color)
     if signed do draw_text_right(value.font, sign, cents_right + {-width - 2, VALUE_Y}, value.size, 0, color)
 }
-
-// Between the columns of the centred readout, room for the sign
-READOUT_GUTTER :: 40
-
-// From the top of the labels to the top of the values
-READOUT_VALUE_Y :: 18
-
-// From the right edge of the cents column to the right edge of the Hz column
-HZ_COLUMN_OFFSET :: 100
 
 // pos is the top right of the text, returns its width
 draw_text_right :: proc(font: gfx.Font, text: cstring, pos: [2]f32, size, spacing: f32, color: gfx.Color) -> f32 {

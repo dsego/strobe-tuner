@@ -40,6 +40,9 @@ Layout :: struct {
     instrument:     [2]f32, // the icon and the label of what's tuned to in the bottom left corner: their left edge and middle
 }
 
+STROBE_WIDTH :: 488
+STROBE_HEIGHT :: 306
+
 PANEL_PADDING :: 16
 DESKTOP_HEIGHT :: 620 // the window, as wide as the strobe, most of the strobe shows above the settings
 LEVEL_METER_WIDTH :: 80 // the microphone icon and the bar after it
@@ -56,6 +59,23 @@ CAP_HALF :: 0.3 // the letter's top and baseline from its middle, in font sizes
 BASELINE :: 0.8 // from the top of the text, in font sizes
 RULER_GAP :: 32 // without the ruler, between the note and the lock, the note's offset is halfway
 READOUT_NOTE_TOP :: NOTE_BASELINE - 40 // the 24pt values and the labels above them
+
+// Without the ruler: the note on its own with arrows either side to step it, the layout leaves room for them
+NOTE_ARROW_SLOT :: 32
+NOTE_WIDTH :: 112
+NOTE_HEIGHT :: 116
+NOTE_BASELINE :: 98 // bottom of the letter, from the top of the note
+// The octave number ends short of NOTE_WIDTH, the right arrow moves in to be as far from it as the left one
+NOTE_RIGHT_ARROW_INSET :: 13
+
+LOCK_BUTTON_HEIGHT :: 24
+
+// Between the columns of the centred readout, room for the sign
+READOUT_GUTTER :: 40
+// From the top of the labels to the top of the values
+READOUT_VALUE_Y :: 18
+// From the right edge of the cents column to the right edge of the Hz column
+HZ_COLUMN_OFFSET :: 100
 
 // Where the right arrow of the note ends, the readout keeps clear of it
 note_right :: proc(layout: Layout) -> f32 {

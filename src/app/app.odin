@@ -24,8 +24,7 @@ import "../audio"
 import "../core"
 import "../gfx"
 
-sheet_bg_color: u32 = 0x40414AFF
-strobe_bg_color: u32 = 0x15161AFF
+APP_NAME :: "Strobie"
 
 // Show the signal stats and NSDF plots, e.g. `odin run app -debug -define:DEBUG_STATS=true`
 DEBUG_STATS :: #config(DEBUG_STATS, false)
@@ -33,13 +32,6 @@ DEBUG_STATS :: #config(DEBUG_STATS, false)
 // The version and build from the Info.plist, e.g. "2.0 (1)", the bundle scripts pass it in. Shown after the
 // settings' title.
 VERSION :: #config(VERSION, "dev")
-
-// The track presets the I key steps through
-INTERVAL_OPTIONS: [3][core.MAX_BANDS]f32 : {
-    {1, 2, 4, 0, 0},
-    {1, 1.5, 2, 0, 0},
-    {1, 2, 3, 0, 0},
-}
 
 // With nothing to show the screen updates less often, it saves the battery of a tuner left open, see App.quiet_time
 IDLE_AFTER_S :: 2

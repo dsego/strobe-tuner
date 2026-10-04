@@ -56,6 +56,32 @@ StrobeSource :: enum {
     LAMP, // the lamp's screen, a DFT bin of it for each track's partial, see lamp_bands
 }
 
+// The track presets the I key steps through
+INTERVAL_OPTIONS: [3][core.MAX_BANDS]f32 : {
+    {1, 2, 4, 0, 0},
+    {1, 1.5, 2, 0, 0},
+    {1, 2, 3, 0, 0},
+}
+
+// The partials a track can follow, 1½ is the fifth above the fundamental like in the 1 1½ 2 preset
+TRACK_PARTIALS :: [?]f32{1, 1.5, 2, 3, 4, 5, 6, 7, 8}
+TRACK_OFFSET_MAX_CENTS :: 50
+TRACK_OFFSET_STEP_CENTS :: 0.5
+
+// Strobe speeds per cent of detuning, fast spins 4× faster for the final adjustment
+RESPONSE_SPEEDS :: [2]f32{0.0125, 0.05}
+
+PITCH_STANDARD_MIN :: 400
+PITCH_STANDARD_MAX :: 480
+
+// The scope's and the lamp's persistence, short, medium and long
+SCOPE_PERSISTENCE_STEPS_MS :: [3]f32{15, 40, 150}
+// The trace's span, short, medium and long, and its range from the middle to the edge, narrow and wide.
+// Narrow for an instrument's pluck settling, wide for a voice's vibrato, half a semitone is as far as a
+// note can be off before it's the next one.
+TRACE_SPAN_STEPS_S :: [3]f32{1, 2, 5}
+TRACE_RANGE_STEPS_CENTS :: [2]f32{25, 50}
+
 
 Config :: struct {
     // The strobe's note at the start, the one it was on at the end

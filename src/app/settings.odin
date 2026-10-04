@@ -27,9 +27,6 @@ import "../gfx"
 // Everything that isn't needed while tuning lives here, the main screen keeps the note lock
 // and the strobe speed.
 
-PITCH_STANDARD_MIN :: 400
-PITCH_STANDARD_MAX :: 480
-
 SEGMENT_WIDTH :: 60
 
 // The rows in gui_settings, a phone has no input row. The display's options page is as tall, the strobe's
@@ -44,15 +41,6 @@ DISPLAY_NAMES :: [len(StrobeDisplayType)]cstring{"Strobe", "Scope", "Trace", "La
 
 // The labels of the steps below that have three
 STEP_LABELS :: []cstring{"Short", "Medium", "Long"}
-// The scope's and the lamp's persistence, short, medium and long
-SCOPE_PERSISTENCE_STEPS_MS :: [3]f32{15, 40, 150}
-// The trace's span, short, medium and long, and its range from the middle to the edge, narrow and wide.
-// Narrow for an instrument's pluck settling, wide for a voice's vibrato, half a semitone is as far as a
-// note can be off before it's the next one.
-TRACE_SPAN_STEPS_S :: [3]f32{1, 2, 5}
-TRACE_RANGE_STEPS_CENTS :: [2]f32{25, 50}
-
-settings_separator_color := gfx.hex(0x35363EFF)
 
 
 // The dropdown whose menu is open, one at a time, on the settings or the instrument's sheet
@@ -256,11 +244,6 @@ gui_settings :: proc(
 // needs updating.
 TRACK_SETTINGS_ROWS :: 5 // the last is room for the buttons that add and remove tracks
 
-// The partials a track can follow, 1½ is the fifth above the fundamental like in the 1 1½ 2 preset
-TRACK_PARTIALS :: [?]f32{1, 1.5, 2, 3, 4, 5, 6, 7, 8}
-TRACK_OFFSET_MAX_CENTS :: 50
-TRACK_OFFSET_STEP_CENTS :: 0.5
-
 gui_track_settings :: proc(
     sheet_layout: SheetLayout,
     config: ^Config,
@@ -351,10 +334,10 @@ gui_track_settings :: proc(
         // controls, these change the strobe and not the track above. Added and removed on top, a new track
         // follows the next whole partial above the one under it, the 1½ fifth is only for picking by hand
         count, top := 0, 0
-        for interval, slot in config.strobe_intervals {
+        for interval, index in config.strobe_intervals {
             if interval < 1 do continue
             count += 1
-            top = slot
+            top = index
         }
         GAP :: 8
         height: f32 = 28
