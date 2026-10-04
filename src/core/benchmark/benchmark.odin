@@ -23,6 +23,7 @@
 package benchmark
 
 import "core:fmt"
+import "core:math"
 import "core:math/rand"
 import "core:time"
 
@@ -88,6 +89,62 @@ main :: proc() {
             TRACKS,
             FRAMES_PER_SECOND,
             100 * core_share,
+        )
+    }
+
+    // The scope's screen as the app makes it (STROBE_WIDTH × SCOPE_ROWS) at the default persistence. A frame's
+    // samples swept onto it, the screen from above for the lamp, and how many of its cells are lit, the dots
+    // the scope shader draws (draw_scope_screen's cut-off, a third of a column's dwell is full brightness).
+    // An in tune note draws a thin line, a detuned one smears over more cells.
+    SCOPE_COLUMNS :: 488
+    SCOPE_ROWS :: 240
+    SCOPE_FRAME :: SAMPLERATE / 60
+    SCOPE_FRAMES :: 300
+
+    scope_notes := []struct {
+        name:    string,
+        freq_hz: f64,
+        cents:   f64,
+    }{{"A2 in tune", 110, 0}, {"A2 +30¢", 110, 30}, {"A4 in tune", 440, 0}}
+
+    for note in scope_notes {
+        scope := core.init_scope(SCOPE_COLUMNS, SCOPE_ROWS)
+        defer core.destroy_scope(&scope)
+        core.set_scope_freq(&scope, note.freq_hz)
+        scope.persistence_seconds = 0.04
+
+        played_hz := note.freq_hz * math.pow(2, note.cents / 1200)
+        chunk: [SCOPE_FRAME]f32
+        sweep, from_above: time.Duration
+        for _ in 0 ..< SCOPE_FRAMES {
+            clock := scope.sample_clock
+            for &sample, index in chunk do sample = f32(0.5 * math.sin(math.TAU * played_hz * f64(clock + i64(index)) / SAMPLERATE))
+
+            start := time.tick_now()
+            core.sweep_samples(&scope, chunk[:])
+            sweep += time.tick_since(start)
+
+            start = time.tick_now()
+            heights, _ := core.scope_from_above(&scope, .HALF_RECTIFIED)
+            from_above += time.tick_since(start)
+            sink += heights[0]
+        }
+
+        total: f32 = 0
+        for dwell in scope.screen do total += dwell
+        full := total / SCOPE_COLUMNS
+        lit := 0
+        for dwell in scope.screen {
+            if 3 * dwell / full >= 0.02 do lit += 1
+        }
+
+        fmt.printfln(
+            "Scope %v: sweep %.1f µs, from above %.1f µs a frame, %v of %v cells lit",
+            note.name,
+            time.duration_microseconds(sweep) / SCOPE_FRAMES,
+            time.duration_microseconds(from_above) / SCOPE_FRAMES,
+            lit,
+            SCOPE_COLUMNS * SCOPE_ROWS,
         )
     }
 

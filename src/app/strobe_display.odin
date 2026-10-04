@@ -52,6 +52,10 @@ StrobeDisplay :: struct {
     band_visibility: [core.MAX_BANDS]f32,
     // and of the scope's beam, see draw_scope_display
     scope_visibility: f32,
+    // the scope's screen for its shader, a byte a cell, see draw_scope_screen
+    scope_shader:     gfx.Shader,
+    scope_texture:    gfx.Texture,
+    scope_pixels:     []u8,
     // the tracks turned by the lamp, see lamp_bands: each one's phase on the screen at the previous
     // frame, at this reference and this sample, and the phase it turned to
     lamp_phases:        [core.MAX_BANDS]f64,
@@ -175,6 +179,7 @@ init_strobe_display :: proc(colors: [2]u32, background: u32) -> (self: StrobeDis
     self.strobe_shader = gfx.load_shader(.STROBE)
     self.bloom_shader = gfx.load_shader(.BLOOM)
     self.shadow_shader = gfx.load_shader(.SHADOW)
+    self.scope_shader = gfx.load_shader(.SCOPE)
 
     return
 }
@@ -183,6 +188,9 @@ destroy_strobe_display :: proc(self: ^StrobeDisplay) {
     gfx.unload_shader(self.strobe_shader)
     gfx.unload_shader(self.bloom_shader)
     gfx.unload_shader(self.shadow_shader)
+    gfx.unload_shader(self.scope_shader)
+    gfx.unload_texture(self.scope_texture)
+    delete(self.scope_pixels)
     unload_glow_targets(self)
 }
 

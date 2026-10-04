@@ -58,7 +58,7 @@ draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: gf
         // Offscreen, it's as large as rect and cuts off what is outside
         ensure_glow_targets(display, {rect.width, rect.height})
         gfx.begin_render_target(display.scene_rt, display.background, {rect.x, rect.y}, display.glow_scale)
-        draw_scope_screen(rect, scope, beam_color, dark_color, display.scope_visibility)
+        draw_scope_screen(display, rect, scope, beam_color, dark_color)
         gfx.end_render_target()
         render_bloom(display)
 
@@ -85,15 +85,16 @@ draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: gf
         heights, dwell := core.scope_from_above(scope, config.lamp_shape)
         draw_lamp(rect, heights, dwell, config.lamp_shape, beam_color, dark_color)
     } else {
-        draw_scope_screen(rect, scope, beam_color, dark_color, display.scope_visibility)
+        draw_scope_screen(display, rect, scope, beam_color, dark_color)
     }
 }
 
 // The screen of an analog oscilloscope, as bright as the beam stayed long. The beam in the colorway's lit
 // color, the lines through the middle in its second color.
 // Every lit cell is a round dot wider than the cell, the dots of neighbouring cells overlap and add up
-// to a thicker and brighter beam. brightness dims the whole beam, 1 is full.
-draw_scope_screen :: proc(rect: gfx.Rect, scope: ^core.Scope, beam_color, grid_color: gfx.Color, brightness: f32) {
+// to a thicker and brighter beam, drawn by the scope shader from the screen as a texture, a byte a cell.
+// The beam dims with the display's scope_visibility, 1 is full.
+draw_scope_screen :: proc(display: ^StrobeDisplay, rect: gfx.Rect, scope: ^core.Scope, beam_color, grid_color: gfx.Color) {
     // The Lissajous figure is round, on a square in the middle
     width := core.scope_width(scope)
     rect := rect
@@ -114,22 +115,37 @@ draw_scope_screen :: proc(rect: gfx.Rect, scope: ^core.Scope, beam_color, grid_c
 
     full := total / f32(width)
 
+    columns, rows := i32(scope.columns), i32(scope.rows)
+    if display.scope_texture.width != columns || display.scope_texture.height != rows {
+        gfx.unload_texture(display.scope_texture)
+        display.scope_texture = gfx.create_gray_texture(columns, rows)
+        delete(display.scope_pixels)
+        display.scope_pixels = make([]u8, scope.columns * scope.rows)
+    }
+
     // A steady beam is shared by a few cells of its column, more where the wave is steep. A third of
     // the column's dwell is full brightness.
     EXPOSURE :: 3
     DARK :: 0.02
-    cell_size := [2]f32{rect.width / f32(width), rect.height / f32(scope.rows)}
     for dwell, i in scope.screen {
         intensity := min(EXPOSURE * dwell / full, 1)
-        if intensity < DARK do continue
-
-        column := i % scope.columns
-        row := i / scope.columns
-        center := [2]f32{rect.x + (f32(column) + 0.5) * cell_size.x, rect.y + (f32(row) + 0.5) * cell_size.y}
-        dot := gfx.Rect{center.x - SCOPE_BEAM_RADIUS, center.y - SCOPE_BEAM_RADIUS, 2 * SCOPE_BEAM_RADIUS, 2 * SCOPE_BEAM_RADIUS}
-        alpha := u8(255 * brightness * intensity)
-        gfx.draw_disc(dot, {beam_color.r, beam_color.g, beam_color.b, alpha})
+        display.scope_pixels[i] = u8(255 * intensity + 0.5) if intensity >= DARK else 0
     }
+    gfx.update_texture(display.scope_texture, display.scope_pixels)
+
+    color := gfx.normalize_color(beam_color)
+    color.a = display.scope_visibility
+    uniforms := gfx.ScopeUniforms {
+        color     = color,
+        cells     = {f32(columns), f32(rows)},
+        cell_size = {rect.width / f32(width), rect.height / f32(rows)},
+        radius    = SCOPE_BEAM_RADIUS,
+    }
+    gfx.begin_shader(display.scope_shader)
+    defer gfx.end_shader()
+
+    gfx.set_shader_uniforms(display.scope_shader, &uniforms)
+    gfx.draw_texture(display.scope_texture, {0, 0, f32(width), f32(rows)}, rect)
 }
 
 // The comparator's tracks turned by the lamp instead, the strobe the other way: a DFT bin of the

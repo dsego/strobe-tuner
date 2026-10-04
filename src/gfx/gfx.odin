@@ -103,6 +103,7 @@ ShaderKind :: enum {
     STROBE,
     BLOOM,
     SHADOW,
+    SCOPE,
 }
 
 // Shader uniforms are plain structs, pushed as a uniform buffer. The layout has to match the MSL struct and
@@ -146,6 +147,13 @@ BloomUniforms :: struct #align (16) {
 ShadowUniforms :: struct #align (16) {
     shape: [4]f32, // the rounded rectangle, min x and y then max x and y, in points of the quad
     size:  [2]f32, // the quad, in points
+}
+
+ScopeUniforms :: struct #align (16) {
+    color:     [4]f32, // the beam's, its alpha the brightness
+    cells:     [2]f32, // the screen's columns and rows, the texture's size
+    cell_size: [2]f32, // of a cell, in points
+    radius:    f32, // of the beam's dot round each cell, in points
 }
 
 

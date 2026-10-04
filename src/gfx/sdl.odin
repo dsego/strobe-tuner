@@ -33,6 +33,12 @@ Texture :: struct {
     width, height: i32,
 }
 
+// A texture's new pixels, from offset in this frame's texture_pixels
+TextureUpload :: struct {
+    texture: Texture,
+    offset:  int,
+}
+
 RenderTarget :: struct {
     texture: Texture,
 }
@@ -57,6 +63,7 @@ Program :: enum {
     STROBE,
     BLOOM,
     SHADOW,
+    SCOPE,
 }
 
 Vertex :: struct {
@@ -110,6 +117,7 @@ when ODIN_OS == .Darwin {
         .STROBE = {#load("../shaders/metal/strobe.metal"), "strobe_fragment"},
         .BLOOM  = {#load("../shaders/metal/bloom.metal"), "bloom_fragment"},
         .SHADOW = {#load("../shaders/metal/shadow.metal"), "shadow_fragment"},
+        .SCOPE  = {#load("../shaders/metal/scope.metal"), "scope_fragment"},
     }
 } else {
     SHADER_FORMAT :: sdl.GPUShaderFormat{.SPIRV}
@@ -120,6 +128,7 @@ when ODIN_OS == .Darwin {
         .STROBE = {#load("../../build/spirv/strobe.frag.spv"), "main"},
         .BLOOM  = {#load("../../build/spirv/bloom.frag.spv"), "main"},
         .SHADOW = {#load("../../build/spirv/shadow.frag.spv"), "main"},
+        .SCOPE  = {#load("../../build/spirv/scope.frag.spv"), "main"},
     }
 }
 
@@ -156,12 +165,16 @@ gpu: struct {
     vertex_buffer:    ^sdl.GPUBuffer,
     transfer_buffer:  ^sdl.GPUTransferBuffer,
     vertex_capacity:  int,
+    texture_transfer: ^sdl.GPUTransferBuffer,
+    texture_capacity: int,
 
     // this frame
     vertices:         [dynamic]Vertex,
     commands:         [dynamic]DrawCommand,
     passes:           [dynamic]Pass,
     uniform_data:     [dynamic]u8,
+    texture_pixels:   [dynamic]u8, // the textures updated this frame, see update_texture
+    texture_uploads:  [dynamic]TextureUpload,
 
     // drawing state
     program:          Program,
@@ -225,6 +238,7 @@ init :: proc(width, height: i32, title: cstring) -> bool {
         .STROBE = create_shader(fragment_shader_code[.STROBE], .FRAGMENT, 0, 1),
         .BLOOM  = create_shader(fragment_shader_code[.BLOOM], .FRAGMENT, 1, 1),
         .SHADOW = create_shader(fragment_shader_code[.SHADOW], .FRAGMENT, 0, 1),
+        .SCOPE  = create_shader(fragment_shader_code[.SCOPE], .FRAGMENT, 1, 1),
     }
     for shader in gpu.fragment_shaders {
         if shader == nil do return false
@@ -282,11 +296,14 @@ shutdown :: proc() {
         sdl.ReleaseGPUBuffer(gpu.device, gpu.vertex_buffer)
         sdl.ReleaseGPUTransferBuffer(gpu.device, gpu.transfer_buffer)
     }
+    if gpu.texture_transfer != nil do sdl.ReleaseGPUTransferBuffer(gpu.device, gpu.texture_transfer)
 
     delete(gpu.vertices)
     delete(gpu.commands)
     delete(gpu.passes)
     delete(gpu.uniform_data)
+    delete(gpu.texture_pixels)
+    delete(gpu.texture_uploads)
 
     sdl.ReleaseWindowFromGPUDevice(gpu.device, gpu.window)
     sdl.DestroyGPUDevice(gpu.device)
@@ -393,6 +410,8 @@ begin_frame :: proc(clear: Color) {
     clear_dynamic_array(&gpu.commands)
     clear_dynamic_array(&gpu.passes)
     clear_dynamic_array(&gpu.uniform_data)
+    clear_dynamic_array(&gpu.texture_pixels)
+    clear_dynamic_array(&gpu.texture_uploads)
     gpu.program = .SPRITE
     gpu.blend = .ALPHA
     gpu.scissor = nil
@@ -504,8 +523,9 @@ end_frame :: proc() {
     }
     gpu.acquire_failed = !acquired
 
-    // Minimized or hidden, nothing to draw into. Or no vertex buffer, nothing to draw with.
-    gpu.dropped = swapchain == nil || !upload_vertices(command_buffer)
+    // Minimized or hidden, nothing to draw into. Or no vertex buffer, nothing to draw with. The textures'
+    // new pixels go up first, before the passes that draw them.
+    gpu.dropped = swapchain == nil || !upload_textures(command_buffer) || !upload_vertices(command_buffer)
     if gpu.dropped {
         _ = sdl.SubmitGPUCommandBuffer(command_buffer)
         sdl.Delay(16)
@@ -662,6 +682,42 @@ load_texture :: proc(png: []u8) -> Texture {
 // Straight alpha RGBA, the sampler is linear already
 load_texture_rgba :: proc(width, height: i32, pixels: []u8) -> Texture {
     return create_texture(width, height, pixels)
+}
+
+// One byte a texel, read as the red channel, for pixels the CPU redraws every frame with update_texture.
+// Starts out undefined, an empty texture when it fails.
+create_gray_texture :: proc(width, height: i32) -> Texture {
+    handle := sdl.CreateGPUTexture(
+        gpu.device,
+        {
+            type = .D2,
+            format = .R8_UNORM,
+            usage = {.SAMPLER},
+            width = u32(width),
+            height = u32(height),
+            layer_count_or_depth = 1,
+            num_levels = 1,
+        },
+    )
+    if handle == nil {
+        fmt.eprintln("SDL_CreateGPUTexture failed:", sdl.GetError())
+        return {}
+    }
+    return {handle, width, height}
+}
+
+// New pixels for a create_gray_texture texture, uploaded before this frame draws. The draws earlier in the
+// frame see them too.
+update_texture :: proc(texture: Texture, pixels: []u8) {
+    if texture.handle == nil do return
+
+    assert(len(pixels) == int(texture.width * texture.height))
+
+    // Each texture's pixels start on a 16 byte boundary, as copies from a buffer want it
+    offset := (len(gpu.texture_pixels) + 15) &~ 15
+    resize(&gpu.texture_pixels, offset)
+    append(&gpu.texture_pixels, ..pixels)
+    append(&gpu.texture_uploads, TextureUpload{texture, offset})
 }
 
 unload_texture :: proc(texture: Texture) {
@@ -968,6 +1024,8 @@ program_of :: proc(shader: Shader) -> Program {
         return .BLOOM
     case .SHADOW:
         return .SHADOW
+    case .SCOPE:
+        return .SCOPE
     }
     return .SPRITE
 }
@@ -1018,6 +1076,48 @@ push_vertices :: proc(texture: ^sdl.GPUTexture, vertices: []Vertex) {
         }
     }
     append(&gpu.commands, command)
+}
+
+// The pixels update_texture queued this frame, in one copy pass. A texture that can't be uploaded keeps the
+// pixels it had, the frame is still drawn.
+upload_textures :: proc(command_buffer: ^sdl.GPUCommandBuffer) -> bool {
+    if len(gpu.texture_uploads) == 0 do return true
+
+    size := len(gpu.texture_pixels)
+    if size > gpu.texture_capacity {
+        if gpu.texture_transfer != nil do sdl.ReleaseGPUTransferBuffer(gpu.device, gpu.texture_transfer)
+
+        gpu.texture_capacity = max(size, 2 * gpu.texture_capacity)
+        gpu.texture_transfer = sdl.CreateGPUTransferBuffer(gpu.device, {usage = .UPLOAD, size = u32(gpu.texture_capacity)})
+        if gpu.texture_transfer == nil {
+            fmt.eprintln("Could not create the texture transfer buffer:", sdl.GetError())
+            gpu.texture_capacity = 0 // tried again next frame
+            return true
+        }
+    }
+
+    mapped := sdl.MapGPUTransferBuffer(gpu.device, gpu.texture_transfer, true)
+    if mapped == nil {
+        fmt.eprintln("SDL_MapGPUTransferBuffer failed:", sdl.GetError())
+        return true
+    }
+    mem.copy(mapped, raw_data(gpu.texture_pixels), size)
+    sdl.UnmapGPUTransferBuffer(gpu.device, gpu.texture_transfer)
+
+    // Every texel is replaced, the GPU can take a fresh copy instead of waiting for the frames still drawing
+    // the old one
+    copy_pass := sdl.BeginGPUCopyPass(command_buffer)
+    for upload in gpu.texture_uploads {
+        texture := upload.texture
+        sdl.UploadToGPUTexture(
+            copy_pass,
+            {transfer_buffer = gpu.texture_transfer, offset = u32(upload.offset)},
+            {texture = texture.handle, w = u32(texture.width), h = u32(texture.height), d = 1},
+            true,
+        )
+    }
+    sdl.EndGPUCopyPass(copy_pass)
+    return true
 }
 
 // False when the buffers couldn't be made, nothing can be drawn then
