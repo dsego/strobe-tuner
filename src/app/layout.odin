@@ -26,7 +26,6 @@ Layout :: struct {
     strobe_top:     f32, // top of the visible strobe, below the notch
     strobe_scale:   f32, // size of the strobe tracks relative to the desktop
     ruler:          gfx.Rect,
-    ruler_scale:    f32, // size of the ruler's notes relative to the desktop
     gauge:          [2]f32, // under the ruler's note, the middle of its top, see draw_cents_gauge
     measurements:   [2]f32, // the top middle of the readout, see draw_measurements
     stats:          [2]f32,
@@ -73,13 +72,13 @@ compute_layout :: proc(window: [2]f32, safe: gfx.Rect, offsets: bool) -> (layout
     panel := layout.strobe.y + layout.strobe.height
 
     layout.stats = {left + 131, panel + 80}
-    panel_layout(&layout, left, right, bottom, RULER_SCALE, offsets)
+    panel_layout(&layout, left, right, bottom, offsets)
     return
 }
 
 // The response and the level meter in a row just under the strobe, the note with the readout above it
 // and the lock under it, and the instrument and the settings in the bottom corners
-panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, ruler_scale: f32, offsets: bool) {
+panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, offsets: bool) {
     panel := layout.strobe.y + layout.strobe.height
 
     // The response changes how fast the strobe spins, it sits just under it on the left, the level meter
@@ -95,10 +94,9 @@ panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, ruler_scale: f32
     // The readout in the top row, the response and the level meter centred on its values, the labels sit
     // above. The note with the gauge and the lock under it between the readout values and the bottom row.
     // Offsets from the middle of the ruler.
-    layout.ruler_scale = ruler_scale
     readout_top := layout.response.y - LABEL_SIZE / 2
-    readout_bottom := readout_top + READOUT_VALUE_Y + BASELINE * ruler_scale * READOUT_SIZE
-    layout.response.y = readout_bottom - CAP_HALF * ruler_scale * READOUT_SIZE
+    readout_bottom := readout_top + READOUT_VALUE_Y + BASELINE * RULER_SCALE * READOUT_SIZE
+    layout.response.y = readout_bottom - CAP_HALF * RULER_SCALE * READOUT_SIZE
     layout.level_meter.y = layout.response.y - 2
     rows_bottom := corners - BOTTOM_ROW_CLEARANCE
 
@@ -108,8 +106,8 @@ panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, ruler_scale: f32
     MIN_GAP :: 12
     CAPTION_GAP :: 6 // from the gauge to the offset
     caption: f32 = CAPTION_GAP + LABEL_SIZE if offsets else 0
-    note_top := -CAP_HALF * ruler_scale * RULER_NOTE_SIZE
-    note_bottom := -note_top + ruler_scale * OCTAVE_BELOW
+    note_top: f32 = -CAP_HALF * RULER_SCALE * RULER_NOTE_SIZE
+    note_bottom := -note_top + RULER_SCALE * OCTAVE_BELOW
     contents := note_bottom - note_top + GAUGE_HEIGHT + caption + LOCK_BUTTON_HEIGHT
     gap := max((rows_bottom - readout_bottom - contents) / 4, MIN_GAP)
     gauge_y := note_bottom + gap
@@ -119,7 +117,7 @@ panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, ruler_scale: f32
 
     center := (left + right) / 2
     // Centred on the notes and stopping above the gauge, a press on the gauge doesn't swipe the notes
-    height := min(ruler_scale * RULER_HEIGHT, 2 * gauge_y)
+    height := min(RULER_SCALE * RULER_HEIGHT, 2 * gauge_y)
     layout.ruler = {left, middle - height / 2, right - left, height}
     layout.measurements = {center, readout_top}
     layout.gauge = {center, middle + gauge_y}

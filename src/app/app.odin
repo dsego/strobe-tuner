@@ -161,13 +161,15 @@ run_app :: proc(config: ^Config) {
         feed_scope(&app)
 
         window, safe := gfx.window_size(), gfx.safe_area()
+
         // The plots take the rest of the window on the right
         when DEBUG_STATS {
             window.x = STROBE_WIDTH
             safe.width = STROBE_WIDTH
         }
+
         layout := compute_layout(window, safe, selected_preset(config) >= 0)
-        update_pixel_fonts(layout.ruler_scale)
+        update_pixel_fonts()
 
         gfx.begin_frame(gfx.hex(strobe_bg_color))
         defer gfx.end_frame()
@@ -262,10 +264,13 @@ handle_keys :: proc(app: ^App) {
         reset_config(config)
         app.config_changed = true
     }
+
     if gfx.key_pressed(.G) do config.strobe_glow = !config.strobe_glow
+
     if gfx.key_pressed(.TAB) {
         config.strobe_display_type = StrobeDisplayType((int(config.strobe_display_type) + 1) % len(StrobeDisplayType))
     }
+
     // The next preset of the tracks, it replaces the partials and clears what was set on each track
     if gfx.key_pressed(.I) && config.strobe_mode == .HARMONIC {
         options, defaults := INTERVAL_OPTIONS, config_defaults
@@ -279,6 +284,7 @@ handle_keys :: proc(app: ^App) {
     // Debug builds only, Cmd+Shift+, reloads the config file and Cmd+, opens it in TextEdit, which can't be
     // started from the Mac App Store sandbox
     command := gfx.key_down(.LEFT_SUPER) || gfx.key_down(.RIGHT_SUPER)
+
     if ODIN_DEBUG && command && gfx.key_pressed(.COMMA) {
         if gfx.key_down(.LEFT_SHIFT) || gfx.key_down(.RIGHT_SHIFT) {
             config^ = load_config()

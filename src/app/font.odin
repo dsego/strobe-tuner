@@ -97,7 +97,6 @@ lerp_font :: proc(small, large: PixelFont, amount: f32) -> PixelFont {
 
 PixelFonts :: struct {
     scale:           f32, // the DPI scale they were loaded for
-    ruler_scale:     f32, // the ruler's sizes relative to the desktop, see Layout
     label:           PixelFont,
     label_large:     PixelFont,
     label_small:     PixelFont,
@@ -121,11 +120,10 @@ PixelFonts :: struct {
 
 pixel_fonts: PixelFonts
 
-// Called before the frame starts, reloads when the window moves to a screen with another scale or the
-// layout sizes the ruler differently
-update_pixel_fonts :: proc(ruler_scale: f32) {
+// Called before the frame starts, reloads when the window moves to a screen with another scale
+update_pixel_fonts :: proc() {
     scale := gfx.dpi_scale()
-    if scale == pixel_fonts.scale && ruler_scale == pixel_fonts.ruler_scale do return
+    if scale == pixel_fonts.scale do return
     unload_pixel_fonts()
 
     inter_medium := #load("../../assets/fonts/inter/Inter-Medium.ttf")
@@ -141,7 +139,6 @@ update_pixel_fonts :: proc(ruler_scale: f32) {
 
     pixel_fonts = {
         scale           = scale,
-        ruler_scale     = ruler_scale,
         label           = load(inter_medium, LABEL_SIZE, scale, FONT_CODEPOINTS),
         label_large     = load(inter_medium, LABEL_LARGE_SIZE, scale, FONT_CODEPOINTS),
         label_small     = load(inter_medium, LABEL_SMALL_SIZE, scale, FONT_CODEPOINTS),
@@ -151,12 +148,12 @@ update_pixel_fonts :: proc(ruler_scale: f32) {
         icon_large      = load(phosphor, ICON_LARGE_SIZE, scale, ICON_CODEPOINTS),
         icon_large_bold = load(phosphor_bold, ICON_LARGE_SIZE, scale, ICON_BOLD_CODEPOINTS),
         icon_sheet      = load(phosphor_bold, ICON_SHEET_SIZE, scale, ICON_SHEET_CODEPOINTS),
-        note            = load(inter_medium, ruler_scale * RULER_NOTE_SIZE, scale, "ABCDEFG"),
-        neighbour       = load(inter_medium, ruler_scale * RULER_NEIGHBOUR_SIZE, scale, "ABCDEFG"),
-        octave          = load(inter_medium, ruler_scale * RULER_OCTAVE_SIZE, scale, "0123456789"),
-        note_sharp      = load(noto_sans_mono, ruler_scale * RULER_NOTE_SHARP_SIZE, scale, "♯"),
-        neighbour_sharp = load(noto_sans_mono, ruler_scale * RULER_NEIGHBOUR_SHARP_SIZE, scale, "♯"),
-        readout         = load(inter_tabular, ruler_scale * READOUT_SIZE, scale, TABULAR_CODEPOINTS),
+        note            = load(inter_medium, RULER_SCALE * RULER_NOTE_SIZE, scale, "ABCDEFG"),
+        neighbour       = load(inter_medium, RULER_SCALE * RULER_NEIGHBOUR_SIZE, scale, "ABCDEFG"),
+        octave          = load(inter_medium, RULER_SCALE * RULER_OCTAVE_SIZE, scale, "0123456789"),
+        note_sharp      = load(noto_sans_mono, RULER_SCALE * RULER_NOTE_SHARP_SIZE, scale, "♯"),
+        neighbour_sharp = load(noto_sans_mono, RULER_SCALE * RULER_NEIGHBOUR_SHARP_SIZE, scale, "♯"),
+        readout         = load(inter_tabular, RULER_SCALE * READOUT_SIZE, scale, TABULAR_CODEPOINTS),
         strobe_arrow    = load(inter_medium, STROBE_ARROW_SIZE, scale, "◀▶"),
         offset_value    = load(inter_medium, OFFSET_VALUE_SIZE, scale, "ABCDEFG#0123456789.+-¢"),
         band_label      = load(inter_tabular, LABEL_LARGE_SIZE, scale, TABULAR_CODEPOINTS),

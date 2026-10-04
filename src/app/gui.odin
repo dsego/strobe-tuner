@@ -351,7 +351,7 @@ ruler_follow_finger :: proc(ruler: ^NoteRuler, rect: gfx.Rect, spacing, highest:
 }
 
 ruler_layout :: proc(rect: gfx.Rect) -> RulerLayout {
-    scale := pixel_fonts.ruler_scale
+    scale :: RULER_SCALE
     layout := RulerLayout {
         rect       = rect,
         center     = {rect.x + rect.width / 2, rect.y + rect.height / 2},
@@ -503,7 +503,7 @@ draw_cents_gauge :: proc(top: [2]f32, cents: f32, lit: bool, semitones: bool, co
     // The ticks either side of the red one, as far as the room reaches from under the note, every few long
     // like a ruler's. Not snapped to the pixels, they glide.
     LONG_EVERY :: 5
-    spacing := pixel_fonts.ruler_scale * GAUGE_SPACING
+    spacing: f32 = RULER_SCALE * GAUGE_SPACING
     first := int(math.floor(-f32(per_side) - gauge_position)) - 1
     last := int(math.ceil(f32(per_side) - gauge_position)) + 1
     for offset in first ..= last {
