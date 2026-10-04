@@ -22,7 +22,18 @@ import "core:slice"
 import "core:testing"
 
 
-// A strong pitch stays strong down to this far under min_snr_db, so a decaying note doesn't flicker
+// Tuned on test recordings with the sandbox tools, not in the settings
+
+PITCH_FFT_SIZE :: 8192 // the window is half of it, 4096 samples
+// Under a guitar's low E (82 Hz), it takes out DC and low frequency rumble. A lower note like a bass's E1
+// (41 Hz) loses its fundamental here, it's still found from its harmonics.
+PITCH_HIGHPASS_HZ :: 60
+// A strong pitch is this clear at least and this far over the noise floor, a weak one less clear than
+// PITCH_CLARITY_LOW
+PITCH_CLARITY_LOW :: 0.9
+PITCH_CLARITY_HIGH :: 0.98
+PITCH_MIN_SNR_DB :: 2
+// A strong pitch stays strong down to this far under PITCH_MIN_SNR_DB, so a decaying note doesn't flicker
 // between strong and weak around the threshold
 SNR_HYSTERESIS_DB :: 1.5
 
@@ -49,10 +60,7 @@ PitchDetector :: struct {
     // Only here, the strobe's tracks are narrow and the scope wants the wave as it is.
     highpass:       Biquad,
     lowpass:        Biquad,
-    clarity_high:   f32,
-    clarity_low:    f32,
     noise_floor:    NoiseFloor, // of the RMS
-    min_snr_db:     f32,
     snr_db:         f32,
     pitch_standard: f32, // A4, detected notes are named against it
 }
@@ -78,25 +86,12 @@ PitchInfo :: struct {
 }
 
 
-init_pitch_detector :: proc(
-    samplerate: int,
-    fft_size: int,
-    clarity_high: f32,
-    clarity_low: f32,
-    min_snr_db: f32,
-    noise_floor_snr_db_threshold: f32,
-    highpass_cutoff_hz: f32,
-) -> (
-    self: PitchDetector,
-) {
-    self.samples = make([]f32, fft_size / 2)
-    self.highpass = init_highpass(highpass_cutoff_hz, f32(samplerate))
+init_pitch_detector :: proc(samplerate: int) -> (self: PitchDetector) {
+    self.samples = make([]f32, PITCH_FFT_SIZE / 2)
+    self.highpass = init_highpass(PITCH_HIGHPASS_HZ, f32(samplerate))
     self.lowpass = init_lowpass(PITCH_LOWPASS_HZ, f32(samplerate))
-    self.nsdf = init_nsdf(fft_size, samplerate)
-    self.clarity_high = clarity_high
-    self.clarity_low = clarity_low
-    self.min_snr_db = min_snr_db
-    self.noise_floor = init_noise_floor(noise_floor_snr_db_threshold)
+    self.nsdf = init_nsdf(PITCH_FFT_SIZE, samplerate)
+    self.noise_floor = init_noise_floor()
     self.pitch_standard = 440.0
 
     init_audio_capture_node(&self, "pitch")
@@ -153,7 +148,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
         if abs(cents_deviation(info.detected_freq, mains_hz)) <= MAINS_CENTS do mains = true
     }
     // A clear pitch is a note, not the background, even before the floor knows how loud that is
-    info.is_tonal = info.detected_freq >= min_freq && info.clarity >= self.clarity_high && !mains
+    info.is_tonal = info.detected_freq >= min_freq && info.clarity >= PITCH_CLARITY_HIGH && !mains
     self.snr_db = update_noise_floor(&self.noise_floor, info.rms, dt, is_tonal = info.is_tonal)
     info.snr_db = self.snr_db
     info.noise_floor = self.noise_floor.level
@@ -163,14 +158,14 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
         info.err_cents = cents_deviation(info.detected_freq, info.detected_note.frequency)
     }
 
-    weak_snr_db := self.min_snr_db - SNR_HYSTERESIS_DB
-    strong_snr_db := weak_snr_db if prev_info.is_strong_pitch else self.min_snr_db
+    weak_snr_db: f32 = PITCH_MIN_SNR_DB - SNR_HYSTERESIS_DB
+    strong_snr_db: f32 = weak_snr_db if prev_info.is_strong_pitch else PITCH_MIN_SNR_DB
 
     info.is_strong_pitch = info.is_tonal && info.snr_db >= strong_snr_db
     info.is_weak_pitch =
         mains ||
         info.detected_freq < min_freq ||
-        info.clarity < self.clarity_low ||
+        info.clarity < PITCH_CLARITY_LOW ||
         info.snr_db < weak_snr_db
 
     return info
@@ -192,10 +187,9 @@ dbfs :: proc(signal: $T) -> T {
 @(test)
 test_mains_hum :: proc(t: ^testing.T) {
     SAMPLERATE :: 48_000
-    FFT_SIZE :: 8192
 
     detect :: proc(fundamental: f32) -> PitchInfo {
-        detector := init_pitch_detector(SAMPLERATE, FFT_SIZE, 0.98, 0.9, 2, 10, 60)
+        detector := init_pitch_detector(SAMPLERATE)
         defer destroy_pitch_detector(&detector)
         // Half a second a display frame at a time like the app, the high-pass settles from its start
         FRAME :: SAMPLERATE / DETECTIONS_PER_SECOND

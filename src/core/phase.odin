@@ -121,7 +121,6 @@ PhaseComparator :: struct {
     samplerate:       f32,
     mode:             StrobeMode,
     available:        int, // the new samples of the latest run_phase_detection
-    snr_threshold_db: f32, // for the noise floor of a track added later
 
     // Absolute index of the sample just past the end of the newest window, i.e. the lock-in clock
     sample_clock:     i64,
@@ -136,7 +135,6 @@ init_phase_comparator :: proc(
     samplerate: f32,
     strobe_intervals: []f32,
     mode: StrobeMode,
-    noise_floor_snr_db_threshold: f32,
 ) -> ^PhaseComparator {
     self := new(PhaseComparator)
     init_audio_capture_node(self, "phase-tracker")
@@ -144,7 +142,6 @@ init_phase_comparator :: proc(
     self.samplerate = samplerate
     self.mode = mode
     self.base_freq_hz = base_freq_hz
-    self.snr_threshold_db = noise_floor_snr_db_threshold
 
     for interval in strobe_intervals {
         if interval >= 1.0 do append_phase_band(self, interval)
@@ -177,7 +174,7 @@ append_phase_band :: proc(self: ^PhaseComparator, interval: f32) {
     band := PhaseBand{}
     band.interval = interval
     band.speed_scale = 1
-    band.noise_floor = init_noise_floor(self.snr_threshold_db)
+    band.noise_floor = init_noise_floor()
     append(&self.bands, band)
 }
 
@@ -386,7 +383,7 @@ test_dft_window_size :: proc(t: ^testing.T) {
 @(test)
 test_track_offset_and_speed :: proc(t: ^testing.T) {
     intervals := []f32{1, 2, 3}
-    self := init_phase_comparator(110, 48_000, intervals, .HARMONIC, 10)
+    self := init_phase_comparator(110, 48_000, intervals, .HARMONIC)
     defer destroy_phase_comparator(self)
 
     // A wide octave, a slower twelfth
@@ -523,7 +520,7 @@ strobe_rescale :: proc(freq_hz: f32) -> f64 {
 update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
     band.onset_hold = max(band.onset_hold - self.available, 0)
 
-    is_loud := band.snr_db > band.noise_floor.snr_threshold_db
+    is_loud := band.snr_db > NOISE_FLOOR_SNR_DB_THRESHOLD
     if is_loud && band.amp > ONSET_RATIO * band.envelope {
         // The attack affects the phase until it has passed the gamma window's mean age, the comb's box adds
         // half its length
@@ -614,7 +611,7 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
 
     run :: proc(target_hz: f32, detune_cents: f32, use_phase_average: bool) -> (err_cents: [2]f32, phase_diff: f32) {
         intervals := []f32{1, 2}
-        pc := init_phase_comparator(target_hz, SAMPLERATE, intervals, .HARMONIC, 10)
+        pc := init_phase_comparator(target_hz, SAMPLERATE, intervals, .HARMONIC)
         defer destroy_phase_comparator(pc)
         set_phase_comparator_freq(pc, target_hz, 440, 0.025, 2, .HARMONIC)
 
@@ -663,7 +660,7 @@ test_strobe_turn_rate :: proc(t: ^testing.T) {
     // Radians of the wheel per second, over the last of 3 seconds
     run :: proc(target_hz: f32, detune_cents: f32, speed_scale: f32) -> f32 {
         intervals := []f32{1}
-        pc := init_phase_comparator(target_hz, SAMPLERATE, intervals, .HARMONIC, 10)
+        pc := init_phase_comparator(target_hz, SAMPLERATE, intervals, .HARMONIC)
         defer destroy_phase_comparator(pc)
         set_phase_comparator_tracks(pc, intervals, {0}, {speed_scale})
         set_phase_comparator_freq(pc, target_hz, 440, BASE_SPEED, 2, .HARMONIC)

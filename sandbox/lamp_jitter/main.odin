@@ -24,15 +24,9 @@ import ma "vendor:miniaudio"
 
 import "../../src/core"
 
-// The app's defaults, see config_defaults in src/app/config.odin
+// The app's, see src/app/app.odin
 SAMPLERATE :: 48_000
-FFT_SIZE :: 8192
-CLARITY_HIGH :: 0.98
-CLARITY_LOW :: 0.9
-MIN_SNR_DB :: 2
-NOISE_FLOOR_SNR_DB :: 10
 NOTE_SWITCH_S :: 0.05
-HIGHPASS_HZ :: 60
 STROBE_SPEED :: 0.0125
 SCOPE_COLUMNS :: 488 // STROBE_WIDTH
 SCOPE_ROWS :: 240
@@ -96,12 +90,12 @@ main :: proc() {
     }
     defer delete(samples)
 
-    detector := core.init_pitch_detector(SAMPLERATE, FFT_SIZE, CLARITY_HIGH, CLARITY_LOW, MIN_SNR_DB, NOISE_FLOOR_SNR_DB, HIGHPASS_HZ)
+    detector := core.init_pitch_detector(SAMPLERATE)
     defer core.destroy_pitch_detector(&detector)
     tuner := core.init_tuner(110, 440, NOTE_SWITCH_S, true)
 
     intervals := INTERVALS
-    strobe := core.init_phase_comparator(110, SAMPLERATE, intervals[:], .HARMONIC, NOISE_FLOOR_SNR_DB)
+    strobe := core.init_phase_comparator(110, SAMPLERATE, intervals[:], .HARMONIC)
     defer core.destroy_phase_comparator(strobe)
     retune :: proc(strobe: ^core.PhaseComparator, freq_hz: f32) {
         core.set_phase_comparator_freq(strobe, freq_hz, 440, STROBE_SPEED, 2, .HARMONIC)

@@ -31,7 +31,6 @@ import pffft "../../../external/odin-pffft"
 
 SAMPLERATE :: 48_000
 ITERATIONS :: 1000
-PITCH_FFT_SIZE :: 8192 // config_defaults.pitch_detect_fft_size
 TRACKS :: 5 // core.MAX_BANDS, every track on the fundamental's window
 FRAMES_PER_SECOND :: 120
 
@@ -43,9 +42,9 @@ main :: proc() {
     sink: f32
 
     {
-        out := make([]f32, PITCH_FFT_SIZE)
+        out := make([]f32, core.PITCH_FFT_SIZE)
         defer delete(out)
-        setup := pffft.new_setup(PITCH_FFT_SIZE, pffft.Transform.REAL)
+        setup := pffft.new_setup(core.PITCH_FFT_SIZE, pffft.Transform.REAL)
         defer pffft.destroy_setup(setup)
 
         stopwatch: time.Stopwatch
@@ -56,7 +55,7 @@ main :: proc() {
         }
         time.stopwatch_stop(&stopwatch)
         microseconds := time.duration_microseconds(time.stopwatch_duration(stopwatch)) / ITERATIONS
-        fmt.printfln("pffft, %v points (pitch detection): %.1f µs", PITCH_FFT_SIZE, microseconds)
+        fmt.printfln("pffft, %v points (pitch detection): %.1f µs", core.PITCH_FFT_SIZE, microseconds)
     }
 
     // A track's window as set_phase_comparator_freq sizes it, the comb's box of one period included

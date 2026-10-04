@@ -39,19 +39,8 @@ IDLE_FPS :: 30
 // Otherwise the display's rate up to ProMotion's, a faster monitor would only redraw the strobe more often
 MAX_FPS :: 120
 
-// The input and the pitch detection, tuned on test recordings with the sandbox tools, not in the settings,
-// see Config
+// Not in the settings, see Config. The pitch detection's are in core, see PITCH_FFT_SIZE.
 SAMPLERATE :: 48_000 // the input's, miniaudio converts the device's own
-PITCH_FFT_SIZE :: 8192 // the window is half of it, 4096 samples
-// Under a guitar's low E (82 Hz), it takes out DC and low frequency rumble. A lower note like a bass's E1
-// (41 Hz) loses its fundamental here, it's still found from its harmonics.
-HIGHPASS_CUTOFF_HZ :: 60
-// A strong pitch is this clear at least and this far over the noise floor, a weak one less clear than
-// PITCH_CLARITY_LOW. The noise floors don't learn the level over their threshold.
-PITCH_CLARITY_LOW :: 0.9
-PITCH_CLARITY_HIGH :: 0.98
-PITCH_MIN_SNR_DB :: 2
-NOISE_FLOOR_SNR_DB_THRESHOLD :: 10
 // How long a new note is detected in a row before the strobe switches to it, the last detection strong or
 // the run steady. At 0 a note under hum flickers.
 NOTE_SWITCH_S :: 0.05
@@ -129,18 +118,9 @@ run_app :: proc(config: ^Config) {
         SAMPLERATE,
         config.strobe_intervals[:],
         config.strobe_mode,
-        NOISE_FLOOR_SNR_DB_THRESHOLD,
     )
     defer core.destroy_phase_comparator(app.phase_comparator)
-    app.pitch_detector = core.init_pitch_detector(
-        SAMPLERATE,
-        PITCH_FFT_SIZE,
-        PITCH_CLARITY_HIGH,
-        PITCH_CLARITY_LOW,
-        PITCH_MIN_SNR_DB,
-        NOISE_FLOOR_SNR_DB_THRESHOLD,
-        HIGHPASS_CUTOFF_HZ,
-    )
+    app.pitch_detector = core.init_pitch_detector(SAMPLERATE)
     app.pitch_detector.pitch_standard = config.pitch_standard
     defer core.destroy_pitch_detector(&app.pitch_detector)
     app.scope = core.init_scope(SAMPLERATE, SCOPE_COLUMNS, SCOPE_ROWS)

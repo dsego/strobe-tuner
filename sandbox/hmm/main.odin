@@ -15,15 +15,9 @@ import ma "vendor:miniaudio"
 
 import "../../src/core"
 
-// The app's defaults, see config_defaults in src/app/config.odin
+// The app's, see src/app/app.odin
 SAMPLERATE :: 48_000
-FFT_SIZE :: 8192
-CLARITY_HIGH :: 0.98
-CLARITY_LOW :: 0.9
-MIN_SNR_DB :: 2
-NOISE_FLOOR_SNR_DB :: 10
 note_switch_s: f32 = 0.05 // NOTE_SWITCH_S in the environment tries another
-HIGHPASS_HZ :: 60
 INTERVALS :: [?]f32{1, 2, 4}
 STROBE_SPEED :: 0.0125
 FRAME_SAMPLES :: SAMPLERATE / 60
@@ -81,7 +75,7 @@ hmm_step :: proc(belief: ^Belief, peaks: []core.Vec2, snr_db: f32) {
         emission[index] = max(emission[index], weight_now * likelihood)
         best = max(best, likelihood)
     }
-    if snr_db < MIN_SNR_DB {
+    if snr_db < core.PITCH_MIN_SNR_DB {
         for state in 0 ..< core.NOTE_COUNT do emission[state] *= WEAK_SNR
     }
     emission[UNVOICED] = max(1 - best, 0.05)
@@ -119,12 +113,12 @@ main :: proc() {
     }
     defer delete(samples)
 
-    detector := core.init_pitch_detector(SAMPLERATE, FFT_SIZE, CLARITY_HIGH, CLARITY_LOW, MIN_SNR_DB, NOISE_FLOOR_SNR_DB, HIGHPASS_HZ)
+    detector := core.init_pitch_detector(SAMPLERATE)
     defer core.destroy_pitch_detector(&detector)
     tuner := core.init_tuner(110, 440, note_switch_s, true)
 
     intervals := INTERVALS
-    strobe := core.init_phase_comparator(110, SAMPLERATE, intervals[:], .HARMONIC, NOISE_FLOOR_SNR_DB)
+    strobe := core.init_phase_comparator(110, SAMPLERATE, intervals[:], .HARMONIC)
     defer core.destroy_phase_comparator(strobe)
     retune :: proc(strobe: ^core.PhaseComparator, freq_hz: f32) {
         core.set_phase_comparator_freq(strobe, freq_hz, 440, STROBE_SPEED, 2, .HARMONIC)
