@@ -32,47 +32,77 @@ gamma_window :: proc(index: f32, size: f32) -> f32 {
     return 0.42 / (2.0 * GAMMA_WINDOW_TAU) * age * age * math.exp(-age)
 }
 
-SingleFreqDFT :: struct {
-    window_size:  int, // the comb's box included
-    gamma_size:   int, // the gamma window before the comb's box widened it
-    norm_freq:    f32, // normalized frequency, eg 440Hz/ 48,000Hz
-    comb_samples: f32, // the comb's box, 0 for none
-    twiddles:     []complex64, // precomputed windowed twiddles, one per sample of the window
-    dft:          complex64, // stores the resulting DFT after calling run_single_dft
+// The gamma window over gamma_size samples, smoothed with a box comb_samples long, a moving average. The
+// box's nulls fall every samplerate / comb_samples from the bin, so a box of a note's period rejects every
+// other partial of it however wide the gamma window's band. The window grows by the box.
+gamma_comb_window :: proc(gamma_size: int, comb_samples: f32 = 0, allocator := context.temp_allocator) -> []f64 {
+    taps := int(math.ceil(comb_samples)) if comb_samples > 0 else 1
+    weights := make([]f64, gamma_size + taps - 1, allocator)
+    for &weight, index in weights[:gamma_size] do weight = f64(gamma_window(f32(index), f32(gamma_size)))
+    if comb_samples > 0 do comb_box(weights, gamma_size, comb_samples)
+    return weights
+}
+
+// The first gamma_size weights convolved with the box, in place. The box is comb_samples long, its last
+// tap takes the fraction. Scaled so the level stays the same over the longer window.
+comb_box :: proc(weights: []f64, gamma_size: int, comb_samples: f32) {
+    source := make([]f64, gamma_size, context.temp_allocator)
+    copy(source, weights[:gamma_size])
+    at :: proc(source: []f64, index: int) -> f64 {
+        return source[index] if index >= 0 && index < len(source) else 0
+    }
+
+    taps := len(weights) - gamma_size + 1
+    last_tap := f64(comb_samples) - f64(taps - 1)
+    scale := f64(len(weights)) / (f64(gamma_size) * f64(comb_samples))
+
+    // A running sum of the whole taps, source[index - taps + 2 ..= index]
+    whole: f64
+    for &weight, index in weights {
+        oldest := index - taps + 1
+        whole += at(source, index) - at(source, oldest)
+        weight = (whole + last_tap * at(source, oldest)) * scale
+    }
+}
+
+// How far back gamma_comb_window measures, in samples: the gamma window's mean age, the box adds half
+// its length
+gamma_comb_delay :: proc(gamma_size: int, comb_samples: f32 = 0) -> int {
+    return int(GAMMA_WINDOW_DELAY * f32(gamma_size) + comb_samples / 2)
+}
+
+// Every sample the same weight
+flat_window :: proc(size: int, allocator := context.temp_allocator) -> []f64 {
+    weights := make([]f64, size, allocator)
+    for &weight in weights do weight = 1
+    return weights
 }
 
 
-// Tune to norm_freq over window_size samples of the gamma window, the twiddles are reallocated when the
+SingleFreqDFT :: struct {
+    window_size: int,
+    norm_freq:   f32, // normalized frequency, eg 440Hz/ 48,000Hz
+    twiddles:    []complex64, // precomputed windowed twiddles, one per sample of the window
+    dft:         complex64, // stores the resulting DFT after calling run_single_dft
+}
+
+
+// Tune to norm_freq over the window's weights, one per sample, the twiddles are reallocated when the
 // size changes.
 //
 // With spread_cents the bins that far below and above are added in, which flattens the top of the peak
 // ("phase average"): a slightly detuned note keeps its level and the in tune phase is the same. The sum of
 // the three DFTs is the DFT with the sum of their twiddles, so it costs no more than one.
-//
-// comb_samples smooths the window with a box that long, a moving average. Its nulls fall every
-// samplerate / comb_samples from the bin, so a box of a note's period rejects every other partial of it
-// however wide the window's band. The window grows by the box.
-set_dft_freq :: proc(
-    self: ^SingleFreqDFT,
-    norm_freq: f32,
-    window_size: int,
-    spread_cents: f32 = 0,
-    comb_samples: f32 = 0,
-) {
-    taps := int(math.ceil(comb_samples)) if comb_samples > 0 else 1
-    size := window_size + taps - 1
+set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32, weights: []f64, spread_cents: f32 = 0) {
+    size := len(weights)
+
     if len(self.twiddles) != size {
         delete(self.twiddles)
         self.twiddles = make([]complex64, size)
     }
-    self.window_size = size
-    self.gamma_size = window_size
-    self.norm_freq = norm_freq
-    self.comb_samples = comb_samples
 
-    weights := make([]f64, size, context.temp_allocator)
-    for &weight, index in weights[:window_size] do weight = f64(gamma_window(f32(index), f32(window_size)))
-    if comb_samples > 0 do comb(weights, window_size, comb_samples)
+    self.window_size = size
+    self.norm_freq = norm_freq
 
     // exp(-j*omega*i), rotated one step at a time. In f64, a long window runs to a couple hundred thousand
     // steps and the f32 rounding adds up.
@@ -97,36 +127,12 @@ set_dft_freq :: proc(
         below *= below_step
         above *= above_step
     }
-
-    // The first window_size weights convolved with the box, in place. The box is comb_samples long, its
-    // last tap takes the fraction. Scaled so the level stays the same over the longer window.
-    comb :: proc(weights: []f64, window_size: int, comb_samples: f32) {
-        source := make([]f64, window_size, context.temp_allocator)
-        copy(source, weights[:window_size])
-        at :: proc(source: []f64, index: int) -> f64 {
-            return source[index] if index >= 0 && index < len(source) else 0
-        }
-
-        taps := len(weights) - window_size + 1
-        last_tap := f64(comb_samples) - f64(taps - 1)
-        scale := f64(len(weights)) / (f64(window_size) * f64(comb_samples))
-
-        // A running sum of the whole taps, source[index - taps + 2 ..= index]
-        whole: f64
-        for &weight, index in weights {
-            oldest := index - taps + 1
-            whole += at(source, index) - at(source, oldest)
-            weight = (whole + last_tap * at(source, oldest)) * scale
-        }
-    }
 }
 
 destroy_dft :: proc(self: ^SingleFreqDFT) {
     delete(self.twiddles)
 }
 
-// TODO: the cost is the window length times the display rate, e.g. an ~80k sample window for a bass low E
-// at 120 FPS. Could run at a fixed rate below the display's, or decimate the input for the low notes.
 run_single_dft :: proc(self: ^SingleFreqDFT, samples: []f32) -> complex64 {
     assert(len(samples) >= self.window_size)
 
@@ -154,14 +160,14 @@ test_phase_average_matches_three_bins :: proc(t: ^testing.T) {
 
     averaged: SingleFreqDFT
     defer destroy_dft(&averaged)
-    set_dft_freq(&averaged, freq / SAMPLERATE, WINDOW, 5)
+    set_dft_freq(&averaged, freq / SAMPLERATE, gamma_comb_window(WINDOW), 5)
 
     // The three bins on their own
     sum: complex64
     for cents in ([]f32{-5, 0, 5}) {
         bin: SingleFreqDFT
         defer destroy_dft(&bin)
-        set_dft_freq(&bin, cents_to_freq(cents, freq) / SAMPLERATE, WINDOW)
+        set_dft_freq(&bin, cents_to_freq(cents, freq) / SAMPLERATE, gamma_comb_window(WINDOW))
         sum += run_single_dft(&bin, samples)
     }
 
@@ -183,8 +189,8 @@ test_comb_rejects_partials :: proc(t: ^testing.T) {
     plain, comb: SingleFreqDFT
     defer destroy_dft(&plain)
     defer destroy_dft(&comb)
-    set_dft_freq(&plain, freq / SAMPLERATE, WINDOW)
-    set_dft_freq(&comb, freq / SAMPLERATE, WINDOW, comb_samples = SAMPLERATE / freq)
+    set_dft_freq(&plain, freq / SAMPLERATE, gamma_comb_window(WINDOW))
+    set_dft_freq(&comb, freq / SAMPLERATE, gamma_comb_window(WINDOW, SAMPLERATE / freq))
 
     // Half the window's mean, as without the comb. The plain window is off it, this wide its band takes in
     // some of the sine's negative frequency, which the comb nulls too.

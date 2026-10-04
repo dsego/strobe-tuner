@@ -512,33 +512,33 @@ GAUGE_HYSTERESIS_CENTS :: 1 // past the halfway between two ticks, so it doesn't
 gauge_position: f32
 gauge_target: f32 // the tick it's going to
 
+// The tick for the cents: the middle one up to the first tick, further out the nearest, the outermost for
+// anything further
+gauge_snap :: proc(cents: f32, per_side: int) -> f32 {
+    tick_cents :: proc(index: int) -> f32 {
+        ticks := GAUGE_CENTS
+        return ticks[index] if index < len(ticks) else 100 * f32(index - len(ticks) + 1)
+    }
+    index := 0
+    for index < per_side {
+        upper := tick_cents(index + 1)
+        halfway := upper if index == 0 else (tick_cents(index) + upper) / 2
+        if abs(cents) < halfway do break
+        index += 1
+    }
+    return math.sign(cents) * f32(index)
+}
+
 // top is the middle of the gauge at its top. Follows the cents from the target while there's a pitch.
 draw_cents_gauge :: proc(top: [2]f32, cents: f32, lit: bool, semitones: bool, color: gfx.Color) {
     ticks := GAUGE_CENTS
     per_side := len(ticks) - 1 + (GAUGE_SEMITONE_TICKS if semitones else 0)
 
-    // The tick for the cents: the middle one up to the first tick, further out the nearest, the outermost
-    // for anything further
-    snap :: proc(cents: f32, per_side: int) -> f32 {
-        tick_cents :: proc(index: int) -> f32 {
-            ticks := GAUGE_CENTS
-            return ticks[index] if index < len(ticks) else 100 * f32(index - len(ticks) + 1)
-        }
-        index := 0
-        for index < per_side {
-            upper := tick_cents(index + 1)
-            halfway := upper if index == 0 else (tick_cents(index) + upper) / 2
-            if abs(cents) < halfway do break
-            index += 1
-        }
-        return math.sign(cents) * f32(index)
-    }
-
     // It stays on its tick while the pitch is within the hysteresis of it
     if lit {
-        lowest := snap(cents - GAUGE_HYSTERESIS_CENTS, per_side)
-        highest := snap(cents + GAUGE_HYSTERESIS_CENTS, per_side)
-        if gauge_target < lowest || gauge_target > highest do gauge_target = snap(cents, per_side)
+        lowest := gauge_snap(cents - GAUGE_HYSTERESIS_CENTS, per_side)
+        highest := gauge_snap(cents + GAUGE_HYSTERESIS_CENTS, per_side)
+        if gauge_target < lowest || gauge_target > highest do gauge_target = gauge_snap(cents, per_side)
     }
 
     gauge_target = clamp(gauge_target, -f32(per_side), f32(per_side))

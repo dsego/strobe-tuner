@@ -119,6 +119,10 @@ Scope :: struct {
     // The screen from above, see scope_from_above
     heights:             []f32,
     dwell:               []f32,
+
+    // Its bins, see scope_partials
+    partial_dfts:        []SingleFreqDFT,
+    noise_dfts:          [SCOPE_NOISE_BINS]SingleFreqDFT,
 }
 
 
@@ -131,6 +135,10 @@ init_scope :: proc(columns, rows: int) -> (self: Scope) {
     self.dwell = make([]f32, columns)
     self.chunk = make([]f32, SCOPE_CHUNK_SIZE)
     self.level = SCOPE_MIN_LEVEL
+
+    for &dft, index in self.noise_dfts {
+        set_dft_freq(&dft, f32(2 * index + 1) / f32(columns), flat_window(columns))
+    }
     return
 }
 
@@ -140,6 +148,10 @@ destroy_scope :: proc(self: ^Scope) {
     delete(self.heights)
     delete(self.dwell)
     delete(self.chunk)
+
+    for &dft in self.partial_dfts do destroy_dft(&dft)
+    delete(self.partial_dfts)
+    for &dft in self.noise_dfts do destroy_dft(&dft)
 }
 
 // Starts with a dark screen at the new reference frequency. A held level lets go, it's another note.
@@ -334,42 +346,51 @@ ScopePartial :: struct {
 SCOPE_NOISE_BINS :: 32 // of the halfway bins, from the bottom
 
 scope_partials :: proc(self: ^Scope, periods: []int, partials: []ScopePartial) -> (noise: f64) {
-    // The sine with this many periods across the screen. A dark column counts as zero, it's a part of
-    // the sweep the beam hasn't been to.
-    dft_bin :: proc(heights: []f32, periods: int) -> (bin: complex128) {
-        for height, column in heights {
-            angle := math.TAU * f64(periods) * (f64(column) + 0.5) / f64(len(heights))
-            bin += complex(f64(height), 0) * complex(math.cos(angle), -math.sin(angle))
-        }
-        return bin * complex(2 / f64(len(heights)), 0)
+    // Retuned when the periods asked for change
+    if len(self.partial_dfts) != len(periods) {
+        for &dft in self.partial_dfts do destroy_dft(&dft)
+        delete(self.partial_dfts)
+        self.partial_dfts = make([]SingleFreqDFT, len(periods))
+    }
+    for &dft, index in self.partial_dfts {
+        norm_freq := f32(periods[index]) / f32(self.columns)
+        if dft.norm_freq != norm_freq do set_dft_freq(&dft, norm_freq, flat_window(self.columns))
     }
 
     // The wave as it is, half rectified it would have harmonics of its own
     heights, _ := scope_from_above(self, .RAW_WAVEFORM)
 
     for &partial, index in partials {
-        bin := dft_bin(heights, periods[index])
+        bin := scope_bin(&self.partial_dfts[index], heights)
         partial = {math.atan2(imag(bin), real(bin)), abs(bin)}
     }
 
     power: f64 = 0
-    for index in 0 ..< SCOPE_NOISE_BINS {
-        bin := dft_bin(heights, 2 * index + 1)
+    for &dft in self.noise_dfts {
+        bin := scope_bin(&dft, heights)
         power += real(bin) * real(bin) + imag(bin) * imag(bin)
     }
     return math.sqrt(power / SCOPE_NOISE_BINS)
 }
 
+// A bin of the screen from above, a sine's peak level and its phase at the screen's left edge. A dark
+// column counts as zero, it's a part of the sweep the beam hasn't been to. The DFT counts a column from
+// its left edge, its height is the middle of it, half a column later.
+scope_bin :: proc(dft: ^SingleFreqDFT, heights: []f32) -> complex128 {
+    half_column := math.PI * f64(dft.norm_freq)
+    return 2 * complex128(run_single_dft(dft, heights)) * complex(math.cos(half_column), -math.sin(half_column))
+}
+
 
 // The phase and amplitude of the reference frequency in the screen from above
 scope_test_fundamental :: proc(heights: []f32) -> (phase: f64, amp: f64) {
-    sum: complex128
-    for height, i in heights {
-        angle := math.TAU * SCOPE_PERIODS * (f64(i) + 0.5) / f64(len(heights))
-        sum += complex(f64(height), 0) * complex(math.cos(angle), -math.sin(angle))
-    }
+    dft: SingleFreqDFT
+    defer destroy_dft(&dft)
+    set_dft_freq(&dft, SCOPE_PERIODS / f32(len(heights)), flat_window(len(heights)))
+
+    bin := scope_bin(&dft, heights)
     // a sine at phase 0 comes out at -90°
-    return wrap_phase(math.atan2(imag(sum), real(sum)) + math.PI / 2), 2 * abs(sum) / f64(len(heights))
+    return wrap_phase(math.atan2(imag(bin), real(bin)) + math.PI / 2), abs(bin)
 }
 
 scope_test_sine :: proc(samples: []f32, freq_hz: f64, clock: i64) {

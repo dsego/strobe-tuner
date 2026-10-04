@@ -188,54 +188,54 @@ gui_settings :: proc(
         back = gui_button({sheet_layout.sheet.x, sheet_layout.close.y, right - sheet_layout.sheet.x, sheet_layout.close.height})
         return
     }
+}
 
-    // The picked display's options, a row each. Returns changed when the strobe needs updating.
-    gui_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (changed: bool) {
-        row := 0
-        switch config.strobe_display_type {
-        case .STROBE:
-            gui_settings_segmented(sheet_layout, &row, "Shape", {"Flat", "Wheel", "Curved"}, &config.strobe_shape, WIDE_SEGMENT_WIDTH)
-            // What turns the tracks: their own DFT, or the lamp's screen, the strobe the other way
-            gui_settings_segmented(sheet_layout, &row, "Turned by", {"Lock-in", "Lamp"}, &config.strobe_source, WIDE_SEGMENT_WIDTH)
-            // Harmonic shows a track per partial, vernier the same frequency at different sensitivities
-            if gui_settings_segmented(sheet_layout, &row, "Mode", {"Harmonic", "Vernier"}, &config.strobe_mode, WIDE_SEGMENT_WIDTH) {
-                changed = true
-            }
-            harmonic := config.strobe_mode == .HARMONIC
-            gui_settings_segmented(sheet_layout, &row, "Partials", {"Off", "1×", "Hz", "Note"}, &config.partial_labels, enabled = harmonic)
-            // How far off each track's partial is, next to the track
-            gui_settings_segmented(sheet_layout, &row, "Cents", {"Off", "On"}, &config.show_band_cents)
-        case .SCOPE:
-            // Tapping the scope flips it too
-            gui_settings_segmented(sheet_layout, &row, "Sweep", {"Time", "X-Y"}, &config.scope_sweep)
-            gui_screen_options(sheet_layout, &row, config)
-        case .TRACE:
-            gui_steps(sheet_layout, &row, "Span", STEP_LABELS, &config.trace_seconds, TRACE_SPAN_STEPS_S)
-            gui_steps(sheet_layout, &row, "Range", {"Narrow", "Wide"}, &config.trace_range_cents, TRACE_RANGE_STEPS_CENTS)
-        case .LAMP:
-            // The positive half of the wave like a mechanical strobe's lamp, or the wave as it is
-            gui_settings_segmented(sheet_layout, &row, "Rectifier", {"Half", "None"}, &config.lamp_shape)
-            gui_screen_options(sheet_layout, &row, config)
+// The picked display's options, a row each. Returns changed when the strobe needs updating.
+gui_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (changed: bool) {
+    row := 0
+    switch config.strobe_display_type {
+    case .STROBE:
+        gui_settings_segmented(sheet_layout, &row, "Shape", {"Flat", "Wheel", "Curved"}, &config.strobe_shape, WIDE_SEGMENT_WIDTH)
+        // What turns the tracks: their own DFT, or the lamp's screen, the strobe the other way
+        gui_settings_segmented(sheet_layout, &row, "Turned by", {"Lock-in", "Lamp"}, &config.strobe_source, WIDE_SEGMENT_WIDTH)
+        // Harmonic shows a track per partial, vernier the same frequency at different sensitivities
+        if gui_settings_segmented(sheet_layout, &row, "Mode", {"Harmonic", "Vernier"}, &config.strobe_mode, WIDE_SEGMENT_WIDTH) {
+            changed = true
         }
-        return
+        harmonic := config.strobe_mode == .HARMONIC
+        gui_settings_segmented(sheet_layout, &row, "Partials", {"Off", "1×", "Hz", "Note"}, &config.partial_labels, enabled = harmonic)
+        // How far off each track's partial is, next to the track
+        gui_settings_segmented(sheet_layout, &row, "Cents", {"Off", "On"}, &config.show_band_cents)
+    case .SCOPE:
+        // Tapping the scope flips it too
+        gui_settings_segmented(sheet_layout, &row, "Sweep", {"Time", "X-Y"}, &config.scope_sweep)
+        gui_screen_options(sheet_layout, &row, config)
+    case .TRACE:
+        gui_steps(sheet_layout, &row, "Span", STEP_LABELS, &config.trace_seconds, TRACE_SPAN_STEPS_S)
+        gui_steps(sheet_layout, &row, "Range", {"Narrow", "Wide"}, &config.trace_range_cents, TRACE_RANGE_STEPS_CENTS)
+    case .LAMP:
+        // The positive half of the wave like a mechanical strobe's lamp, or the wave as it is
+        gui_settings_segmented(sheet_layout, &row, "Rectifier", {"Half", "None"}, &config.lamp_shape)
+        gui_screen_options(sheet_layout, &row, config)
+    }
+    return
 
-        // The scope's and the lamp's screen. Held, a note's decay shows, the wave shrinks and the stripes dim
-        // like a mechanical strobe's lamp. Auto keeps a fading note filling the screen.
-        gui_screen_options :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config) {
-            gui_steps(sheet_layout, row, "Persistence", STEP_LABELS, &config.scope_persistence_ms, SCOPE_PERSISTENCE_STEPS_MS)
-            gui_settings_segmented(sheet_layout, row, "Gain", {"Auto", "Hold"}, &config.scope_gain)
+    // The scope's and the lamp's screen. Held, a note's decay shows, the wave shrinks and the stripes dim
+    // like a mechanical strobe's lamp. Auto keeps a fading note filling the screen.
+    gui_screen_options :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config) {
+        gui_steps(sheet_layout, row, "Persistence", STEP_LABELS, &config.scope_persistence_ms, SCOPE_PERSISTENCE_STEPS_MS)
+        gui_settings_segmented(sheet_layout, row, "Gain", {"Auto", "Hold"}, &config.scope_gain)
+    }
+
+    // A value that's one of a few steps, a label each. None is picked for a value set in the config file
+    // between them.
+    gui_steps :: proc(sheet_layout: SheetLayout, row: ^int, label: cstring, labels: []cstring, value: ^f32, steps: [$N]f32) {
+        step := -1
+        for step_value, index in steps {
+            if value^ == step_value do step = index
         }
-
-        // A value that's one of a few steps, a label each. None is picked for a value set in the config file
-        // between them.
-        gui_steps :: proc(sheet_layout: SheetLayout, row: ^int, label: cstring, labels: []cstring, value: ^f32, steps: [$N]f32) {
-            step := -1
-            for step_value, index in steps {
-                if value^ == step_value do step = index
-            }
-            if gui_settings_segmented(sheet_layout, row, label, labels, &step, WIDE_SEGMENT_WIDTH) {
-                value^ = steps[step]
-            }
+        if gui_settings_segmented(sheet_layout, row, label, labels, &step, WIDE_SEGMENT_WIDTH) {
+            value^ = steps[step]
         }
     }
 }

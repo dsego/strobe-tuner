@@ -25,14 +25,17 @@ import "core:testing"
 // Tuned on test recordings with the sandbox tools, not in the settings
 
 PITCH_FFT_SIZE :: 8192 // the window is half of it, 4096 samples
+
 // Under a guitar's low E (82 Hz), it takes out DC and low frequency rumble. A lower note like a bass's E1
 // (41 Hz) loses its fundamental here, it's still found from its harmonics.
 PITCH_HIGHPASS_HZ :: 60
+
 // A strong pitch is this clear at least and this far over the noise floor, a weak one less clear than
 // PITCH_CLARITY_LOW
 PITCH_CLARITY_LOW :: 0.9
 PITCH_CLARITY_HIGH :: 0.98
 PITCH_MIN_SNR_DB :: 2
+
 // A strong pitch stays strong down to this far under PITCH_MIN_SNR_DB, so a decaying note doesn't flicker
 // between strong and weak around the threshold
 SNR_HYSTERESIS_DB :: 1.5
@@ -147,17 +150,21 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
 
     dt := f32(elapsed) / SAMPLERATE
     info.elapsed_s = dt
+
     // Down to A0, flat by up to half a semitone, at the pitch standard
     min_freq := cents_to_freq(LOWEST_NOTE * 100 - 50, self.pitch_standard)
     mains := false
+
     for mains_hz in MAINS_HZ {
         if abs(cents_deviation(info.detected_freq, mains_hz)) <= MAINS_CENTS do mains = true
     }
+
     // A clear pitch is a note, not the background, even before the floor knows how loud that is
     info.is_tonal = info.detected_freq >= min_freq && info.clarity >= PITCH_CLARITY_HIGH && !mains
     self.snr_db = update_noise_floor(&self.noise_floor, info.rms, dt, is_tonal = info.is_tonal)
     info.snr_db = self.snr_db
     info.noise_floor = self.noise_floor.level
+
     // No peak gives 0 Hz, which has no note
     if info.detected_freq > 0 {
         info.detected_note = freq_to_note(info.detected_freq, self.pitch_standard)

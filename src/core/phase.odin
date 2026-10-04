@@ -77,6 +77,7 @@ PhaseBand :: struct {
     norm_freq:    f32,
     dft:          SingleFreqDFT,
     averaged_dft: SingleFreqDFT, // with PHASE_AVERAGE_SPREAD_CENTS, see set_dft_freq
+    window_delay: int, // samples, how far back the DFTs measure, see gamma_comb_delay
     time_stretch: f32, // samples in a period of the base note, the strobe shader's time scale
     phase:        f32, // measured lock-in phase, relative to the reference oscillator
     amp:          f32,
@@ -264,30 +265,29 @@ set_phase_comparator_freq :: proc(
         if measures_band(self, band_index) {
             // Every track gets the fundamental's window. Sized in cents of its own partial an upper track's
             // window would be shorter, its band wider in Hz for a weaker partial, and it shimmers.
-            window_size := dft_window_size(base_freq_hz, SAMPLERATE, DFT_RESOLUTION_CENTS)
-            set_dft_freq(&band.dft, band.norm_freq, window_size, comb_samples = comb_samples)
-            set_dft_freq(&band.averaged_dft, band.norm_freq, window_size, PHASE_AVERAGE_SPREAD_CENTS, comb_samples)
+            gamma_size := dft_window_size(base_freq_hz, SAMPLERATE, DFT_RESOLUTION_CENTS)
+            window := gamma_comb_window(gamma_size, comb_samples)
+            set_dft_freq(&band.dft, band.norm_freq, window)
+            set_dft_freq(&band.averaged_dft, band.norm_freq, window, PHASE_AVERAGE_SPREAD_CENTS)
+            band.window_delay = gamma_comb_delay(gamma_size, comb_samples)
         }
     }
+
     set_phase_comparator_speed(self, base_speed)
+}
 
-    // The comb's box spans enough periods of the note that every track's partials land on its nulls,
-    // two for a fifth (3/2): with a chord the root's partials and the fifth's are all multiples of half the root
-    comb_periods :: proc(bands: []PhaseBand, mode: StrobeMode) -> f32 {
-        if mode != .HARMONIC do return 1
-        for periods: f32 = 1; periods < 4; periods += 1 {
-            if all_whole(bands, periods) do return periods
+// The comb's box spans enough periods of the note that every track's partials land on its nulls,
+// two for a fifth (3/2): with a chord the root's partials and the fifth's are all multiples of half the root
+comb_periods :: proc(bands: []PhaseBand, mode: StrobeMode) -> f32 {
+    if mode != .HARMONIC do return 1
+    search: for periods: f32 = 1; periods < 4; periods += 1 {
+        for band in bands {
+            multiple := band.interval * periods
+            if abs(multiple - math.round(multiple)) > 0.01 do continue search
         }
-        return 4
-
-        all_whole :: proc(bands: []PhaseBand, periods: f32) -> bool {
-            for band in bands {
-                multiple := band.interval * periods
-                if abs(multiple - math.round(multiple)) > 0.01 do return false
-            }
-            return true
-        }
+        return periods
     }
+    return 4
 }
 
 // The measurements start over, for another note or another input
@@ -522,11 +522,8 @@ update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
 
     is_loud := band.snr_db > NOISE_FLOOR_SNR_DB_THRESHOLD
     if is_loud && band.amp > ONSET_RATIO * band.envelope {
-        // The attack affects the phase until it has passed the gamma window's mean age, the comb's box adds
-        // half its length
-        dft := band.dft
-        delay := int(GAMMA_WINDOW_DELAY * f32(dft.gamma_size) + dft.comb_samples / 2)
-        band.onset_hold = delay + int(ONSET_HOLD_S * SAMPLERATE)
+        // The attack affects the phase until it has passed the window's delay
+        band.onset_hold = band.window_delay + int(ONSET_HOLD_S * SAMPLERATE)
         // The readout's average starts over on each pluck
         band.rate_time_s = 0
     }

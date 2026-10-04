@@ -68,7 +68,7 @@ main :: proc() {
         window_size := core.dft_window_size(note.freq_hz, SAMPLERATE, core.DFT_RESOLUTION_CENTS)
         dft: core.SingleFreqDFT
         defer core.destroy_dft(&dft)
-        core.set_dft_freq(&dft, note.freq_hz / SAMPLERATE, window_size, comb_samples = SAMPLERATE / note.freq_hz)
+        core.set_dft_freq(&dft, note.freq_hz / SAMPLERATE, core.gamma_comb_window(window_size, SAMPLERATE / note.freq_hz))
 
         stopwatch: time.Stopwatch
         time.stopwatch_start(&stopwatch)
