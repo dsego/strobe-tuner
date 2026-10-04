@@ -204,3 +204,8 @@ draw_sheet_header :: proc(sheet_layout: SheetLayout, title: cstring, details: cs
 above_sheet :: proc(sheet_layout: SheetLayout) -> gfx.Rect {
     return {0, 0, sheet_layout.sheet.width, sheet_layout.sheet.y}
 }
+
+// A tap on the strobe above a sheet closes it, like the ✕, Escape or a swipe down
+sheet_dismissed :: proc(sheet_layout: SheetLayout, swiped: bool) -> bool {
+    return gui_button(above_sheet(sheet_layout)) || gfx.key_pressed(.ESCAPE) || swiped
+}

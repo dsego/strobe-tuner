@@ -612,7 +612,9 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     // target following the detected note under the finger
     if swiping do lock_toggled = !tuner.locked
     if lock_toggled || step != 0 do app.quiet_time = 0
+
     retune_target := lock_toggled && core.toggle_note_lock(tuner)
+
     if core.step_target_note(tuner, step) do retune_target = true
     if retune_target do retune(app)
 
@@ -656,83 +658,89 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo, meter
 
 // The sheets that are up, over the main screen
 draw_sheets :: proc(app: ^App, layout: Layout) {
-    config := app.config
-
-    // A tap on the strobe above a sheet closes it, like the ✕, Escape or a swipe down
-    closes :: proc(sheet_layout: SheetLayout, swiped: bool) -> bool {
-        return gui_button(above_sheet(sheet_layout)) || gfx.key_pressed(.ESCAPE) || swiped
-    }
-
     // Android's back button is Escape. It closes a sheet, with none up it leaves the app as anywhere else.
     when gfx.ANDROID {
         sheets_down := app.settings_sheet.slide == 0 && app.track_sheet.slide == 0 && app.instrument_sheet.slide == 0
         if gfx.key_pressed(.ESCAPE) && sheets_down do gfx.system_back()
     }
 
-    if app.settings_sheet.slide > 0 {
-        sheet := &app.settings_sheet
-        sheet_layout, swiped := begin_sheet(sheet, SETTINGS_ROWS, &app.strobe_display, layout.strobe)
-        close, changed := gui_settings(
-            sheet_layout,
-            config,
-            app.audio_devices[:],
-            &app.audio_device_index,
-            &app.settings_menu,
-            &app.display_options,
-        )
-        if changed do app.config_changed = true
-        grab_sheet(sheet, sheet_layout)
-        // Escape goes back from the display's options like the ‹
-        if app.display_options && gfx.key_pressed(.ESCAPE) {
-            app.display_options = false
-        } else if close || closes(sheet_layout, swiped) {
-            close_sheet(sheet)
-            app.settings_menu = .NONE
-            exclusive_control_mode = false
-        }
+    draw_settings_sheet(app, layout)
+    draw_track_sheet(app, layout)
+    draw_instrument_sheet(app, layout)
+}
+
+draw_settings_sheet :: proc(app: ^App, layout: Layout) {
+    sheet := &app.settings_sheet
+    if sheet.slide == 0 do return
+
+    sheet_layout, swiped := begin_sheet(sheet, SETTINGS_ROWS, &app.strobe_display, layout.strobe)
+    close, changed := gui_settings(
+        sheet_layout,
+        app.config,
+        app.audio_devices[:],
+        &app.audio_device_index,
+        &app.settings_menu,
+        &app.display_options,
+    )
+    if changed do app.config_changed = true
+    grab_sheet(sheet, sheet_layout)
+
+    // Escape goes back from the display's options like the ‹
+    if app.display_options && gfx.key_pressed(.ESCAPE) {
+        app.display_options = false
+    } else if close || sheet_dismissed(sheet_layout, swiped) {
+        close_sheet(sheet)
+        app.settings_menu = .NONE
+        exclusive_control_mode = false
     }
+}
 
-    if app.track_sheet.slide > 0 {
-        sheet := &app.track_sheet
-        bands := app.phase_comparator.bands[:]
-        sheet_layout, swiped := begin_sheet(sheet, TRACK_SETTINGS_ROWS, &app.strobe_display, layout.strobe)
-        app.selected_track = min(app.selected_track, len(bands) - 1)
-        close, changed := gui_track_settings(sheet_layout, config, app.selected_track, bands[app.selected_track])
-        if changed do app.config_changed = true
-        grab_sheet(sheet, sheet_layout)
+draw_track_sheet :: proc(app: ^App, layout: Layout) {
+    sheet := &app.track_sheet
+    if sheet.slide == 0 do return
 
-        // Tapping another track above the sheet switches to it, anywhere else closes the sheet
-        if gui_button(above_sheet(sheet_layout)) {
-            track := strobe_track_at(config.strobe_shape, layout.strobe, layout.strobe_scale, len(bands), gfx.mouse_position())
-            if track >= 0 do app.selected_track = track
-            else do close = true
-        }
-        if close || gfx.key_pressed(.ESCAPE) || swiped do close_sheet(sheet)
+    config := app.config
+    bands := app.phase_comparator.bands[:]
+    sheet_layout, swiped := begin_sheet(sheet, TRACK_SETTINGS_ROWS, &app.strobe_display, layout.strobe)
+    app.selected_track = min(app.selected_track, len(bands) - 1)
+    close, changed := gui_track_settings(sheet_layout, config, app.selected_track, bands[app.selected_track])
+    if changed do app.config_changed = true
+    grab_sheet(sheet, sheet_layout)
+
+    // Tapping another track above the sheet switches to it, anywhere else closes the sheet
+    if gui_button(above_sheet(sheet_layout)) {
+        track := strobe_track_at(config.strobe_shape, layout.strobe, layout.strobe_scale, len(bands), gfx.mouse_position())
+        if track >= 0 do app.selected_track = track
+        else do close = true
     }
+    if close || gfx.key_pressed(.ESCAPE) || swiped do close_sheet(sheet)
+}
 
-    if app.instrument_sheet.slide > 0 {
-        sheet := &app.instrument_sheet
-        // Over the whole window, room for every note offset of a preset
-        sheet_layout, swiped := begin_sheet(sheet, 0, &app.strobe_display, layout.strobe, gfx.window_size().y)
+draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
+    sheet := &app.instrument_sheet
+    if sheet.slide == 0 do return
 
-        // A new offset starts on the note the tuner is on
-        target := -1
-        if index, in_range := core.note_index(app.tuner.target_note); in_range && app.tuner.target_note.frequency != 0 {
-            target = index
-        }
-        close, changed := gui_instrument(sheet_layout, config, &app.settings_menu, target)
-        if changed {
-            app.config_changed = true
-            // Other notes on the ruler, it starts again on the target
-            note_ruler.initialized = false
-        }
-        grab_sheet(sheet, sheet_layout)
-        if close || closes(sheet_layout, swiped) {
-            close_sheet(sheet)
-            app.settings_menu = .NONE
-            exclusive_control_mode = false
-            reset_note_offsets_editing()
-        }
+    // Over the whole window, room for every note offset of a preset
+    sheet_layout, swiped := begin_sheet(sheet, 0, &app.strobe_display, layout.strobe, gfx.window_size().y)
+
+    // A new offset starts on the note the tuner is on
+    target := -1
+    if index, in_range := core.note_index(app.tuner.target_note); in_range && app.tuner.target_note.frequency != 0 {
+        target = index
+    }
+    close, changed := gui_instrument(sheet_layout, app.config, &app.settings_menu, target)
+    if changed {
+        app.config_changed = true
+        // Other notes on the ruler, it starts again on the target
+        note_ruler.initialized = false
+    }
+    grab_sheet(sheet, sheet_layout)
+
+    if close || sheet_dismissed(sheet_layout, swiped) {
+        close_sheet(sheet)
+        app.settings_menu = .NONE
+        exclusive_control_mode = false
+        reset_note_offsets_editing()
     }
 }
 
