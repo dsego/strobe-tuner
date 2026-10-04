@@ -41,9 +41,6 @@ MAX_FPS :: 120
 
 // Not in the settings, see Config. The pitch detection's are in core, see PITCH_FFT_SIZE.
 SAMPLERATE :: 48_000 // the input's, miniaudio converts the device's own
-// How long a new note is detected in a row before the strobe switches to it, the last detection strong or
-// the run steady. At 0 a note under hum flickers.
-NOTE_SWITCH_S :: 0.05
 // Vernier mode, each track turns this much faster than the one under it
 VERNIER_SPEED_MULTIPLIER :: 2
 
@@ -100,7 +97,7 @@ run_app :: proc(config: ^Config) {
         phase_average = true,
     }
     tuner := &app.tuner
-    tuner^ = core.init_tuner(config.target_freq_hz, config.pitch_standard, NOTE_SWITCH_S, prevent_octave_jumps = true)
+    tuner^ = core.init_tuner(config.target_freq_hz, config.pitch_standard, prevent_octave_jumps = true)
     configure_tuner(&app)
     // Saved for the next start
     defer config.target_freq_hz = tuner.target_note.frequency

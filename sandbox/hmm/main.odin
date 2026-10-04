@@ -17,7 +17,7 @@ import "../../src/core"
 
 // The app's, see src/app/app.odin
 SAMPLERATE :: 48_000
-note_switch_s: f32 = 0.05 // NOTE_SWITCH_S in the environment tries another
+note_switch_s: f32 = core.NOTE_SWITCH_S // NOTE_SWITCH_S in the environment tries another
 INTERVALS :: [?]f32{1, 2, 4}
 STROBE_SPEED :: 0.0125
 FRAME_SAMPLES :: SAMPLERATE / 60
@@ -115,7 +115,7 @@ main :: proc() {
 
     detector := core.init_pitch_detector(SAMPLERATE)
     defer core.destroy_pitch_detector(&detector)
-    tuner := core.init_tuner(110, 440, note_switch_s, true)
+    tuner := core.init_tuner(110, 440, true, note_switch_s)
 
     intervals := INTERVALS
     strobe := core.init_phase_comparator(110, SAMPLERATE, intervals[:], .HARMONIC)

@@ -61,7 +61,15 @@ Tuner :: struct {
 
 MAX_STRINGS :: 8 // an 8-string guitar, the built-in tunings go up to 7
 
-init_tuner :: proc(target_freq_hz, pitch_standard: f32, confirm_s: f32, prevent_octave_jumps: bool) -> Tuner {
+// How long a new note is detected in a row before the strobe switches to it, the last detection strong or
+// the run steady. At 0 a note under hum flickers.
+NOTE_SWITCH_S :: 0.05
+
+init_tuner :: proc(
+    target_freq_hz, pitch_standard: f32,
+    prevent_octave_jumps: bool,
+    confirm_s: f32 = NOTE_SWITCH_S,
+) -> Tuner {
     return {
         target_note = freq_to_note(target_freq_hz, pitch_standard),
         detected_note = {cents = -1},
@@ -353,21 +361,21 @@ test_tuner :: proc(t: ^testing.T) {
     A3 :: 220.0
 
     // A new note needs to be seen for confirm_s, 0.1 s is 3 detections 0.05 s apart
-    tuner := init_tuner(E2, 440, 0.1, true)
+    tuner := init_tuner(E2, 440, true, 0.1)
     testing.expect(t, !update_tuner(&tuner, detection(A2)))
     testing.expect(t, !update_tuner(&tuner, detection(A2)))
     testing.expect(t, update_tuner(&tuner, detection(A2)))
     testing.expect_value(t, tuner.target_note.name, 'A')
 
     // At 60 detections a second it takes as long, 7 of them
-    tuner = init_tuner(E2, 440, 0.1, true)
+    tuner = init_tuner(E2, 440, true, 0.1)
     fast := detection(A2)
     fast.elapsed_s = 1.0 / 60
     for _ in 0 ..< 6 do testing.expect(t, !update_tuner(&tuner, fast))
     testing.expect(t, update_tuner(&tuner, fast))
 
     // A weak detection starts the count again
-    tuner = init_tuner(E2, 440, 0.1, true)
+    tuner = init_tuner(E2, 440, true, 0.1)
     update_tuner(&tuner, detection(A2))
     update_tuner(&tuner, detection(A2))
     update_tuner(&tuner, detection(A2, strong = false))
@@ -381,7 +389,7 @@ test_tuner :: proc(t: ^testing.T) {
         pitch.is_weak_pitch = false
         return pitch
     }
-    tuner = init_tuner(E2, 440, 0.1, true)
+    tuner = init_tuner(E2, 440, true, 0.1)
     update_tuner(&tuner, medium(A2))
     update_tuner(&tuner, medium(A2 * 2.0 / 3.0))
     update_tuner(&tuner, medium(A2))
@@ -394,7 +402,7 @@ test_tuner :: proc(t: ^testing.T) {
     testing.expect_value(t, tuner.target_note.name, 'A')
 
     // Not a steady run of guesses at three periods, a third of the note
-    tuner = init_tuner(E2, 440, 0.1, true)
+    tuner = init_tuner(E2, 440, true, 0.1)
     for _ in 0 ..< 5 {
         guess := medium(A3 / 3)
         guess.shortest_period = false
@@ -403,13 +411,13 @@ test_tuner :: proc(t: ^testing.T) {
     testing.expect(t, !tuner.active)
 
     // An octave jump while a note is followed keeps the strobe, the target note still changes
-    tuner = init_tuner(A2, 440, 0, true)
+    tuner = init_tuner(A2, 440, true, 0)
     update_tuner(&tuner, detection(A2))
     testing.expect(t, !update_tuner(&tuner, detection(A3)))
     testing.expect_value(t, tuner.target_note.octave, 3)
 
     // The strobe keeps a followed note lit when the detections turn weak, but doesn't light one
-    tuner = init_tuner(A2, 440, 0, true)
+    tuner = init_tuner(A2, 440, true, 0)
     update_tuner(&tuner, detection(A2, strong = false), strobe_hears = true)
     testing.expect(t, !tuner.active)
     update_tuner(&tuner, detection(A2))
@@ -419,13 +427,13 @@ test_tuner :: proc(t: ^testing.T) {
     testing.expect(t, !tuner.active)
 
     // Not without a track for the octave, the strobe follows it
-    tuner = init_tuner(A2, 440, 0, true)
+    tuner = init_tuner(A2, 440, true, 0)
     tuner.octave_track = false
     update_tuner(&tuner, detection(A2))
     testing.expect(t, update_tuner(&tuner, detection(A3)))
 
     // A locked note stays, its octave too. Another note is out of range, the gauge points down to it.
-    tuner = init_tuner(E2, 440, 0, false)
+    tuner = init_tuner(E2, 440, false, 0)
     update_tuner(&tuner, detection(E2))
     toggle_note_lock(&tuner)
     testing.expect(t, !tuner_out_of_range(&tuner))
@@ -454,7 +462,7 @@ test_tuner :: proc(t: ^testing.T) {
     testing.expect_value(t, tuner.target_note.name, 'G')
 
     // The readout averages small wobbles, a bigger change jumps straight there
-    tuner = init_tuner(A2, 440, 0, true)
+    tuner = init_tuner(A2, 440, true, 0)
     update_tuner(&tuner, detection(A2))
     update_tuner(&tuner, detection(cents_to_freq(2, A2)))
     steady = tuner_readout(&tuner)
@@ -464,7 +472,7 @@ test_tuner :: proc(t: ^testing.T) {
     testing.expect(t, abs(steady.err_cents - 20) < 0.01)
 
     // A note tuned 10 cents flat: the strobe is tuned there and the readout counts from there
-    tuner = init_tuner(A2, 440, 0, true)
+    tuner = init_tuner(A2, 440, true, 0)
     a2_index, _ := note_index(tuner.target_note)
     tuner.offsets_cents[a2_index] = -10
     testing.expect(t, abs(tuner_target_freq(&tuner) - cents_to_freq(-10, A2)) < 0.001)
@@ -478,7 +486,7 @@ test_tuner :: proc(t: ^testing.T) {
 
     // A guitar in standard tuning, E2 A2 D3 G3 B3 E4 in semitones from A4
     guitar := []int{-29, -24, -19, -14, -10, -5}
-    tuner = init_tuner(A3, 440, 0, true)
+    tuner = init_tuner(A3, 440, true, 0)
     testing.expect(t, set_tuner_strings(&tuner, guitar))
     testing.expect_value(t, tuner.string_index, 3)
     testing.expect_value(t, tuner.target_note.name, 'G')
@@ -503,7 +511,7 @@ test_tuner :: proc(t: ^testing.T) {
 
     // Another string's note isn't measured against the target string while it's held long enough to be the
     // target, then against its own string
-    held := init_tuner(A3, 440, 0.1, true)
+    held := init_tuner(A3, 440, true, 0.1)
     set_tuner_strings(&held, guitar)
     for _ in 0 ..< 3 do update_tuner(&held, detection(196.0)) // G3, the target
     update_tuner(&held, detection(E2))

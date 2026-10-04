@@ -20,7 +20,6 @@ import "../../src/core"
 
 // The app's, see src/app/app.odin
 SAMPLERATE :: 48_000
-NOTE_SWITCH_S :: 0.05
 INTERVALS :: [?]f32{1, 2, 4}
 STROBE_SPEED :: 0.0125
 
@@ -50,7 +49,7 @@ main :: proc() {
 
     detector := core.init_pitch_detector(SAMPLERATE)
     defer core.destroy_pitch_detector(&detector)
-    tuner := core.init_tuner(110, 440, NOTE_SWITCH_S, true)
+    tuner := core.init_tuner(110, 440, true)
 
     // The strobe tracks, following the tuner's note like in the app
     intervals := INTERVALS
