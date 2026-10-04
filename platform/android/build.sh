@@ -21,7 +21,7 @@ OUT="$ROOT/build/android"
 STAGE="$OUT/apk" # the .apk's files, the native libraries in lib/arm64-v8a
 LIBS="$STAGE/lib/arm64-v8a"
 APK="$OUT/Strobie.apk"
-PACKAGE=com.dsego.strobetuner
+PACKAGE=app.strobie
 MIN_SDK=29 # Android 10, the oldest with Vulkan on most phones
 TARGET_SDK=35
 # The same version as on iOS. The code is Android's own, Google Play wants it higher with each upload and

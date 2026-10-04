@@ -7,7 +7,7 @@
     <key>CFBundleExecutable</key>
     <string>StrobeTuner</string>
     <key>CFBundleIdentifier</key>
-    <string>com.dsego.strobetuner</string>
+    <string>app.strobie</string>
     <key>CFBundleName</key>
     <string>StrobeTuner</string>
     <key>CFBundleDisplayName</key>

@@ -101,8 +101,8 @@ draw_led :: proc(led: gfx.Rect, on: bool, color: gfx.Color) {
     gfx.draw_pill(led, color if on else pill_dark)
 }
 
-// The most important toggle gets a whole button, gray while off and violet while locked. center is the
-// middle of the button.
+// The note lock as a labelled button, gray while off and violet while locked. center is the middle of the
+// button.
 gui_lock_toggle :: proc(center: [2]f32, locked: bool) -> bool {
     LABEL :: "LOCK NOTE"
     PADDING :: 10
