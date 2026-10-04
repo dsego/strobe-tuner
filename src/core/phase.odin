@@ -35,6 +35,7 @@ import "core:math"
 import "core:math/cmplx"
 import "core:slice"
 import "core:testing"
+import "core:time"
 
 
 MIN_STROBE_FREQ_HZ :: 16.0
@@ -345,6 +346,7 @@ run_phase_detection :: proc(self: ^PhaseComparator, is_tonal := false) {
             base_band := self.bands[0]
             band.amp = base_band.amp
             band.phase_diff = base_band.phase_diff
+            band.rate = base_band.rate
             band.noise_floor = base_band.noise_floor
             band.snr_db = base_band.snr_db
             band.scaled_phase -= band.phase_diff * band.speed
@@ -519,6 +521,19 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
 // A phase advance at freq_hz times this turns the strobe as fast per cent as every other note
 strobe_rescale :: proc(freq_hz: f32) -> f64 {
     return STROBE_REFERENCE_HZ / f64(freq_hz)
+}
+
+// Without audio the strobe stops going on after this long
+STROBE_AHEAD_MAX_S :: 0.03
+
+// How far the strobe turned since its newest sample came in, at the readout's rate. The audio comes in chunks
+// that don't line up with the display's frames, 10 ms ones on a Mac at 120 Hz: a frame in six gets none and
+// the others a chunk and a bit, a steady drift drawn as measured steps and stalls. Drawn this far ahead it
+// moves evenly, and the next measurement takes over where it is.
+strobe_phase_ahead :: proc(self: ^PhaseComparator, band: PhaseBand) -> f32 {
+    age := min(time.duration_seconds(time.tick_since(self.newest_tick)), STROBE_AHEAD_MAX_S)
+    advance := band.rate * age * SAMPLERATE * strobe_rescale(band.freq_hz)
+    return -f32(advance) * band.speed
 }
 
 

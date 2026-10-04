@@ -490,7 +490,7 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         if config.strobe_source == .LAMP {
             bands = lamp_bands(display, &app.scope, bands, app.pitch_detector.snr_db)
         }
-        draw_strobe_display(display, strobe, layout.strobe_scale, bands, comparator.mode, config)
+        draw_strobe_display(display, strobe, layout.strobe_scale, bands, comparator, config)
 
         // Vernier mode shows the same pitch on every track, there's nothing to set on one
         if config.strobe_mode == .HARMONIC && !input_missing(app) && gui_button(strobe) {

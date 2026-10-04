@@ -19,6 +19,7 @@ package core
 import "base:intrinsics"
 import "core:slice"
 import "core:testing"
+import "core:time"
 
 
 // The input's, miniaudio and AAudio convert the device's own. PITCH_FFT_SIZE, MAX_WINDOW_SIZE and the values
@@ -34,6 +35,10 @@ AudioCaptureNode :: struct {
     // Samples that didn't fit, the main loop stalled for longer than the ring buffer holds. Written by the
     // audio thread, see audio_capture_skip_stale.
     dropped:         i64,
+    // When the newest sample came in, a time.Tick's nanoseconds, written by the audio thread
+    written_tick:    i64,
+    // and the newest one audio_capture_read took, see strobe_phase_ahead
+    newest_tick:     time.Tick,
 }
 
 init_audio_capture_node :: proc(self: ^AudioCaptureNode, name: string) {
@@ -56,6 +61,8 @@ destroy_audio_capture_node :: proc(self: ^AudioCaptureNode) {
 audio_capture_write :: proc(self: ^AudioCaptureNode, input: []f32) {
     written := write_ringbuffer(&self.ringbuffer, input)
     if written < len(input) do intrinsics.atomic_add(&self.dropped, i64(len(input) - written))
+
+    intrinsics.atomic_store(&self.written_tick, time.tick_now()._nsec)
 }
 
 // After a stall that dropped samples, the ones still in the ring buffer came before them and are stale.
@@ -94,6 +101,9 @@ audio_capture_read :: proc(
     available := ringbuffer_available(&self.ringbuffer)
 
     if available <= min_available do return 0, 0
+
+    // A chunk coming in right now may be counted in the time but not the samples, rarely and for a frame
+    self.newest_tick = time.Tick{intrinsics.atomic_load(&self.written_tick)}
 
     size := len(audio_buffer)
 

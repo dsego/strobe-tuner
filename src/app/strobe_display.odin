@@ -50,6 +50,8 @@ StrobeDisplay :: struct {
 
     // per band stripe visibility, smoothed so it doesn't flicker, see update_band_visibility
     band_visibility: [core.MAX_BANDS]f32,
+    // per band phase drawn in the previous frame, for the motion blur, see strobe_tracks
+    band_drawn_phases: [core.MAX_BANDS]f32,
     // and of the scope's beam, see draw_scope_display
     scope_visibility: f32,
     // the scope's screen for its shader, a byte a cell, see draw_scope_screen
@@ -312,7 +314,7 @@ draw_strobe_display :: proc(
     rect: gfx.Rect,
     scale: f32,
     bands: []core.PhaseBand,
-    mode: core.StrobeMode,
+    comparator: ^core.PhaseComparator,
     config: ^Config,
 ) {
     shape := config.strobe_shape
@@ -342,7 +344,7 @@ draw_strobe_display :: proc(
     uniforms.glow_filter.rgb = glow_filter(glow.color)
     uniforms.glow_dark_filter.rgb = glow_filter(glow.dark_color) * glow.dark_level
     uniforms.highlight_color = gfx.normalize_color(accent_color)
-    tracks := strobe_tracks(self, rect, bands, mode, uniforms, geometry)
+    tracks := strobe_tracks(self, rect, bands, comparator, uniforms, geometry)
 
     if glow_enabled {
         // Render the strobe offscreen so the bright parts can bloom over the surroundings. A dark strobe
@@ -494,12 +496,13 @@ strobe_tracks :: proc(
     self: ^StrobeDisplay,
     strobe_rect: gfx.Rect,
     bands: []core.PhaseBand,
-    mode: core.StrobeMode,
+    comparator: ^core.PhaseComparator,
     shared: gfx.StrobeUniforms,
     geometry: StrobeGeometry,
 ) -> (
     tracks: StrobeTracks,
 ) {
+    mode := comparator.mode
     curvature_radius := geometry.curvature_radius
     band_height := geometry.band_height
     period_count := geometry.period_count
@@ -534,11 +537,14 @@ strobe_tracks :: proc(
         uniforms.time_stretch = band.time_stretch
 
         // The shader multiplies the phase by the period count, a denser pattern turns slower to drift as
-        // many stripes a second as the desktop's
-        uniforms.phase = band.scaled_phase / density
+        // many stripes a second as the desktop's. Drawn as of now, see strobe_phase_ahead, the lamp's
+        // tracks too, its screen gets the same chunks.
+        uniforms.phase = (band.scaled_phase + core.strobe_phase_ahead(comparator, band)) / density
 
-        // How far the strobe moved this frame, see determine_band_phase
-        uniforms.phase_step = -band.phase_diff * band.speed / density
+        // How far the strobe moved since the previous frame as drawn
+        drawn_phase := &self.band_drawn_phases[band_index]
+        uniforms.phase_step = uniforms.phase - drawn_phase^
+        drawn_phase^ = uniforms.phase
 
         uniforms.amp = STROBE_AMP
         uniforms.visibility = update_band_visibility(self, &band, band_index)
