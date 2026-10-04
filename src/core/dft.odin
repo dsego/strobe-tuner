@@ -20,6 +20,18 @@ import "core:math"
 import "core:testing"
 
 
+// Gamma shaped (order 3), the weight of a 3-pole lock-in low-pass: it rises fast from the newest sample and
+// falls off with age, so a tone is measured as of GAMMA_WINDOW_DELAY of the window back instead of half.
+// The spread of the weights matches a Blackman window's (0.16 of the window, σ = √3 τ), for about as
+// narrow a band, and the mean matches its 0.42 so the levels are the same.
+GAMMA_WINDOW_TAU :: 0.0921 // of the window size
+GAMMA_WINDOW_DELAY :: 3 * GAMMA_WINDOW_TAU // the mean age, of the window size
+
+gamma_window :: proc(index: f32, size: f32) -> f32 {
+    age := (size - 1.0 - index) / (GAMMA_WINDOW_TAU * size)
+    return 0.42 / (2.0 * GAMMA_WINDOW_TAU) * age * age * math.exp(-age)
+}
+
 SingleFreqDFT :: struct {
     window_size:  int, // the comb's box included
     gamma_size:   int, // the gamma window before the comb's box widened it

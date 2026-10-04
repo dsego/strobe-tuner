@@ -118,16 +118,22 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info := PitchInfo{}
 
     // Once a display frame's worth of new samples is in, the read wants more than its minimum
-    available := audio_capture_read(self, self.samples, SAMPLERATE / DETECTIONS_PER_SECOND - 1)
+    read, elapsed := audio_capture_read(self, self.samples, SAMPLERATE / DETECTIONS_PER_SECOND - 1)
 
-    if available <= 0 {
+    // Samples went by that the window didn't get, the filters start from rest on the new ones
+    if i64(read) < elapsed {
+        self.highpass.z1, self.highpass.z2 = 0, 0
+        self.lowpass.z1, self.lowpass.z2 = 0, 0
+    }
+
+    if read == 0 {
         stale := prev_info
         stale.fresh = false
         return stale
     }
 
     // The new samples are at the end, the older ones were filtered on the way in before
-    new_samples := self.samples[max(len(self.samples) - int(available), 0):]
+    new_samples := self.samples[len(self.samples) - read:]
     biquad_process(&self.highpass, new_samples, new_samples)
     biquad_process(&self.lowpass, new_samples, new_samples)
 
@@ -139,7 +145,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.rms = max(calculate_rms(self.samples), MIN_RMS_TRACKABLE)
     info.rms_dbfs = dbfs(info.rms)
 
-    dt := f32(available) / SAMPLERATE
+    dt := f32(elapsed) / SAMPLERATE
     info.elapsed_s = dt
     // Down to A0, flat by up to half a semitone, at the pitch standard
     min_freq := cents_to_freq(LOWEST_NOTE * 100 - 50, self.pitch_standard)

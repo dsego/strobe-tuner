@@ -328,11 +328,18 @@ run_phase_detection :: proc(self: ^PhaseComparator, use_phase_average: bool, is_
         for band in self.bands do window_size = max(window_size, band.dft.window_size)
     }
     resize_sample_buffer(self, window_size)
-    available := audio_capture_read(self, self.sample_buffer[:self.buffer_len])
-    if available <= 0 do return
+    read, elapsed := audio_capture_read(self, self.sample_buffer[:self.buffer_len])
+    if read == 0 && elapsed > 0 {
+        // A stall, the buffer is silent and the tracks start over on the audio after it. The clock too, the
+        // noise floors don't learn the silence while the window fills again.
+        self.sample_clock = 0
+        for &band in self.bands do restart_band(&band)
+        return
+    }
+    if read == 0 do return
 
-    self.available = int(available)
-    self.sample_clock += i64(available) + audio_capture_dropped(self)
+    self.available = int(elapsed)
+    self.sample_clock += elapsed
 
     for &band, band_index in self.bands {
         if !measures_band(self, band_index) {

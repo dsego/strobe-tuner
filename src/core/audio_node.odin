@@ -17,6 +17,7 @@
 package core
 
 import "base:intrinsics"
+import "core:slice"
 import "core:testing"
 
 
@@ -31,7 +32,7 @@ AudioCaptureNode :: struct {
     ringbuffer:      RingBuffer,
     ringbuffer_data: []u8,
     // Samples that didn't fit, the main loop stalled for longer than the ring buffer holds. Written by the
-    // audio thread, see audio_capture_dropped.
+    // audio thread, see audio_capture_skip_stale.
     dropped:         i64,
 }
 
@@ -57,45 +58,64 @@ audio_capture_write :: proc(self: ^AudioCaptureNode, input: []f32) {
     if written < len(input) do intrinsics.atomic_add(&self.dropped, i64(len(input) - written))
 }
 
-// The samples dropped since the last call. A sample clock adds them, the newest sample is that much later
-// than the ones read before it.
-audio_capture_dropped :: proc(self: ^AudioCaptureNode) -> i64 {
-    return intrinsics.atomic_exchange(&self.dropped, 0)
+// After a stall that dropped samples, the ones still in the ring buffer came before them and are stale.
+// Skips them, returns how many samples went by, the skipped and the dropped, 0 without a stall.
+audio_capture_skip_stale :: proc(self: ^AudioCaptureNode) -> (lost: i64) {
+    dropped := intrinsics.atomic_exchange(&self.dropped, 0)
+    if dropped == 0 do return 0
+
+    available := ringbuffer_available(&self.ringbuffer)
+    skip_ringbuffer(&self.ringbuffer, available)
+    // Also what was dropped until the skip made room
+    return i64(available) + dropped + intrinsics.atomic_exchange(&self.dropped, 0)
 }
 
-// Fill the buffer with new audio samples.
-// If there are more samples available than the size of the buffer, it will overwrite the complete
-// buffer with new samples. Otherwise it will shift the existing samples.
+// Fills the buffer with the new samples, the older ones shift towards the start to make room. Of more than
+// fits, the oldest are skipped.
+//
+// elapsed is the time since the previous read in samples, read of them are new at the end of the buffer.
+// When read is less, samples went by that the buffer didn't get, a filter over the new ones starts over.
+// After a stall read is 0 and the buffer is silent, see audio_capture_skip_stale, the next read is the
+// audio after the gap.
 audio_capture_read :: proc(
     self: ^AudioCaptureNode,
     audio_buffer: []f32,
     min_available: i32 = 0,
-) -> i32 {
+) -> (
+    read: int,
+    elapsed: i64,
+) {
+    if lost := audio_capture_skip_stale(self); lost > 0 {
+        slice.zero(audio_buffer)
+        return 0, lost
+    }
+
     available := ringbuffer_available(&self.ringbuffer)
 
-    if available <= min_available do return 0
+    if available <= min_available do return 0, 0
 
     size := len(audio_buffer)
 
     if int(available) >= size {
         skip_ringbuffer(&self.ringbuffer, available - i32(size))
         read_ringbuffer(&self.ringbuffer, audio_buffer)
-    } else {
-        // move old samples back to make room for new samples
-        copy(audio_buffer, audio_buffer[available:size])
-
-        // copy over new samples into the freed space
-        offset := size - int(available)
-        read_ringbuffer(&self.ringbuffer, audio_buffer[offset:])
+        return size, i64(available)
     }
 
-    return available
+    // move old samples back to make room for new samples
+    copy(audio_buffer, audio_buffer[available:size])
+
+    // copy over new samples into the freed space
+    offset := size - int(available)
+    read_ringbuffer(&self.ringbuffer, audio_buffer[offset:])
+
+    return int(available), i64(available)
 }
 
 
-// A stall longer than the ring buffer holds, what didn't fit is counted once
+// A stall longer than the ring buffer holds, the stale samples are skipped and the time counted once
 @(test)
-test_audio_capture_dropped :: proc(t: ^testing.T) {
+test_audio_capture_stall :: proc(t: ^testing.T) {
     node: AudioCaptureNode
     init_audio_capture_node(&node, "test")
     defer destroy_audio_capture_node(&node)
@@ -103,11 +123,20 @@ test_audio_capture_dropped :: proc(t: ^testing.T) {
     SAMPLES :: 70_000
     input := make([]f32, SAMPLES)
     defer delete(input)
+    slice.fill(input, 1)
     audio_capture_write(&node, input)
 
-    available := i64(ringbuffer_available(&node.ringbuffer))
-    dropped := audio_capture_dropped(&node)
-    testing.expect(t, dropped > 0, "dropped none")
-    testing.expect_value(t, available + dropped, SAMPLES)
-    testing.expect_value(t, audio_capture_dropped(&node), 0)
+    buffer: [1024]f32
+    slice.fill(buffer[:], 1)
+    read, elapsed := audio_capture_read(&node, buffer[:])
+    testing.expect_value(t, read, 0)
+    testing.expect_value(t, elapsed, SAMPLES)
+    testing.expect(t, slice.all_of(buffer[:], 0), "the buffer isn't silent")
+
+    // The audio after the gap
+    audio_capture_write(&node, input[:100])
+    read, elapsed = audio_capture_read(&node, buffer[:])
+    testing.expect_value(t, read, 100)
+    testing.expect_value(t, elapsed, 100)
+    testing.expect(t, slice.all_of(buffer[len(buffer) - 100:], 1), "the new samples aren't at the end")
 }

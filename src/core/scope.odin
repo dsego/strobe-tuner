@@ -168,7 +168,14 @@ scope_width :: proc(self: ^Scope) -> int {
 // Draws what came in since the previous frame
 update_scope :: proc(self: ^Scope) {
     self.skipping = false
-    self.sample_clock += audio_capture_dropped(self)
+    if lost := audio_capture_skip_stale(self); lost > 0 {
+        // A stall, the beam starts over on the audio after it
+        self.sample_clock += lost
+        self.coupling = {}
+        clear_scope(self)
+        return
+    }
+
     available := int(ringbuffer_available(&self.ringbuffer))
     if available == 0 do return
 
@@ -194,9 +201,10 @@ update_scope :: proc(self: ^Scope) {
 // measurements. What came in is dropped, the clock runs on and the screen goes dark, it starts over when
 // it shows again.
 skip_scope :: proc(self: ^Scope) {
+    self.sample_clock += audio_capture_skip_stale(self)
     available := ringbuffer_available(&self.ringbuffer)
     skip_ringbuffer(&self.ringbuffer, available)
-    self.sample_clock += i64(available) + audio_capture_dropped(self)
+    self.sample_clock += i64(available)
     if !self.skipping do clear_scope(self)
     self.skipping = true
 }
