@@ -196,7 +196,8 @@ The strobe went through four versions, each one fixing what the one before could
 
 #### Other approaches
 
-- **A square-wave slot**: [strobeTuner](https://sourceforge.net/projects/strobetuner/) (Scott Duplichan, GPLv3) builds each band the other way round from the lamp. Every frame, each column multiplies the last 6 periods by a ±1 square wave at the band's pitch, shifted by the column's place on the wheel, and clips the average. That's the same fold, seen through a slot half a period wide instead of a thin slit, and recomputed from the raw audio for every column.
+- **A square-wave slot**: [strobeTuner](https://sourceforge.net/projects/strobetuner/) (Scott Duplichan, GPLv3) builds each band the other way round from the lamp. Every frame, each column multiplies the last 6 periods by a ±1 square wave at the band's pitch, shifted by the column's place on the wheel, and clips the average. That's the same fold, seen through a slot half a period wide instead of a thin slit, and recomputed from the raw audio for every column. A real disc's stripes are half black and half clear, so the square slot is the more literal model of one.
+- **A simulated strobe**: a pitch detector like NSDF or YIN compares the signal with itself, so it gives the period but not where the wave is. Stripes turned by the detected cents follow the integral of an estimate: its noise walks them off while the note holds in tune, a jump in phase doesn't show, and harmonic tracks can only be multiples of one f0, so a partial out of tune with its fundamental never shows. Here the pitch detector only picks the note. The stripes are the signal's phase against a reference on the sample clock, measured again every frame, so the error doesn't add up. The cents go the other way round, the readout is the slope of the measured phase rather than the phase the integral of the cents.
 
 
 #### Noise floor
