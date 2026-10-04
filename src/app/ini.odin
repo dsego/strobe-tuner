@@ -36,7 +36,10 @@ create_app_directory :: proc() -> Maybe(string) {
 
     // With the folders above it, an iOS app's container has no Application Support until it's made
     err := os.make_directory_all(dir_path)
-    if err != nil do return nil
+    if err != nil {
+        delete(dir_path)
+        return nil
+    }
 
     return dir_path
 }
