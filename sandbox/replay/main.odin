@@ -107,7 +107,7 @@ main :: proc() {
             kind,
             "active" if tuner.active else "-",
         )
-        _, steady := core.tuner_readout(&tuner)
+        steady := core.tuner_readout(&tuner)
         readout := fmt.tprintf("%+.1f¢", steady.err_cents)
         if readout_ready && tuner.active && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS {
             band := strobe.bands[readout_track]

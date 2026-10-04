@@ -318,23 +318,19 @@ locked_note :: proc(self: ^Tuner) -> bool {
     return self.locked && self.string_count == 0
 }
 
-// The latest detection as it is, and the strong detections averaged for the readout. A locked note or a
-// string is measured against the target instead of the nearest note. Either way from where the note is tuned
-// to, the readout is 0 where the strobe stands still.
-tuner_readout :: proc(self: ^Tuner) -> (pitch, steady_pitch: PitchInfo) {
-    pitch = self.pitch
+// The strong detections averaged for the readout, see tuner_cents
+tuner_readout :: proc(self: ^Tuner) -> (steady_pitch: PitchInfo) {
     steady_pitch = self.last_good_pitch
     if self.steady_freq != 0 do steady_pitch.detected_freq = self.steady_freq
-
-    if measures_target(self) {
-        steady_pitch.err_cents = tuner_cents_off(self, steady_pitch.detected_freq)
-        pitch.err_cents = tuner_cents_off(self, pitch.detected_freq)
-        return
-    }
-    steady_pitch.err_cents = cents_deviation(steady_pitch.detected_freq, steady_pitch.detected_note.frequency)
-    steady_pitch.err_cents -= note_offset_cents(self, steady_pitch.detected_note)
-    pitch.err_cents -= note_offset_cents(self, pitch.detected_note)
+    steady_pitch.err_cents = tuner_cents(self, steady_pitch.detected_freq, steady_pitch.detected_note)
     return
+}
+
+// Cents of a detected note like the readout's. A locked note or a string is measured against the target
+// instead of the nearest note. Either way from where the note is tuned to, 0 where the strobe stands still.
+tuner_cents :: proc(self: ^Tuner, freq: f32, note: Note) -> f32 {
+    if measures_target(self) do return tuner_cents_off(self, freq)
+    return cents_deviation(freq, note.frequency) - note_offset_cents(self, note)
 }
 
 
@@ -444,7 +440,7 @@ test_tuner :: proc(t: ^testing.T) {
     // Its readout doesn't follow a stray detection of another note
     update_tuner(&tuner, detection(E2))
     update_tuner(&tuner, detection(2 * E2))
-    _, steady := tuner_readout(&tuner)
+    steady := tuner_readout(&tuner)
     testing.expect(t, abs(steady.err_cents) < 0.1) // E2 is 82.407 Hz
 
     // Unlocking goes back to the detected note
@@ -461,10 +457,10 @@ test_tuner :: proc(t: ^testing.T) {
     tuner = init_tuner(A2, 440, 0, true)
     update_tuner(&tuner, detection(A2))
     update_tuner(&tuner, detection(cents_to_freq(2, A2)))
-    _, steady = tuner_readout(&tuner)
+    steady = tuner_readout(&tuner)
     testing.expect(t, steady.err_cents > 0.3 && steady.err_cents < 0.5)
     update_tuner(&tuner, detection(cents_to_freq(20, A2)))
-    _, steady = tuner_readout(&tuner)
+    steady = tuner_readout(&tuner)
     testing.expect(t, abs(steady.err_cents - 20) < 0.01)
 
     // A note tuned 10 cents flat: the strobe is tuned there and the readout counts from there
@@ -473,7 +469,7 @@ test_tuner :: proc(t: ^testing.T) {
     tuner.offsets_cents[a2_index] = -10
     testing.expect(t, abs(tuner_target_freq(&tuner) - cents_to_freq(-10, A2)) < 0.001)
     update_tuner(&tuner, detection(cents_to_freq(-10, A2)))
-    _, steady = tuner_readout(&tuner)
+    steady = tuner_readout(&tuner)
     testing.expect(t, abs(steady.err_cents) < 0.01)
 
     // The octave isn't tuned flat, the strobe moves there instead of staying
@@ -493,7 +489,7 @@ test_tuner :: proc(t: ^testing.T) {
     update_tuner(&tuner, detection(97.999)) // G2, 3 semitones up and 2 below A
     testing.expect_value(t, tuner.string_index, 0)
     testing.expect(t, !tuner_out_of_range(&tuner))
-    _, steady = tuner_readout(&tuner)
+    steady = tuner_readout(&tuner)
     testing.expect(t, abs(steady.err_cents - 300) < 0.1)
     update_tuner(&tuner, detection(103.83)) // G#2
     testing.expect_value(t, tuner.string_index, 1)
@@ -502,7 +498,7 @@ test_tuner :: proc(t: ^testing.T) {
     update_tuner(&tuner, detection(E2))
     update_tuner(&tuner, detection(2 * E2))
     testing.expect_value(t, tuner.string_index, 0)
-    _, steady = tuner_readout(&tuner)
+    steady = tuner_readout(&tuner)
     testing.expect(t, abs(steady.err_cents) < 0.1)
 
     // Another string's note isn't measured against the target string while it's held long enough to be the
@@ -512,12 +508,12 @@ test_tuner :: proc(t: ^testing.T) {
     for _ in 0 ..< 3 do update_tuner(&held, detection(196.0)) // G3, the target
     update_tuner(&held, detection(E2))
     testing.expect_value(t, held.string_index, 3)
-    _, steady = tuner_readout(&held)
+    steady = tuner_readout(&held)
     testing.expect(t, abs(steady.err_cents) < 0.1)
     update_tuner(&held, detection(E2))
     update_tuner(&held, detection(E2))
     testing.expect_value(t, held.string_index, 0)
-    _, steady = tuner_readout(&held)
+    steady = tuner_readout(&held)
     testing.expect(t, abs(steady.err_cents) < 0.1)
 
     // Drop D's low D and the D string an octave up are two strings

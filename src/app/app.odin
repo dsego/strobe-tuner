@@ -86,8 +86,7 @@ App :: struct {
 // This frame's measurements, for the main screen
 Reading :: struct {
     pitch:          core.PitchInfo, // the latest detection
-    shown:          core.PitchInfo, // the latest detection measured like the readout, see core.tuner_readout
-    steady:         core.PitchInfo, // the readout, the strong detections averaged
+    steady:       core.PitchInfo, // the readout, the strong detections averaged
     out_of_range:   bool, // another note than a locked one is played, see core.tuner_out_of_range
     strobe_readout: bool, // the readout is the strobe track's, close to the note
 }
@@ -315,7 +314,7 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     if off_target && !core.strobe_shows_note(app.phase_comparator, fundamental_only = true) do retune(app)
 
     reading.out_of_range = core.tuner_out_of_range(tuner)
-    reading.shown, reading.steady = core.tuner_readout(tuner)
+    reading.steady = core.tuner_readout(tuner)
 
     // Close to the note the readout is the strobe's, 0 where the fundamental's track stands still. The pitch
     // detection reads the whole wave, a real string's partials are a little sharp and pull it a few cents off
@@ -346,7 +345,8 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     if app.traced_track >= 0 && !reading.out_of_range && !far {
         traced_cents = app.phase_comparator.bands[app.traced_track].err_cents
     } else if detected {
-        traced_cents, light = reading.shown.err_cents, 1
+        traced_cents = core.tuner_cents(tuner, reading.pitch.detected_freq, reading.pitch.detected_note)
+        light = 1
     }
     record_trace(&app.cents_trace, traced_cents, light, reading.pitch.fresh, gfx.frame_time())
     return
