@@ -14,11 +14,14 @@
 // with this program.  If not, see <http://www.gnu.org/licenses/>.
 package app
 
+import "base:runtime"
 import "core:encoding/ini"
 import "core:fmt"
 import "core:os"
 import "core:path/filepath"
+import "core:reflect"
 import "core:slice"
+import "core:strconv"
 import "core:strings"
 import sdl "vendor:sdl3"
 
@@ -43,6 +46,105 @@ config_path :: proc() -> string {
     defer delete(dir_path)
     path, _ := filepath.join({dir_path, CONFIG_NAME})
     return path
+}
+
+// From the standard OS path, e.g. ~/Library/Application Support/<APP_NAME>/config.ini on macOS, see
+// config_directory. What's missing or doesn't parse keeps its default.
+load_config :: proc() -> Config {
+    config := config_defaults
+
+    ini_map, loaded := load_ini()
+    defer if loaded do ini.delete_map(ini_map)
+    section := ini_map[""]
+
+    fields := reflect.struct_fields_zipped(Config)
+
+    for field in fields {
+        ptr := rawptr(uintptr(&config) + field.offset)
+
+        #partial switch _ in field.type.variant {
+        case reflect.Type_Info_Named:
+            if value, ok := reflect.enum_from_name_any(field.type.id, section[field.name]); ok {
+                write_int_field(ptr, field.type.size, int(value))
+            }
+        case reflect.Type_Info_Float:
+            if value, ok := strconv.parse_f32(section[field.name]); ok {
+                (^f32)(ptr)^ = value
+            }
+        case reflect.Type_Info_Integer:
+            if value, ok := strconv.parse_int(section[field.name]); ok {
+                write_int_field(ptr, field.type.size, value)
+            }
+        case reflect.Type_Info_Boolean:
+            if value, ok := strconv.parse_bool(section[field.name]); ok {
+                (^bool)(ptr)^ = value
+            }
+        case reflect.Type_Info_Array:
+            listed := strings.trim(section[field.name], "[] ")
+            if len(listed) > 0 {
+                split := strings.split(listed, ",")
+                defer delete(split)
+                // Of f32 or int, an array of arrays is read in the order it's written out
+                element_type := field.type
+                for {
+                    array, is_array := reflect.type_info_base(element_type).variant.(reflect.Type_Info_Array)
+                    if !is_array do break
+                    element_type = array.elem
+                }
+                for i in 0 ..< field.type.size / element_type.size {
+                    element := rawptr(uintptr(ptr) + uintptr(i * element_type.size))
+                    // Fill in the rest, one that doesn't parse keeps its default
+                    if i >= len(split) {
+                        runtime.mem_zero(element, element_type.size)
+                        continue
+                    }
+                    trimmed := strings.trim(split[i], "[] ")
+                    if reflect.is_float(element_type) {
+                        if value, ok := strconv.parse_f32(trimmed); ok do (^f32)(element)^ = value
+                    } else if reflect.is_integer(element_type) {
+                        if value, ok := strconv.parse_int(trimmed); ok do write_int_field(element, element_type.size, value)
+                    }
+                }
+            }
+        }
+    }
+
+    return config
+}
+
+
+// Write with the field's own size, writing a full int into a smaller field clobbers the next one
+write_int_field :: proc(ptr: rawptr, size: int, value: int) {
+    switch size {
+    case 1:
+        (^u8)(ptr)^ = u8(value)
+    case 2:
+        (^u16)(ptr)^ = u16(value)
+    case 4:
+        (^u32)(ptr)^ = u32(value)
+    case 8:
+        (^int)(ptr)^ = value
+    case:
+        fmt.println("Unsupported config field size", size)
+    }
+}
+
+save_config :: proc(config: Config) {
+    ini_map := ini.Map{}
+    defer ini.delete_map(ini_map)
+
+    section: map[string]string = {}
+    fields := reflect.struct_fields_zipped(Config)
+
+    for field in fields {
+        value := reflect.struct_field_value(config, field)
+        key := strings.clone(field.name)
+        section[key] = fmt.aprintf("%v", value)
+    }
+
+    ini_map[""] = section
+
+    save_ini(ini_map)
 }
 
 load_ini :: proc() -> (ini.Map, bool) {
