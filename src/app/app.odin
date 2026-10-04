@@ -39,8 +39,6 @@ IDLE_FPS :: 30
 // Otherwise the display's rate up to ProMotion's, a faster monitor would only redraw the strobe more often
 MAX_FPS :: 120
 
-// Not in the settings, see Config. The pitch detection's are in core, see PITCH_FFT_SIZE.
-SAMPLERATE :: 48_000 // the input's, miniaudio converts the device's own
 // Vernier mode, each track turns this much faster than the one under it
 VERNIER_SPEED_MULTIPLIER :: 2
 
@@ -104,32 +102,38 @@ run_app :: proc(config: ^Config) {
 
     if !gfx.init(1200 when DEBUG_STATS else STROBE_WIDTH, DESKTOP_HEIGHT, APP_NAME) do return
     defer gfx.shutdown()
+
     // Loaded each frame for the screen's scale, see update_pixel_fonts
     defer unload_pixel_fonts()
+
     gfx.load_shapes()
     defer gfx.unload_shapes()
 
     app.phase_comparator = core.init_phase_comparator(
         config.target_freq_hz,
-        SAMPLERATE,
         config.strobe_intervals[:],
         config.strobe_mode,
     )
     defer core.destroy_phase_comparator(app.phase_comparator)
-    app.pitch_detector = core.init_pitch_detector(SAMPLERATE)
+
+    app.pitch_detector = core.init_pitch_detector()
     app.pitch_detector.pitch_standard = config.pitch_standard
     defer core.destroy_pitch_detector(&app.pitch_detector)
-    app.scope = core.init_scope(SAMPLERATE, SCOPE_COLUMNS, SCOPE_ROWS)
+
+    app.scope = core.init_scope(SCOPE_COLUMNS, SCOPE_ROWS)
     defer core.destroy_scope(&app.scope)
+
     app.strobe_display = init_strobe_display(strobe_colors(config), strobe_bg_color)
     defer destroy_strobe_display(&app.strobe_display)
+
     app.cents_trace = create_trace()
     defer destroy_trace(&app.cents_trace)
 
-    audio_capture, ok := audio.init(SAMPLERATE)
+    audio_capture, ok := audio.init()
     if !ok do return
     defer audio.destroy(audio_capture)
     app.audio_capture = audio_capture
+
     audio.register_node(audio_capture, &app.pitch_detector)
     audio.register_node(audio_capture, app.phase_comparator)
     audio.register_node(audio_capture, &app.scope)

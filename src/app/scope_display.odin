@@ -156,7 +156,7 @@ lamp_bands :: proc(
 
     // A new reference starts with a dark screen, the phases before it are arbitrary
     has_phase := display.lamp_freq_hz == scope.freq_hz
-    elapsed := f64(scope.sample_clock - display.lamp_clock) / scope.samplerate
+    elapsed := f64(scope.sample_clock - display.lamp_clock) / core.SAMPLERATE
     display.lamp_freq_hz = scope.freq_hz
     display.lamp_clock = scope.sample_clock
 

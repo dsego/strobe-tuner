@@ -34,7 +34,6 @@ Capture :: struct {
     device_open:        bool,
     active_device:      i32, // always 0, the one input
     nodes:              [dynamic]^core.AudioCaptureNode,
-    samplerate:         u32,
 
     // Set from AAudio's thread when the stream was disconnected, a headset plugged in or out, then it's
     // opened again
@@ -90,7 +89,7 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
         AAudioStreamBuilder_setDirection(builder, .INPUT)
         AAudioStreamBuilder_setFormat(builder, .PCM_FLOAT)
         AAudioStreamBuilder_setChannelCount(builder, 1)
-        AAudioStreamBuilder_setSampleRate(builder, i32(self.samplerate))
+        AAudioStreamBuilder_setSampleRate(builder, core.SAMPLERATE)
         AAudioStreamBuilder_setPerformanceMode(builder, .LOW_LATENCY)
         AAudioStreamBuilder_setInputPreset(builder, preset)
         AAudioStreamBuilder_setDataCallback(builder, stream_callback, self)
@@ -100,8 +99,8 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
 
         // AAudio converts to the rate asked for. Should it open at another, every note would read off by
         // the ratio, a semitone and a half from 48 to 44.1 kHz.
-        if rate := AAudioStream_getSampleRate(self.stream); rate != i32(self.samplerate) {
-            fmt.println("Input opened at", rate, "Hz instead of", self.samplerate)
+        if rate := AAudioStream_getSampleRate(self.stream); rate != core.SAMPLERATE {
+            fmt.println("Input opened at", rate, "Hz instead of", core.SAMPLERATE)
             failed(AAudioStream_close(self.stream))
             self.stream = nil
             return false
@@ -115,9 +114,8 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
 
 
 // Asks for the microphone, the input opens once it's allowed
-init :: proc(samplerate: u32) -> (self: ^Capture, ok: bool) {
+init :: proc() -> (self: ^Capture, ok: bool) {
     self = new(Capture)
-    self.samplerate = samplerate
     open_stream_on_active_device(self)
     return self, true
 }

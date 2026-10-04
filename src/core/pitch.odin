@@ -86,11 +86,11 @@ PitchInfo :: struct {
 }
 
 
-init_pitch_detector :: proc(samplerate: int) -> (self: PitchDetector) {
+init_pitch_detector :: proc() -> (self: PitchDetector) {
     self.samples = make([]f32, PITCH_FFT_SIZE / 2)
-    self.highpass = init_highpass(PITCH_HIGHPASS_HZ, f32(samplerate))
-    self.lowpass = init_lowpass(PITCH_LOWPASS_HZ, f32(samplerate))
-    self.nsdf = init_nsdf(PITCH_FFT_SIZE, samplerate)
+    self.highpass = init_highpass(PITCH_HIGHPASS_HZ, SAMPLERATE)
+    self.lowpass = init_lowpass(PITCH_LOWPASS_HZ, SAMPLERATE)
+    self.nsdf = init_nsdf(PITCH_FFT_SIZE)
     self.noise_floor = init_noise_floor()
     self.pitch_standard = 440.0
 
@@ -118,7 +118,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info := PitchInfo{}
 
     // Once a display frame's worth of new samples is in, the read wants more than its minimum
-    available := audio_capture_read(self, self.samples, i32(self.nsdf.samplerate / DETECTIONS_PER_SECOND) - 1)
+    available := audio_capture_read(self, self.samples, SAMPLERATE / DETECTIONS_PER_SECOND - 1)
 
     if available <= 0 {
         stale := prev_info
@@ -139,7 +139,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.rms = max(calculate_rms(self.samples), MIN_RMS_TRACKABLE)
     info.rms_dbfs = dbfs(info.rms)
 
-    dt := f32(available) / f32(self.nsdf.samplerate)
+    dt := f32(available) / SAMPLERATE
     info.elapsed_s = dt
     // Down to A0, flat by up to half a semitone, at the pitch standard
     min_freq := cents_to_freq(LOWEST_NOTE * 100 - 50, self.pitch_standard)
@@ -186,10 +186,8 @@ dbfs :: proc(signal: $T) -> T {
 // Hum with its harmonics doesn't name a note at either mains frequency, the notes either side of it do
 @(test)
 test_mains_hum :: proc(t: ^testing.T) {
-    SAMPLERATE :: 48_000
-
     detect :: proc(fundamental: f32) -> PitchInfo {
-        detector := init_pitch_detector(SAMPLERATE)
+        detector := init_pitch_detector()
         defer destroy_pitch_detector(&detector)
         // Half a second a display frame at a time like the app, the high-pass settles from its start
         FRAME :: SAMPLERATE / DETECTIONS_PER_SECOND

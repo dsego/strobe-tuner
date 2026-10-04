@@ -41,7 +41,6 @@ Capture :: struct {
     capture_infos:      []ma.device_info, // owned by ctx, valid until the next enumeration
     active_device:      i32, // index into capture_infos
     nodes:              [dynamic]^core.AudioCaptureNode,
-    samplerate:         u32,
 
     // Set from miniaudio's thread when an iOS audio interruption (a call, Siri, an alarm) is over.
     // miniaudio stops the device when one begins but doesn't start it again.
@@ -60,7 +59,7 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
     config := ma.device_config_init(.capture)
     config.capture.format = .f32
     config.capture.channels = 1
-    config.sampleRate = self.samplerate
+    config.sampleRate = core.SAMPLERATE
     config.performanceProfile = .low_latency
     config.noFixedSizedCallback = true // the nodes' ring buffers take chunks of any size
     config.dataCallback = stream_callback
@@ -89,9 +88,8 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
 
 
 // Opens the default input, nil when there's none or it can't be opened
-init :: proc(samplerate: u32) -> (self: ^Capture, ok: bool) {
+init :: proc() -> (self: ^Capture, ok: bool) {
     self = new(Capture)
-    self.samplerate = samplerate
 
     if failed(ma.context_init(nil, 0, nil, &self.ctx)) {
         free(self)

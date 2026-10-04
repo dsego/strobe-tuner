@@ -19,7 +19,7 @@ import ma "vendor:miniaudio"
 import "../../src/core"
 
 // The app's, see src/app/app.odin
-SAMPLERATE :: 48_000
+SAMPLERATE :: core.SAMPLERATE
 INTERVALS :: [?]f32{1, 2, 4}
 STROBE_SPEED :: 0.0125
 
@@ -47,13 +47,13 @@ main :: proc() {
     }
     defer delete(samples)
 
-    detector := core.init_pitch_detector(SAMPLERATE)
+    detector := core.init_pitch_detector()
     defer core.destroy_pitch_detector(&detector)
     tuner := core.init_tuner(110, 440, true)
 
     // The strobe tracks, following the tuner's note like in the app
     intervals := INTERVALS
-    strobe := core.init_phase_comparator(110, SAMPLERATE, intervals[:], .HARMONIC)
+    strobe := core.init_phase_comparator(110, intervals[:], .HARMONIC)
     defer core.destroy_phase_comparator(strobe)
     retune :: proc(strobe: ^core.PhaseComparator, freq_hz: f32) {
         core.set_phase_comparator_freq(strobe, freq_hz, 440, STROBE_SPEED, 2, .HARMONIC)

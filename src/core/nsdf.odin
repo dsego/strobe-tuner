@@ -39,21 +39,19 @@ NSDF :: struct {
     spectrum:       []complex64, // the power spectrum once autocorrelated
     autocorr:       []f32,
     values:         []f32, // the NSDF of each lag
-    samplerate:     int,
     padded_samples: []f32,
     peaks:          [dynamic]Vec2, // lag and NSDF value of each key maximum
     chosen_peak:    int, // in peaks, -1 for none
 }
 
 
-init_nsdf :: proc(fft_size: int, samplerate: int) -> (self: NSDF) {
+init_nsdf :: proc(fft_size: int) -> (self: NSDF) {
     self.fft_size = fft_size
     self.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
     // A real transform of fft_size samples has fft_size / 2 complex bins, see nsdf_autocorrelate
     self.spectrum = runtime.make_aligned([]complex64, fft_size / 2, 16)
     self.autocorr = runtime.make_aligned([]f32, fft_size, 16)
     self.values = make([]f32, fft_size / 2)
-    self.samplerate = samplerate
     self.padded_samples = runtime.make_aligned([]f32, fft_size, 16)
     return
 }
@@ -72,7 +70,7 @@ run_nsdf :: proc(self: ^NSDF, samples: []f32) -> (freq: f32, peak: Vec2) {
     nsdf_autocorrelate(self, samples)
     normalize(self, samples)
     peak = find_peak(self)
-    if peak.x > 0 do freq = f32(self.samplerate) / peak.x
+    if peak.x > 0 do freq = SAMPLERATE / peak.x
     return
 
     // The NSDF through the autocorrelation, the left-hand sum of the squares runs down as the lag grows.
@@ -193,7 +191,7 @@ parabolic :: proc(before: f32, middle: f32, after: f32) -> (offset: f32, value: 
 @(test)
 test_autocorrelation :: proc(t: ^testing.T) {
     FFT_SIZE :: 1024
-    self := init_nsdf(FFT_SIZE, 48_000)
+    self := init_nsdf(FFT_SIZE)
     defer destroy_nsdf(&self)
 
     // DC and a tone at the Nyquist frequency of the padded transform go through its packed first bin
@@ -215,12 +213,11 @@ test_autocorrelation :: proc(t: ^testing.T) {
 // string's pull it sharp of the fundamental, towards the loud ones
 @(test)
 test_nsdf_accuracy :: proc(t: ^testing.T) {
-    SAMPLERATE :: 48_000
-    FFT_SIZE :: 8192 // the app's default
+    FFT_SIZE :: PITCH_FFT_SIZE
 
     // Cents from the fundamental, partial n is at n * fundamental stretched by stretch_cents * (n² - 1)
     run :: proc(fundamental: f64, amplitudes: []f64, stretch_cents: f64) -> f32 {
-        self := init_nsdf(FFT_SIZE, SAMPLERATE)
+        self := init_nsdf(FFT_SIZE)
         defer destroy_nsdf(&self)
         samples: [FFT_SIZE / 2]f32
         for &sample, i in samples {

@@ -118,7 +118,6 @@ PhaseComparator :: struct {
     speed_multiplier: f32, // vernier mode, each track turns this much faster than the one under it
     sample_buffer:    []f32,
     bands:            [dynamic]PhaseBand,
-    samplerate:       f32,
     mode:             StrobeMode,
     available:        int, // the new samples of the latest run_phase_detection
 
@@ -130,16 +129,10 @@ PhaseComparator :: struct {
 }
 
 
-init_phase_comparator :: proc(
-    base_freq_hz: f32,
-    samplerate: f32,
-    strobe_intervals: []f32,
-    mode: StrobeMode,
-) -> ^PhaseComparator {
+init_phase_comparator :: proc(base_freq_hz: f32, strobe_intervals: []f32, mode: StrobeMode) -> ^PhaseComparator {
     self := new(PhaseComparator)
     init_audio_capture_node(self, "phase-tracker")
     self.sample_buffer = make([]f32, MAX_WINDOW_SIZE)
-    self.samplerate = samplerate
     self.mode = mode
     self.base_freq_hz = base_freq_hz
 
@@ -249,10 +242,10 @@ set_phase_comparator_freq :: proc(
     self.mode = mode
     self.speed_multiplier = speed_multiplier
 
-    comb_samples := comb_periods(self.bands[:], mode) * self.samplerate / base_freq_hz
+    comb_samples := comb_periods(self.bands[:], mode) * SAMPLERATE / base_freq_hz
 
     for &band, band_index in self.bands {
-        band.time_stretch = self.samplerate / base_freq_hz
+        band.time_stretch = SAMPLERATE / base_freq_hz
         restart_band(&band)
 
         switch self.mode {
@@ -264,14 +257,14 @@ set_phase_comparator_freq :: proc(
             band.freq_hz = base_freq_hz
             band.note = freq_to_note(band.freq_hz, pitch_standard)
         }
-        band.norm_freq = band.freq_hz / self.samplerate
+        band.norm_freq = band.freq_hz / SAMPLERATE
         band.in_range = band.norm_freq < MAX_BAND_NORM_FREQ
-        band.ref_omega = math.TAU * f64(band.freq_hz) / f64(self.samplerate)
+        band.ref_omega = math.TAU * f64(band.freq_hz) / SAMPLERATE
 
         if measures_band(self, band_index) {
             // Every track gets the fundamental's window. Sized in cents of its own partial an upper track's
             // window would be shorter, its band wider in Hz for a weaker partial, and it shimmers.
-            window_size := dft_window_size(base_freq_hz, self.samplerate, DFT_RESOLUTION_CENTS)
+            window_size := dft_window_size(base_freq_hz, SAMPLERATE, DFT_RESOLUTION_CENTS)
             set_dft_freq(&band.dft, band.norm_freq, window_size, comb_samples = comb_samples)
             set_dft_freq(&band.averaged_dft, band.norm_freq, window_size, PHASE_AVERAGE_SPREAD_CENTS, comb_samples)
         }
@@ -383,7 +376,7 @@ test_dft_window_size :: proc(t: ^testing.T) {
 @(test)
 test_track_offset_and_speed :: proc(t: ^testing.T) {
     intervals := []f32{1, 2, 3}
-    self := init_phase_comparator(110, 48_000, intervals, .HARMONIC)
+    self := init_phase_comparator(110, intervals, .HARMONIC)
     defer destroy_phase_comparator(self)
 
     // A wide octave, a slower twelfth
@@ -470,7 +463,7 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, use_phase
 
     step := f64(self.available)
     if had_phase {
-        decay := math.exp(-step / (READOUT_FIT_S * f64(self.samplerate)))
+        decay := math.exp(-step / (READOUT_FIT_S * SAMPLERATE))
         shift_fit(&band.fit, step, phase_advance, decay)
     }
 
@@ -479,14 +472,14 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, use_phase
     // as it took. A single one has no slope yet, the rate is its advance.
     if had_phase && band.onset_hold == 0 && band.snr_db >= STROBE_FADE_SNR_DB[0] {
         if band.rate_time_s == 0 do band.fit = {}
-        band.rate_time_s += f32(self.available) / self.samplerate
+        band.rate_time_s += f32(self.available) / SAMPLERATE
 
         // The new measurement at time 0 and phase 0 only adds its weight
         band.fit.weight += step
         slope, has_slope := fit_slope(band.fit)
         band.rate = slope if has_slope else phase_advance / step
     }
-    freq_diff_hz := f32(band.rate * f64(self.samplerate) / math.TAU)
+    freq_diff_hz := f32(band.rate * SAMPLERATE / math.TAU)
     band.err_cents = cents_deviation(band.freq_hz + freq_diff_hz, band.freq_hz)
 
     // The strobe turns by the phase times the track's speed
@@ -526,12 +519,12 @@ update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
         // half its length
         dft := band.dft
         delay := int(GAMMA_WINDOW_DELAY * f32(dft.gamma_size) + dft.comb_samples / 2)
-        band.onset_hold = delay + int(ONSET_HOLD_S * self.samplerate)
+        band.onset_hold = delay + int(ONSET_HOLD_S * SAMPLERATE)
         // The readout's average starts over on each pluck
         band.rate_time_s = 0
     }
 
-    alpha := 1.0 - math.exp(-f32(self.available) / (ONSET_ENVELOPE_TIME_S * self.samplerate))
+    alpha := 1.0 - math.exp(-f32(self.available) / (ONSET_ENVELOPE_TIME_S * SAMPLERATE))
     band.envelope += alpha * (band.amp - band.envelope)
 }
 
@@ -596,7 +589,7 @@ strobe_shows_note :: proc(self: ^PhaseComparator, fundamental_only := false) -> 
 
 // Keep an up-to-date estimate of background noise (i.e. when no note is playing)
 update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, is_tonal: bool) {
-    dt := f32(self.available) / self.samplerate
+    dt := f32(self.available) / SAMPLERATE
     // The window starts out on the silence the sample buffer is filled with
     window_full := self.sample_clock >= i64(band.dft.window_size)
     band.snr_db = update_noise_floor(&band.noise_floor, band.amp, dt, window_full, is_tonal)
@@ -605,13 +598,12 @@ update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, is_ton
 
 @(test)
 test_phase_detection_lock_in :: proc(t: ^testing.T) {
-    SAMPLERATE :: 48_000
     FRAME :: 400 // samples per display frame at 120 FPS
     target_hz: f32 = 261.63
 
     run :: proc(target_hz: f32, detune_cents: f32, use_phase_average: bool) -> (err_cents: [2]f32, phase_diff: f32) {
         intervals := []f32{1, 2}
-        pc := init_phase_comparator(target_hz, SAMPLERATE, intervals, .HARMONIC)
+        pc := init_phase_comparator(target_hz, intervals, .HARMONIC)
         defer destroy_phase_comparator(pc)
         set_phase_comparator_freq(pc, target_hz, 440, 0.025, 2, .HARMONIC)
 
@@ -653,14 +645,13 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
 // TAU * STROBE_REFERENCE_HZ * (2^(cents / 1200) - 1) * speed, in radians of the wheel per second.
 @(test)
 test_strobe_turn_rate :: proc(t: ^testing.T) {
-    SAMPLERATE :: 48_000
     FRAME :: 800 // samples per display frame at 60 FPS
     BASE_SPEED :: 0.0125
 
     // Radians of the wheel per second, over the last of 3 seconds
     run :: proc(target_hz: f32, detune_cents: f32, speed_scale: f32) -> f32 {
         intervals := []f32{1}
-        pc := init_phase_comparator(target_hz, SAMPLERATE, intervals, .HARMONIC)
+        pc := init_phase_comparator(target_hz, intervals, .HARMONIC)
         defer destroy_phase_comparator(pc)
         set_phase_comparator_tracks(pc, intervals, {0}, {speed_scale})
         set_phase_comparator_freq(pc, target_hz, 440, BASE_SPEED, 2, .HARMONIC)

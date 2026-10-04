@@ -29,7 +29,7 @@ import "core:time"
 import ".."
 import pffft "../../../external/odin-pffft"
 
-SAMPLERATE :: 48_000
+SAMPLERATE :: core.SAMPLERATE
 ITERATIONS :: 1000
 TRACKS :: 5 // core.MAX_BANDS, every track on the fundamental's window
 FRAMES_PER_SECOND :: 120

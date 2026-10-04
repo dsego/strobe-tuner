@@ -17,6 +17,10 @@
 package core
 
 
+// The input's, miniaudio and AAudio convert the device's own. PITCH_FFT_SIZE, MAX_WINDOW_SIZE and the values
+// tuned with the sandbox tools are for it.
+SAMPLERATE :: 48_000
+
 // The input of one consumer, the pitch detection, the strobe or the scope. The audio thread writes into its
 // ring buffer, the consumer reads from it every frame.
 AudioCaptureNode :: struct {

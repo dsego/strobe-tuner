@@ -133,7 +133,6 @@ run_single_dft :: proc(self: ^SingleFreqDFT, samples: []f32) -> complex64 {
 
 @(test)
 test_phase_average_matches_three_bins :: proc(t: ^testing.T) {
-    SAMPLERATE :: 48_000
     WINDOW :: 7339
     freq: f32 = 110
 
@@ -160,7 +159,6 @@ test_phase_average_matches_three_bins :: proc(t: ^testing.T) {
 
 @(test)
 test_comb_rejects_partials :: proc(t: ^testing.T) {
-    SAMPLERATE :: 48_000
     WINDOW :: 800 // about 200 cents wide, the gamma window alone lets the next partials in
     freq: f32 = 110 // a period of 436.4 samples, the box's last tap takes the fraction
 

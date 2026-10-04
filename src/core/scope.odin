@@ -92,7 +92,6 @@ ScopeGain :: enum {
 
 Scope :: struct {
     using node:          AudioCaptureNode,
-    samplerate:          f64,
     freq_hz:             f64,
     sweep:               ScopeSweep,
     gain:                ScopeGain,
@@ -123,9 +122,8 @@ Scope :: struct {
 }
 
 
-init_scope :: proc(samplerate: f64, columns, rows: int) -> (self: Scope) {
+init_scope :: proc(columns, rows: int) -> (self: Scope) {
     init_audio_capture_node(&self, "scope")
-    self.samplerate = samplerate
     self.columns = columns
     self.rows = rows
     self.screen = make([]f32, columns * rows)
@@ -147,7 +145,7 @@ destroy_scope :: proc(self: ^Scope) {
 // Starts with a dark screen at the new reference frequency. A held level lets go, it's another note.
 set_scope_freq :: proc(self: ^Scope, freq_hz: f64) {
     self.freq_hz = freq_hz
-    self.step = freq_hz / (self.samplerate * SCOPE_PERIODS)
+    self.step = freq_hz / (SAMPLERATE * SCOPE_PERIODS)
     clear_scope(self)
     if self.gain == .HOLD do self.level = SCOPE_MIN_LEVEL
 }
@@ -176,7 +174,7 @@ update_scope :: proc(self: ^Scope) {
     if self.persistence_seconds <= 0 do clear_scope(self)
 
     // A one pole highpass, the output follows the changes of the input and lets the steady part go
-    pole := f32(math.exp(-math.TAU * SCOPE_AC_COUPLING_HZ / self.samplerate))
+    pole := f32(math.exp(f64(-math.TAU * SCOPE_AC_COUPLING_HZ / SAMPLERATE)))
 
     for available > 0 {
         count := min(available, len(self.chunk))
@@ -210,12 +208,12 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
     // Of one sample, the older samples of the same chunk have faded by it too
     decay: f64 = 1
     if self.persistence_seconds > 0 {
-        decay = math.exp(-1 / (self.persistence_seconds * self.samplerate))
+        decay = math.exp(-1 / (self.persistence_seconds * SAMPLERATE))
         fade := f32(math.pow(decay, f64(len(samples))))
         for &cell in self.screen do cell *= fade
     }
 
-    release: f32 = 1 if self.gain == .HOLD else f32(math.exp(-1 / (SCOPE_LEVEL_RELEASE_SECONDS * self.samplerate)))
+    release: f32 = 1 if self.gain == .HOLD else f32(math.exp(f64(-1 / (SCOPE_LEVEL_RELEASE_SECONDS * SAMPLERATE))))
     clock := self.sample_clock - i64(len(samples))
     brightness := math.pow(decay, f64(len(samples) - 1))
     min_level := max(self.noise_floor * SCOPE_NOISE_HEADROOM, SCOPE_MIN_LEVEL)
@@ -365,18 +363,17 @@ scope_test_fundamental :: proc(heights: []f32) -> (phase: f64, amp: f64) {
     return wrap_phase(math.atan2(imag(sum), real(sum)) + math.PI / 2), 2 * abs(sum) / f64(len(heights))
 }
 
-scope_test_sine :: proc(samples: []f32, freq_hz: f64, samplerate: f64, clock: i64) {
+scope_test_sine :: proc(samples: []f32, freq_hz: f64, clock: i64) {
     for &sample, i in samples {
-        sample = f32(math.sin(math.TAU * freq_hz * f64(clock + i64(i)) / samplerate))
+        sample = f32(math.sin(math.TAU * freq_hz * f64(clock + i64(i)) / SAMPLERATE))
     }
 }
 
-SCOPE_TEST_SAMPLERATE :: 48_000
-SCOPE_TEST_FRAME :: SCOPE_TEST_SAMPLERATE / 60
+SCOPE_TEST_FRAME :: SAMPLERATE / 60
 
 // The screen of the scope display type
 scope_test_init :: proc(freq_hz: f64) -> Scope {
-    scope := init_scope(SCOPE_TEST_SAMPLERATE, 488, 240)
+    scope := init_scope(488, 240)
     set_scope_freq(&scope, freq_hz)
     return scope
 }
@@ -399,7 +396,7 @@ test_scope_in_tune_stands_still :: proc(t: ^testing.T) {
 
     samples: [SCOPE_TEST_FRAME]f32
     for frame in 0 ..< 60 {
-        scope_test_sine(samples[:], FREQ, SCOPE_TEST_SAMPLERATE, scope.sample_clock)
+        scope_test_sine(samples[:], FREQ,scope.sample_clock)
         clear_scope(&scope)
         sweep_samples(&scope, samples[:])
         heights, dwell := scope_from_above(&scope, .RAW_WAVEFORM)
@@ -422,12 +419,12 @@ test_scope_detuned_drifts :: proc(t: ^testing.T) {
     // The wave is ahead by the phase the note gained on the reference, in the middle of the frame
     samples: [SCOPE_TEST_FRAME]f32
     for _ in 0 ..< 90 {
-        scope_test_sine(samples[:], FREQ + OFF_HZ, SCOPE_TEST_SAMPLERATE, scope.sample_clock)
+        scope_test_sine(samples[:], FREQ + OFF_HZ,scope.sample_clock)
         clear_scope(&scope)
         sweep_samples(&scope, samples[:])
         heights, _ := scope_from_above(&scope, .RAW_WAVEFORM)
         phase, _ := scope_test_fundamental(heights)
-        middle_s := (f64(scope.sample_clock) - SCOPE_TEST_FRAME / 2) / SCOPE_TEST_SAMPLERATE
+        middle_s := (f64(scope.sample_clock) - SCOPE_TEST_FRAME / 2) / SAMPLERATE
         expected := wrap_phase(math.TAU * OFF_HZ * middle_s)
         testing.expectf(t, abs(wrap_phase(phase - expected)) < 0.02, "phase %v, expected %v", phase, expected)
     }
@@ -442,7 +439,7 @@ test_scope_fast_drift_washes_out :: proc(t: ^testing.T) {
     defer destroy_scope(&scope)
 
     samples: [SCOPE_TEST_FRAME]f32
-    scope_test_sine(samples[:], FREQ + 30, SCOPE_TEST_SAMPLERATE, 0)
+    scope_test_sine(samples[:], FREQ + 30,0)
     sweep_samples(&scope, samples[:])
     heights, _ := scope_from_above(&scope, .RAW_WAVEFORM)
     _, amp := scope_test_fundamental(heights)
@@ -450,7 +447,7 @@ test_scope_fast_drift_washes_out :: proc(t: ^testing.T) {
 
     // A full turn, nothing is left
     set_scope_freq(&scope, FREQ)
-    scope_test_sine(samples[:], FREQ + 60, SCOPE_TEST_SAMPLERATE, 0)
+    scope_test_sine(samples[:], FREQ + 60,0)
     sweep_samples(&scope, samples[:])
     heights, _ = scope_from_above(&scope, .RAW_WAVEFORM)
     _, amp = scope_test_fundamental(heights)
@@ -477,7 +474,7 @@ test_scope_beam_is_continuous :: proc(t: ^testing.T) {
     defer destroy_scope(&scope)
 
     samples: [SCOPE_TEST_FRAME]f32
-    scope_test_sine(samples[:], FREQ, SCOPE_TEST_SAMPLERATE, 0)
+    scope_test_sine(samples[:], FREQ,0)
     sweep_samples(&scope, samples[:])
 
     // Lit in every column, and from one column to the next the beam is in the same rows or the ones next to them
@@ -515,7 +512,7 @@ test_scope_noise_stays_low :: proc(t: ^testing.T) {
     // Longer than the level takes to fall back after a note, as small as it is over the noise
     samples: [SCOPE_TEST_FRAME]f32
     for _ in 0 ..< 120 {
-        scope_test_sine(samples[:], FREQ, SCOPE_TEST_SAMPLERATE, scope.sample_clock)
+        scope_test_sine(samples[:], FREQ,scope.sample_clock)
         for &sample in samples do sample *= NOISE
         clear_scope(&scope)
         sweep_samples(&scope, samples[:])
@@ -537,7 +534,7 @@ test_scope_persistence :: proc(t: ^testing.T) {
     // A note, then silence: from above the lit half fades with the persistence instead of going dark
     samples: [SCOPE_TEST_FRAME]f32
     for _ in 0 ..< 30 {
-        scope_test_sine(samples[:], FREQ, SCOPE_TEST_SAMPLERATE, scope.sample_clock)
+        scope_test_sine(samples[:], FREQ,scope.sample_clock)
         sweep_samples(&scope, samples[:])
     }
     heights, _ := scope_from_above(&scope, .HALF_RECTIFIED)
@@ -579,7 +576,7 @@ test_scope_xy_in_tune_stands_still :: proc(t: ^testing.T) {
 
     samples: [SCOPE_TEST_FRAME]f32
     for frame in 0 ..< 60 {
-        scope_test_sine(samples[:], FREQ, SCOPE_TEST_SAMPLERATE, scope.sample_clock)
+        scope_test_sine(samples[:], FREQ,scope.sample_clock)
         clear_scope(&scope)
         sweep_samples(&scope, samples[:])
         distance := off_circle(&scope)
@@ -589,7 +586,7 @@ test_scope_xy_in_tune_stands_still :: proc(t: ^testing.T) {
     // A quarter of a turn later the circle has rolled shut into a line
     set_scope_sweep(&scope, .XY)
     for _ in 0 ..< 15 {
-        scope_test_sine(samples[:], FREQ + OFF_HZ, SCOPE_TEST_SAMPLERATE, scope.sample_clock)
+        scope_test_sine(samples[:], FREQ + OFF_HZ,scope.sample_clock)
         clear_scope(&scope)
         sweep_samples(&scope, samples[:])
     }
@@ -609,7 +606,7 @@ test_scope_gain :: proc(t: ^testing.T) {
 
         samples: [SCOPE_TEST_FRAME]f32
         for frame in 0 ..< 180 {
-            scope_test_sine(samples[:], FREQ, SCOPE_TEST_SAMPLERATE, scope.sample_clock)
+            scope_test_sine(samples[:], FREQ,scope.sample_clock)
             if frame >= 60 do for &sample in samples do sample *= 0.1
             sweep_samples(&scope, samples[:])
         }
@@ -627,7 +624,7 @@ test_scope_gain :: proc(t: ^testing.T) {
     defer destroy_scope(&scope)
     scope.gain = .HOLD
     samples: [SCOPE_TEST_FRAME]f32
-    scope_test_sine(samples[:], FREQ, SCOPE_TEST_SAMPLERATE, scope.sample_clock)
+    scope_test_sine(samples[:], FREQ,scope.sample_clock)
     sweep_samples(&scope, samples[:])
     set_scope_freq(&scope, 2 * FREQ)
     testing.expectf(t, scope.level == SCOPE_MIN_LEVEL, "after another note: level %v", scope.level)
