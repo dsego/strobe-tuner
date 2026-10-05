@@ -55,9 +55,10 @@ STROBE_REFERENCE_HZ :: 656.5
 // twice that on average, steady but a turned peg shows that much later than on the stripes.
 READOUT_FIT_S :: 0.15
 
-// The drift follows the chunks' phase advances this closely, the stripes fade with the attack's glide, a
-// vibrato or beating partials as a narrow band's level would, and with noise
-DRIFT_SMOOTH_S :: 0.075
+// The drift averages the chunks' phase advances this long, about the window of the old narrow bands a
+// semitone wide. A voice's waver evens out like it did in their window, the stripes fade by how far off the
+// note is and not by how much it wavers.
+DRIFT_SMOOTH_S :: 0.3
 
 // The readout's average starts over on each pluck, the previous note's rate doesn't carry over. It follows
 // the attack like the stripes do, a plucked string glides down from sharp.
@@ -85,7 +86,8 @@ PhaseBand :: struct {
     amp:          f32,
     phase_diff:   f32, // strobe phase advance since the previous frame (normalized to STROBE_REFERENCE_HZ)
     err_cents:    f32, // of the averaged rate
-    drift_cents:  f32, // how far off each chunk's phase advance is, unsigned and smoothed, see DRIFT_SMOOTH_S
+    drift_hz:     f32, // the chunks' phase advances as a frequency off the track's, smoothed, see DRIFT_SMOOTH_S
+    drift_cents:  f32, // and how far off that is, unsigned
     scaled_phase: f32, // the strobe's phase, phase_diff times the speed added up
     speed:        f32, // under 1 the strobe turns slower, over 1 faster
     snr_db:       f32,
@@ -300,6 +302,7 @@ restart_band :: proc(band: ^PhaseBand) {
     band.rate = 0
     band.rate_time_s = 0
     band.fit = {}
+    band.drift_hz = 0
     band.drift_cents = 0
     band.envelope = 0
     band.onset = false
@@ -481,13 +484,14 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
         decay := math.exp(-step / (READOUT_FIT_S * SAMPLERATE))
         shift_fit(&band.fit, step, phase_advance, decay)
 
-        // How far off the track is right now, unsigned so noise's random advances read far off instead of
-        // averaging out to in tune. Noise on a low track can advance by more than its frequency, an octave
-        // flat is far enough.
+        // How far off the track is lately, the advances averaged with their sign, a waver on the note evens out
+        // like it did in a narrow band's window. Noise's random advances even out too, the SNR fades its
+        // stripes. An octave flat is as far as it goes, noise on a low track can advance by more than its
+        // frequency.
         drift_hz := f32(phase_advance / step * SAMPLERATE / math.TAU)
-        drift_cents := abs(cents_deviation(max(band.freq_hz + drift_hz, 0.5 * band.freq_hz), band.freq_hz))
         alpha := f32(1 - math.exp(-step / (DRIFT_SMOOTH_S * SAMPLERATE)))
-        band.drift_cents += alpha * (drift_cents - band.drift_cents)
+        band.drift_hz += alpha * (drift_hz - band.drift_hz)
+        band.drift_cents = abs(cents_deviation(max(band.freq_hz + band.drift_hz, 0.5 * band.freq_hz), band.freq_hz))
     }
 
     // The readout fits the rate while the stripes fully show, a fading note keeps the last of it, the dimming
@@ -678,6 +682,70 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
     testing.expect(t, diff < 0)
 }
 
+
+// A voice down a semitone and back up, the strobe retuned to each note a moment after it changes like the
+// tuner does. Each track hears the note as well when it comes back as before it left.
+@(test)
+test_note_away_and_back :: proc(t: ^testing.T) {
+    FRAME :: 800
+    RETUNE_AFTER :: 9 // frames, about what the tuner takes to confirm a note
+    a3, g_sharp3: f32 = 220, 207.65
+
+    intervals := []f32{1, 2, 4}
+    pc := init_phase_comparator(a3, intervals, .HARMONIC)
+    defer destroy_phase_comparator(pc)
+    set_phase_comparator_freq(pc, a3, 440, 0.025, 2, .HARMONIC)
+
+    // The partials of a hum over a little noise, the background for the noise floors to learn first. The
+    // voice slides from one note to the next over glide frames, not a clear pitch on the way.
+    Voice :: struct {
+        chunk: [FRAME]f32,
+        phase: f64,
+        freq:  f32,
+        noise: u32,
+    }
+    play :: proc(pc: ^PhaseComparator, voice: ^Voice, to: f32, frames: int, glide := 0, retune := -1) {
+        from := voice.freq
+        for frame in 0 ..< frames {
+            voice.freq = to if frame >= glide else from + (to - from) * f32(frame) / f32(glide)
+            for &sample in voice.chunk {
+                voice.noise = voice.noise * 1664525 + 1013904223
+                sample = 0.1 * (f32(voice.noise) / f32(max(u32)) - 0.5)
+                voice.phase += math.TAU * f64(voice.freq) / SAMPLERATE
+                phase := voice.phase
+                if voice.freq > 0 do sample += f32(0.1 * math.sin(phase) + 0.03 * math.sin(2 * phase) + 0.01 * math.sin(4 * phase))
+            }
+            if frame == retune do set_phase_comparator_freq(pc, to, 440, 0.025, 2, .HARMONIC)
+            audio_capture_write(pc, voice.chunk[:])
+            run_phase_detection(pc, is_tonal = voice.freq > 0 && frame >= glide)
+        }
+    }
+
+    SECOND :: SAMPLERATE / FRAME
+    GLIDE :: SECOND / 2
+    voice := Voice{noise = 1}
+    play(pc, &voice, 0, 3 * SECOND)
+    play(pc, &voice, a3, 2 * SECOND)
+    before: [3]f32
+    for band, index in pc.bands do before[index] = band.snr_db
+
+    play(pc, &voice, g_sharp3, 2 * SECOND, GLIDE, GLIDE + RETUNE_AFTER)
+    away: [3]f32
+    for band, index in pc.bands do away[index] = band.snr_db
+
+    play(pc, &voice, a3, 2 * SECOND, GLIDE, GLIDE + RETUNE_AFTER)
+    for band, index in pc.bands {
+        testing.expectf(
+            t,
+            band.snr_db > before[index] - 3,
+            "%v× %.1f dB back on the note, %.1f before, %.1f a semitone down",
+            band.interval,
+            band.snr_db,
+            before[index],
+            away[index],
+        )
+    }
+}
 
 // How fast the wheel turns for a steady detuning, against what the lock-in phase should give:
 // TAU * STROBE_REFERENCE_HZ * (2^(cents / 1200) - 1) * speed, in radians of the wheel per second.
