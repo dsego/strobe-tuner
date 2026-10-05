@@ -29,8 +29,10 @@ BLOOM_TAP_SPACING :: 1.5 // blur taps spaced apart for a wider glow at the same 
 BLOOM_ITERATIONS :: 2
 BLOOM_STRENGTH :: 0.2
 
-// The stripes shaped from the sine, off a hard square wave
+// The stripes shaped from the sine, off a hard square wave. Motion blur averages the pattern over its
+// movement since the previous frame, it reduces shimmer when it spins fast.
 STROBE_BLUR :: true
+MOTION_BLUR :: true
 
 StrobeDisplay :: struct {
     strobe_shader:   gfx.Shader,
@@ -48,6 +50,8 @@ StrobeDisplay :: struct {
 
     // per band stripe visibility, smoothed so it doesn't flicker, see update_band_visibility
     band_visibility: [core.MAX_BANDS]f32,
+    // per band phase drawn in the previous frame, for the motion blur, see strobe_tracks
+    band_drawn_phases: [core.MAX_BANDS]f32,
     // and of the scope's beam, see draw_scope_display
     scope_visibility: f32,
     // the scope's screen for its shader, a byte a cell, see draw_scope_screen
@@ -324,6 +328,7 @@ draw_strobe_display :: proc(
     uniforms := gfx.StrobeUniforms {
         band_height     = band_height,
         strobe_blur     = i32(STROBE_BLUR),
+        motion_blur     = i32(MOTION_BLUR),
         glow            = i32(glow_enabled),
         flat_track      = i32(shape == .FLAT),
         // The wheel is lit evenly all around, the tracks only show the top of the disc
@@ -587,6 +592,11 @@ strobe_tracks :: proc(
         ahead := core.strobe_phase_ahead(comparator, band) if !lamp else 0
         uniforms.phase = (band.scaled_phase + ahead) / density
 
+        // How far the strobe moved since the previous frame as drawn
+        drawn_phase := &self.band_drawn_phases[band_index]
+        uniforms.phase_step = uniforms.phase - drawn_phase^
+        drawn_phase^ = uniforms.phase
+
         // Vernier tracks show the first one's measurement. The lamp's tracks are as far off as the comparator's.
         response: f32
         if mode == .VERNIER {
@@ -614,7 +624,7 @@ strobe_tracks :: proc(
         uniforms.err_cents = band.err_cents
 
         // Without stripes the track looks the same whatever its phase, and doesn't change from frame to frame
-        if uniforms.visibility == 0 do uniforms.phase, uniforms.err_cents = 0, 0
+        if uniforms.visibility == 0 do uniforms.phase, uniforms.phase_step, uniforms.err_cents = 0, 0, 0
 
         selected := band_index == self.selected_track
         uniforms.highlight = self.selection if selected else 0
