@@ -27,10 +27,6 @@ NOISE_FLOOR_TIME_S :: 0.5
 NOISE_FLOOR_RISE_DB_PER_S :: 1.0
 NOISE_FLOOR_WARMUP_S :: 1.0 // follows ungated at first, the level isn't known yet
 
-// The warmup waits out a clear pitch, a note ringing when the app starts isn't the background. One that
-// goes on this long is after all, e.g. hum. Most of a plucked string has died away by then.
-NOISE_FLOOR_WARMUP_MAX_TONAL_S :: 8.0
-
 // The floor is known once it learned this much of the background, a note starting in the first measurements
 // (the attack isn't a clear pitch yet) passes for the background otherwise
 NOISE_FLOOR_KNOWN_AFTER_S :: 0.25
@@ -42,11 +38,11 @@ MIN_NOISE_FLOOR :: 1e-6 // -120 dB, a level of digital silence doesn't pull it d
 
 // The level of the background noise, of the whole signal for the pitch detector or of one strobe band.
 // It follows the level in dB while nothing louder plays, and pauses when the SNR is above the threshold,
-// only creeping up so it catches up with a noisier room, slow enough that a sustained note barely moves it.
+// only creeping up so it catches up with a noisier room. Not on a clear pitch, a held note or a steady
+// sine would become the background.
 NoiseFloor :: struct {
-    level:      f32, // 0 until the first update
-    warmup:     f32, // seconds left of following the level ungated
-    tonal_time: f32, // seconds of the warmup waited out on a clear pitch
+    level:  f32, // 0 until the first update
+    warmup: f32, // seconds left of following the level ungated
 }
 
 init_noise_floor :: proc() -> NoiseFloor {
@@ -57,12 +53,12 @@ init_noise_floor :: proc() -> NoiseFloor {
 reset_noise_floor :: proc(self: ^NoiseFloor) {
     self.level = 0
     self.warmup = NOISE_FLOOR_WARMUP_S
-    self.tonal_time = 0
 }
 
 // Updates with the level measured over the last dt seconds, returns its SNR over the floor before the update.
 // Without warming_up the warmup time doesn't run out, e.g. while the window is still on the silence it
-// starts out with. is_tonal is a clear pitch, the warmup doesn't learn from it.
+// starts out with. is_tonal is a clear pitch, the warmup waits it out however long it rings, a note playing
+// when the app starts isn't the background. Hum isn't a clear pitch, see MAINS_HZ.
 update_noise_floor :: proc(
     self: ^NoiseFloor,
     measured_level: f32,
@@ -74,8 +70,7 @@ update_noise_floor :: proc(
 ) {
     level := max(measured_level, MIN_NOISE_FLOOR)
 
-    if self.warmup > 0 && is_tonal && self.tonal_time < NOISE_FLOOR_WARMUP_MAX_TONAL_S {
-        self.tonal_time += dt
+    if self.warmup > 0 && is_tonal {
         known := self.level != 0 && NOISE_FLOOR_WARMUP_S - self.warmup >= NOISE_FLOOR_KNOWN_AFTER_S
         if !known do return NOISE_FLOOR_UNKNOWN_SNR_DB
 
@@ -95,7 +90,7 @@ update_noise_floor :: proc(
         // Smooth in dB, the level of the noise in a single bin dips deep now and then
         alpha := 1 - math.exp(-dt / NOISE_FLOOR_TIME_S)
         self.level *= math.pow(10, alpha * snr_db / 20)
-    } else {
+    } else if !is_tonal {
         self.level *= math.pow(10, NOISE_FLOOR_RISE_DB_PER_S * dt / 20)
     }
     self.level = max(self.level, MIN_NOISE_FLOOR)
@@ -126,6 +121,12 @@ test_noise_floor :: proc(t: ^testing.T) {
     for _ in 0 ..< 200 do update_noise_floor(&floor, 0.001, DT)
 
     testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "after the note, got %v", floor.level)
+
+    // A clear pitch held for minutes doesn't move it at all
+    for _ in 0 ..< 6000 do snr = update_noise_floor(&floor, 0.1, DT, is_tonal = true)
+
+    testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "held note, got %v", floor.level)
+    testing.expectf(t, snr > 39, "held note SNR, got %v dB", snr)
 }
 
 @(test)
@@ -144,10 +145,10 @@ test_noise_floor_warmup_on_a_note :: proc(t: ^testing.T) {
 
     testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "background, got %v", floor.level)
 
-    // A tone that never stops is the background after all
+    // A tone that never stops still isn't the background
     floor = init_noise_floor()
     for _ in 0 ..< 300 do snr = update_noise_floor(&floor, 0.01, DT, is_tonal = true)
 
-    testing.expectf(t, abs(floor.level - 0.01) < 1e-4, "hum, got %v", floor.level)
-    testing.expectf(t, abs(snr) < 1, "hum SNR, got %v dB", snr)
+    testing.expectf(t, floor.level == 0, "steady tone, got %v", floor.level)
+    testing.expectf(t, snr >= NOISE_FLOOR_UNKNOWN_SNR_DB, "steady tone SNR, got %v dB", snr)
 }
