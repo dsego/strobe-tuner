@@ -12,6 +12,7 @@
 package replay
 
 import "core:fmt"
+import "core:math"
 import "core:os"
 import "core:strconv"
 import ma "vendor:miniaudio"
@@ -21,12 +22,15 @@ import "../../src/core"
 // The app's, see src/app/app.odin
 SAMPLERATE :: core.SAMPLERATE
 INTERVALS :: [?]f32{1, 2, 4}
-STROBE_SPEED :: 0.0125
+STROBE_SPEED :: 0.025
+DESKTOP_PERIODS :: 12 // the strobe's stripes across the desktop's tracks
 
 // The app draws at 60 fps and the pitch detection runs on every frame's new samples
 FRAME_SAMPLES :: SAMPLERATE / 60
 // e.g. -define:PRINT_EVERY_MS=20 to follow an attack frame by frame
 PRINT_EVERY_MS :: #config(PRINT_EVERY_MS, 250)
+// e.g. -define:PITCH_STANDARD=443 to tune the notes to a hum or an instrument off 440
+PITCH_STANDARD :: f32(#config(PITCH_STANDARD, 440))
 
 LEAD_IN_S :: 2
 
@@ -48,20 +52,20 @@ main :: proc() {
     }
     defer delete(samples)
 
-    detector := core.init_pitch_detector()
+    detector := core.init_pitch_detector(PITCH_STANDARD)
     defer core.destroy_pitch_detector(&detector)
-    tuner := core.init_tuner(110, 440, true)
+    tuner := core.init_tuner(110, PITCH_STANDARD, true)
 
     // The strobe tracks, following the tuner's note like in the app
     intervals := INTERVALS
     strobe := core.init_phase_comparator(110, intervals[:], .HARMONIC)
     defer core.destroy_phase_comparator(strobe)
     retune :: proc(strobe: ^core.PhaseComparator, freq_hz: f32) {
-        core.set_phase_comparator_freq(strobe, freq_hz, 440, STROBE_SPEED, 2, .HARMONIC)
+        core.set_phase_comparator_freq(strobe, freq_hz, PITCH_STANDARD, STROBE_SPEED, 2, .HARMONIC)
     }
     retune(strobe, 110)
 
-    fmt.println("   time      Hz  cents  note  clarity     SNR  pitch   tuner   readout   tracks: SNR, cents")
+    fmt.println("   time      Hz  cents  note  clarity     SNR  pitch   tuner   readout   tracks: SNR, cents, drift, stripes a second")
 
     next_print: f32 = 0
     was_active := false
@@ -114,9 +118,20 @@ main :: proc() {
             readout = fmt.tprintf("%+.1f¢ %v×", band.err_cents, band.interval)
         }
         fmt.printf("%-9v ", readout)
-        // The stripes fade out between 16 and 8 dB, see core.STROBE_FADE_SNR_DB
+        // The stripes fade out between 16 and 8 dB, see core.STROBE_FADE_SNR_DB. And by their speed, the
+        // desktop's stripes a second by the drift, they fade from a quarter of a stripe a frame, see the app's
+        // STROBE_ALIAS_FADE_STRIPES.
         for band in strobe.bands {
-            fmt.printf("  %v× %-7v %-6v", band.interval, fmt.tprintf("%.1fdB", band.snr_db), fmt.tprintf("%+.1f¢", band.err_cents))
+            drift_hz := band.freq_hz * (math.pow(2, band.drift_cents / 1200) - 1)
+            stripes_per_s := DESKTOP_PERIODS * drift_hz * f32(core.strobe_rescale(band.freq_hz)) * band.speed
+            fmt.printf(
+                "  %v× %-7v %-6v %-6v %-5v",
+                band.interval,
+                fmt.tprintf("%.1fdB", band.snr_db),
+                fmt.tprintf("%+.1f¢", band.err_cents),
+                fmt.tprintf("~%.0f¢", band.drift_cents),
+                fmt.tprintf("%.1f/s", stripes_per_s),
+            )
         }
         fmt.println()
     }
