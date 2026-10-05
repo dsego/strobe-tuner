@@ -471,8 +471,9 @@ draw_inner_shadow :: proc(self: ^StrobeDisplay, area: gfx.Rect, shape: gfx.Rect)
 STROBE_AMP :: 50.0
 STROBE_LOOK_TIME_S :: 0.05
 
-// The stripes fade out between these speeds, in stripes passing a point a second. Faster they flicker into
-// a mess instead of drifting, too far off for the strobe to show anything but which way.
+// The stripes fade out between these speeds, in the fundamental's stripes a track moves across a second.
+// Faster they flicker into a mess instead of drifting, too far off for the strobe to show anything but
+// which way.
 STROBE_FAST_FADE_STRIPES_PER_S :: [2]f32{4, 8}
 
 // The visibility of a band's stripes, smoothed so they don't flicker. stripes_per_s is how fast they move.
@@ -548,8 +549,11 @@ strobe_tracks :: proc(
         ahead := core.strobe_phase_ahead(comparator, band) if !lamp else 0
         uniforms.phase = (band.scaled_phase + ahead) / density
 
-        // A stripe is a period of the shader's sine. The lamp's tracks move by the screen, about as fast.
-        stripes_per_s := abs(period_count * core.strobe_phase_rate(band) / density) / math.TAU
+        // How fast the track moves across, in the fundamental's stripes. A partial's track has as many times
+        // the stripes as it turns faster in phase, so the tracks of a harmonic note all turn alike. The lamp's
+        // tracks move by the screen, about as fast.
+        partial := band.freq_hz / comparator.base_freq_hz
+        stripes_per_s := abs(period_count * core.strobe_phase_rate(band) / density) / (math.TAU * partial)
 
         uniforms.amp = STROBE_AMP
         uniforms.visibility = update_band_visibility(self, &band, band_index, stripes_per_s)
