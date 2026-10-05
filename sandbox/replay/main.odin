@@ -31,6 +31,8 @@ FRAME_SAMPLES :: SAMPLERATE / 60
 PRINT_EVERY_MS :: #config(PRINT_EVERY_MS, 250)
 // e.g. -define:PITCH_STANDARD=443 to tune the notes to a hum or an instrument off 440
 PITCH_STANDARD :: f32(#config(PITCH_STANDARD, 440))
+// -define:NEIGHBORS=true for the tracks' SNR over the noise between the partials instead of the noise floor
+NEIGHBORS :: #config(NEIGHBORS, false)
 
 LEAD_IN_S :: 2
 
@@ -64,8 +66,9 @@ main :: proc() {
         core.set_phase_comparator_freq(strobe, freq_hz, PITCH_STANDARD, STROBE_SPEED, 2, .HARMONIC)
     }
     retune(strobe, 110)
+    strobe.use_neighbors = NEIGHBORS
 
-    fmt.println("   time      Hz  cents  note  clarity     SNR  pitch   tuner   readout   tracks: SNR, cents, drift, stripes a second")
+    fmt.println("   time      Hz  cents  note  clarity     SNR  pitch   tuner   readout   tracks: floor/neighbor SNR, cents, drift, stripes a second")
 
     next_print: f32 = 0
     was_active := false
@@ -118,16 +121,17 @@ main :: proc() {
             readout = fmt.tprintf("%+.1f¢ %v×", band.err_cents, band.interval)
         }
         fmt.printf("%-9v ", readout)
-        // The stripes fade out between 16 and 8 dB, see core.STROBE_FADE_SNR_DB. And by their speed, the
+        // The SNR over the noise floor and over the noise between the partials, the stripes fade out between 16
+        // and 8 dB of the one in use, see core.STROBE_FADE_SNR_DB. And by their speed, the
         // desktop's stripes a second by the drift, they fade from a quarter of a stripe a frame, see the app's
         // STROBE_ALIAS_FADE_STRIPES.
         for band in strobe.bands {
             drift_hz := band.freq_hz * (math.pow(2, band.drift_cents / 1200) - 1)
             stripes_per_s := DESKTOP_PERIODS * drift_hz * f32(core.strobe_rescale(band.freq_hz)) * band.speed
             fmt.printf(
-                "  %v× %-7v %-6v %-6v %-5v",
+                "  %v× %-12v %-6v %-6v %-5v",
                 band.interval,
-                fmt.tprintf("%.1fdB", band.snr_db),
+                fmt.tprintf("%.0f/%.0fdB", band.floor_snr_db, band.neighbor_snr_db),
                 fmt.tprintf("%+.1f¢", band.err_cents),
                 fmt.tprintf("~%.0f¢", band.drift_cents),
                 fmt.tprintf("%.1f/s", stripes_per_s),
