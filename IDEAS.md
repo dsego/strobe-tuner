@@ -99,6 +99,12 @@ What falls short is around it, in this order:
    - After 8 s the E1 really repeats at E2, both show E2.
 
    The HMM as a whole isn't a win, its continuity on the octave is.
+6. A pure sine under the 60 Hz high-pass needs more level than a string. B0's 31 Hz loses about 9 dB
+   in it, under white noise 10 dB down the NSDF finds the period at clarity 0.75, under 0.9, the floor
+   learns the tone and no note shows. Live with a tone generator and white noise B0 shows at 10% and
+   not at 4%. Strings, saw and square read from their harmonics, it's sub-bass synths and organ pedal
+   flutes. A cutoff nearer A0 (27.5 Hz) would help them and let more rumble in, `sandbox/accuracy`
+   reports these cases as stress.
 
    Tried and dropped, the smaller version: a detection an octave or two above the followed note
    left out while the wave repeats better at the followed period and nothing was plucked for
