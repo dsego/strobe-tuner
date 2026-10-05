@@ -329,6 +329,7 @@ handle_keys :: proc(app: ^App) {
 measure :: proc(app: ^App) -> (reading: Reading) {
     tuner := &app.tuner
     reading.pitch = core.run_pitch_detection(&app.pitch_detector, tuner.pitch)
+    app.phase_comparator.use_neighbors = app.config.strobe_neighbors
     core.run_phase_detection(app.phase_comparator, reading.pitch.is_tonal)
 
     // The track the readout follows. The strobe keeps the note lit while it shows it.
@@ -443,6 +444,12 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
         if gui_led_toggle(layout.response, "FAST", config.strobe_fast, pill_mint) {
             config.strobe_fast = !config.strobe_fast
             core.set_phase_comparator_speed(app.phase_comparator, strobe_speed(config))
+        }
+
+        // Right of FAST, their touch areas reach a little past them
+        fast_width := 18 + measure_label(pixel_fonts.label, "FAST", 1).x
+        if gui_led_toggle(layout.response + {fast_width + 32, 0}, "NBR", config.strobe_neighbors, pill_mint) {
+            config.strobe_neighbors = !config.strobe_neighbors
         }
     }
 
