@@ -57,9 +57,14 @@ Case :: struct {
     waveform:       Waveform,
     note_semitones: int, // from A4
     offset_cents:   f32,
-    pitch_standard: f32,
-    noise_snr_db:   f32,
+    pitch_standard:   f32,
+    noise_snr_db:     f32,
+    before_semitones: Maybe(int), // a note played for BEFORE_S first, in tune, the tone switches from it
 }
+
+// Octave switches like a tone generator going from A2 to A1, the strobe has to follow the new note
+OCTAVE_SWITCHES :: [?][2]int{{-24, -36}, {-36, -24}, {-17, -29}, {-29, -17}, {0, -12}, {24, 12}}
+BEFORE_S :: 3
 
 Result :: struct {
     using test_case: Case,
@@ -88,7 +93,7 @@ main :: proc() {
                     if waveform == .WEAK_FUNDAMENTAL && note_semitones > WEAK_FUNDAMENTAL_HIGHEST do break
 
                     for offset_cents in OFFSETS_CENTS {
-                        append(&results, run_case({waveform, note_semitones, offset_cents, pitch_standard, noise_snr_db}))
+                        append(&results, run_case({waveform, note_semitones, offset_cents, pitch_standard, noise_snr_db, nil}))
                     }
                 }
             }
@@ -96,6 +101,24 @@ main :: proc() {
     }
 
     print_summary(results[:])
+
+    fmt.println("\noctave switches:")
+    for switch_notes in OCTAVE_SWITCHES {
+        for waveform in ([?]Waveform{.SINE, .SAW}) {
+            for noise_snr_db in ([?]f32{0, 20}) {
+                test_case := Case {
+                    waveform         = waveform,
+                    note_semitones   = switch_notes[1],
+                    pitch_standard   = 440,
+                    noise_snr_db     = noise_snr_db,
+                    before_semitones = switch_notes[0],
+                }
+                result := run_case(test_case)
+                append(&results, result)
+                print_case(result)
+            }
+        }
+    }
 
     false_notes := 0
     for noise_snr_db in NOISE_SNRS_DB {
@@ -123,7 +146,11 @@ run_case :: proc(test_case: Case) -> (result: Result) {
 
     note := core.cents_to_note(f32(100 * test_case.note_semitones), test_case.pitch_standard)
     freq_hz := note.frequency * math.pow(2, test_case.offset_cents / 1200)
-    samples := generate(test_case.waveform, freq_hz, test_case.noise_snr_db)
+    before_hz: f32
+    if before, ok := test_case.before_semitones.?; ok {
+        before_hz = core.cents_to_note(f32(100 * before), test_case.pitch_standard).frequency
+    }
+    samples := generate(test_case.waveform, freq_hz, test_case.noise_snr_db, before_hz)
     defer delete(samples)
 
     detector := core.init_pitch_detector(test_case.pitch_standard)
@@ -221,12 +248,17 @@ has_partial :: proc(waveform: Waveform, interval: f32) -> bool {
 }
 
 // LEAD_IN_S of silence then TONE_S of the waveform at TONE_RMS, and white noise noise_snr_db under that
-// throughout. A frequency of 0 is the noise alone.
-generate :: proc(waveform: Waveform, freq_hz, noise_snr_db: f32) -> []f32 {
+// throughout. A frequency of 0 is the noise alone. With before_hz the tone plays that for BEFORE_S first,
+// at the same level.
+generate :: proc(waveform: Waveform, freq_hz, noise_snr_db: f32, before_hz: f32 = 0) -> []f32 {
     tone_start := int(LEAD_IN_S * SAMPLERATE)
+    if before_hz > 0 do tone_start += int(BEFORE_S * SAMPLERATE)
     samples := make([]f32, tone_start + int(TONE_S * SAMPLERATE))
 
-    if freq_hz > 0 {
+    if before_hz > 0 do add_tone(samples[int(LEAD_IN_S * SAMPLERATE):tone_start], waveform, before_hz)
+    if freq_hz > 0 do add_tone(samples[tone_start:], waveform, freq_hz)
+
+    add_tone :: proc(samples: []f32, waveform: Waveform, freq_hz: f32) {
         // Band-limited, the partials under the Nyquist frequency
         amplitudes: [64]f32
         for &amplitude, index in amplitudes {
@@ -251,7 +283,7 @@ generate :: proc(waveform: Waveform, freq_hz, noise_snr_db: f32) -> []f32 {
         gain := TONE_RMS / math.sqrt(power)
 
         phase_step := f64(freq_hz) / SAMPLERATE
-        for &sample, index in samples[tone_start:] {
+        for &sample, index in samples {
             phase := math.TAU * phase_step * f64(index)
             for amplitude, harmonic in amplitudes {
                 if amplitude == 0 do continue
@@ -307,24 +339,36 @@ print_summary :: proc(results: []Result) {
         return abs(first.worst_cents) > abs(second.worst_cents)
     })
     fmt.println("\nfailed cases:")
-    for result in failures {
-        note := core.cents_to_note(f32(100 * result.note_semitones), result.pitch_standard)
-        name := fmt.tprintf("%v%v%v", note.name, "#" if note.is_accidental else "", note.octave)
-        noise := "clean" if result.noise_snr_db == 0 else fmt.tprintf("%.0fdB", result.noise_snr_db)
-        fmt.printf(
-            "  %-17v %-4v %+5.1f¢  A=%.0f  %-6v",
-            result.waveform,
-            name,
-            result.offset_cents,
-            result.pitch_standard,
-            noise,
-        )
-        if result.wrong_note > 0 {
-            fmt.printf("  wrong or no note in %v detections\n", result.wrong_note)
-        } else {
-            fmt.printf("  readout off by %+.2f¢", result.worst_cents)
-            if result.wrong_way > 0 do fmt.printf(", stripes turn the wrong way in %v detections", result.wrong_way)
-            fmt.println()
-        }
+    for result in failures do print_case(result)
+}
+
+print_case :: proc(result: Result) {
+    note_name :: proc(semitones: int, pitch_standard: f32) -> string {
+        note := core.cents_to_note(f32(100 * semitones), pitch_standard)
+        return fmt.tprintf("%v%v%v", note.name, "#" if note.is_accidental else "", note.octave)
+    }
+
+    name := note_name(result.note_semitones, result.pitch_standard)
+    if before, ok := result.before_semitones.?; ok {
+        name = fmt.tprintf("%v→%v", note_name(before, result.pitch_standard), name)
+    }
+    noise := "clean" if result.noise_snr_db == 0 else fmt.tprintf("%.0fdB", result.noise_snr_db)
+    fmt.printf(
+        "  %-17v %-7v %+5.1f¢  A=%.0f  %-6v",
+        result.waveform,
+        name,
+        result.offset_cents,
+        result.pitch_standard,
+        noise,
+    )
+
+    if passed(result) {
+        fmt.printf("  ok, readout off by %+.2f¢\n", result.worst_cents)
+    } else if result.wrong_note > 0 {
+        fmt.printf("  wrong or no note in %v detections\n", result.wrong_note)
+    } else {
+        fmt.printf("  readout off by %+.2f¢", result.worst_cents)
+        if result.wrong_way > 0 do fmt.printf(", stripes turn the wrong way in %v detections", result.wrong_way)
+        fmt.println()
     }
 }

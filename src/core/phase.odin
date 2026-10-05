@@ -231,10 +231,11 @@ set_phase_comparator_speed :: proc(self: ^PhaseComparator, base_speed: f32) {
 // steadies the cents, a narrower band only buys less noise for more lag.
 DFT_RESOLUTION_CENTS :: 100
 
-// The phase is measured this many times a window through the new samples. Between two the phase moves by
-// less than half a turn for a partial HOPS_PER_WINDOW / 2 resolutions off, further than the window hears it.
-// Under a frame's samples a window only for notes over ~120 Hz, the low ones measure once a frame as before.
-HOPS_PER_WINDOW :: 8
+// The phase is measured this many times a period of the strobe's note through the new samples. Between two
+// the phase moves by less than half a turn for a sound up to HOPS_PER_PERIOD / 2 times the note's frequency
+// off, an octave down or up on any track. A strong note far off still leaks into a track, its drift has to
+// read how far, see hears_note.
+HOPS_PER_PERIOD :: 4
 
 // The new samples a frame walks through on top of the longest window, more and its oldest are skipped
 MAX_FRAME_SAMPLES :: 4096
@@ -460,14 +461,15 @@ resize_sample_buffer :: proc(self: ^PhaseComparator, size: int) {
 determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
     // The strobe turns by the measured phase, the shortest way from the previous frame's, nothing else
     // carries over between frames. Once a frame a track more than half the frame rate off would alias, 30 Hz
-    // at 60 fps, a high note's partial is that far off within a semitone. So the phase is measured a hop
-    // apart through the new samples, see HOPS_PER_WINDOW, each step the shortest way and the frame's
-    // advance their sum. The newest window last, its DFT is the band's amplitude. No advance on the first
-    // frame after a reset, the phase before it is arbitrary.
+    // at 60 fps, a high note's partial is that far off within a semitone, and a low note an octave off leaks
+    // in that far. So the phase is measured a hop apart through the new samples, see HOPS_PER_PERIOD, each
+    // step the shortest way and the frame's advance their sum. The newest window last, its DFT is the band's
+    // amplitude. No advance on the first frame after a reset, the phase before it is arbitrary.
     had_phase := band.has_phase
     window_size := band.dft.window_size
     span := min(self.available, self.buffer_len - window_size)
-    hops := max(int(math.ceil(f32(span) * HOPS_PER_WINDOW / f32(window_size))), 1) if had_phase else 1
+    hop_size := SAMPLERATE / (HOPS_PER_PERIOD * self.base_freq_hz)
+    hops := max(int(math.ceil(f32(span) / hop_size)), 1) if had_phase else 1
 
     phase_advance: f64
     for hop in 1 ..= hops {
@@ -619,7 +621,7 @@ strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: in
     loudest, fundamental := -1, -1
     for band, index in self.bands[:count] {
         if band.onset do plucked = true
-        if !band.in_range || band.snr_db < READOUT_MIN_SNR_DB do continue
+        if !hears_note(band) || band.snr_db < READOUT_MIN_SNR_DB do continue
         if loudest < 0 || band.snr_db > self.bands[loudest].snr_db do loudest = index
         if band.interval == 1 do fundamental = index
     }
@@ -637,13 +639,19 @@ strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: in
     return track, settled(self.bands[track])
 }
 
+// A track hears its note while it drifts less than a semitone, as wide as its window. Further out it's
+// another note leaking in, e.g. an octave down while the strobe stays on the octave, see update_tuner.
+hears_note :: proc(band: PhaseBand) -> bool {
+    return band.in_range && band.drift_cents <= DFT_RESOLUTION_CENTS
+}
+
 // Whether any track's stripes are at least half faded in, the note is still ringing. The background noise
 // stays under it. fundamental_only for just the track of the strobe's own note.
 strobe_shows_note :: proc(self: ^PhaseComparator, fundamental_only := false) -> bool {
     fade := STROBE_FADE_SNR_DB
     for band in self.bands {
         if fundamental_only && band.interval != 1 do continue
-        if band.in_range && band.snr_db >= 0.5 * (fade[0] + fade[1]) do return true
+        if hears_note(band) && band.snr_db >= 0.5 * (fade[0] + fade[1]) do return true
     }
     return false
 }
