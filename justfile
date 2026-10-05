@@ -69,3 +69,7 @@ pkg: setup
 # Runs the unit tests in core
 test:
     odin test src/core
+
+# Generated tones through the tuner, checks the note and the readout: just accuracy [full]
+accuracy mode="": setup
+    odin run sandbox/accuracy -o:speed -- {{mode}}

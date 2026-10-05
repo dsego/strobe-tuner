@@ -9,7 +9,7 @@ A simple stroboscopic instrument tuner.
 </div>
 
 
-Strobie is on the App Store for Mac and iPhone. The source is here to read and build yourself, see [Development](#development).
+Strobie is coming to the App Store for Mac and iPhone. The source is here to read and build yourself, see [Development](#development).
 
 ### Features
 
@@ -102,6 +102,7 @@ The first run clones and compiles the dependencies into `external/`, later runs 
 | `just build` | Optimized build for this machine |
 | `just pkg` | Signed build for the Mac App Store, see `platform/macos/build-pkg.sh`, links SDL in statically |
 | `just test` | Unit tests of the pitch detection and strobe code |
+| `just accuracy` | Generated tones with and without noise through the tuner, checks the note and the readout within 1¢, `just accuracy full` for every note and three concert pitches |
 
 Debug builds also have <kbd>Cmd</kbd><kbd>,</kbd> to open the config file and <kbd>Cmd</kbd><kbd>Shift</kbd><kbd>,</kbd> to reload it.
 
