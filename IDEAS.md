@@ -11,9 +11,11 @@ it's hard to tell how far there is to go.
 Far out, show a simulated rotation at a steady rate in the right direction, and blend it into the
 real strobe as the string comes within about 50 to 100 cents.
 
-- The band's window is 25 cents a bin, so the lock-in hears the string about 20 dB down at 50 cents
-  and not at all past 75. The direction and distance out there have to come from the pitch detection,
-  like the arrows next to the note.
+- The band's window is a semitone wide now (`DFT_RESOLUTION_CENTS`), so the lock-in hears the string
+  further out than it used to, but the readout only follows a track within 30 cents
+  (`READOUT_RANGE_CENTS`). How far down the band hears a string 50 or 100 cents off needs measuring
+  again. Past that the direction and distance have to come from the pitch detection, like the
+  readout's cents.
 - The blend could follow the band's SNR, which rises as the string comes into the window.
 - A constant rate reads as "keep going", a rate that follows the distance would jump around with the
   wobble it is meant to hide.
@@ -135,7 +137,7 @@ and not a preset:
 - The readout and the strobe measure from the tempered target, 0 is in tune.
 - The note names, the ruler and the detection stay on the equal tempered grid in `src/core/note.odin`,
   the offsets are all under 50 cents so the nearest note is still the right one. The temperament
-  is one more term in `tuner_target_freq`, next to `note_offset_cents`.
+  is one more term in `note_offset_cents`, `tuner_target_freq` and `tuner_cents` both go through it.
 - Only 12-note scales with a 2/1 octave load, anything else is turned away with a message.
 - The file's contents are copied into the config, not its path, iOS doesn't keep access to a file
   and a file on the desktop moves.
@@ -144,5 +146,6 @@ Open:
 
 - A `.scl` file has no root and no tie to A. Normalize so A has no offset and concert A stays
   concert A, and pick the root key (which note is the scale's 1/1) on the setup?
-- `pitch.odin` measures `err_cents` from the untempered note, check that nothing shown reads it
-  once a temperament is set.
+- `pitch.odin` measures `err_cents` from the untempered note, the readout's comes from `tuner_cents`
+  with the offset taken off. Check that nothing shown reads the pitch detection's once a temperament
+  is set.
