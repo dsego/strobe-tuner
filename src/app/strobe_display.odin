@@ -501,10 +501,42 @@ track_response :: proc(drift_cents: f32, speed_ratio: f32 = 0) -> f32 {
     return response
 }
 
-// The visibility of a band's stripes, smoothed so they don't flicker. response is track_response's.
-update_band_visibility :: proc(self: ^StrobeDisplay, band: ^core.PhaseBand, band_index: int, response: f32) -> f32 {
+// The screen shows the stripes once a frame. Moving half a stripe a frame they seem to alternate, further
+// they turn backwards, a whole one they stand still. The stripes fade out before that, between these, in the
+// track's own stripes a frame, a sine drifting the right way and then an even wash.
+STROBE_ALIAS_FADE_STRIPES :: [2]f32{0.25, 0.45}
+
+// And between these, in how often each point of the track turns light and dark a second, its own stripes
+// passing it. 10 to 30 is the worst for photosensitivity. A partial's track has as many times the stripes,
+// it fades as much sooner.
+STROBE_FLICKER_FADE_HZ :: [2]f32{8, 16}
+
+// A hitch isn't the screen's refresh, the stripes don't fade for one
+STROBE_MAX_FRAME_TIME_S :: 1.0 / 30
+
+// The sharpest the stripes can be at this speed, in the track's own stripes a frame. A hard edge is the sum of
+// the stripe's harmonics, the 5th alternates at a tenth of a stripe a frame. An edge as wide as a frame's
+// movement leaves out the ones the screen can't show: an edge spans 1 / (π amp) of a stripe.
+alias_free_amp :: proc(stripes_per_frame: f32) -> f32 {
+    return 1 / (math.PI * max(stripes_per_frame, 1e-6))
+}
+
+// The visibility of a band's stripes, smoothed so they don't flicker. response is track_response's,
+// stripes_per_s how fast the track's own stripes move, frame_time the screen's.
+update_band_visibility :: proc(
+    self: ^StrobeDisplay,
+    band: ^core.PhaseBand,
+    band_index: int,
+    response: f32,
+    stripes_per_s: f32,
+    frame_time: f32,
+) -> f32 {
     fade := core.STROBE_FADE_SNR_DB
+    flicker := STROBE_FLICKER_FADE_HZ
+    alias := STROBE_ALIAS_FADE_STRIPES
     target := math.smoothstep(fade[0], fade[1], band.snr_db) * min(NARROW_BAND_CONTRAST * response, 1)
+    target *= 1 - math.smoothstep(flicker[0], flicker[1], stripes_per_s)
+    target *= 1 - math.smoothstep(alias[0], alias[1], stripes_per_s * frame_time)
 
     alpha := 1.0 - math.exp(-gfx.frame_time() / STROBE_LOOK_TIME_S)
     visibility := &self.band_visibility[band_index]
@@ -578,10 +610,21 @@ strobe_tracks :: proc(
             response = track_response(band.drift_cents)
         }
 
+        // How fast the track's own stripes, a period of the shader's sine, move. By the drift, the phase as
+        // measured each chunk, as drawn: the readout's rate lags, and holds on a weak partial while its phase
+        // still moves. Vernier tracks by the first one's, at their own speed. The lamp's tracks move by the
+        // screen, about as fast.
+        frame_time := min(gfx.frame_time(), STROBE_MAX_FRAME_TIME_S)
+        drift_cents := bands[0].drift_cents if mode == .VERNIER else band.drift_cents
+        drift_hz := band.freq_hz * (math.pow(2, drift_cents / 1200) - 1)
+        phase_per_s := math.TAU * drift_hz * f32(core.strobe_rescale(band.freq_hz)) * band.speed
+        stripes_per_s := period_count * phase_per_s / density / math.TAU
+
         // Off the note the edges go soft, the stripes a sine before they fade. Squared, as the response alone
-        // still leaves an edge a few percent of a stripe wide where they're half faded.
-        uniforms.amp = STROBE_AMP * response * response
-        uniforms.visibility = update_band_visibility(self, &band, band_index, response)
+        // still leaves an edge a few percent of a stripe wide where they're half faded. Moving fast they go
+        // soft too, see alias_free_amp.
+        uniforms.amp = min(STROBE_AMP * response * response, alias_free_amp(stripes_per_s * frame_time))
+        uniforms.visibility = update_band_visibility(self, &band, band_index, response, stripes_per_s, frame_time)
         uniforms.norm_freq = band.norm_freq
         uniforms.err_cents = band.err_cents
 
