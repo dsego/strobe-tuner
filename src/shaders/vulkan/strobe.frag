@@ -34,7 +34,6 @@ layout(set = 3, binding = 0) uniform StrobeUniforms {
     float curvature_radius;
     float time_stretch;
     float phase;
-    float phase_step; // change of phase since the previous frame
     float lamp_spread; // angular width of the lamp hotspot in radians
     float glow_exposure; // how hard the lamp drives the exposure curve, higher washes lit stripes out
     float glow_saturation; // 1 keeps the full color, lower mixes in gray
@@ -49,7 +48,6 @@ layout(set = 3, binding = 0) uniform StrobeUniforms {
     float highlight; // 0..1, outlines the track whose sheet is open
     float dim; // 0..1, darkens the other tracks meanwhile
     int strobe_blur;
-    int motion_blur;
     int glow;
     int flat_track; // the top of the arc straightened, see main
 } u;
@@ -90,53 +88,6 @@ float generate_signal(
     value = 0.5 * value + 0.5;
 
     return value;
-}
-
-// Average the signal over the phase swept since the previous frame, like a camera shutter would.
-// Without it the pattern aliases (wagon wheel effect) and shimmers once it moves close to
-// half a period per frame.
-float generate_blurred_signal(
-    float freq,
-    float phase,
-    float phase_step,
-    float amplitude,
-    float visibility,
-    float time,
-    float time_stretch,
-    float period_count,
-    bool strobe_blur
-) {
-    // Radians of the pattern swept during one frame
-    float sweep = abs(period_count * phase_step);
-
-    if (sweep < 0.05) {
-        return generate_signal(freq, phase, amplitude, visibility, time, time_stretch, period_count, strobe_blur);
-    }
-
-    // A full period or more averages out to a flat colour, the pattern carries no information
-    if (sweep >= TAU) {
-        return 0.5;
-    }
-
-    // ~24 samples per period is enough to keep the average smooth even for the hard edged square wave
-    const int MAX_SAMPLES = 24;
-    int n = int(clamp(ceil(sweep * float(MAX_SAMPLES) / TAU), 2.0, float(MAX_SAMPLES)));
-
-    float sum = 0.0;
-    for (int i = 0; i < MAX_SAMPLES; i++) {
-        if (i >= n) break;
-
-        float t = (float(i) + 0.5) / float(n);
-        sum += generate_signal(
-            freq, phase - t * phase_step, amplitude, visibility, time, time_stretch, period_count, strobe_blur
-        );
-    }
-    float value = sum / float(n);
-
-    // Ease the last bit of contrast out, so the pattern doesn't pop when the sweep crosses a full period
-    float fade = 1.0 - smoothstep(0.75 * TAU, TAU, sweep);
-
-    return mix(0.5, value, fade);
 }
 
 float draw_curved_track(float thickness, float outer_radius, float feathering, float radial_position)
@@ -183,7 +134,7 @@ void main()
     // Color the pixel at position based on whether it sits in the donut shape
     float curved_track = draw_curved_track(thickness, u.curvature_radius, feathering, radial_position);
 
-    // Most of the quad is outside the arc, skip the signal there, it's the costly part with the motion blur
+    // Most of the quad is outside the arc, skip the signal there
     if (curved_track <= 0.0) {
         out_color = vec4(0.0);
         return;
@@ -192,10 +143,9 @@ void main()
     // Time is translated from the linear to radial
     float time = angle / TAU;
 
-    float signal_value = generate_blurred_signal(
+    float signal_value = generate_signal(
         u.norm_freq,
         u.phase,
-        u.motion_blur > 0 ? u.phase_step : 0.0,
         u.amp,
         u.visibility,
         time,

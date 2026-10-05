@@ -29,10 +29,8 @@ BLOOM_TAP_SPACING :: 1.5 // blur taps spaced apart for a wider glow at the same 
 BLOOM_ITERATIONS :: 2
 BLOOM_STRENGTH :: 0.2
 
-// The stripes shaped from the sine, off a hard square wave. Motion blur averages the pattern over its
-// movement since the previous frame, it reduces shimmer when it spins fast.
+// The stripes shaped from the sine, off a hard square wave
 STROBE_BLUR :: true
-MOTION_BLUR :: true
 
 StrobeDisplay :: struct {
     strobe_shader:   gfx.Shader,
@@ -50,8 +48,6 @@ StrobeDisplay :: struct {
 
     // per band stripe visibility, smoothed so it doesn't flicker, see update_band_visibility
     band_visibility: [core.MAX_BANDS]f32,
-    // per band phase drawn in the previous frame, for the motion blur, see strobe_tracks
-    band_drawn_phases: [core.MAX_BANDS]f32,
     // and of the scope's beam, see draw_scope_display
     scope_visibility: f32,
     // the scope's screen for its shader, a byte a cell, see draw_scope_screen
@@ -328,7 +324,6 @@ draw_strobe_display :: proc(
     uniforms := gfx.StrobeUniforms {
         band_height     = band_height,
         strobe_blur     = i32(STROBE_BLUR),
-        motion_blur     = i32(MOTION_BLUR),
         glow            = i32(glow_enabled),
         flat_track      = i32(shape == .FLAT),
         // The wheel is lit evenly all around, the tracks only show the top of the disc
@@ -344,7 +339,7 @@ draw_strobe_display :: proc(
     uniforms.glow_filter.rgb = glow_filter(glow.color)
     uniforms.glow_dark_filter.rgb = glow_filter(glow.dark_color) * glow.dark_level
     uniforms.highlight_color = gfx.normalize_color(accent_color)
-    tracks := strobe_tracks(self, rect, bands, comparator, uniforms, geometry)
+    tracks := strobe_tracks(self, rect, bands, comparator, config.strobe_source == .LAMP, uniforms, geometry)
 
     if glow_enabled {
         // Render the strobe offscreen so the bright parts can bloom over the surroundings. A dark strobe
@@ -497,6 +492,7 @@ strobe_tracks :: proc(
     strobe_rect: gfx.Rect,
     bands: []core.PhaseBand,
     comparator: ^core.PhaseComparator,
+    lamp: bool,
     shared: gfx.StrobeUniforms,
     geometry: StrobeGeometry,
 ) -> (
@@ -537,14 +533,10 @@ strobe_tracks :: proc(
         uniforms.time_stretch = band.time_stretch
 
         // The shader multiplies the phase by the period count, a denser pattern turns slower to drift as
-        // many stripes a second as the desktop's. Drawn as of now, see strobe_phase_ahead, the lamp's
-        // tracks too, its screen gets the same chunks.
-        uniforms.phase = (band.scaled_phase + core.strobe_phase_ahead(comparator, band)) / density
-
-        // How far the strobe moved since the previous frame as drawn
-        drawn_phase := &self.band_drawn_phases[band_index]
-        uniforms.phase_step = uniforms.phase - drawn_phase^
-        drawn_phase^ = uniforms.phase
+        // many stripes a second as the desktop's. Drawn as of now, see strobe_phase_ahead. Not the lamp's
+        // tracks, they turn by the screen and the readout's rate isn't theirs, they'd jump back each chunk.
+        ahead := core.strobe_phase_ahead(comparator, band) if !lamp else 0
+        uniforms.phase = (band.scaled_phase + ahead) / density
 
         uniforms.amp = STROBE_AMP
         uniforms.visibility = update_band_visibility(self, &band, band_index)
@@ -552,7 +544,7 @@ strobe_tracks :: proc(
         uniforms.err_cents = band.err_cents
 
         // Without stripes the track looks the same whatever its phase, and doesn't change from frame to frame
-        if uniforms.visibility == 0 do uniforms.phase, uniforms.phase_step, uniforms.err_cents = 0, 0, 0
+        if uniforms.visibility == 0 do uniforms.phase, uniforms.err_cents = 0, 0
 
         selected := band_index == self.selected_track
         uniforms.highlight = self.selection if selected else 0

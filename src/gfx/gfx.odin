@@ -119,7 +119,6 @@ StrobeUniforms :: struct #align (16) {
     curvature_radius: f32,
     time_stretch:     f32,
     phase:            f32,
-    phase_step:       f32, // change of phase since the previous frame
     lamp_spread:      f32, // angular width of the lamp hotspot in radians
     glow_exposure:    f32,
     glow_saturation:  f32,
@@ -134,7 +133,6 @@ StrobeUniforms :: struct #align (16) {
     highlight:        f32, // 0..1, outlines the track whose sheet is open
     dim:              f32, // 0..1, darkens the other tracks meanwhile
     strobe_blur:      i32,
-    motion_blur:      i32,
     glow:             i32,
     flat_track:       i32, // the top of the arc straightened
 }
