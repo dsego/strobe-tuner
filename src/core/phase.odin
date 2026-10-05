@@ -532,8 +532,12 @@ STROBE_AHEAD_MAX_S :: 0.03
 // moves evenly, and the next measurement takes over where it is.
 strobe_phase_ahead :: proc(self: ^PhaseComparator, band: PhaseBand) -> f32 {
     age := min(time.duration_seconds(time.tick_since(self.newest_tick)), STROBE_AHEAD_MAX_S)
-    advance := band.rate * age * SAMPLERATE * strobe_rescale(band.freq_hz)
-    return -f32(advance) * band.speed
+    return strobe_phase_rate(band) * f32(age)
+}
+
+// How fast the strobe turns at the readout's rate, its phase a second
+strobe_phase_rate :: proc(band: PhaseBand) -> f32 {
+    return -f32(band.rate * SAMPLERATE * strobe_rescale(band.freq_hz)) * band.speed
 }
 
 

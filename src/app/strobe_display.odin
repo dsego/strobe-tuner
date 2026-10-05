@@ -471,10 +471,20 @@ draw_inner_shadow :: proc(self: ^StrobeDisplay, area: gfx.Rect, shape: gfx.Rect)
 STROBE_AMP :: 50.0
 STROBE_LOOK_TIME_S :: 0.05
 
-// The visibility of a band's stripes, smoothed so they don't flicker
-update_band_visibility :: proc(self: ^StrobeDisplay, band: ^core.PhaseBand, band_index: int) -> f32 {
+// The stripes fade out between these speeds, in stripes passing a point a second. Faster they flicker into
+// a mess instead of drifting, too far off for the strobe to show anything but which way.
+STROBE_FAST_FADE_STRIPES_PER_S :: [2]f32{4, 8}
+
+// The visibility of a band's stripes, smoothed so they don't flicker. stripes_per_s is how fast they move.
+update_band_visibility :: proc(
+    self: ^StrobeDisplay,
+    band: ^core.PhaseBand,
+    band_index: int,
+    stripes_per_s: f32,
+) -> f32 {
     fade := core.STROBE_FADE_SNR_DB
-    target := math.smoothstep(fade[0], fade[1], band.snr_db)
+    fast := STROBE_FAST_FADE_STRIPES_PER_S
+    target := math.smoothstep(fade[0], fade[1], band.snr_db) * (1 - math.smoothstep(fast[0], fast[1], stripes_per_s))
 
     alpha := 1.0 - math.exp(-gfx.frame_time() / STROBE_LOOK_TIME_S)
     visibility := &self.band_visibility[band_index]
@@ -538,8 +548,11 @@ strobe_tracks :: proc(
         ahead := core.strobe_phase_ahead(comparator, band) if !lamp else 0
         uniforms.phase = (band.scaled_phase + ahead) / density
 
+        // A stripe is a period of the shader's sine. The lamp's tracks move by the screen, about as fast.
+        stripes_per_s := abs(period_count * core.strobe_phase_rate(band) / density) / math.TAU
+
         uniforms.amp = STROBE_AMP
-        uniforms.visibility = update_band_visibility(self, &band, band_index)
+        uniforms.visibility = update_band_visibility(self, &band, band_index, stripes_per_s)
         uniforms.norm_freq = band.norm_freq
         uniforms.err_cents = band.err_cents
 
