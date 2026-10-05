@@ -90,18 +90,8 @@ PhaseBand :: struct {
     drift_cents:  f32, // and how far off that is, unsigned
     scaled_phase: f32, // the strobe's phase, phase_diff times the speed added up
     speed:        f32, // under 1 the strobe turns slower, over 1 faster
-    snr_db:       f32, // floor_snr_db or neighbor_snr_db, see PhaseComparator.use_neighbors
-    floor_snr_db: f32, // the level over the noise floor
+    snr_db:       f32,
     noise_floor:  NoiseFloor,
-
-    // The level over the noise between the partials either side, see update_band_neighbors: their DFTs, and
-    // the noise's power and the band's, smoothed over about a window, and what scales the noise to the band's
-    // window
-    neighbor_snr_db: f32,
-    neighbor_dfts:   [2]SingleFreqDFT,
-    neighbor_power:  f32,
-    smoothed_power:  f32,
-    neighbor_scale:  f32,
 
     // Lock-in reference oscillator frequency, radians per sample
     ref_omega:    f64,
@@ -137,9 +127,6 @@ PhaseComparator :: struct {
     mode:             StrobeMode,
     available:        int, // the new samples of the latest run_phase_detection
 
-    // The bands' SNR is over the noise between the partials instead of the noise floor, the floors still learn
-    use_neighbors:    bool,
-
     // Absolute index of the sample just past the end of the newest window, i.e. the lock-in clock
     sample_clock:     i64,
 
@@ -173,7 +160,6 @@ destroy_phase_comparator :: proc(self: ^PhaseComparator) {
 
 destroy_phase_band :: proc(band: ^PhaseBand) {
     destroy_dft(&band.dft)
-    for &neighbor in band.neighbor_dfts do destroy_dft(&neighbor)
 }
 
 // Vernier mode measures the first band only, the others show it at other speeds
@@ -287,33 +273,11 @@ set_phase_comparator_freq :: proc(
             // Every track gets the fundamental's window. Sized in cents of its own partial an upper track's
             // window would be shorter, its band wider in Hz for a weaker partial, and it shimmers.
             gamma_size := dft_window_size(base_freq_hz, SAMPLERATE, DFT_RESOLUTION_CENTS)
-            weights := gamma_comb_window(gamma_size, comb_samples)
-            set_dft_freq(&band.dft, band.norm_freq, weights)
-
-            // Halfway to the next partial either side, a quiet room's noise is about as loud there as on the
-            // partial. Their box is twice as long, its nulls every half step fall on the partials either side,
-            // a strong one would otherwise leak in. Their noise scaled to the band's window, the longer box
-            // lets a little less of it through.
-            neighbor_weights := gamma_comb_window(gamma_size, 2 * comb_samples)
-            halfway := 0.5 * SAMPLERATE / comb_samples
-            for &neighbor, side in band.neighbor_dfts {
-                direction: f32 = -1 if side == 0 else 1
-                set_dft_freq(&neighbor, (band.freq_hz + direction * halfway) / SAMPLERATE, neighbor_weights)
-            }
-            band.neighbor_scale = noise_power_gain(weights) / noise_power_gain(neighbor_weights)
+            set_dft_freq(&band.dft, band.norm_freq, gamma_comb_window(gamma_size, comb_samples))
         }
     }
 
     set_phase_comparator_speed(self, base_speed)
-}
-
-// How much of white noise's power a window's bin lets through, as run_single_dft scales it
-noise_power_gain :: proc(weights: []f64) -> f32 {
-    sum_sq: f64
-    for weight in weights do sum_sq += weight * weight
-
-    size := f64(len(weights))
-    return f32(sum_sq / (size * size))
 }
 
 // The comb's box spans enough periods of the note that every track's partials land on its nulls,
@@ -342,9 +306,6 @@ restart_band :: proc(band: ^PhaseBand) {
     band.drift_cents = 0
     band.envelope = 0
     band.onset = false
-    band.neighbor_snr_db = 0
-    band.neighbor_power = 0
-    band.smoothed_power = 0
 }
 
 // Another input's signal is unrelated to the previous one's, everything starts over like at launch: the
@@ -367,14 +328,11 @@ wrap_phase :: proc(phase: f64) -> f64 {
 // Measures the new samples, nothing changes without any. is_tonal is a clear pitch from the pitch detection,
 // the bands' noise floors don't learn it as the background.
 run_phase_detection :: proc(self: ^PhaseComparator, is_tonal := false) {
-    // Just the longest window, of the bands measured or their neighbors. The buffer is no longer than that, the
-    // newest samples come in without delay.
-    window_size := 0
-    for band, band_index in self.bands {
-        if !measures_band(self, band_index) do continue
-
-        window_size = max(window_size, band.dft.window_size)
-        for neighbor in band.neighbor_dfts do window_size = max(window_size, neighbor.window_size)
+    // Just the longest window, the lowest partial's, which isn't always the first track's. The buffer is no
+    // longer than that, the newest samples come in without delay.
+    window_size := self.bands[0].dft.window_size
+    if self.mode == .HARMONIC {
+        for band in self.bands do window_size = max(window_size, band.dft.window_size)
     }
     resize_sample_buffer(self, window_size)
     read, elapsed := audio_capture_read(self, self.sample_buffer[:self.buffer_len])
@@ -394,15 +352,13 @@ run_phase_detection :: proc(self: ^PhaseComparator, is_tonal := false) {
     for &band, band_index in self.bands {
         if !measures_band(self, band_index) {
             // Vernier mode, the first track at another speed
-            base_band := &self.bands[0]
+            base_band := self.bands[0]
             band.amp = base_band.amp
             band.phase_diff = base_band.phase_diff
             band.rate = base_band.rate
             band.drift_cents = base_band.drift_cents
             band.noise_floor = base_band.noise_floor
             band.snr_db = base_band.snr_db
-            band.floor_snr_db = base_band.floor_snr_db
-            band.neighbor_snr_db = base_band.neighbor_snr_db
             band.scaled_phase -= band.phase_diff * band.speed
         } else if !band.in_range {
             // Nothing to measure up there, quiet so the track stays dark
@@ -562,8 +518,6 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
     // The strobe turns by the phase times the track's speed
     band.scaled_phase -= band.phase_diff * band.speed
 
-    update_band_neighbors(self, band)
-
     // The fit's measurements move back by step samples and down by the phase advance, so the new one
     // comes in at 0, and the older ones weigh less by decay
     shift_fit :: proc(fit: ^RateFit, step, phase_advance, decay: f64) {
@@ -586,37 +540,6 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
 // A phase advance at freq_hz times this turns the strobe as fast per cent as every other note
 strobe_rescale :: proc(freq_hz: f32) -> f64 {
     return STROBE_REFERENCE_HZ / f64(freq_hz)
-}
-
-// The band's level over the noise between the partials either side, an SNR that needs no noise floor. On the
-// same window at the same moment, nothing is learned and nothing carries over from one note to the next. The
-// powers are smoothed over about a window, a single bin of noise swings a lot. A neighbor past what the
-// sample rate holds is left out.
-update_band_neighbors :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
-    power: f32
-    count := 0
-    for &neighbor in band.neighbor_dfts {
-        if neighbor.norm_freq >= 0.5 do continue
-
-        // Its window is longer than the band's, the newest samples all the same
-        window := self.sample_buffer[self.buffer_len - neighbor.window_size:self.buffer_len]
-        level := run_single_dft(&neighbor, window)
-        power += real(level) * real(level) + imag(level) * imag(level)
-        count += 1
-    }
-    if count == 0 do return
-
-    power *= band.neighbor_scale / f32(count)
-    band_power := band.amp * band.amp
-    if band.neighbor_power == 0 {
-        band.neighbor_power = power
-        band.smoothed_power = band_power
-    } else {
-        alpha := 1 - math.exp(-f32(self.available) / f32(band.dft.window_size))
-        band.neighbor_power += alpha * (power - band.neighbor_power)
-        band.smoothed_power += alpha * (band_power - band.smoothed_power)
-    }
-    band.neighbor_snr_db = 10 * math.log10(max(band.smoothed_power, 1e-24) / max(band.neighbor_power, 1e-24))
 }
 
 // Without audio the strobe stops going on after this long
@@ -706,15 +629,13 @@ strobe_shows_note :: proc(self: ^PhaseComparator, fundamental_only := false) -> 
     return false
 }
 
-// Keep an up-to-date estimate of background noise (i.e. when no note is playing), and the band's SNR over it
-// or over the noise between the partials
+// Keep an up-to-date estimate of background noise (i.e. when no note is playing)
 update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, is_tonal: bool) {
     dt := f32(self.available) / SAMPLERATE
 
     // The window starts out on the silence the sample buffer is filled with
     window_full := self.sample_clock >= i64(band.dft.window_size)
-    band.floor_snr_db = update_noise_floor(&band.noise_floor, band.amp, dt, window_full, is_tonal)
-    band.snr_db = band.neighbor_snr_db if self.use_neighbors else band.floor_snr_db
+    band.snr_db = update_noise_floor(&band.noise_floor, band.amp, dt, window_full, is_tonal)
 }
 
 

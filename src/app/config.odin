@@ -132,10 +132,6 @@ Config :: struct {
     // The FAST toggle, the strobe turns at STROBE_SPEED_FAST per cent of detuning instead of STROBE_SPEED
     strobe_fast:                  bool,
 
-    // The NBR toggle, the tracks fade by their level over the noise between the partials instead of the noise
-    // floor, see core.update_band_neighbors
-    strobe_neighbors:             bool,
-
     // --- Display ---
 
     strobe_display_type:          StrobeDisplayType,
@@ -183,7 +179,6 @@ config_defaults :: Config {
     strobe_offsets_cents         = {0, 0, 0, 0, 0},
     strobe_speeds                = {1, 1, 1, 1, 1},
     strobe_fast                  = false,
-    strobe_neighbors             = false,
 
     // --- Display ---
     strobe_display_type          = .STROBE,
