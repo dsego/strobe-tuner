@@ -20,19 +20,25 @@ import "../../src/core"
 SAMPLERATE :: core.SAMPLERATE
 INTERVALS :: [?]f32{1, 2, 4}
 STROBE_SPEED :: 0.025
-FRAME_SAMPLES :: SAMPLERATE / 60
+// The app draws at 60 fps, e.g. -define:FRAME_SAMPLES=1024 for iOS's chunks of audio arriving every other frame
+FRAME_SAMPLES :: #config(FRAME_SAMPLES, SAMPLERATE / 60)
 
 TOLERANCE_CENTS :: 1
 
 // A mic level, -20 dBFS RMS
 TONE_RMS :: 0.1
 
-// Silence before the tone like the app opened in a quiet room, then the tone, measured over its last second
-LEAD_IN_S :: 0.5
+// The room before the tone, long enough for the noise floors to learn it (see core.NOISE_FLOOR_WARMUP_S),
+// then the tone, measured over its last second
+LEAD_IN_S :: 2
 TONE_S :: 2.5
 MEASURE_S :: 1.0
 
-OFFSETS_CENTS :: [?]f32{0, 0.5, -0.5, 5, -5, 20, -20, 45, -45}
+// 28 just inside the strobe's readout range, see core.READOUT_RANGE_CENTS
+OFFSETS_CENTS :: [?]f32{0, 0.5, -0.5, 5, -5, 20, -20, 28, -28, 45, -45}
+
+// A lit track drifting the other way than the tone this fast, its stripes turn the wrong way
+WRONG_WAY_MIN_HZ :: 1
 
 // White noise this far under the tone, 0 for none
 NOISE_SNRS_DB :: [?]f32{0, 20, 10}
@@ -59,6 +65,7 @@ Result :: struct {
     using test_case: Case,
     wrong_note:      int, // measured detections on another note, or none
     worst_cents:     f32, // the readout's furthest from the offset
+    wrong_way:       int, // measured detections with a lit track drifting the other way
 }
 
 main :: proc() {
@@ -108,7 +115,7 @@ main :: proc() {
 }
 
 passed :: proc(result: Result) -> bool {
-    return result.wrong_note == 0 && abs(result.worst_cents) <= TOLERANCE_CENTS
+    return result.wrong_note == 0 && abs(result.worst_cents) <= TOLERANCE_CENTS && result.wrong_way == 0
 }
 
 run_case :: proc(test_case: Case) -> (result: Result) {
@@ -156,6 +163,20 @@ run_case :: proc(test_case: Case) -> (result: Result) {
             continue
         }
 
+        // Lit like core.strobe_shows_note counts it, on a partial the tone has. A sine's empty tracks can light
+        // up from its leakage, their drift is the fundamental's and says nothing about the stripes.
+        fade := core.STROBE_FADE_SNR_DB
+        for band in strobe.bands {
+            if !band.in_range || band.snr_db < 0.5 * (fade[0] + fade[1]) do continue
+            if !has_partial(test_case.waveform, band.interval) do continue
+
+            expected_hz := band.freq_hz * (math.pow(2, test_case.offset_cents / 1200) - 1)
+            if abs(expected_hz) >= WRONG_WAY_MIN_HZ && band.drift_hz * expected_hz < 0 {
+                result.wrong_way += 1
+                break
+            }
+        }
+
         steady := core.tuner_readout(&tuner)
         readout := steady.err_cents
         if readout_ready && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS {
@@ -183,6 +204,20 @@ run_noise_only :: proc(noise_snr_db: f32) -> (active_s: f32) {
         if tuner.active do active_s += f32(FRAME_SAMPLES) / SAMPLERATE
     }
     return
+}
+
+has_partial :: proc(waveform: Waveform, interval: f32) -> bool {
+    if interval != math.round(interval) do return false
+
+    switch waveform {
+    case .SINE:
+        return interval == 1
+    case .SQUARE:
+        return int(interval) % 2 == 1
+    case .SAW, .WEAK_FUNDAMENTAL:
+        return true
+    }
+    return false
 }
 
 // LEAD_IN_S of silence then TONE_S of the waveform at TONE_RMS, and white noise noise_snr_db under that
@@ -287,7 +322,9 @@ print_summary :: proc(results: []Result) {
         if result.wrong_note > 0 {
             fmt.printf("  wrong or no note in %v detections\n", result.wrong_note)
         } else {
-            fmt.printf("  readout off by %+.2f¢\n", result.worst_cents)
+            fmt.printf("  readout off by %+.2f¢", result.worst_cents)
+            if result.wrong_way > 0 do fmt.printf(", stripes turn the wrong way in %v detections", result.wrong_way)
+            fmt.println()
         }
     }
 }
