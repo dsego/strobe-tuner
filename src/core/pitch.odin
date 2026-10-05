@@ -83,7 +83,7 @@ PitchInfo :: struct {
     err_cents:       f32,
     is_strong_pitch: bool,
     is_weak_pitch:   bool,
-    is_tonal:        bool, // a clear pitch whatever its level, the noise floors don't learn it as the background
+    is_tonal:        bool, // a pitch whatever its level, medium clarity or more, the noise floors don't learn it as the background
     snr_db:          f32,
     noise_floor:     f32,
 }
@@ -159,8 +159,9 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
         if abs(cents_deviation(info.detected_freq, mains_hz)) <= MAINS_CENTS do mains = true
     }
 
-    // A clear pitch is a note, not the background, even before the floor knows how loud that is
-    info.is_tonal = info.detected_freq >= min_freq && info.clarity >= PITCH_CLARITY_HIGH && !mains
+    // A pitch is a note, not the background, even before the floor knows how loud that is. A voice or a
+    // muddied string can be one, noise doesn't repeat that well.
+    info.is_tonal = info.detected_freq >= min_freq && info.clarity >= PITCH_CLARITY_LOW && !mains
     self.snr_db = update_noise_floor(&self.noise_floor, info.rms, dt, is_tonal = info.is_tonal)
     info.snr_db = self.snr_db
     info.noise_floor = self.noise_floor.level
@@ -174,7 +175,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     weak_snr_db: f32 = PITCH_MIN_SNR_DB - SNR_HYSTERESIS_DB
     strong_snr_db: f32 = weak_snr_db if prev_info.is_strong_pitch else PITCH_MIN_SNR_DB
 
-    info.is_strong_pitch = info.is_tonal && info.snr_db >= strong_snr_db
+    info.is_strong_pitch = info.is_tonal && info.clarity >= PITCH_CLARITY_HIGH && info.snr_db >= strong_snr_db
     info.is_weak_pitch =
         mains ||
         info.detected_freq < min_freq ||

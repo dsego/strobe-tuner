@@ -35,14 +35,19 @@ NOISE_FLOOR_KNOWN_AFTER_S :: 0.25
 NOISE_FLOOR_UNKNOWN_SNR_DB :: 40.0
 MIN_NOISE_FLOOR :: 1e-6 // -120 dB, a level of digital silence doesn't pull it down to zero
 
+// A pitch counts this long after its last detection, a breath, a slide or an unclear moment in a held note
+// doesn't let the floor up
+NOISE_FLOOR_PITCH_HOLD_S :: 0.5
+
 
 // The level of the background noise, of the whole signal for the pitch detector or of one strobe band.
 // It follows the level in dB while nothing louder plays, and pauses when the SNR is above the threshold,
-// only creeping up so it catches up with a noisier room. Not on a clear pitch, a held note or a steady
-// sine would become the background.
+// only creeping up so it catches up with a noisier room. Never up on a pitch, a held note or a steady
+// sine would become the background, it goes up once the note stops.
 NoiseFloor :: struct {
-    level:  f32, // 0 until the first update
-    warmup: f32, // seconds left of following the level ungated
+    level:      f32, // 0 until the first update
+    warmup:     f32, // seconds left of following the level ungated
+    pitch_hold: f32, // seconds left of counting as a pitch, see NOISE_FLOOR_PITCH_HOLD_S
 }
 
 init_noise_floor :: proc() -> NoiseFloor {
@@ -53,12 +58,13 @@ init_noise_floor :: proc() -> NoiseFloor {
 reset_noise_floor :: proc(self: ^NoiseFloor) {
     self.level = 0
     self.warmup = NOISE_FLOOR_WARMUP_S
+    self.pitch_hold = 0
 }
 
 // Updates with the level measured over the last dt seconds, returns its SNR over the floor before the update.
 // Without warming_up the warmup time doesn't run out, e.g. while the window is still on the silence it
-// starts out with. is_tonal is a clear pitch, the warmup waits it out however long it rings, a note playing
-// when the app starts isn't the background. Hum isn't a clear pitch, see MAINS_HZ.
+// starts out with. is_tonal is a pitch, the warmup waits it out however long it rings, a note playing
+// when the app starts isn't the background. Hum isn't a pitch, see MAINS_HZ.
 update_noise_floor :: proc(
     self: ^NoiseFloor,
     measured_level: f32,
@@ -70,7 +76,10 @@ update_noise_floor :: proc(
 ) {
     level := max(measured_level, MIN_NOISE_FLOOR)
 
-    if self.warmup > 0 && is_tonal {
+    self.pitch_hold = NOISE_FLOOR_PITCH_HOLD_S if is_tonal else max(self.pitch_hold - dt, 0)
+    pitch := self.pitch_hold > 0
+
+    if self.warmup > 0 && pitch {
         known := self.level != 0 && NOISE_FLOOR_WARMUP_S - self.warmup >= NOISE_FLOOR_KNOWN_AFTER_S
         if !known do return NOISE_FLOOR_UNKNOWN_SNR_DB
 
@@ -87,10 +96,12 @@ update_noise_floor :: proc(
     if warming_up do self.warmup = max(self.warmup - dt, 0)
 
     if self.warmup > 0 || snr_db < NOISE_FLOOR_SNR_DB_THRESHOLD {
-        // Smooth in dB, the level of the noise in a single bin dips deep now and then
+        // Smooth in dB, the level of the noise in a single bin dips deep now and then. Only down on a pitch:
+        // a weak partial, or a band the note slid away from, would rise to the note's level and stay there,
+        // every track it reached dark until the note stops.
         alpha := 1 - math.exp(-dt / NOISE_FLOOR_TIME_S)
-        self.level *= math.pow(10, alpha * snr_db / 20)
-    } else if !is_tonal {
+        if !pitch || snr_db < 0 do self.level *= math.pow(10, alpha * snr_db / 20)
+    } else if !pitch {
         self.level *= math.pow(10, NOISE_FLOOR_RISE_DB_PER_S * dt / 20)
     }
     self.level = max(self.level, MIN_NOISE_FLOOR)
@@ -127,6 +138,21 @@ test_noise_floor :: proc(t: ^testing.T) {
 
     testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "held note, got %v", floor.level)
     testing.expectf(t, snr > 39, "held note SNR, got %v dB", snr)
+
+    // Nor one barely over it, a weak partial's band, it would rise to the partial and stay
+    for _ in 0 ..< 6000 do snr = update_noise_floor(&floor, 0.002, DT, is_tonal = true)
+
+    testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "weak partial, got %v", floor.level)
+
+    // A held note unclear for a moment now and then, like a voice, stays a note
+    for step in 0 ..< 6000 do update_noise_floor(&floor, 0.002, DT, is_tonal = step % 8 != 0)
+
+    testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "unclear moments, got %v", floor.level)
+
+    // Once it stops, the floor learns the room again
+    for _ in 0 ..< 200 do update_noise_floor(&floor, 0.003, DT)
+
+    testing.expectf(t, abs(floor.level - 0.003) < 1e-4, "after the note, got %v", floor.level)
 }
 
 @(test)
