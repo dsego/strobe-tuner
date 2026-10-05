@@ -161,3 +161,23 @@ test_comb_rejects_partials :: proc(t: ^testing.T) {
         testing.expectf(t, leak < 1e-3 * level, "partial %v leaks %v of %v, %v without the comb", partial, leak, level, amp(&plain, partial * freq))
     }
 }
+
+// The level of a Blackman window's bin for a sine offset_bins off it, in dB under a sine on it. A long
+// window's: its spectrum is the sinc of the box and two pairs of shifted ones. The main lobe ends 3 bins out.
+blackman_response_db :: proc(offset_bins: f32) -> f32 {
+    sinc :: proc(x: f64) -> f64 {
+        return 1 if x == 0 else math.sin(math.PI * x) / (math.PI * x)
+    }
+
+    x := f64(offset_bins)
+    response := 0.42 * sinc(x) + 0.25 * (sinc(x - 1) + sinc(x + 1)) + 0.04 * (sinc(x - 2) + sinc(x + 2))
+    return f32(20 * math.log10(max(abs(response) / 0.42, 1e-6)))
+}
+
+@(test)
+test_blackman_response_db :: proc(t: ^testing.T) {
+    testing.expect(t, blackman_response_db(0) == 0)
+    testing.expectf(t, abs(blackman_response_db(1) + 4.5) < 0.1, "1 bin, got %v dB", blackman_response_db(1))
+    testing.expectf(t, abs(blackman_response_db(-2) + 20.4) < 0.1, "2 bins, got %v dB", blackman_response_db(-2))
+    testing.expectf(t, blackman_response_db(3) < -100, "the null 3 bins out, got %v dB", blackman_response_db(3))
+}

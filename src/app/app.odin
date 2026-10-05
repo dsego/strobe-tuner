@@ -677,6 +677,7 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo, meter
     base_band := app.phase_comparator.bands[0]
     stat(fmt.ctprintf("Band SNR %.1f", base_band.snr_db), layout.stats)
     stat(fmt.ctprintf("Band NF %.1f", core.dbfs(base_band.noise_floor.level)), layout.stats + {0, 15})
+    stat(fmt.ctprintf("Band drift %.1f", base_band.drift_cents), layout.stats + {0, 30})
     stat(fmt.ctprintf("RMS %.1f", pitch.rms_dbfs), layout.stats + {130, 0})
     stat(fmt.ctprintf("NF %.1f", floor_level), layout.stats + {130, 15})
     stat(fmt.ctprintf("SNR %.1f", pitch.snr_db), layout.stats + {130, 30})

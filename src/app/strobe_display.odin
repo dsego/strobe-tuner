@@ -467,25 +467,44 @@ draw_inner_shadow :: proc(self: ^StrobeDisplay, area: gfx.Rect, shape: gfx.Rect)
 }
 
 // The shader draws amp * sin(phase), an edge spans about 2 / amp radians of the strobe phase. The edges
-// stay this sharp while a note fades, the stripes dim like a lamp's. Sharper gets jagged.
+// stay this sharp while a note fades, the stripes dim like a lamp's, and soften off the note, see
+// track_response. Sharper gets jagged.
 STROBE_AMP :: 50.0
 STROBE_LOOK_TIME_S :: 0.05
 
-// The stripes fade out between these speeds, in the fundamental's stripes a track moves across a second.
-// Faster they flicker into a mess instead of drifting, too far off for the strobe to show anything but
-// which way.
-STROBE_FAST_FADE_STRIPES_PER_S :: [2]f32{4, 8}
+// A track off its partial fades as it did when the bands were narrow: a Blackman window a bin of this many
+// cents of the track's own partial, so a harmonic note's tracks fade alike. Half a bin off is 1 dB down, a
+// bin 4.5, two bins 20, three are its null.
+NARROW_BAND_CENTS :: 25
 
-// The visibility of a band's stripes, smoothed so they don't flicker. stripes_per_s is how fast they move.
-update_band_visibility :: proc(
-    self: ^StrobeDisplay,
-    band: ^core.PhaseBand,
-    band_index: int,
-    stripes_per_s: f32,
-) -> f32 {
+// The stripes' contrast was the band's level 1000 times, full from 1 up, so a louder note stayed further off.
+// Every note fades as one at -40 dBFS did instead, its band's level 0.21 of the sine's amplitude: full to
+// about 29 cents off, half at 39, a tenth at 55, nothing at 75. A quiet note or a decay doesn't dim the
+// stripes, the SNR fades them as before.
+NARROW_BAND_CONTRAST :: 1000 * 0.21 * 0.01
+
+// Vernier tracks all hear the note, the faster ones fade by their speed instead, as they used to: the first
+// track between these cents, each faster one as much sooner as it turns faster.
+VERNIER_FADE_CENTS :: [2]f32{10, 80}
+
+// How much of a track's stripes is left off its note, 1 on it. drift_cents is how far the track is off right
+// now, see PhaseBand, speed_ratio how many times faster than the first track it turns, vernier mode only.
+// The old bands' level was also the shader's amp, the edges went soft before the stripes faded, the stripes
+// here soften by it too.
+track_response :: proc(drift_cents: f32, speed_ratio: f32 = 0) -> f32 {
+    response := math.pow(10, core.blackman_response_db(drift_cents / NARROW_BAND_CENTS) / 20)
+
+    if speed_ratio > 0 {
+        vernier := VERNIER_FADE_CENTS
+        response *= 1 - math.smoothstep(vernier[0], vernier[1], drift_cents * speed_ratio)
+    }
+    return response
+}
+
+// The visibility of a band's stripes, smoothed so they don't flicker. response is track_response's.
+update_band_visibility :: proc(self: ^StrobeDisplay, band: ^core.PhaseBand, band_index: int, response: f32) -> f32 {
     fade := core.STROBE_FADE_SNR_DB
-    fast := STROBE_FAST_FADE_STRIPES_PER_S
-    target := math.smoothstep(fade[0], fade[1], band.snr_db) * (1 - math.smoothstep(fast[0], fast[1], stripes_per_s))
+    target := math.smoothstep(fade[0], fade[1], band.snr_db) * min(NARROW_BAND_CONTRAST * response, 1)
 
     alpha := 1.0 - math.exp(-gfx.frame_time() / STROBE_LOOK_TIME_S)
     visibility := &self.band_visibility[band_index]
@@ -549,14 +568,20 @@ strobe_tracks :: proc(
         ahead := core.strobe_phase_ahead(comparator, band) if !lamp else 0
         uniforms.phase = (band.scaled_phase + ahead) / density
 
-        // How fast the track moves across, in the fundamental's stripes. A partial's track has as many times
-        // the stripes as it turns faster in phase, so the tracks of a harmonic note all turn alike. The lamp's
-        // tracks move by the screen, about as fast.
-        partial := band.freq_hz / comparator.base_freq_hz
-        stripes_per_s := abs(period_count * core.strobe_phase_rate(band) / density) / (math.TAU * partial)
+        // Vernier tracks show the first one's measurement. The lamp's tracks are as far off as the comparator's.
+        response: f32
+        if mode == .VERNIER {
+            first := bands[0]
+            speed_ratio := band.speed / first.speed if first.speed != 0 else 1
+            response = track_response(first.drift_cents, speed_ratio)
+        } else {
+            response = track_response(band.drift_cents)
+        }
 
-        uniforms.amp = STROBE_AMP
-        uniforms.visibility = update_band_visibility(self, &band, band_index, stripes_per_s)
+        // Off the note the edges go soft, the stripes a sine before they fade. Squared, as the response alone
+        // still leaves an edge a few percent of a stripe wide where they're half faded.
+        uniforms.amp = STROBE_AMP * response * response
+        uniforms.visibility = update_band_visibility(self, &band, band_index, response)
         uniforms.norm_freq = band.norm_freq
         uniforms.err_cents = band.err_cents
 

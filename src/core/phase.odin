@@ -55,6 +55,10 @@ STROBE_REFERENCE_HZ :: 656.5
 // twice that on average, steady but a turned peg shows that much later than on the stripes.
 READOUT_FIT_S :: 0.15
 
+// The drift follows the chunks' phase advances this closely, the stripes fade with the attack's glide, a
+// vibrato or beating partials as a narrow band's level would, and with noise
+DRIFT_SMOOTH_S :: 0.075
+
 // The readout's average starts over on each pluck, the previous note's rate doesn't carry over. It follows
 // the attack like the stripes do, a plucked string glides down from sharp.
 ONSET_RATIO :: 1.5 // amp jump over the slow envelope that counts as a new pluck (~3.5 dB)
@@ -81,6 +85,7 @@ PhaseBand :: struct {
     amp:          f32,
     phase_diff:   f32, // strobe phase advance since the previous frame (normalized to STROBE_REFERENCE_HZ)
     err_cents:    f32, // of the averaged rate
+    drift_cents:  f32, // how far off each chunk's phase advance is, unsigned and smoothed, see DRIFT_SMOOTH_S
     scaled_phase: f32, // the strobe's phase, phase_diff times the speed added up
     speed:        f32, // under 1 the strobe turns slower, over 1 faster
     snr_db:       f32,
@@ -295,6 +300,7 @@ restart_band :: proc(band: ^PhaseBand) {
     band.rate = 0
     band.rate_time_s = 0
     band.fit = {}
+    band.drift_cents = 0
     band.envelope = 0
     band.onset = false
 }
@@ -347,6 +353,7 @@ run_phase_detection :: proc(self: ^PhaseComparator, is_tonal := false) {
             band.amp = base_band.amp
             band.phase_diff = base_band.phase_diff
             band.rate = base_band.rate
+            band.drift_cents = base_band.drift_cents
             band.noise_floor = base_band.noise_floor
             band.snr_db = base_band.snr_db
             band.scaled_phase -= band.phase_diff * band.speed
@@ -473,6 +480,14 @@ determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
     if had_phase {
         decay := math.exp(-step / (READOUT_FIT_S * SAMPLERATE))
         shift_fit(&band.fit, step, phase_advance, decay)
+
+        // How far off the track is right now, unsigned so noise's random advances read far off instead of
+        // averaging out to in tune. Noise on a low track can advance by more than its frequency, an octave
+        // flat is far enough.
+        drift_hz := f32(phase_advance / step * SAMPLERATE / math.TAU)
+        drift_cents := abs(cents_deviation(max(band.freq_hz + drift_hz, 0.5 * band.freq_hz), band.freq_hz))
+        alpha := f32(1 - math.exp(-step / (DRIFT_SMOOTH_S * SAMPLERATE)))
+        band.drift_cents += alpha * (drift_cents - band.drift_cents)
     }
 
     // The readout fits the rate while the stripes fully show, a fading note keeps the last of it, the dimming
@@ -532,12 +547,8 @@ STROBE_AHEAD_MAX_S :: 0.03
 // moves evenly, and the next measurement takes over where it is.
 strobe_phase_ahead :: proc(self: ^PhaseComparator, band: PhaseBand) -> f32 {
     age := min(time.duration_seconds(time.tick_since(self.newest_tick)), STROBE_AHEAD_MAX_S)
-    return strobe_phase_rate(band) * f32(age)
-}
-
-// How fast the strobe turns at the readout's rate, its phase a second
-strobe_phase_rate :: proc(band: PhaseBand) -> f32 {
-    return -f32(band.rate * SAMPLERATE * strobe_rescale(band.freq_hz)) * band.speed
+    advance := band.rate * age * SAMPLERATE * strobe_rescale(band.freq_hz)
+    return -f32(advance) * band.speed
 }
 
 
