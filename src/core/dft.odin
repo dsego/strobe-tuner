@@ -17,6 +17,7 @@
 package core
 
 import "core:math"
+import "core:simd"
 import "core:testing"
 
 
@@ -82,10 +83,14 @@ flat_window :: proc(size: int, allocator := context.temp_allocator) -> []f64 {
 
 
 SingleFreqDFT :: struct {
-    window_size: int,
-    norm_freq:   f32, // normalized frequency, eg 440Hz/ 48,000Hz
-    twiddles:    []complex64, // precomputed windowed twiddles, one per sample of the window
-    dft:         complex64, // stores the resulting DFT after calling run_single_dft
+    window_size:   int,
+    norm_freq:     f32, // normalized frequency, eg 440Hz/ 48,000Hz
+
+    // Precomputed windowed twiddles, one per sample of the window, the real and imaginary parts apart so
+    // run_single_dft loads them a vector at a time
+    twiddles_real: []f32,
+    twiddles_imag: []f32,
+    dft:           complex64, // stores the resulting DFT after calling run_single_dft
 }
 
 
@@ -94,9 +99,11 @@ SingleFreqDFT :: struct {
 set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32, weights: []f64) {
     size := len(weights)
 
-    if len(self.twiddles) != size {
-        delete(self.twiddles)
-        self.twiddles = make([]complex64, size)
+    if len(self.twiddles_real) != size {
+        delete(self.twiddles_real)
+        delete(self.twiddles_imag)
+        self.twiddles_real = make([]f32, size)
+        self.twiddles_imag = make([]f32, size)
     }
 
     self.window_size = size
@@ -109,23 +116,39 @@ set_dft_freq :: proc(self: ^SingleFreqDFT, norm_freq: f32, weights: []f64) {
     rotation := complex128(1)
 
     for weight, index in weights {
-        self.twiddles[index] = complex64(complex(weight, 0) * rotation)
+        twiddle := complex(weight, 0) * rotation
+        self.twiddles_real[index] = f32(real(twiddle))
+        self.twiddles_imag[index] = f32(imag(twiddle))
         rotation *= step
     }
 }
 
 destroy_dft :: proc(self: ^SingleFreqDFT) {
-    delete(self.twiddles)
+    delete(self.twiddles_real)
+    delete(self.twiddles_imag)
 }
+
+// The lanes summed side by side, a single sum waits on its previous add every sample. Wider than one
+// register, so each lane group is its own chain of adds.
+DFT_LANES :: 16
 
 run_single_dft :: proc(self: ^SingleFreqDFT, samples: []f32) -> complex64 {
     assert(len(samples) >= self.window_size)
 
     // The samples are real, two multiplies each instead of a full complex multiply
-    re, im: f32
-    for twiddle, i in self.twiddles {
-        re += samples[i] * real(twiddle)
-        im += samples[i] * imag(twiddle)
+    re_lanes, im_lanes: #simd[DFT_LANES]f32
+    vector_end := self.window_size - self.window_size % DFT_LANES
+    for index := 0; index < vector_end; index += DFT_LANES {
+        sample := simd.from_slice(#simd[DFT_LANES]f32, samples[index:])
+        re_lanes += sample * simd.from_slice(#simd[DFT_LANES]f32, self.twiddles_real[index:])
+        im_lanes += sample * simd.from_slice(#simd[DFT_LANES]f32, self.twiddles_imag[index:])
+    }
+
+    re := simd.reduce_add_pairs(re_lanes)
+    im := simd.reduce_add_pairs(im_lanes)
+    for index in vector_end ..< self.window_size {
+        re += samples[index] * self.twiddles_real[index]
+        im += samples[index] * self.twiddles_imag[index]
     }
 
     size := f32(self.window_size)

@@ -79,13 +79,16 @@ main :: proc() {
         time.stopwatch_stop(&stopwatch)
         microseconds := time.duration_microseconds(time.stopwatch_duration(stopwatch)) / ITERATIONS
 
-        // Of one core, with every track measured on every frame
-        core_share := microseconds * TRACKS * FRAMES_PER_SECOND / 1e6
+        // Of one core, every track measured a hop apart through each frame's new samples, as
+        // determine_band_phase does, the hops of a frame rounded up
+        hops_per_frame := math.ceil(core.HOPS_PER_PERIOD * note.freq_hz / FRAMES_PER_SECOND)
+        core_share := microseconds * TRACKS * f64(hops_per_frame) * FRAMES_PER_SECOND / 1e6
         fmt.printfln(
-            "Single bin DFT, %v (%v samples): %.1f µs, %v tracks at %v fps %.2f%% of a core",
+            "Single bin DFT, %v (%v samples): %.1f µs, %v hops a frame, %v tracks at %v fps %.2f%% of a core",
             note.name,
             dft.window_size,
             microseconds,
+            hops_per_frame,
             TRACKS,
             FRAMES_PER_SECOND,
             100 * core_share,

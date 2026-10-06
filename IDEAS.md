@@ -155,3 +155,20 @@ Open:
 - `pitch.odin` measures `err_cents` from the untempered note, the readout's comes from `tuner_cents`
   with the offset taken off. Check that nothing shown reads the pitch detection's once a temperament
   is set.
+
+## Gamma window as a recursive filter
+
+Every hop runs a whole window's DFT, about 4 × the note's frequency of them a second per track
+(`HOPS_PER_PERIOD`), roughly 70 multiply-adds per sample whatever the note. The window, age² · e^(−age),
+is a third order gamma, the gammatone filter's shape: the samples mixed down by the reference oscillator
+and through three one-pole low-passes in a row give the same window, the comb's box a running sum on the
+input. A phase at every sample for about 10 to 15 operations, the hops cost nothing and the lock-in
+rotation goes away.
+
+- The window stops at 10.9 τ (`GAMMA_WINDOW_TAU`), about 0.13% of the gamma's weight is past it, so the
+  filter's endless tail barely differs.
+- The state in f64, the pole is very close to 1 on a 20k sample window.
+- A retune now measures straight from the ring buffer. The filters would run over the buffer once on a
+  retune to keep that, about one window's pass.
+- Only worth it if the hops get in the way, more of them a period, or the DFT shows up on the phone's
+  profile. With the SIMD DFT five tracks take under 1% of a desktop core.
