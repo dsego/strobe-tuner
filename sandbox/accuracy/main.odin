@@ -165,6 +165,9 @@ passed :: proc(result: Result) -> bool {
 }
 
 run_case :: proc(test_case: Case) -> (result: Result) {
+    // Every retune makes its window's weights there, a full run would pile up gigabytes
+    defer free_all(context.temp_allocator)
+
     result.test_case = test_case
 
     note := core.cents_to_note(f32(100 * test_case.note_semitones), test_case.pitch_standard)
