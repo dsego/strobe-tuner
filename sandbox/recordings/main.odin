@@ -22,6 +22,7 @@ import "core:math"
 import "core:os"
 import "core:slice"
 import "core:strings"
+import "core:time"
 import ma "vendor:miniaudio"
 
 import "../../src/core"
@@ -33,9 +34,21 @@ STROBE_SPEED :: 0.025
 FRAME_SAMPLES :: SAMPLERATE / 60
 
 TOLERANCE_CENTS :: 1 // like the generated tones', see sandbox/accuracy
-// The readout further than core.READOUT_RANGE_CENTS from the note, the pitch detection's while the
-// strobe's tracks can't follow, it points the way there
+// The readout the pitch detection's, until a hidden track has settled on the string, it points the way there
 COARSE_TOLERANCE_CENTS :: 5
+
+// The readout from hidden tracks like the strobe's, aimed at the string instead of the note, so they read
+// it as closely at any distance from the note. Retuned once the string is this far off their aim.
+HIDDEN_RETUNE_CENTS :: 15
+// The pitch detection this far off the hidden tracks hears another note, they're aimed by it again
+HIDDEN_ANOTHER_NOTE_CENTS :: 50
+
+// The time spent measuring the strobe's tracks and the hidden ones, over every run
+Timing :: struct {
+    visible: time.Duration,
+    hidden:  time.Duration,
+}
+timing: Timing
 
 LEAD_IN_S :: 2
 
@@ -87,14 +100,17 @@ Track :: struct {
 
 // A fresh detection, the pitch in cents from A4 as the readout shows it
 Detection :: struct {
-    time_s:     f32,
-    active:     bool,
-    note_cents: int, // the target note's
+    time_s:       f32,
+    active:       bool,
+    note_cents:   int, // the target note's
     // The readout's track's over the note, the note's shown that much higher, see core.readout_octaves
-    octaves:    int,
-    cents:      f32, // the note's plus the readout
-    fine:       bool, // the readout a strobe track's, otherwise the pitch detection's, see COARSE_TOLERANCE_CENTS
-    tracks:     [len(INTERVALS)]Track,
+    octaves:      int,
+    cents:        f32, // the note's plus the readout
+    fine:         bool, // the readout a hidden track's, otherwise the pitch detection's, see COARSE_TOLERANCE_CENTS
+    // The strobe's own readout, like cents, close to the note where its tracks follow
+    strobe_cents: f32,
+    strobe_fine:  bool,
+    tracks:       [len(INTERVALS)]Track,
 }
 
 Run :: struct {
@@ -109,6 +125,9 @@ Run :: struct {
     // The same where either readout is coarse, and how many detections
     coarse_cents:   f32,
     coarse:         int,
+    // The readout against the strobe's own where both are fine, the 90th percentile apart. A strobe standing
+    // still has to read in tune.
+    strobe_apart:   f32,
     expected_note:  int,
     shown_note:     int, // the most common in the sustain
     wrong_note:     int, // detections in the sustain on another note, or none
@@ -169,6 +188,12 @@ main :: proc() {
         print_report(runs[:])
         when SHOW_SPECTRA do print_spectra(spectra[:])
     }
+
+    fmt.eprintfln(
+        "The strobe's tracks measured for %.1fs, the hidden ones %.1fs",
+        time.duration_seconds(timing.visible),
+        time.duration_seconds(timing.hidden),
+    )
 
     for spectrum in spectra {
         if spectrum.named_low do fmt.eprintfln("%v: %v looks an octave low, nothing at its 1x and 3x", spectrum.file, note_name(spectrum.note))
@@ -278,6 +303,8 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, re
     defer delete(aligned_errors)
     coarse_errors: [dynamic]f32
     defer delete(coarse_errors)
+    strobe_apart: [dynamic]f32
+    defer delete(strobe_apart)
     note_counts: map[int]int
     defer delete(note_counts)
 
@@ -293,6 +320,9 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, re
 
         note_counts[detection.note_cents + 1200 * detection.octaves] += 1
         append(&cents, fold_octave(detection.cents, expected_note))
+        if detection.fine && detection.strobe_fine {
+            append(&strobe_apart, abs(detection.cents - detection.strobe_cents))
+        }
 
         // The original at the same moment of the performance
         original, aligned := reference.?
@@ -368,6 +398,10 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, re
     if len(aligned_errors) > 0 {
         slice.sort(aligned_errors[:])
         run.aligned_cents = percentile(aligned_errors[:], 0.5)
+    }
+    if len(strobe_apart) > 0 {
+        slice.sort(strobe_apart[:])
+        run.strobe_apart = percentile(strobe_apart[:], 0.9)
     }
     if len(coarse_errors) > 0 {
         slice.sort(coarse_errors[:])
@@ -481,40 +515,78 @@ play :: proc(path: string, decode_rate: u32, pitch_standard: f32) -> (detections
     }
     retune(strobe, tuner.target_note.frequency, pitch_standard)
 
+    hidden := core.init_phase_comparator(110, intervals[:], .HARMONIC)
+    defer core.destroy_phase_comparator(hidden)
+    retune(hidden, tuner.target_note.frequency, pitch_standard)
+
     readout_track := -1
     readout_ready := false
+    hidden_track := -1
+    hidden_ready := false
     for start := 0; start + FRAME_SAMPLES <= len(samples); start += FRAME_SAMPLES {
         frame := samples[start:start + FRAME_SAMPLES]
         core.audio_capture_write(&detector, frame)
         core.audio_capture_write(strobe, frame)
+        core.audio_capture_write(hidden, frame)
         pitch := core.run_pitch_detection(&detector, tuner.pitch)
+
+        tick := time.tick_now()
         core.run_phase_detection(strobe, pitch.is_tonal)
+        timing.visible += time.tick_since(tick)
+
+        tick = time.tick_now()
+        core.run_phase_detection(hidden, pitch.is_tonal)
+        timing.hidden += time.tick_since(tick)
+
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
+        hidden_track, hidden_ready = core.strobe_readout_track(hidden, hidden_track)
         if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) {
             retune(strobe, tuner.target_note.frequency, pitch_standard)
         }
+        steady := core.tuner_readout(&tuner)
+
+        // Aimed at the string, by its own reading once ready, otherwise or on another note the pitch detection's
+        if tuner.active {
+            target_hz := tuner.target_note.frequency
+            heard := core.cents_deviation(steady.detected_freq, target_hz)
+            heard -= 1200 * math.round(heard / 1200)
+            heard_hz := target_hz * math.pow(2, heard / 1200)
+            from_heard := core.cents_deviation(heard_hz, hidden.base_freq_hz)
+
+            aim := from_heard
+            if hidden_ready && abs(from_heard) <= HIDDEN_ANOTHER_NOTE_CENTS do aim = hidden.bands[hidden_track].err_cents
+
+            if abs(aim) > HIDDEN_RETUNE_CENTS {
+                retune(hidden, hidden.base_freq_hz * math.pow(2, aim / 1200), pitch_standard)
+                hidden_track, hidden_ready = -1, false
+            }
+        }
         if !pitch.fresh do continue
 
-        steady := core.tuner_readout(&tuner)
-        // The pitch detection's from the note it heard, the strobe's from the target, see src/app/app.odin
-        readout := steady.err_cents
-        readout_note := steady.detected_note.cents
+        // The pitch detection's from the note it heard, see src/app/app.odin
+        readout := f32(steady.detected_note.cents) + steady.err_cents
         octaves := 0
-        fine := readout_ready && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS
-        if fine {
-            readout_note = tuner.target_note.cents
-            band := strobe.bands[readout_track]
-            readout = band.err_cents
+        if hidden_ready {
+            band := hidden.bands[hidden_track]
+            hidden_hz := hidden.base_freq_hz * math.pow(2, band.err_cents / 1200)
+            readout = f32(tuner.target_note.cents) + core.tuner_cents(&tuner, hidden_hz, tuner.target_note)
             octaves = core.readout_octaves(band, tuner.target_note.frequency)
         }
 
+        // The strobe's from the target close to the note
+        strobe_fine := readout_ready && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS
+        strobe_cents: f32
+        if strobe_fine do strobe_cents = f32(tuner.target_note.cents) + strobe.bands[readout_track].err_cents
+
         detection := Detection {
-            time_s     = f32(start + FRAME_SAMPLES) / SAMPLERATE,
-            active     = tuner.active,
-            note_cents = tuner.target_note.cents,
-            octaves    = octaves,
-            cents      = f32(readout_note) + readout,
-            fine       = fine,
+            time_s       = f32(start + FRAME_SAMPLES) / SAMPLERATE,
+            active       = tuner.active,
+            note_cents   = tuner.target_note.cents,
+            octaves      = octaves,
+            cents        = readout,
+            fine         = hidden_ready,
+            strobe_cents = strobe_cents,
+            strobe_fine  = strobe_fine,
         }
         // Lit like sandbox/accuracy counts it, an instrument's partials are whole multiples
         fade := core.STROBE_FADE_SNR_DB
@@ -589,9 +661,10 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
   A            the pitch standard the tuner was set to
   error c      readout's move minus the shift, the medians over the sustain
   aligned      the same, each detection against the original's at the same moment of the performance,
-               the note's drift cancels, where both readouts are the strobe's, within 1c passes
-  coarse       the same where either readout is the pitch detection's, the note over 30c from its
-               target where the strobe's tracks can't follow, within 5c passes, - for none
+               the note's drift cancels, where both readouts are hidden tracks', within 1c passes
+  coarse       the same where either readout is the pitch detection's, before a hidden track settled on
+               the string, within 5c passes, - for none
+  strobe       the readout apart from the strobe's own tracks where both read, the 90th percentile
   shown/named  the note the tuner showed most, then the filename's note if they differ
   wrong note   detections in the sustain on another note or dark, out of all of them in the sustain,
                an octave down or two up count here too
@@ -612,23 +685,24 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
 `)
 
     // Plain ASCII, the padding counts bytes and a ¢ is two
-    rule := "+-----------------+----------+-----+---------+---------+---------+-------------+------------+------------+------------+-------+------------+---------+-------+----------+"
+    rule := "+-----------------+----------+-----+---------+---------+---------+---------+-------------+------------+------------+------------+-------+------------+---------+-------+----------+"
     fmt.println()
     fmt.println(rule)
-    fmt.println("| file            | shift c  | A   | error c | aligned | coarse  | shown/named | wrong note | octave up  | partial    | 1x dB | wrong way  | spread c| lit s |          |")
+    fmt.println("| file            | shift c  | A   | error c | aligned | coarse  | strobe  | shown/named | wrong note | octave up  | partial    | 1x dB | wrong way  | spread c| lit s |          |")
     fmt.println(rule)
     for run in sorted {
         note := note_name(run.shown_note)
         if run.shown_note != run.expected_note do note = fmt.tprintf("%v/%v", note, note_name(run.expected_note))
         fmt.printfln(
             // Odin pads a width on a float with zeros, they go in as text
-            "| %-15v | %8v | %3v | %7v | %7v | %7v | %-11v | %10v | %10v | %10v | %5v | %-10v | %7v | %5v | %-8v |",
+            "| %-15v | %8v | %3v | %7v | %7v | %7v | %7v | %-11v | %10v | %10v | %10v | %5v | %-10v | %7v | %5v | %-8v |",
             os.stem(run.file),
             "original" if run.shift_cents == 0 else fmt.tprintf("%+.2f", run.shift_cents),
             fmt.tprintf("%.0f", run.pitch_standard),
             fmt.tprintf("%+.2f", run.error_cents),
             "-" if run.shift_cents == 0 else fmt.tprintf("%+.2f", run.aligned_cents),
             "-" if run.coarse == 0 else fmt.tprintf("%+.2f", run.coarse_cents),
+            fmt.tprintf("%.2f", run.strobe_apart),
             note,
             fmt.tprintf("%v/%v", run.wrong_note, run.measured),
             fmt.tprintf("%v/%v", run.octave, run.measured),
@@ -684,10 +758,10 @@ print_spectra :: proc(spectra: []Spectrum) {
 }
 
 print_csv :: proc(runs: []Run) {
-    fmt.println("file,shift_cents,pitch_standard,error_cents,aligned_cents,coarse_cents,coarse,expected_note,shown_note,wrong_note,octave,partial,measured,fundamental_db,wrong_way,spread_cents,lit_s")
+    fmt.println("file,shift_cents,pitch_standard,error_cents,aligned_cents,coarse_cents,coarse,strobe_apart,expected_note,shown_note,wrong_note,octave,partial,measured,fundamental_db,wrong_way,spread_cents,lit_s")
     for run in runs {
         fmt.printfln(
-            "%v,%.3f,%.0f,%.3f,%.3f,%.3f,%v,%v,%v,%v,%v,%v,%v,%.1f,%v,%.2f,%.2f",
+            "%v,%.3f,%.0f,%.3f,%.3f,%.3f,%v,%.3f,%v,%v,%v,%v,%v,%v,%.1f,%v,%.2f,%.2f",
             run.file,
             run.shift_cents,
             run.pitch_standard,
@@ -695,6 +769,7 @@ print_csv :: proc(runs: []Run) {
             run.aligned_cents,
             run.coarse_cents,
             run.coarse,
+            run.strobe_apart,
             note_name(run.expected_note),
             note_name(run.shown_note),
             run.wrong_note,
