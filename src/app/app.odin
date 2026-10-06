@@ -81,7 +81,7 @@ Reading :: struct {
     pitch:          core.PitchInfo, // the latest detection
     steady:       core.PitchInfo, // the readout, the strong detections averaged
     out_of_range:   bool, // another note than a locked one is played, see core.tuner_out_of_range
-    strobe_readout: bool, // the readout is the strobe track's, close to the note
+    strobe_readout: bool, // the readout is the strobe track's, none without one, see measure
     octaves:        int, // the note's shown this many octaves off the tuner's, the partial the readout measures
 }
 
@@ -331,20 +331,25 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     reading.pitch = core.run_pitch_detection(&app.pitch_detector, tuner.pitch)
     core.run_phase_detection(app.phase_comparator, reading.pitch.is_tonal)
 
-    // The track the readout follows. The strobe keeps the note lit while it shows it.
+    // The track the readout follows. The strobe keeps the note lit while it shows it. Retuned to another note the
+    // tracks start over, their reading was from the note before.
     ready: bool
     app.readout_track, ready = core.strobe_readout_track(app.phase_comparator, app.readout_track)
-    if core.update_tuner(tuner, reading.pitch, core.strobe_shows_note(app.phase_comparator)) do retune(app)
+    if core.update_tuner(tuner, reading.pitch, core.strobe_shows_note(app.phase_comparator)) {
+        retune(app)
+        ready = false
+    }
 
     reading.out_of_range = core.tuner_out_of_range(tuner)
     reading.steady = core.tuner_readout(tuner)
 
-    // Close to the note the readout is the strobe's, 0 where the fundamental's track stands still. The pitch
-    // detection reads the whole wave, a real string's partials are a little sharp and pull it a few cents off
-    // the track you see. The Hz move along with the cents. A fading note keeps its track's last reading, also
-    // once the tuner lets go of it.
+    // The readout is the strobe's, 0 where the fundamental's track stands still, none until a track has settled
+    // after the pluck. The pitch detection only picks the note: it reads the whole wave, a real string's partials
+    // are a little sharp and pull it a few cents off the track you see. The Hz move along with the cents. A
+    // fading note keeps its track's last reading, also once the tuner lets go of it.
     steady := &reading.steady
-    reading.strobe_readout = ready && !reading.out_of_range && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS
+    reading.strobe_readout = ready && !reading.out_of_range
+    reading.strobe_readout &&= abs(app.phase_comparator.bands[app.readout_track].err_cents) <= core.READOUT_RANGE_CENTS
 
     if reading.strobe_readout {
         band := app.phase_comparator.bands[app.readout_track]
@@ -359,29 +364,23 @@ measure :: proc(app: ^App) -> (reading: Reading) {
         }
     }
 
-    // The readout's cents, the strobe's close to the note so an in tune note is on the middle line, further
-    // out every detection unaveraged. The track the readout followed carries on as the note decays and the
-    // readout gives way, the line as lit as its stripes and dark with them, not the noisy weak detections.
+    // The readout's cents, the strobe's so an in tune note is on the middle line, none before a track settled.
+    // The track the readout followed carries on as the note decays and the readout gives way, the line as lit as
+    // its stripes and dark with them, not the noisy weak detections.
     if reading.strobe_readout do app.traced_track = app.readout_track
 
     light: f32 = 1
+    traced_cents := math.nan_f32()
 
     if app.traced_track >= 0 {
         band := app.phase_comparator.bands[app.traced_track]
         fade := core.STROBE_FADE_SNR_DB
         light = math.smoothstep(fade[0], fade[1], band.snr_db)
         if light == 0 || !band.in_range do app.traced_track = -1
-    }
 
-    detected := tuner.active && !reading.out_of_range && !reading.pitch.is_weak_pitch
-    far := detected && abs(steady.err_cents) > core.READOUT_RANGE_CENTS
-    traced_cents := math.nan_f32()
-
-    if app.traced_track >= 0 && !reading.out_of_range && !far {
-        traced_cents = app.phase_comparator.bands[app.traced_track].err_cents
-    } else if detected {
-        traced_cents = core.tuner_cents(tuner, reading.pitch.detected_freq, reading.pitch.detected_note)
-        light = 1
+        if app.traced_track >= 0 && !reading.out_of_range && abs(band.err_cents) <= core.READOUT_RANGE_CENTS {
+            traced_cents = band.err_cents
+        }
     }
 
     record_trace(&app.cents_trace, traced_cents, light, reading.pitch.fresh, gfx.frame_time())
@@ -429,13 +428,13 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
     draw_tuning_arrows(app, layout, reading)
     draw_note_controls(app, layout, reading)
 
-    // The strong detections averaged, a raw one each frame is too jumpy to read. Nothing to measure on another
-    // note than a locked one.
+    // The strobe's reading, none before a track settled, and nothing to measure on another note than a locked
+    // one. The gauge points the way without one.
     draw_measurements(
         layout.measurements,
         reading.steady.detected_freq,
         reading.steady.err_cents,
-        reading.steady.measured && !reading.out_of_range,
+        reading.strobe_readout,
         app.tuner.active,
     )
 

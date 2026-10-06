@@ -34,8 +34,9 @@ LEAD_IN_S :: 2
 TONE_S :: 2.5
 MEASURE_S :: 1.0
 
-// 28 just inside the strobe's readout range, see core.READOUT_RANGE_CENTS
-OFFSETS_CENTS :: [?]f32{0, 0.5, -0.5, 5, -5, 20, -20, 28, -28, 45, -45}
+// Out to nearly half a semitone the readout reads too, see core.READOUT_RANGE_CENTS. Half way the note shown is a
+// coin toss.
+OFFSETS_CENTS :: [?]f32{0, 0.5, -0.5, 5, -5, 20, -20, 28, -28, 35, -35, 40, -40, 45, -45}
 
 // A lit track drifting the other way than the tone this fast, its stripes turn the wrong way
 WRONG_WAY_MIN_HZ :: 1
@@ -74,6 +75,7 @@ Result :: struct {
     using test_case: Case,
     wrong_note:      int, // measured detections on another note, or none
     worst_cents:     f32, // the readout's furthest from the offset
+    unread:          int, // measured detections without a readout, no track settled or one too far off
     wrong_way:       int, // measured detections with a lit track drifting the other way
 }
 
@@ -105,6 +107,7 @@ main :: proc() {
     }
 
     print_summary(results[:])
+    print_by_offset(results[:])
 
     fmt.println("\noctave switches:")
     for switch_notes in OCTAVE_SWITCHES {
@@ -161,6 +164,8 @@ is_stress :: proc(test_case: Case) -> bool {
 }
 
 passed :: proc(result: Result) -> bool {
+    if result.unread > 0 do return false
+
     return result.wrong_note == 0 && abs(result.worst_cents) <= TOLERANCE_CENTS && result.wrong_way == 0
 }
 
@@ -204,6 +209,7 @@ run_case :: proc(test_case: Case) -> (result: Result) {
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
         if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) {
             retune(strobe, tuner.target_note.frequency, test_case.pitch_standard)
+            readout_ready = false
         }
         if !pitch.fresh || start < measure_from do continue
 
@@ -226,12 +232,12 @@ run_case :: proc(test_case: Case) -> (result: Result) {
             }
         }
 
-        steady := core.tuner_readout(&tuner)
-        readout := steady.err_cents
-        if readout_ready && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS {
-            readout = strobe.bands[readout_track].err_cents
+        // The strobe's track, none until one settled, like src/app/app.odin
+        if !readout_ready || abs(strobe.bands[readout_track].err_cents) > core.READOUT_RANGE_CENTS {
+            result.unread += 1
+            continue
         }
-        error_cents := readout - test_case.offset_cents
+        error_cents := strobe.bands[readout_track].err_cents - test_case.offset_cents
         if abs(error_cents) > abs(result.worst_cents) do result.worst_cents = error_cents
     }
     return
@@ -377,6 +383,50 @@ print_summary :: proc(results: []Result) {
     }
 }
 
+// How far off its note a track still reads: the readout's worst by the tone's distance from the note, the tracks
+// stay on it. Report only, without the stress cases and the ones on another note.
+print_by_offset :: proc(results: []Result) {
+    fmt.println("\nworst readout cents by the tone's distance from the note")
+    names := [Waveform]string {
+        .SINE             = "sine",
+        .SAW              = "saw",
+        .SQUARE           = "square",
+        .WEAK_FUNDAMENTAL = "weak",
+    }
+    fmt.printf("%-9v", "offset")
+    for waveform in Waveform {
+        for noise_snr_db in NOISE_SNRS_DB {
+            if noise_snr_db == STRESS_SNR_DB do continue
+
+            noise := "clean" if noise_snr_db == 0 else fmt.tprintf("%.0fdB", noise_snr_db)
+            fmt.printf("%-12v", fmt.tprintf("%v %v", names[waveform], noise))
+        }
+    }
+    fmt.println()
+
+    offsets := OFFSETS_CENTS
+    for offset in offsets {
+        if offset < 0 do continue
+
+        fmt.printf("%-9v", fmt.tprintf("±%v", offset))
+        for waveform in Waveform {
+            for noise_snr_db in NOISE_SNRS_DB {
+                if noise_snr_db == STRESS_SNR_DB do continue
+
+                worst: f32
+                for result in results {
+                    if result.waveform != waveform || result.noise_snr_db != noise_snr_db do continue
+                    if abs(result.offset_cents) != offset || result.wrong_note > 0 || is_stress(result) do continue
+
+                    if abs(result.worst_cents) > abs(worst) do worst = result.worst_cents
+                }
+                fmt.printf("%-12v", fmt.tprintf("%+.2f", worst))
+            }
+        }
+        fmt.println()
+    }
+}
+
 print_case :: proc(result: Result) {
     note_name :: proc(semitones: int, pitch_standard: f32) -> string {
         note := core.cents_to_note(f32(100 * semitones), pitch_standard)
@@ -401,6 +451,8 @@ print_case :: proc(result: Result) {
         fmt.printf("  ok, readout off by %+.2f¢\n", result.worst_cents)
     } else if result.wrong_note > 0 {
         fmt.printf("  wrong or no note in %v detections\n", result.wrong_note)
+    } else if result.unread > 0 {
+        fmt.printf("  no readout in %v detections\n", result.unread)
     } else {
         fmt.printf("  readout off by %+.2f¢", result.worst_cents)
         if result.wrong_way > 0 do fmt.printf(", stripes turn the wrong way in %v detections", result.wrong_way)

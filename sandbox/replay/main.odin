@@ -80,7 +80,10 @@ main :: proc() {
         core.run_phase_detection(strobe, pitch.is_tonal)
         // Like the app's readout, and the strobe keeps the note lit while it shows it
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
-        if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) do retune(strobe, tuner.target_note.frequency)
+        if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) {
+            retune(strobe, tuner.target_note.frequency)
+            readout_ready = false
+        }
         if !pitch.fresh do continue
 
         // Every so often, and whenever the tuner lets go of the note or picks it up
@@ -109,9 +112,9 @@ main :: proc() {
             kind,
             "active" if tuner.active else "-",
         )
-        steady := core.tuner_readout(&tuner)
-        readout := fmt.tprintf("%+.1f¢", steady.err_cents)
-        if readout_ready && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS {
+        // None until a track settles, like the app's
+        readout := "-"
+        if readout_ready && abs(strobe.bands[readout_track].err_cents) <= core.READOUT_RANGE_CENTS {
             // The note the app names, the partial the track measures
             band := strobe.bands[readout_track]
             octaves := core.readout_octaves(band, tuner.target_note.frequency)

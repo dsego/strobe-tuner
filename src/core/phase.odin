@@ -259,7 +259,12 @@ set_phase_comparator_freq :: proc(
     self.mode = mode
     self.speed_multiplier = speed_multiplier
 
+    // Every track gets the fundamental's window. Sized in cents of its own partial an upper track's window would
+    // be shorter, its band wider in Hz for a weaker partial, and it shimmers. Built once, the tracks only turn it
+    // to their own frequency.
     comb_samples := comb_periods(self.bands[:], mode) * SAMPLERATE / base_freq_hz
+    gamma_size := dft_window_size(base_freq_hz, SAMPLERATE, DFT_RESOLUTION_CENTS)
+    window := gamma_comb_window(gamma_size, comb_samples)
 
     for &band, band_index in self.bands {
         band.time_stretch = SAMPLERATE / base_freq_hz
@@ -278,12 +283,7 @@ set_phase_comparator_freq :: proc(
         band.in_range = band.norm_freq < MAX_BAND_NORM_FREQ
         band.ref_omega = math.TAU * f64(band.freq_hz) / SAMPLERATE
 
-        if measures_band(self, band_index) {
-            // Every track gets the fundamental's window. Sized in cents of its own partial an upper track's
-            // window would be shorter, its band wider in Hz for a weaker partial, and it shimmers.
-            gamma_size := dft_window_size(base_freq_hz, SAMPLERATE, DFT_RESOLUTION_CENTS)
-            set_dft_freq(&band.dft, band.norm_freq, gamma_comb_window(gamma_size, comb_samples))
-        }
+        if measures_band(self, band_index) do set_dft_freq(&band.dft, band.norm_freq, window)
     }
 
     set_phase_comparator_speed(self, base_speed)
@@ -600,7 +600,9 @@ STROBE_FADE_SNR_DB :: [2]f32{8, 16}
 // The readout follows a track this loud, where its stripes are fully there
 READOUT_MIN_SNR_DB :: STROBE_FADE_SNR_DB[1]
 READOUT_WEAK_FUNDAMENTAL_DB :: 20 // this far under the loudest partial the fundamental gives way to it
-READOUT_RANGE_CENTS :: 30 // the pitch detection's distance from the note, further out the tracks can't follow
+// The track's own reading this far off its partial, as far as the tracks were measured to read, see
+// sandbox/accuracy and sandbox/recordings. Further out the readout has none.
+READOUT_RANGE_CENTS :: 50
 READOUT_SETTLE_S :: 0.05 // the track's fit since the pluck before the readout follows it
 
 // The track the readout follows, the fundamental. A weak or missing fundamental gives way to the loudest
