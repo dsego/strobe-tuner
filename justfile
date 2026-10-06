@@ -73,3 +73,7 @@ test:
 # Generated tones through the tuner, checks the note and the readout: just accuracy [full]
 accuracy mode="": setup
     odin run sandbox/accuracy -o:speed -- {{mode}}
+
+# Recordings shifted by known cents through the tuner, checks the readout moves by the shift: just recordings [folder] [csv]
+recordings *args: setup
+    odin run sandbox/recordings -o:speed -- {{args}}

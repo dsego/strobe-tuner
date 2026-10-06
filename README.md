@@ -103,6 +103,7 @@ The first run clones and compiles the dependencies into `external/`, later runs 
 | `just pkg` | Signed build for the Mac App Store, see `platform/macos/build-pkg.sh`, links SDL in statically |
 | `just test` | Unit tests of the pitch detection and strobe code |
 | `just accuracy` | Generated tones with and without noise through the tuner, checks the note and the readout within 1¢, `just accuracy full` for every note and three concert pitches |
+| `just recordings` | The recordings in `sandbox/media` shifted by known cents through the tuner, checks the readout moves by the shift, report only, `just recordings <folder> csv` for another folder as CSV |
 
 Debug builds also have <kbd>Cmd</kbd><kbd>,</kbd> to open the config file and <kbd>Cmd</kbd><kbd>Shift</kbd><kbd>,</kbd> to reload it.
 
