@@ -399,7 +399,7 @@ wrong_way_text :: proc(run: Run) -> string {
     for count, index in run.wrong_way {
         if count == 0 do continue
         if strings.builder_len(builder) > 0 do strings.write_byte(&builder, ' ')
-        fmt.sbprintf(&builder, "%v×%v", intervals[index], count)
+        fmt.sbprintf(&builder, "%vx%v", intervals[index], count)
     }
     return strings.to_string(builder) if strings.builder_len(builder) > 0 else "-"
 }
@@ -412,24 +412,31 @@ print_report :: proc(runs: []Run) {
         return abs(first.error_cents) > abs(second.error_cents)
     })
 
-    fmt.println("\nfile                  shift      A    error  note        wrong note  wrong way  spread  lit")
+    // Plain ASCII, the padding counts bytes and a ¢ is two
+    rule := "+-----------------+----------+-----+---------+-------------+------------+------------+---------+-------+----+"
+    fmt.println()
+    fmt.println(rule)
+    fmt.println("| file            | shift c  | A   | error c | shown/named | wrong note | wrong way  | spread c| lit s |    |")
+    fmt.println(rule)
     for run in sorted {
         note := note_name(run.shown_note)
-        if run.shown_note != run.expected_note do note = fmt.tprintf("%v≠%v", note, note_name(run.expected_note))
+        if run.shown_note != run.expected_note do note = fmt.tprintf("%v/%v", note, note_name(run.expected_note))
         fmt.printfln(
-            "%-21v %-10v %-4.0f %-6v %-11v %-11v %-10v %-7v %-6v %v",
-            run.file,
-            "original" if run.shift_cents == 0 else fmt.tprintf("%+.2f¢", run.shift_cents),
-            run.pitch_standard,
-            fmt.tprintf("%+.2f¢", run.error_cents),
+            // Odin pads a width on a float with zeros, they go in as text
+            "| %-15v | %8v | %3v | %7v | %-11v | %10v | %-10v | %7v | %5v | %-2v |",
+            os.stem(run.file),
+            "original" if run.shift_cents == 0 else fmt.tprintf("%+.2f", run.shift_cents),
+            fmt.tprintf("%.0f", run.pitch_standard),
+            fmt.tprintf("%+.2f", run.error_cents),
             note,
             fmt.tprintf("%v/%v", run.wrong_note, run.measured),
             wrong_way_text(run),
-            fmt.tprintf("%.1f¢", run.spread_cents),
-            fmt.tprintf("%.1fs", run.lit_s),
+            fmt.tprintf("%.1f", run.spread_cents),
+            fmt.tprintf("%.1f", run.lit_s),
             "ok" if passed(run) else "",
         )
     }
+    fmt.println(rule)
 
     failed := 0
     for run in runs {
