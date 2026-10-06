@@ -87,6 +87,8 @@ Detection :: struct {
     time_s:     f32,
     active:     bool,
     note_cents: int, // the target note's
+    // The readout's track's over the note, the note's shown that much higher, see core.readout_octaves
+    octaves:    int,
     cents:      f32, // the note's plus the readout
     tracks:     [len(INTERVALS)]Track,
 }
@@ -101,6 +103,7 @@ Run :: struct {
     shown_note:     int, // the most common in the sustain
     wrong_note:     int, // detections in the sustain on another note, or none
     octave:         int, // on the note an octave up, the others count as a wrong note
+    partial:        int, // on the note, shown in the octave of the partial the readout measures
     fundamental_db: f32, // the original's, from its strongest harmonic, see measure_spectrum
     // The original's 2nd harmonic louder than its fundamental, showing the octave up is following it
     second_louder:  bool,
@@ -274,7 +277,7 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, re
             continue
         }
 
-        note_counts[detection.note_cents] += 1
+        note_counts[detection.note_cents + 1200 * detection.octaves] += 1
         append(&cents, fold_octave(detection.cents, expected_note))
         // On another note the tracks are other partials
         if detection.note_cents != expected_note {
@@ -285,6 +288,7 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, re
             }
             continue
         }
+        if detection.octaves != 0 do run.partial += 1
 
         original, aligned := reference.?
         if !aligned do continue
@@ -438,7 +442,7 @@ play :: proc(path: string, decode_rate: u32, pitch_standard: f32) -> (detections
     retune :: proc(strobe: ^core.PhaseComparator, freq_hz, pitch_standard: f32) {
         core.set_phase_comparator_freq(strobe, freq_hz, pitch_standard, STROBE_SPEED, 2, .HARMONIC)
     }
-    retune(strobe, 110, pitch_standard)
+    retune(strobe, tuner.target_note.frequency, pitch_standard)
 
     readout_track := -1
     readout_ready := false
@@ -452,22 +456,22 @@ play :: proc(path: string, decode_rate: u32, pitch_standard: f32) -> (detections
         if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) {
             retune(strobe, tuner.target_note.frequency, pitch_standard)
         }
-        off_target := strobe.base_freq_hz != tuner.target_note.frequency
-        if off_target && !core.strobe_shows_note(strobe, fundamental_only = true) {
-            retune(strobe, tuner.target_note.frequency, pitch_standard)
-        }
         if !pitch.fresh do continue
 
         steady := core.tuner_readout(&tuner)
         readout := steady.err_cents
+        octaves := 0
         if readout_ready && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS {
-            readout = strobe.bands[readout_track].err_cents
+            band := strobe.bands[readout_track]
+            readout = band.err_cents
+            octaves = core.readout_octaves(band, tuner.target_note.frequency)
         }
 
         detection := Detection {
             time_s     = f32(start + FRAME_SAMPLES) / SAMPLERATE,
             active     = tuner.active,
             note_cents = tuner.target_note.cents,
+            octaves    = octaves,
             cents      = f32(tuner.target_note.cents) + readout,
         }
         // Lit like sandbox/accuracy counts it, an instrument's partials are whole multiples
@@ -544,6 +548,8 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
   wrong note   detections in the sustain on another note or dark, out of all of them in the sustain,
                an octave down or two up count here too
   octave up    detections on the right note one octave up, the readout is the same there
+  partial      detections on the right note named after the partial the readout measures, e.g. B3
+               for a B2 once its fundamental died down under the 2nd harmonic, right
   1x dB        the original's fundamental from its strongest harmonic, measured without the tuner
   wrong way    strobe tracks whose stripes turned the wrong way and in how many detections, 4x8 is the
                4th harmonic's track 8 times
@@ -558,17 +564,17 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
 `)
 
     // Plain ASCII, the padding counts bytes and a ¢ is two
-    rule := "+-----------------+----------+-----+---------+-------------+------------+------------+-------+------------+---------+-------+----------+"
+    rule := "+-----------------+----------+-----+---------+-------------+------------+------------+------------+-------+------------+---------+-------+----------+"
     fmt.println()
     fmt.println(rule)
-    fmt.println("| file            | shift c  | A   | error c | shown/named | wrong note | octave up  | 1x dB | wrong way  | spread c| lit s |          |")
+    fmt.println("| file            | shift c  | A   | error c | shown/named | wrong note | octave up  | partial    | 1x dB | wrong way  | spread c| lit s |          |")
     fmt.println(rule)
     for run in sorted {
         note := note_name(run.shown_note)
         if run.shown_note != run.expected_note do note = fmt.tprintf("%v/%v", note, note_name(run.expected_note))
         fmt.printfln(
             // Odin pads a width on a float with zeros, they go in as text
-            "| %-15v | %8v | %3v | %7v | %-11v | %10v | %10v | %5v | %-10v | %7v | %5v | %-8v |",
+            "| %-15v | %8v | %3v | %7v | %-11v | %10v | %10v | %10v | %5v | %-10v | %7v | %5v | %-8v |",
             os.stem(run.file),
             "original" if run.shift_cents == 0 else fmt.tprintf("%+.2f", run.shift_cents),
             fmt.tprintf("%.0f", run.pitch_standard),
@@ -576,6 +582,7 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
             note,
             fmt.tprintf("%v/%v", run.wrong_note, run.measured),
             fmt.tprintf("%v/%v", run.octave, run.measured),
+            fmt.tprintf("%v/%v", run.partial, run.measured),
             fmt.tprintf("%.0f", run.fundamental_db),
             wrong_way_text(run),
             fmt.tprintf("%.1f", run.spread_cents),
@@ -621,10 +628,10 @@ print_spectra :: proc(spectra: []Spectrum) {
 }
 
 print_csv :: proc(runs: []Run) {
-    fmt.println("file,shift_cents,pitch_standard,error_cents,expected_note,shown_note,wrong_note,octave,measured,fundamental_db,wrong_way,spread_cents,lit_s")
+    fmt.println("file,shift_cents,pitch_standard,error_cents,expected_note,shown_note,wrong_note,octave,partial,measured,fundamental_db,wrong_way,spread_cents,lit_s")
     for run in runs {
         fmt.printfln(
-            "%v,%.3f,%.0f,%.3f,%v,%v,%v,%v,%v,%.1f,%v,%.2f,%.2f",
+            "%v,%.3f,%.0f,%.3f,%v,%v,%v,%v,%v,%v,%.1f,%v,%.2f,%.2f",
             run.file,
             run.shift_cents,
             run.pitch_standard,
@@ -633,6 +640,7 @@ print_csv :: proc(runs: []Run) {
             note_name(run.shown_note),
             run.wrong_note,
             run.octave,
+            run.partial,
             run.measured,
             run.fundamental_db,
             wrong_way_text(run),

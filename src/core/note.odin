@@ -251,7 +251,3 @@ test_chromatic_range :: proc(t: ^testing.T) {
 cents_deviation :: proc(freq_hz: f32, reference_hz: f32) -> f32 {
     return freq_to_cents(freq_hz, reference_hz)
 }
-
-octave_apart :: proc(first: Note, second: Note) -> bool {
-    return abs(first.cents - second.cents) == 1200
-}

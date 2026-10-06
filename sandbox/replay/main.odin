@@ -25,8 +25,9 @@ INTERVALS :: [?]f32{1, 2, 4}
 STROBE_SPEED :: 0.025
 DESKTOP_PERIODS :: 12 // the strobe's stripes across the desktop's tracks
 
-// The app draws at 60 fps and the pitch detection runs on every frame's new samples
-FRAME_SAMPLES :: SAMPLERATE / 60
+// The pitch detection runs on every frame's new samples, e.g. -define:FPS=120 for the app's MAX_FPS
+FPS :: #config(FPS, 60)
+FRAME_SAMPLES :: SAMPLERATE / FPS
 // e.g. -define:PRINT_EVERY_MS=20 to follow an attack frame by frame
 PRINT_EVERY_MS :: #config(PRINT_EVERY_MS, 250)
 // e.g. -define:PITCH_STANDARD=443 to tune the notes to a hum or an instrument off 440
@@ -63,7 +64,7 @@ main :: proc() {
     retune :: proc(strobe: ^core.PhaseComparator, freq_hz: f32) {
         core.set_phase_comparator_freq(strobe, freq_hz, PITCH_STANDARD, STROBE_SPEED, 2, .HARMONIC)
     }
-    retune(strobe, 110)
+    retune(strobe, tuner.target_note.frequency)
 
     fmt.println("   time      Hz  cents  note  clarity     SNR  pitch   tuner   readout   tracks: SNR, cents, drift, stripes a second")
 
@@ -80,9 +81,6 @@ main :: proc() {
         // Like the app's readout, and the strobe keeps the note lit while it shows it
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
         if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) do retune(strobe, tuner.target_note.frequency)
-        // Like the app, an octave off strobe follows the target once its own note is dark
-        off_target := strobe.base_freq_hz != tuner.target_note.frequency
-        if off_target && !core.strobe_shows_note(strobe, fundamental_only = true) do retune(strobe, tuner.target_note.frequency)
         if !pitch.fresh do continue
 
         // Every so often, and whenever the tuner lets go of the note or picks it up
@@ -114,10 +112,13 @@ main :: proc() {
         steady := core.tuner_readout(&tuner)
         readout := fmt.tprintf("%+.1f¢", steady.err_cents)
         if readout_ready && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS {
+            // The note the app names, the partial the track measures
             band := strobe.bands[readout_track]
-            readout = fmt.tprintf("%+.1f¢ %v×", band.err_cents, band.interval)
+            octaves := core.readout_octaves(band, tuner.target_note.frequency)
+            shown := core.cents_to_note(f32(tuner.target_note.cents + 1200 * octaves), PITCH_STANDARD)
+            readout = fmt.tprintf("%+.1f¢ %v× %v", band.err_cents, band.interval, core.note_name(shown))
         }
-        fmt.printf("%-9v ", readout)
+        fmt.printf("%-13v ", readout)
         // The stripes fade out between 16 and 8 dB, see core.STROBE_FADE_SNR_DB. And by their speed, the
         // desktop's stripes a second by the drift, they fade from a quarter of a stripe a frame, see the app's
         // STROBE_ALIAS_FADE_STRIPES.

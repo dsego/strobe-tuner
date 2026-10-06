@@ -604,9 +604,11 @@ READOUT_RANGE_CENTS :: 30 // the pitch detection's distance from the note, furth
 READOUT_SETTLE_S :: 0.05 // the track's fit since the pluck before the readout follows it
 
 // The track the readout follows, the fundamental. A weak or missing fundamental gives way to the loudest
-// partial. The partials read a few cents apart, so once its track is ready the readout stays on it for the
-// rest of the note and keeps its last reading as it fades, until a pluck or another note starts the
-// tracks over. -1 for none.
+// partial. The partials read a few cents apart, so once its track is ready the readout stays on it and
+// keeps its last reading as it fades, until a pluck or another note starts the tracks over. Only a partial
+// still ringing this far over it takes the readout on, e.g. a low string's fundamental dies down first.
+// Only an octave track reads out, the note is named after the partial it measures, see readout_octaves.
+// -1 for none.
 //
 // ready once its track has fitted a little since the pluck, until then the readout is the pitch detection's.
 strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: int, ready: bool) {
@@ -617,18 +619,24 @@ strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: in
     // Vernier mode measures the first track, the others show it at other speeds
     count := 1 if self.mode == .VERNIER else len(self.bands)
 
-    plucked := false
     loudest, fundamental := -1, -1
     for band, index in self.bands[:count] {
-        if band.onset do plucked = true
-        if !hears_note(band) || band.snr_db < READOUT_MIN_SNR_DB do continue
+        if !is_octave_track(band) || !hears_note(band) || band.snr_db < READOUT_MIN_SNR_DB do continue
         if loudest < 0 || band.snr_db > self.bands[loudest].snr_db do loudest = index
         if band.interval == 1 do fundamental = index
     }
 
-    // Held, unless a pluck brings another track to pick
+    // A pluck lifts the loudest partial, a faint one's level wobbling isn't one
+    plucked := loudest >= 0 && self.bands[loudest].onset
+
+    // Held, unless a pluck brings another track to pick or the held one fades under a ringing partial
     held := current >= 0 && current < count && settled(self.bands[current])
-    if held && (!plucked || loudest < 0) do return current, true
+    if held && !plucked {
+        faded := loudest >= 0 && self.bands[loudest].snr_db - self.bands[current].snr_db >= READOUT_WEAK_FUNDAMENTAL_DB
+        if !faded do return current, true
+
+        return loudest, settled(self.bands[loudest])
+    }
 
     if loudest < 0 do return -1, false
 
@@ -639,18 +647,79 @@ strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: in
     return track, settled(self.bands[track])
 }
 
+// The fundamental's or an octave's track, the others' partials are another note, e.g. a fifth
+is_octave_track :: proc(band: PhaseBand) -> bool {
+    octaves := math.log2(band.interval)
+    return band.interval > 0 && abs(octaves - math.round(octaves)) < 0.01
+}
+
+// The octaves the readout's track is over the tuner's note, the note it measures is named that much higher.
+// From the track's frequency, a strobe kept an octave off the note has its octave track on the note.
+readout_octaves :: proc(band: PhaseBand, note_freq_hz: f32) -> int {
+    return int(math.round(math.log2(band.freq_hz / note_freq_hz)))
+}
+
+@(test)
+test_readout_track :: proc(t: ^testing.T) {
+    self := init_phase_comparator(123.47, {1, 2, 4}, .HARMONIC)
+    defer destroy_phase_comparator(self)
+
+    set_phase_comparator_freq(self, 123.47, 440, 0.01, 2, .HARMONIC)
+
+    // Every track settled on the note, the fundamental under the 2nd harmonic but not by much
+    snrs := [?]f32{90, 95, 30}
+    for &band, index in self.bands {
+        band.in_range = true
+        band.rate_time_s = 1
+        band.snr_db = snrs[index]
+    }
+    track, ready := strobe_readout_track(self, -1)
+    testing.expect_value(t, track, 0)
+    testing.expect(t, ready)
+
+    // A faint partial's level wobbling isn't a pluck
+    self.bands[2].onset = true
+    track, _ = strobe_readout_track(self, track)
+    testing.expect_value(t, track, 0)
+    self.bands[2].onset = false
+
+    // The fundamental dies down under the 2nd harmonic still ringing, the readout goes on with that one, a
+    // B3 for the B2
+    self.bands[0].snr_db = 70
+    track, ready = strobe_readout_track(self, track)
+    testing.expect_value(t, track, 1)
+    testing.expect(t, ready)
+    testing.expect_value(t, readout_octaves(self.bands[track], 123.47), 1)
+
+    // A pluck on the loudest track picks again, the fundamental back up
+    self.bands[0].snr_db = 92
+    self.bands[1].onset = true
+    track, _ = strobe_readout_track(self, track)
+    testing.expect_value(t, track, 0)
+
+    // A twelfth isn't an octave, it never reads out however loud
+    set_phase_comparator_tracks(self, {1, 3}, {0, 0}, {1, 1})
+    set_phase_comparator_freq(self, 123.47, 440, 0.01, 2, .HARMONIC)
+    for &band, index in self.bands {
+        band.in_range = true
+        band.rate_time_s = 1
+        band.snr_db = 50 if index == 0 else 90
+    }
+    track, _ = strobe_readout_track(self, -1)
+    testing.expect_value(t, track, 0)
+}
+
 // A track hears its note while it drifts less than a semitone, as wide as its window. Further out it's
-// another note leaking in, e.g. an octave down while the strobe stays on the octave, see update_tuner.
+// another note leaking in.
 hears_note :: proc(band: PhaseBand) -> bool {
     return band.in_range && band.drift_cents <= DFT_RESOLUTION_CENTS
 }
 
 // Whether any track's stripes are at least half faded in, the note is still ringing. The background noise
-// stays under it. fundamental_only for just the track of the strobe's own note.
-strobe_shows_note :: proc(self: ^PhaseComparator, fundamental_only := false) -> bool {
+// stays under it.
+strobe_shows_note :: proc(self: ^PhaseComparator) -> bool {
     fade := STROBE_FADE_SNR_DB
     for band in self.bands {
-        if fundamental_only && band.interval != 1 do continue
         if hears_note(band) && band.snr_db >= 0.5 * (fade[0] + fade[1]) do return true
     }
     return false

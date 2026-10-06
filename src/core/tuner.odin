@@ -24,8 +24,7 @@ import "core:testing"
 //
 // A new note has to be detected for a moment in a row before the strobe switches to it, otherwise a single
 // noisy detection of a decaying note resets the strobe. A locked note stays, another note played is out of
-// range. A note ringing out an octave off, like a harmonic on some guitar and bass strings, can keep the
-// strobe where it is.
+// range.
 Tuner :: struct {
     target_note:          Note, // what the strobe is tuned to
     detected_note:        Note, // the last confirmed detection, cents -1 before the first
@@ -43,9 +42,6 @@ Tuner :: struct {
 
     confirm_s:            f32, // seen this long in a row before switching, the last one strong or the run steady
     prevent_octave_jumps: bool,
-    // The strobe shows the octave on a track of its own, it can stay where it is when the note jumps an
-    // octave. Vernier mode has every track on the one note, it goes dark on the octave and follows it instead.
-    octave_track:         bool,
 
     // Cents each note from A0 up is tuned off equal temperament, e.g. a ukulele's E a little flat so its
     // fretted chords sound right. The strobe and the readout follow, see note_offset_cents.
@@ -76,7 +72,6 @@ init_tuner :: proc(
         candidate_note = {cents = -1},
         confirm_s = confirm_s,
         prevent_octave_jumps = prevent_octave_jumps,
-        octave_track = true,
     }
 }
 
@@ -141,19 +136,7 @@ update_tuner :: proc(self: ^Tuner, pitch: PitchInfo, strobe_hears := false) -> (
             }
 
             if new_target.cents != self.target_note.cents {
-                // The strobe stays on the note it's following when it jumps an octave, the note is still shown.
-                // E.g. a fading string whose octave reads a tad clearer. Only while the strobe still shows its
-                // own note, the app retunes once that track is dark.
-                // Not when the octave is tuned off by another amount, the strobe would stand still in the wrong
-                // place, and not on strings, another string an octave away is another string.
-                strobe_stays :=
-                    self.prevent_octave_jumps &&
-                    self.octave_track &&
-                    self.active &&
-                    self.string_count == 0 &&
-                    octave_apart(self.target_note, new_target) &&
-                    note_offset_cents(self, self.target_note) == note_offset_cents(self, new_target)
-                retune = !strobe_stays
+                retune = true
                 self.target_note = new_target
             }
         }
@@ -419,11 +402,14 @@ test_tuner :: proc(t: ^testing.T) {
     }
     testing.expect(t, !tuner.active)
 
-    // An octave jump while a note is followed keeps the strobe, the target note still changes
+    // The strobe follows an octave either way while a note is followed, e.g. a slur down to the note whose
+    // octave the strobe was on
     tuner = init_tuner(A2, 440, true, 0)
     update_tuner(&tuner, detection(A2))
-    testing.expect(t, !update_tuner(&tuner, detection(A3)))
-    testing.expect_value(t, tuner.target_note.octave, 3)
+    testing.expect(t, update_tuner(&tuner, detection(A2 / 2)))
+    testing.expect_value(t, tuner.target_note.octave, 1)
+    testing.expect(t, update_tuner(&tuner, detection(A2)))
+    testing.expect_value(t, tuner.target_note.octave, 2)
 
     // The strobe keeps a followed note lit when the detections turn weak, but doesn't light one
     tuner = init_tuner(A2, 440, true, 0)
@@ -434,12 +420,6 @@ test_tuner :: proc(t: ^testing.T) {
     testing.expect(t, tuner.active)
     update_tuner(&tuner, detection(A2, strong = false))
     testing.expect(t, !tuner.active)
-
-    // Not without a track for the octave, the strobe follows it
-    tuner = init_tuner(A2, 440, true, 0)
-    tuner.octave_track = false
-    update_tuner(&tuner, detection(A2))
-    testing.expect(t, update_tuner(&tuner, detection(A3)))
 
     // A locked note stays, its octave too. Another note is out of range, the gauge points down to it.
     tuner = init_tuner(E2, 440, false, 0)
@@ -489,7 +469,7 @@ test_tuner :: proc(t: ^testing.T) {
     steady = tuner_readout(&tuner)
     testing.expect(t, abs(steady.err_cents) < 0.01)
 
-    // The octave isn't tuned flat, the strobe moves there instead of staying
+    // The octave isn't tuned flat, the strobe moves there untouched
     testing.expect(t, update_tuner(&tuner, detection(A3)))
     testing.expect(t, tuner_target_freq(&tuner) == tuner.target_note.frequency)
 

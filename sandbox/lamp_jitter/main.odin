@@ -123,8 +123,6 @@ main :: proc() {
         pitch := core.run_pitch_detection(&detector, tuner.pitch)
         core.run_phase_detection(strobe, pitch.is_tonal)
         if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) do retune(strobe, tuner.target_note.frequency)
-        off_target := strobe.base_freq_hz != tuner.target_note.frequency
-        if off_target && !core.strobe_shows_note(strobe, fundamental_only = true) do retune(strobe, tuner.target_note.frequency)
 
         // The tracks, as strobe_tracks turns them, in fundamental stripes: a track's phase moves its
         // stripes by the phase over its partial

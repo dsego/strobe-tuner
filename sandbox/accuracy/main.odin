@@ -189,7 +189,7 @@ run_case :: proc(test_case: Case) -> (result: Result) {
     retune :: proc(strobe: ^core.PhaseComparator, freq_hz, pitch_standard: f32) {
         core.set_phase_comparator_freq(strobe, freq_hz, pitch_standard, STROBE_SPEED, 2, .HARMONIC)
     }
-    retune(strobe, 110, test_case.pitch_standard)
+    retune(strobe, tuner.target_note.frequency, test_case.pitch_standard)
 
     measure_from := len(samples) - int(MEASURE_S * SAMPLERATE)
     readout_track := -1
@@ -203,10 +203,6 @@ run_case :: proc(test_case: Case) -> (result: Result) {
         core.run_phase_detection(strobe, pitch.is_tonal)
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
         if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) {
-            retune(strobe, tuner.target_note.frequency, test_case.pitch_standard)
-        }
-        off_target := strobe.base_freq_hz != tuner.target_note.frequency
-        if off_target && !core.strobe_shows_note(strobe, fundamental_only = true) {
             retune(strobe, tuner.target_note.frequency, test_case.pitch_standard)
         }
         if !pitch.fresh || start < measure_from do continue
