@@ -33,6 +33,9 @@ STROBE_SPEED :: 0.025
 FRAME_SAMPLES :: SAMPLERATE / 60
 
 TOLERANCE_CENTS :: 1 // like the generated tones', see sandbox/accuracy
+// The readout further than core.READOUT_RANGE_CENTS from the note, the pitch detection's while the
+// strobe's tracks can't follow, it points the way there
+COARSE_TOLERANCE_CENTS :: 5
 
 LEAD_IN_S :: 2
 
@@ -90,6 +93,7 @@ Detection :: struct {
     // The readout's track's over the note, the note's shown that much higher, see core.readout_octaves
     octaves:    int,
     cents:      f32, // the note's plus the readout
+    fine:       bool, // the readout a strobe track's, otherwise the pitch detection's, see COARSE_TOLERANCE_CENTS
     tracks:     [len(INTERVALS)]Track,
 }
 
@@ -99,6 +103,12 @@ Run :: struct {
     pitch_standard: f32,
     expected_cents: f32, // how far the pitch should move from the original's
     error_cents:    f32,
+    // The median of the readout's move minus the shift, each detection against the original's at the same
+    // moment of the performance, the note's drift cancels moment by moment. Where both readouts are fine.
+    aligned_cents:  f32,
+    // The same where either readout is coarse, and how many detections
+    coarse_cents:   f32,
+    coarse:         int,
     expected_note:  int,
     shown_note:     int, // the most common in the sustain
     wrong_note:     int, // detections in the sustain on another note, or none
@@ -264,6 +274,10 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, re
 
     cents: [dynamic]f32
     defer delete(cents)
+    aligned_errors: [dynamic]f32
+    defer delete(aligned_errors)
+    coarse_errors: [dynamic]f32
+    defer delete(coarse_errors)
     note_counts: map[int]int
     defer delete(note_counts)
 
@@ -279,6 +293,28 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, re
 
         note_counts[detection.note_cents + 1200 * detection.octaves] += 1
         append(&cents, fold_octave(detection.cents, expected_note))
+
+        // The original at the same moment of the performance
+        original, aligned := reference.?
+        then: Detection
+        if aligned {
+            original_s := LEAD_IN_S + (detection.time_s - LEAD_IN_S) / original.ratio
+            for cursor + 1 < len(original.detections) && original.detections[cursor + 1].time_s <= original_s {
+                cursor += 1
+            }
+            then = original.detections[cursor]
+        }
+
+        // The readout's pitch on any note, e.g. the neighbour half way between them
+        if then.active {
+            moved := fold_octave(detection.cents, expected_note) - fold_octave(then.cents, original.note)
+            if detection.fine && then.fine {
+                append(&aligned_errors, moved - original.cents)
+            } else {
+                append(&coarse_errors, moved - original.cents)
+            }
+        }
+
         // On another note the tracks are other partials
         if detection.note_cents != expected_note {
             if detection.note_cents - expected_note == 1200 {
@@ -290,14 +326,6 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, re
         }
         if detection.octaves != 0 do run.partial += 1
 
-        original, aligned := reference.?
-        if !aligned do continue
-
-        original_s := LEAD_IN_S + (detection.time_s - LEAD_IN_S) / original.ratio
-        for cursor + 1 < len(original.detections) && original.detections[cursor + 1].time_s <= original_s {
-            cursor += 1
-        }
-        then := original.detections[cursor]
         if !then.active || then.note_cents != original.note do continue
 
         for track, index in detection.tracks {
@@ -336,6 +364,15 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, re
     if len(cents) > 0 {
         slice.sort(cents[:])
         run.spread_cents = percentile(cents[:], 0.9) - percentile(cents[:], 0.1)
+    }
+    if len(aligned_errors) > 0 {
+        slice.sort(aligned_errors[:])
+        run.aligned_cents = percentile(aligned_errors[:], 0.5)
+    }
+    if len(coarse_errors) > 0 {
+        slice.sort(coarse_errors[:])
+        run.coarse_cents = percentile(coarse_errors[:], 0.5)
+        run.coarse = len(coarse_errors)
     }
     return
 }
@@ -459,9 +496,13 @@ play :: proc(path: string, decode_rate: u32, pitch_standard: f32) -> (detections
         if !pitch.fresh do continue
 
         steady := core.tuner_readout(&tuner)
+        // The pitch detection's from the note it heard, the strobe's from the target, see src/app/app.odin
         readout := steady.err_cents
+        readout_note := steady.detected_note.cents
         octaves := 0
-        if readout_ready && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS {
+        fine := readout_ready && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS
+        if fine {
+            readout_note = tuner.target_note.cents
             band := strobe.bands[readout_track]
             readout = band.err_cents
             octaves = core.readout_octaves(band, tuner.target_note.frequency)
@@ -472,7 +513,8 @@ play :: proc(path: string, decode_rate: u32, pitch_standard: f32) -> (detections
             active     = tuner.active,
             note_cents = tuner.target_note.cents,
             octaves    = octaves,
-            cents      = f32(tuner.target_note.cents) + readout,
+            cents      = f32(readout_note) + readout,
+            fine       = fine,
         }
         // Lit like sandbox/accuracy counts it, an instrument's partials are whole multiples
         fade := core.STROBE_FADE_SNR_DB
@@ -507,7 +549,9 @@ decode :: proc(path: string, decode_rate: u32) -> (samples: []f32, ok: bool) {
 // An octave up only when the recording explains it, its 2nd harmonic louder than the fundamental
 passed :: proc(run: Run) -> bool {
     if run.octave > 0 && !run.second_louder do return false
-    return run.wrong_note == 0 && abs(run.error_cents) <= TOLERANCE_CENTS && run.wrong_way == {}
+    if abs(run.coarse_cents) > COARSE_TOLERANCE_CENTS do return false
+
+    return run.wrong_note == 0 && abs(run.aligned_cents) <= TOLERANCE_CENTS && run.wrong_way == {}
 }
 
 // "ok", "ok 2x>1x" when it showed the octave up the recording explains, empty when it failed
@@ -533,7 +577,7 @@ print_report :: proc(runs: []Run) {
     // The worst first
     slice.sort_by(sorted, proc(first, second: Run) -> bool {
         if first.wrong_note != second.wrong_note do return first.wrong_note > second.wrong_note
-        return abs(first.error_cents) > abs(second.error_cents)
+        return abs(first.aligned_cents) > abs(second.aligned_cents)
     })
 
     fmt.print(`
@@ -543,7 +587,11 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
 
   shift c      how far the pitch was moved, from the decode rate, so not exactly a round number
   A            the pitch standard the tuner was set to
-  error c      readout's move minus the shift, within 1c passes
+  error c      readout's move minus the shift, the medians over the sustain
+  aligned      the same, each detection against the original's at the same moment of the performance,
+               the note's drift cancels, where both readouts are the strobe's, within 1c passes
+  coarse       the same where either readout is the pitch detection's, the note over 30c from its
+               target where the strobe's tracks can't follow, within 5c passes, - for none
   shown/named  the note the tuner showed most, then the filename's note if they differ
   wrong note   detections in the sustain on another note or dark, out of all of them in the sustain,
                an octave down or two up count here too
@@ -555,7 +603,7 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
                4th harmonic's track 8 times
   spread c     readout from the 10th to the 90th percentile over the sustain, the player's vibrato too
   lit s        seconds the note was lit
-  ok           passed: no wrong note, error within 1c, no track turning the wrong way
+  ok           passed: no wrong note, aligned within 1c, coarse within 5c, no track turning the wrong way
   ok 2x>1x     passed showing the octave up, the original's 2nd harmonic is louder than its
                fundamental so the tuner follows it, e.g. a bass with a weak fundamental. An octave
                up on a recording whose fundamental is the louder fails.
@@ -564,21 +612,23 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
 `)
 
     // Plain ASCII, the padding counts bytes and a ¢ is two
-    rule := "+-----------------+----------+-----+---------+-------------+------------+------------+------------+-------+------------+---------+-------+----------+"
+    rule := "+-----------------+----------+-----+---------+---------+---------+-------------+------------+------------+------------+-------+------------+---------+-------+----------+"
     fmt.println()
     fmt.println(rule)
-    fmt.println("| file            | shift c  | A   | error c | shown/named | wrong note | octave up  | partial    | 1x dB | wrong way  | spread c| lit s |          |")
+    fmt.println("| file            | shift c  | A   | error c | aligned | coarse  | shown/named | wrong note | octave up  | partial    | 1x dB | wrong way  | spread c| lit s |          |")
     fmt.println(rule)
     for run in sorted {
         note := note_name(run.shown_note)
         if run.shown_note != run.expected_note do note = fmt.tprintf("%v/%v", note, note_name(run.expected_note))
         fmt.printfln(
             // Odin pads a width on a float with zeros, they go in as text
-            "| %-15v | %8v | %3v | %7v | %-11v | %10v | %10v | %10v | %5v | %-10v | %7v | %5v | %-8v |",
+            "| %-15v | %8v | %3v | %7v | %7v | %7v | %-11v | %10v | %10v | %10v | %5v | %-10v | %7v | %5v | %-8v |",
             os.stem(run.file),
             "original" if run.shift_cents == 0 else fmt.tprintf("%+.2f", run.shift_cents),
             fmt.tprintf("%.0f", run.pitch_standard),
             fmt.tprintf("%+.2f", run.error_cents),
+            "-" if run.shift_cents == 0 else fmt.tprintf("%+.2f", run.aligned_cents),
+            "-" if run.coarse == 0 else fmt.tprintf("%+.2f", run.coarse_cents),
             note,
             fmt.tprintf("%v/%v", run.wrong_note, run.measured),
             fmt.tprintf("%v/%v", run.octave, run.measured),
@@ -596,7 +646,13 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
     for run in runs {
         if !passed(run) do failed += 1
     }
-    fmt.printfln("\n%v of %v runs off by more than %v¢, on another note or turning the wrong way", failed, len(runs), TOLERANCE_CENTS)
+    fmt.printfln(
+        "\n%v of %v runs off by more than %v¢, %v¢ coarse, on another note or turning the wrong way",
+        failed,
+        len(runs),
+        TOLERANCE_CENTS,
+        COARSE_TOLERANCE_CENTS,
+    )
 }
 
 // Each original's harmonics of the named note, the level from the strongest and the peak's cents from it
@@ -628,14 +684,17 @@ print_spectra :: proc(spectra: []Spectrum) {
 }
 
 print_csv :: proc(runs: []Run) {
-    fmt.println("file,shift_cents,pitch_standard,error_cents,expected_note,shown_note,wrong_note,octave,partial,measured,fundamental_db,wrong_way,spread_cents,lit_s")
+    fmt.println("file,shift_cents,pitch_standard,error_cents,aligned_cents,coarse_cents,coarse,expected_note,shown_note,wrong_note,octave,partial,measured,fundamental_db,wrong_way,spread_cents,lit_s")
     for run in runs {
         fmt.printfln(
-            "%v,%.3f,%.0f,%.3f,%v,%v,%v,%v,%v,%v,%.1f,%v,%.2f,%.2f",
+            "%v,%.3f,%.0f,%.3f,%.3f,%.3f,%v,%v,%v,%v,%v,%v,%v,%.1f,%v,%.2f,%.2f",
             run.file,
             run.shift_cents,
             run.pitch_standard,
             run.error_cents,
+            run.aligned_cents,
+            run.coarse_cents,
+            run.coarse,
             note_name(run.expected_note),
             note_name(run.shown_note),
             run.wrong_note,
