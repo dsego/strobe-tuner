@@ -5,7 +5,8 @@
 //   odin run sandbox/recordings -o:speed -- [folder] [csv]
 //
 // Every wav, mp3 and flac in the folder, sandbox/samples by default, one note per file named at the end of
-// the filename, e.g. bass_E1.wav. csv prints the runs as CSV instead, to diff two commits.
+// the filename, e.g. bass_E1.wav, middle C as C4. A folder in MIDDLE_C3_FOLDERS names middle C as C3 and
+// reads an octave up, a %23 in a filename reads as #. csv prints the runs as CSV instead, to diff two commits.
 //
 // The shift decodes at SAMPLERATE × 2^(−cents/1200) and plays at SAMPLERATE, the pitch rises by the cents
 // and the length shrinks by the same ratio. Report only, nothing fails the run.
@@ -35,6 +36,9 @@ TOLERANCE_CENTS :: 1 // like the generated tones', see sandbox/accuracy
 
 LEAD_IN_S :: 2
 
+// Named with middle C as C3, as Yamaha, Ableton and many sample libraries do
+MIDDLE_C3_FOLDERS :: [?]string{"sandbox/samples"}
+
 // ±100 lands on the next note
 SHIFTS_CENTS :: [?]f32{0.5, -0.5, 3, -3, 7, -7, 23, -23, 49, -49, 100, -100}
 
@@ -59,12 +63,16 @@ SHOW_SPECTRA :: #config(SHOW_SPECTRA, false)
 // Each peak searched this far either side of its harmonic, a real string's partials run sharp
 PEAK_SEARCH_CENTS :: 50
 PEAK_STEP_CENTS :: 2
+// The named note looks an octave too low with its 1x and 3x both this far under the strongest, a real
+// note's 3x stays even when its fundamental is weak
+NAMED_LOW_DB :: -40
 
 Spectrum :: struct {
     file:          string,
     note:          int,
     levels_db:     [len(HARMONICS)]f32, // the peak's, from the strongest
     offsets_cents: [len(HARMONICS)]f32, // the peak's from its harmonic
+    named_low:     bool, // see NAMED_LOW_DB
 }
 
 Track :: struct {
@@ -123,6 +131,11 @@ main :: proc() {
     defer os.file_info_slice_delete(files, context.allocator)
     slice.sort_by(files, proc(first, second: os.File_Info) -> bool { return first.name < second.name })
 
+    named_octave_cents := 0
+    for c3_folder in MIDDLE_C3_FOLDERS {
+        if strings.trim_right(folder, "/") == c3_folder do named_octave_cents = 1200
+    }
+
     runs: [dynamic]Run
     defer delete(runs)
 
@@ -134,7 +147,7 @@ main :: proc() {
         if extension != ".wav" && extension != ".mp3" && extension != ".flac" do continue
 
         if !csv do fmt.eprintln("Playing", file.name)
-        run_file(&runs, &spectra, file.fullpath, file.name)
+        run_file(&runs, &spectra, file.fullpath, file.name, named_octave_cents)
     }
 
     if csv {
@@ -143,10 +156,14 @@ main :: proc() {
         print_report(runs[:])
         when SHOW_SPECTRA do print_spectra(spectra[:])
     }
+
+    for spectrum in spectra {
+        if spectrum.named_low do fmt.eprintfln("%v: %v looks an octave low, nothing at its 1x and 3x", spectrum.file, note_name(spectrum.note))
+    }
 }
 
 // The original, then every shift against it
-run_file :: proc(runs: ^[dynamic]Run, spectra: ^[dynamic]Spectrum, path, name: string) {
+run_file :: proc(runs: ^[dynamic]Run, spectra: ^[dynamic]Spectrum, path, name: string, named_octave_cents: int) {
     original := play(path, 0, 440)
     defer delete(original)
 
@@ -164,9 +181,9 @@ run_file :: proc(runs: ^[dynamic]Run, spectra: ^[dynamic]Spectrum, path, name: s
     }
 
     // The note in the filename, after the last underscore, or the one the original shows
-    stem := os.stem(name)
+    stem, _ := strings.replace_all(os.stem(name), "%23", "#", context.temp_allocator)
     filename_note, named := core.parse_note(stem[strings.last_index_byte(stem, '_') + 1:])
-    expected_note := filename_note.cents
+    expected_note := filename_note.cents + named_octave_cents
     if !named {
         unfolded, _ := median_cents(original[:], sustain, nil)
         expected_note = 100 * int(math.round(unfolded / 100))
@@ -372,6 +389,10 @@ measure_spectrum :: proc(samples: []f32, sustain: [2]f32, note: int) -> (spectru
 
     strongest := slice.max(powers[:])
     for power, index in powers do spectrum.levels_db[index] = f32(10 * math.log10(power / strongest))
+
+    fundamental_index, _ := slice.linear_search(harmonics[:], 1)
+    third_index, _ := slice.linear_search(harmonics[:], 3)
+    spectrum.named_low = spectrum.levels_db[fundamental_index] < NAMED_LOW_DB && spectrum.levels_db[third_index] < NAMED_LOW_DB
     return
 }
 
