@@ -180,6 +180,10 @@ Core steps:
 
 Every track's window is sized for a band a semitone wide around the fundamental, about 0.16 s at 110 Hz. The window is gamma shaped, weighted toward the newest samples like an analog lock-in's low-pass, so the phase is measured as of about 50 ms ago instead of half the window. A semitone lets the neighbouring partials in, so the window is also smoothed with a box one period of the note long (two for a fifth), a comb whose nulls fall on every other partial.
 
+Measured once a frame, a track more than half the frame rate off would alias, 30 Hz at 60 fps, and a high note's partial is that far off within a semitone. So the phase is measured a hop apart through the frame's new samples, a quarter of the note's period, and the frame's advance is the sum of the steps between the hops, each the shortest way. Every hop's phase is against the same reference on the sample clock, so the steps telescope: their sum is the newest phase minus the previous frame's plus the full turns in between, and nothing adds up from frame to frame. A step crossing ±180° counts a full turn, and each step stays under half a turn up to twice the note's frequency off, so the hops count the full turns a single measurement a frame would lose.
+
+<img src="docs/phase-hops.svg" alt="One frame of a track: the reference runs on the absolute sample clock, a window a hop apart through the frame's new samples each gives a phase against it, and the steps between them add up to the newest phase minus the previous frame's plus the full turns, which a single measurement a frame loses.">
+
 The strobe phase is rescaled so each note spins at the same rate per cent of detuning, and since it's a measured phase it can be multiplied by any factor, which is what the track speed, the fast toggle and the vernier mode are built on.
 
 
