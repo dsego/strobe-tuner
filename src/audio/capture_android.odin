@@ -116,10 +116,10 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
 
 
 // Asks for the microphone, the input opens once it's allowed
-init :: proc() -> (self: ^Capture, ok: bool) {
-    self = new(Capture)
+init :: proc() -> ^Capture {
+    self := new(Capture)
     open_stream_on_active_device(self)
-    return self, true
+    return self
 }
 
 

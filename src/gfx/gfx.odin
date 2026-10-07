@@ -27,15 +27,16 @@ import "core:math/linalg"
 //   frame_time() -> f32, dpi_scale() -> f32
 //   window_size() -> [2]f32, safe_area() -> Rect   in points
 //   in_background() -> bool, wait_for_foreground()  a phone, nothing may be drawn in the background
-//   open_url(url), system_back()        the latter what Android does with its back button
+//   system_back()                       what Android does with its back button
 //   limit_fps(fps)                      fewer frames while there's nothing to show, 0 for the display's rate
 //
 //   key_pressed(key), key_down(key), mouse_position(), mouse_pressed(), mouse_down(), mouse_wheel()
 //
-//   Texture, load_texture(png), load_texture_rgba(width, height, pixels), unload_texture(texture)
+//   Texture, load_texture_rgba(width, height, pixels), unload_texture(texture)
+//   create_gray_texture(width, height), update_texture(texture, pixels)
 //   Font, load_font(ttf, size, codepoints), unload_font(font)
 //   draw_texture(texture, source, dest, tint), negative source width/height flips the image
-//   draw_rect(position, size, color), draw_rect_lines(rect, thickness, color)
+//   draw_rect(position, size, color)
 //   draw_line(start, end, thickness, color), draw_circle(center, radius, color)
 //   draw_text(font, text, position, size, spacing, color), measure_text(font, text, size, spacing)
 //   begin_scissor(rect), end_scissor(), set_blend_mode(mode)
@@ -77,8 +78,6 @@ PURPLE :: Color{200, 122, 255, 255}
 Key :: enum {
     LEFT,
     RIGHT,
-    UP,
-    DOWN,
     TAB,
     SPACE,
     COMMA,
@@ -87,7 +86,6 @@ Key :: enum {
     I,
     R,
     W,
-    X,
     LEFT_SHIFT,
     RIGHT_SHIFT,
     LEFT_SUPER,

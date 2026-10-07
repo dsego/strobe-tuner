@@ -66,30 +66,47 @@ main :: proc() {
     }{{"E1", 41.2}, {"A2", 110}, {"A4", 440}}
 
     for note in notes {
+        // A track per partial, each on the fundamental's window
         window_size := core.dft_window_size(note.freq_hz, SAMPLERATE, core.DFT_RESOLUTION_CENTS)
-        dft: core.SingleFreqDFT
-        defer core.destroy_dft(&dft)
-        core.set_dft_freq(&dft, note.freq_hz / SAMPLERATE, core.gamma_comb_window(window_size, SAMPLERATE / note.freq_hz))
+        window := core.gamma_comb_window(window_size, SAMPLERATE / note.freq_hz)
+        dfts: [TRACKS]core.SingleFreqDFT
+        tracks: [TRACKS]^core.SingleFreqDFT
+        for &dft, index in dfts {
+            core.set_dft_freq(&dft, f32(index + 1) * note.freq_hz / SAMPLERATE, window)
+            tracks[index] = &dft
+        }
+        defer for &dft in dfts do core.destroy_dft(&dft)
 
+        // Each track on its own, then all of them at once as run_phase_detection does
         stopwatch: time.Stopwatch
         time.stopwatch_start(&stopwatch)
         for _ in 0 ..< ITERATIONS {
-            sink += real(core.run_single_dft(&dft, samples))
+            for &dft in dfts do sink += real(core.run_single_dft(&dft, samples))
         }
         time.stopwatch_stop(&stopwatch)
-        microseconds := time.duration_microseconds(time.stopwatch_duration(stopwatch)) / ITERATIONS
+        separate := time.duration_microseconds(time.stopwatch_duration(stopwatch)) / ITERATIONS
+
+        stopwatch = {}
+        time.stopwatch_start(&stopwatch)
+        for _ in 0 ..< ITERATIONS {
+            core.run_single_dfts(tracks[:], samples)
+            sink += real(dfts[0].dft)
+        }
+        time.stopwatch_stop(&stopwatch)
+        fused := time.duration_microseconds(time.stopwatch_duration(stopwatch)) / ITERATIONS
 
         // Of one core, every track measured a hop apart through each frame's new samples, as
-        // determine_band_phase does, the hops of a frame rounded up
+        // run_phase_detection does, the hops of a frame rounded up
         hops_per_frame := math.ceil(core.HOPS_PER_PERIOD * note.freq_hz / FRAMES_PER_SECOND)
-        core_share := microseconds * TRACKS * f64(hops_per_frame) * FRAMES_PER_SECOND / 1e6
+        core_share := fused * f64(hops_per_frame) * FRAMES_PER_SECOND / 1e6
         fmt.printfln(
-            "Single bin DFT, %v (%v samples): %.1f µs, %v hops a frame, %v tracks at %v fps %.2f%% of a core",
+            "Single bin DFTs, %v (%v samples, %v tracks): %.1f µs apart, %.1f µs fused, %v hops a frame at %v fps %.2f%% of a core",
             note.name,
-            dft.window_size,
-            microseconds,
-            hops_per_frame,
+            dfts[0].window_size,
             TRACKS,
+            separate,
+            fused,
+            hops_per_frame,
             FRAMES_PER_SECOND,
             100 * core_share,
         )

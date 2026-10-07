@@ -38,11 +38,8 @@ TABULAR_CODEPOINTS :: "0123456789.+-×½#ABCDEFGHz¢"
 // The codepoints are in the style.css of the @phosphor-icons/web package.
 ICON_SLIDERS: cstring : "\ue432"
 ICON_CARET_UP: cstring : "\ue13c"
-ICON_TRASH: cstring : "\ue4a8"
-ICON_PLUS_MINUS: cstring : "\ue3d8"
 ICON_PIANO_KEYS: cstring : "\ue9c8"
 ICON_GUITAR: cstring : "\uea8a"
-ICON_GEAR: cstring : "\ue272"
 ICON_MICROPHONE: cstring : "\ue326"
 ICON_CARET_DOWN: cstring : "\ue136"
 ICON_MINUS: cstring : "\ue32a"
@@ -53,7 +50,7 @@ ICON_CARET_LEFT: cstring : "\ue138"
 ICON_CARET_RIGHT: cstring : "\ue13a"
 ICON_X: cstring : "\ue4f6"
 
-ICON_CODEPOINTS :: "\ue432\ue13c\ue4a8\ue3d8\ue9c8\uea8a\ue272\ue326\ue136\ue32a\ue3d4"
+ICON_CODEPOINTS :: "\ue432\ue13c\ue9c8\uea8a\ue326\ue136\ue32a\ue3d4"
 
 // Phosphor Bold, cut down the same way from Phosphor-Bold.ttf to Phosphor-Bold-Icons.ttf, for the large
 // steppers: beside their 32pt value the regular stroke is too thin. And with ICON_SHEET_CODEPOINTS the
@@ -100,27 +97,33 @@ lerp_font :: proc(small, large: PixelFont, amount: f32) -> PixelFont {
 }
 
 PixelFonts :: struct {
-    scale:           f32, // the DPI scale they were loaded for
-    label:           PixelFont,
-    label_large:     PixelFont,
-    label_small:     PixelFont,
-    label_times:     PixelFont, // the × after a label's digits, Inter's is only as tall as a lowercase letter
-    title:           PixelFont,
-    icon:            PixelFont,
-    icon_large:      PixelFont,
-    icon_large_bold: PixelFont, // the large steppers
-    icon_sheet:      PixelFont, // the sheet's ✕, ‹ and ›
-    note:            PixelFont, // the ruler's target note
-    neighbour:       PixelFont,
-    octave:          PixelFont,
-    note_sharp:      PixelFont,
-    neighbour_sharp: PixelFont,
-    readout:         PixelFont,
-    strobe_arrow:    PixelFont,
-    offset_value:    PixelFont,
-    band_label:      PixelFont, // each track's partial and cents on the strobe
-    band_label_small: PixelFont, // a track's frequency and its offset
+    scale:       f32, // the DPI scale they were loaded for
+    using fonts: struct {
+        label:            PixelFont,
+        label_large:      PixelFont,
+        label_small:      PixelFont,
+        label_times:      PixelFont, // the × after a label's digits, Inter's is only as tall as a lowercase letter
+        title:            PixelFont,
+        icon:             PixelFont,
+        icon_large:       PixelFont,
+        icon_large_bold:  PixelFont, // the large steppers
+        icon_sheet:       PixelFont, // the sheet's ✕, ‹ and ›
+        note:             PixelFont, // the ruler's target note
+        neighbour:        PixelFont,
+        octave:           PixelFont,
+        note_sharp:       PixelFont,
+        neighbour_sharp:  PixelFont,
+        readout:          PixelFont,
+        strobe_arrow:     PixelFont,
+        offset_value:     PixelFont,
+        band_label:       PixelFont, // each track's partial and cents on the strobe
+        band_label_small: PixelFont, // a track's frequency and its offset
+    },
 }
+
+// The fonts one after the other, unloaded in a loop
+FONT_COUNT :: size_of(PixelFonts{}.fonts) / size_of(PixelFont)
+#assert(FONT_COUNT * size_of(PixelFont) == size_of(PixelFonts{}.fonts))
 
 pixel_fonts: PixelFonts
 
@@ -142,26 +145,26 @@ update_pixel_fonts :: proc() {
         return {gfx.load_font(ttf, i32(pixels), codepoints), pixels / scale}
     }
 
-    pixel_fonts = {
-        scale           = scale,
-        label           = load(inter_medium, LABEL_SIZE, scale, FONT_CODEPOINTS),
-        label_large     = load(inter_medium, LABEL_LARGE_SIZE, scale, FONT_CODEPOINTS),
-        label_small     = load(inter_medium, LABEL_SMALL_SIZE, scale, FONT_CODEPOINTS),
-        label_times     = load(inter_medium, LABEL_TIMES_SIZE, scale, "×"),
-        title           = load(inter_bold, TITLE_SIZE, scale, FONT_CODEPOINTS),
-        icon            = load(phosphor, ICON_SIZE, scale, ICON_CODEPOINTS),
-        icon_large      = load(phosphor, ICON_LARGE_SIZE, scale, ICON_CODEPOINTS),
-        icon_large_bold = load(phosphor_bold, ICON_LARGE_SIZE, scale, ICON_BOLD_CODEPOINTS),
-        icon_sheet      = load(phosphor_bold, ICON_SHEET_SIZE, scale, ICON_SHEET_CODEPOINTS),
-        note            = load(inter_medium, RULER_SCALE * RULER_NOTE_SIZE, scale, "ABCDEFG"),
-        neighbour       = load(inter_medium, RULER_SCALE * RULER_NEIGHBOUR_SIZE, scale, "ABCDEFG"),
-        octave          = load(inter_medium, RULER_SCALE * RULER_OCTAVE_SIZE, scale, "0123456789"),
-        note_sharp      = load(noto_sans_mono, RULER_SCALE * RULER_NOTE_SHARP_SIZE, scale, "♯"),
-        neighbour_sharp = load(noto_sans_mono, RULER_SCALE * RULER_NEIGHBOUR_SHARP_SIZE, scale, "♯"),
-        readout         = load(inter_tabular, RULER_SCALE * READOUT_SIZE, scale, TABULAR_CODEPOINTS),
-        strobe_arrow    = load(inter_medium, STROBE_ARROW_SIZE, scale, "◀▶"),
-        offset_value    = load(inter_medium, OFFSET_VALUE_SIZE, scale, "ABCDEFG#0123456789.+-¢"),
-        band_label      = load(inter_tabular, LABEL_LARGE_SIZE, scale, TABULAR_CODEPOINTS),
+    pixel_fonts.scale = scale
+    pixel_fonts.fonts = {
+        label            = load(inter_medium, LABEL_SIZE, scale, FONT_CODEPOINTS),
+        label_large      = load(inter_medium, LABEL_LARGE_SIZE, scale, FONT_CODEPOINTS),
+        label_small      = load(inter_medium, LABEL_SMALL_SIZE, scale, FONT_CODEPOINTS),
+        label_times      = load(inter_medium, LABEL_TIMES_SIZE, scale, "×"),
+        title            = load(inter_bold, TITLE_SIZE, scale, FONT_CODEPOINTS),
+        icon             = load(phosphor, ICON_SIZE, scale, ICON_CODEPOINTS),
+        icon_large       = load(phosphor, ICON_LARGE_SIZE, scale, ICON_CODEPOINTS),
+        icon_large_bold  = load(phosphor_bold, ICON_LARGE_SIZE, scale, ICON_BOLD_CODEPOINTS),
+        icon_sheet       = load(phosphor_bold, ICON_SHEET_SIZE, scale, ICON_SHEET_CODEPOINTS),
+        note             = load(inter_medium, RULER_SCALE * RULER_NOTE_SIZE, scale, "ABCDEFG"),
+        neighbour        = load(inter_medium, RULER_SCALE * RULER_NEIGHBOUR_SIZE, scale, "ABCDEFG"),
+        octave           = load(inter_medium, RULER_SCALE * RULER_OCTAVE_SIZE, scale, "0123456789"),
+        note_sharp       = load(noto_sans_mono, RULER_SCALE * RULER_NOTE_SHARP_SIZE, scale, "♯"),
+        neighbour_sharp  = load(noto_sans_mono, RULER_SCALE * RULER_NEIGHBOUR_SHARP_SIZE, scale, "♯"),
+        readout          = load(inter_tabular, RULER_SCALE * READOUT_SIZE, scale, TABULAR_CODEPOINTS),
+        strobe_arrow     = load(inter_medium, STROBE_ARROW_SIZE, scale, "◀▶"),
+        offset_value     = load(inter_medium, OFFSET_VALUE_SIZE, scale, "ABCDEFG#0123456789.+-¢"),
+        band_label       = load(inter_tabular, LABEL_LARGE_SIZE, scale, TABULAR_CODEPOINTS),
         band_label_small = load(inter_tabular, LABEL_SIZE, scale, TABULAR_CODEPOINTS),
     }
 }
@@ -169,25 +172,9 @@ update_pixel_fonts :: proc() {
 unload_pixel_fonts :: proc() {
     if pixel_fonts.scale == 0 do return
 
-    gfx.unload_font(pixel_fonts.label.font)
-    gfx.unload_font(pixel_fonts.label_large.font)
-    gfx.unload_font(pixel_fonts.label_small.font)
-    gfx.unload_font(pixel_fonts.label_times.font)
-    gfx.unload_font(pixel_fonts.title.font)
-    gfx.unload_font(pixel_fonts.icon.font)
-    gfx.unload_font(pixel_fonts.icon_large.font)
-    gfx.unload_font(pixel_fonts.icon_large_bold.font)
-    gfx.unload_font(pixel_fonts.icon_sheet.font)
-    gfx.unload_font(pixel_fonts.note.font)
-    gfx.unload_font(pixel_fonts.neighbour.font)
-    gfx.unload_font(pixel_fonts.octave.font)
-    gfx.unload_font(pixel_fonts.note_sharp.font)
-    gfx.unload_font(pixel_fonts.neighbour_sharp.font)
-    gfx.unload_font(pixel_fonts.readout.font)
-    gfx.unload_font(pixel_fonts.strobe_arrow.font)
-    gfx.unload_font(pixel_fonts.offset_value.font)
-    gfx.unload_font(pixel_fonts.band_label.font)
-    gfx.unload_font(pixel_fonts.band_label_small.font)
+    fonts := transmute([FONT_COUNT]PixelFont)pixel_fonts.fonts
+    for pixel_font in fonts do gfx.unload_font(pixel_font.font)
+
     pixel_fonts = {}
 }
 

@@ -153,7 +153,6 @@ strobe_track_at :: proc(shape: StrobeShape, rect: gfx.Rect, scale: f32, band_cou
     geometry := strobe_geometry(shape, rect, scale, band_count)
     if !gfx.point_in_rect(point, rect) do return -1
 
-
     if shape == .FLAT {
         // The first track is the bottom one
         order := int(math.floor((point.y - geometry.y) / geometry.band_height))
@@ -528,7 +527,7 @@ update_band_visibility :: proc(
     fade := core.STROBE_FADE_SNR_DB
     alias := STROBE_ALIAS_FADE_STRIPES
     target := math.smoothstep(fade[0], fade[1], band.snr_db) * min(NARROW_BAND_CONTRAST * response, 1)
-    target *=1 - math.smoothstep(alias[0], alias[1], stripes_per_s * frame_time)
+    target *= 1 - math.smoothstep(alias[0], alias[1], stripes_per_s * frame_time)
 
     alpha := 1.0 - math.exp(-gfx.frame_time() / STROBE_LOOK_TIME_S)
     visibility := &self.band_visibility[band_index]
@@ -608,8 +607,8 @@ strobe_tracks :: proc(
         }
 
         // How fast the track's own stripes, a period of the shader's sine, move. By the drift, the phase as
-        // measured, averaged: the readout's rate holds on a weak partial while its phase still moves. Vernier tracks by the first one's, at their own speed. The lamp's tracks move by the
-        // screen, about as fast.
+        // measured, averaged: the readout's rate holds on a weak partial while its phase still moves. Vernier
+        // tracks by the first one's, at their own speed. The lamp's tracks move by the screen, about as fast.
         frame_time := min(gfx.frame_time(), STROBE_MAX_FRAME_TIME_S)
         drift_cents := bands[0].drift_cents if mode == .VERNIER else band.drift_cents
         drift_hz := band.freq_hz * (math.pow(2, drift_cents / 1200) - 1)

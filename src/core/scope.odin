@@ -46,6 +46,7 @@
 package core
 
 import "core:math"
+import "core:slice"
 import "core:testing"
 
 
@@ -167,7 +168,7 @@ set_scope_freq :: proc(self: ^Scope, freq_hz: f64) {
 }
 
 clear_scope :: proc(self: ^Scope) {
-    for &cell in self.screen do cell = 0
+    slice.zero(self.screen)
     self.fade_gain = 1
 }
 
@@ -256,19 +257,19 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
     }
 }
 
-// The beam moves on from the sample before the previous one to the previous one, a curve through them
-// needs the newest one too (Catmull-Rom). It leaves a dot in every cell on the way, all as long a time
-// apart, so it's dimmer where it moves fast. position is the newest sample's.
-move_beam :: proc(self: ^Scope, position: f64, sample: f32, brightness: f64) {
-    // The smooth curve through four samples, between the two in the middle. progress is 0 at from and 1
-    // at to, the samples before and after set the curve's direction there.
-    curve_between :: proc(before, from, to, after: f32, progress: f32) -> f32 {
-        slope := to - before
-        bend := 2 * before - 5 * from + 4 * to - after
-        twist := 3 * from - before - 3 * to + after
-        return 0.5 * (2 * from + slope * progress + bend * progress * progress + twist * progress * progress * progress)
-    }
+// The smooth curve through four points between the two in the middle (Catmull-Rom), of values or of
+// positions. progress is 0 at from and 1 at to, the points before and after set the curve's direction there.
+catmull_rom :: proc(before, from, to, after: $T, progress: f32) -> T {
+    slope := to - before
+    bend := 2 * before - 5 * from + 4 * to - after
+    twist := 3 * from - before - 3 * to + after
+    return 0.5 * (2 * from + slope * progress + bend * progress * progress + twist * progress * progress * progress)
+}
 
+// The beam moves on from the sample before the previous one to the previous one, a curve through them
+// needs the newest one too. It leaves a dot in every cell on the way, all as long a time apart, so it's
+// dimmer where it moves fast. position is the newest sample's.
+move_beam :: proc(self: ^Scope, position: f64, sample: f32, brightness: f64) {
     before, from, to, after := self.recent[0], self.recent[1], self.recent[2], sample
     self.recent = {from, to, after}
 
@@ -283,7 +284,7 @@ move_beam :: proc(self: ^Scope, position: f64, sample: f32, brightness: f64) {
     from_position := position - 2 * self.step
     for dot in 0 ..< dots {
         progress := (f32(dot) + 0.5) / f32(dots)
-        value := curve_between(before, from, to, after, progress)
+        value := catmull_rom(before, from, to, after, progress)
         beam_dot(self, from_position + f64(progress) * self.step, value, brightness / f64(dots))
     }
 }
@@ -329,8 +330,8 @@ scope_from_above :: proc(self: ^Scope, shape: ScopeShape) -> (heights: []f32, dw
         return (0.5 - (f32(row) + 0.5) / f32(self.rows)) / (0.5 * SCOPE_FILL)
     }
 
-    for &height in self.heights do height = 0
-    for &time in self.dwell do time = 0
+    slice.zero(self.heights)
+    slice.zero(self.dwell)
 
     for cell, i in self.screen {
         if cell == 0 do continue

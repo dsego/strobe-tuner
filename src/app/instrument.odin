@@ -303,10 +303,7 @@ gui_instrument :: proc(
     }
 
     if preset >= 0 {
-        names := INSTRUMENT_NAMES
-        options := make([]GuiOption, len(Instrument), context.temp_allocator)
-        for instrument in Instrument do options[int(instrument)] = {i32(instrument), names[instrument]}
-
+        options := instrument_options(0)
         rect := settings_row(sheet_layout, 1, "Instrument", 176)
         selected := int(setup.instrument)
         gui_settings_dropdown(menu, .INSTRUMENT, rect, options, &selected, down = true)
@@ -327,10 +324,7 @@ gui_instrument :: proc(
     {
         // The built-in instruments, then the preset slots by number with what's in them like the corner, a
         // line between them. An unused slot is chromatic as it starts, its instrument is picked under it.
-        names := INSTRUMENT_NAMES
-        options := make([]GuiOption, len(Instrument) + PRESET_SLOTS, context.temp_allocator)
-        for instrument in Instrument do options[int(instrument)] = {i32(instrument), names[instrument]}
-
+        options := instrument_options(PRESET_SLOTS)
         for slot in 0 ..< PRESET_SLOTS {
             option := len(Instrument) + slot
             held := preset_setup(config, slot)
@@ -357,4 +351,13 @@ gui_instrument :: proc(
     }
 
     return
+}
+
+// The built-in instruments by name, and room after them for extra options. Lives until the end of the frame.
+instrument_options :: proc(extra: int) -> []GuiOption {
+    names := INSTRUMENT_NAMES
+    options := make([]GuiOption, len(Instrument) + extra, context.temp_allocator)
+    for instrument in Instrument do options[int(instrument)] = {i32(instrument), names[instrument]}
+
+    return options
 }

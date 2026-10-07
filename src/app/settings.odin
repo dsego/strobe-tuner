@@ -153,16 +153,18 @@ gui_settings :: proc(
         changed = true
     }
 
-    // A phone routes the input itself: built-in mic, headset or an audio interface
+    // A phone routes the input itself: built-in mic, headset or an audio interface. Without any the row
+    // stays empty, the strobe area says so.
     when !gfx.MOBILE {
         // The menu opens upwards over the rows above
         input_rect := settings_row(sheet_layout, row, "Input", 240)
         row += 1
 
         // TODO: add refresh button to show newly connected devices
-        gui_settings_dropdown(menu, .INPUT, input_rect, audio_devices, audio_device_index, left_pad = 36)
-
-        draw_centered_icon(ICON_MICROPHONE, {input_rect.x + 12, input_rect.y, ICON_SIZE, input_rect.height}, icon_color)
+        if len(audio_devices) > 0 {
+            gui_settings_dropdown(menu, .INPUT, input_rect, audio_devices, audio_device_index, left_pad = 36)
+            draw_centered_icon(ICON_MICROPHONE, {input_rect.x + 12, input_rect.y, ICON_SIZE, input_rect.height}, icon_color)
+        }
     }
 
     {
@@ -233,18 +235,27 @@ gui_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (chan
         gui_steps(sheet_layout, row, "Persistence", STEP_LABELS, &config.scope_persistence_ms, SCOPE_PERSISTENCE_STEPS_MS)
         gui_settings_segmented(sheet_layout, row, "Gain", {"Auto", "Hold"}, &config.scope_gain)
     }
+}
 
-    // A value that's one of a few steps, a label each. None is picked for a value set in the config file
-    // between them.
-    gui_steps :: proc(sheet_layout: SheetLayout, row: ^int, label: cstring, labels: []cstring, value: ^f32, steps: [$N]f32) {
-        step := -1
-        for step_value, index in steps {
-            if value^ == step_value do step = index
-        }
-        if gui_settings_segmented(sheet_layout, row, label, labels, &step, WIDE_SEGMENT_WIDTH) {
-            value^ = steps[step]
-        }
+// A settings row of a value that's one of a few steps, a label each. None is picked for a value set in the
+// config file between them. Returns whether a tap changed value.
+gui_steps :: proc(
+    sheet_layout: SheetLayout,
+    row: ^int,
+    label: cstring,
+    labels: []cstring,
+    value: ^f32,
+    steps: [$N]f32,
+    segment_width: f32 = WIDE_SEGMENT_WIDTH,
+) -> bool {
+    step := -1
+    for step_value, index in steps {
+        if value^ == step_value do step = index
     }
+    if !gui_settings_segmented(sheet_layout, row, label, labels, &step, segment_width) do return false
+
+    value^ = steps[step]
+    return true
 }
 
 
@@ -313,20 +324,10 @@ gui_track_settings :: proc(
         }
     }
 
-    {
-        // On top of the strobe speed, a high partial spins faster than the rest. In percent, × is for partials.
-        speeds := [?]f32{0.25, 0.5, 1, 2}
-        labels := []cstring{"25%", "50%", "100%", "200%"}
-        rect := settings_row(sheet_layout, row, "Speed", f32(len(labels)) * SEGMENT_WIDTH)
-        row += 1
-        selected := -1
-        for speed, index in speeds {
-            if config.strobe_speeds[slot] == speed do selected = index
-        }
-        if tapped, ok := gui_segmented(rect, labels, selected); ok {
-            config.strobe_speeds[slot] = speeds[tapped]
-            changed = true
-        }
+    // On top of the strobe speed, a high partial spins faster than the rest. In percent, × is for partials.
+    speed_labels := []cstring{"25%", "50%", "100%", "200%"}
+    if gui_steps(sheet_layout, &row, "Speed", speed_labels, &config.strobe_speeds[slot], [4]f32{0.25, 0.5, 1, 2}, SEGMENT_WIDTH) {
+        changed = true
     }
 
     {
@@ -607,11 +608,12 @@ gui_stepper_buttons :: proc(
     if gui_button_repeat(touch_area(minus)) do return -1, false
     if gui_button_repeat(touch_area(plus)) do return 1, false
 
-    // Double clicking the value between the buttons puts it back to the default
+    // Double clicking the value between the buttons puts it back to the default, both clicks on this stepper
     if gui_button(touch_area({minus.x + minus.width, rect.y, plus.x - minus.x - minus.width, rect.height})) {
         now := time.tick_now()
-        double_click := time.tick_diff(stepper_last_click, now) < 400 * time.Millisecond
+        double_click := stepper_click_rect == rect && time.tick_diff(stepper_last_click, now) < 400 * time.Millisecond
         stepper_last_click = now
+        stepper_click_rect = rect
         if double_click do return 0, true
     }
 
@@ -634,6 +636,7 @@ gui_stepper_buttons :: proc(
 stepper_scroll: f32
 stepper_scroll_rect: gfx.Rect
 stepper_last_click: time.Tick
+stepper_click_rect: gfx.Rect
 
 
 draw_centered_label :: proc(label: cstring, rect: gfx.Rect, color: gfx.Color) {

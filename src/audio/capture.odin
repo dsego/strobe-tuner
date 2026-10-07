@@ -36,6 +36,7 @@ IOS :: #config(IOS, false)
 
 Capture :: struct {
     ctx:                ma.context_type,
+    ctx_ready:          bool,
     device:             ma.device,
     device_open:        bool,
     capture_infos:      []ma.device_info, // owned by ctx, valid until the next enumeration
@@ -56,6 +57,8 @@ device_name :: proc(self: ^Capture, device_index: i32) -> string {
 }
 
 open_stream_on_active_device :: proc(self: ^Capture) -> bool {
+    if device_count(self) == 0 do return false
+
     config := ma.device_config_init(.capture)
     config.capture.format = .f32
     config.capture.channels = 1
@@ -88,22 +91,21 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
 }
 
 
-// Opens the default input, nil when there's none or it can't be opened
-init :: proc() -> (self: ^Capture, ok: bool) {
-    self = new(Capture)
+// Opens the default input. Without one, or when it can't be opened, the input stays closed and the app says
+// so, see input_failed.
+init :: proc() -> ^Capture {
+    self := new(Capture)
 
-    if failed(ma.context_init(nil, 0, nil, &self.ctx)) {
-        free(self)
-        return nil, false
-    }
+    if failed(ma.context_init(nil, 0, nil, &self.ctx)) do return self
+
+    self.ctx_ready = true
     fmt.println("Initialized miniaudio, backend:", self.ctx.backend)
 
     infos: [^]ma.device_info
     count: u32
     if failed(ma.context_get_devices(&self.ctx, nil, nil, &infos, &count)) || count == 0 {
         fmt.println("No audio input devices found")
-        destroy(self)
-        return nil, false
+        return self
     }
     self.capture_infos = infos[:count]
 
@@ -115,11 +117,8 @@ init :: proc() -> (self: ^Capture, ok: bool) {
         fmt.printfln("  %v %s %s", index, marker, device_name(self, index))
     }
 
-    if !open_stream_on_active_device(self) {
-        destroy(self)
-        return nil, false
-    }
-    return self, true
+    open_stream_on_active_device(self)
+    return self
 }
 
 
@@ -159,8 +158,10 @@ close_device :: proc(self: ^Capture) {
 
 destroy :: proc(self: ^Capture) {
     close_device(self)
-    ma.context_uninit(&self.ctx)
-    fmt.println("Terminated miniaudio")
+    if self.ctx_ready {
+        ma.context_uninit(&self.ctx)
+        fmt.println("Terminated miniaudio")
+    }
 
     delete(self.nodes)
     free(self)

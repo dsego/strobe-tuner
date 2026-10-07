@@ -17,6 +17,7 @@ package app
 import "base:runtime"
 import "core:encoding/ini"
 import "core:fmt"
+import "core:math"
 import "core:os"
 import "core:path/filepath"
 import "core:reflect"
@@ -25,6 +26,7 @@ import "core:strconv"
 import "core:strings"
 import sdl "vendor:sdl3"
 
+import "../core"
 import "../gfx"
 
 CONFIG_NAME :: "config.ini"
@@ -117,6 +119,16 @@ load_config :: proc() -> Config {
             }
         }
     }
+
+    // Hand edited out of range, or not a number, the tuner would have no note to start on
+    within :: proc(value, low, high, default: f32) -> f32 {
+        return default if math.is_nan(value) else clamp(value, low, high)
+    }
+    defaults := config_defaults
+    config.pitch_standard = within(config.pitch_standard, PITCH_STANDARD_MIN, PITCH_STANDARD_MAX, defaults.pitch_standard)
+    lowest := core.cents_to_freq(core.LOWEST_NOTE * 100, config.pitch_standard)
+    highest := core.cents_to_freq(core.HIGHEST_NOTE * 100, config.pitch_standard)
+    config.target_freq_hz = within(config.target_freq_hz, lowest, highest, defaults.target_freq_hz)
 
     return config
 }

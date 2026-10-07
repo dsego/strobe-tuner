@@ -19,6 +19,7 @@ package app
 import "core:fmt"
 import "core:math"
 
+import "../core"
 import "../gfx"
 
 // The cents over the last few seconds as a line, one of the display types.
@@ -35,7 +36,7 @@ TRACE_CURVE_STEPS :: 8 // pieces of the curve between two readings
 
 // Only the actual readings with their time, the curve through them is worked out when drawing
 TraceSample :: struct {
-    time:  f32, // seconds on the trace's clock
+    time:  f64, // seconds on the trace's clock
     cents: f32, // NaN marks where the pitch was lost, the line has a gap there
     light: f32, // 0 to 1, as lit as the strobe track's stripes
 }
@@ -44,7 +45,8 @@ Trace :: struct {
     samples: []TraceSample,
     head:    int, // where the next one goes
     count:   int,
-    clock:   f32,
+    // Since the app started, in f64: in f32 a frame would round away after a day and a half left open
+    clock:   f64,
 }
 
 create_trace :: proc() -> (self: Trace) {
@@ -69,7 +71,7 @@ push_sample :: proc(self: ^Trace, sample: TraceSample) {
 
 // Called every frame, fresh tells a new reading from the previous one repeated
 record_trace :: proc(self: ^Trace, cents, light: f32, fresh: bool, frame_time: f32) {
-    self.clock += frame_time
+    self.clock += f64(frame_time)
 
     lost := self.count > 0 && math.is_nan(trace_sample(self, self.count - 1).cents)
     if math.is_nan(cents) {
@@ -132,8 +134,8 @@ draw_cents_trace :: proc(self: ^Trace, rect: gfx.Rect, seconds, range_cents: f32
 // was lost
 draw_trace_line :: proc(self: ^Trace, plot: gfx.Rect, middle: f32, scale: [2]f32, radius: f32, color: gfx.Color) {
     // Placed by time, the newest reading is at the right edge now and scrolls left
-    point :: proc(sample: TraceSample, clock: f32, plot: gfx.Rect, middle: f32, scale: [2]f32) -> [2]f32 {
-        x := plot.x + plot.width - (clock - sample.time) * scale.x
+    point :: proc(sample: TraceSample, clock: f64, plot: gfx.Rect, middle: f32, scale: [2]f32) -> [2]f32 {
+        x := plot.x + plot.width - f32(clock - sample.time) * scale.x
         limit := plot.height / 2
         return {x, middle - clamp(sample.cents * scale.y, -limit, limit)}
     }
@@ -203,12 +205,9 @@ pen_line_to :: proc(pen: ^Pen, to: [2]f32) {
 // A curve from p1 to p2 (Catmull-Rom), p0 before it and p3 after it set its direction. The pen fades from
 // alpha1 to alpha2 along it.
 pen_curve_to :: proc(pen: ^Pen, p0, p1, p2, p3: [2]f32, alpha1, alpha2: f32) {
-    bend := 2 * p0 - 5 * p1 + 4 * p2 - p3
-    twist := 3 * p1 - p0 - 3 * p2 + p3
     for step in 1 ..= TRACE_CURVE_STEPS {
         progress := f32(step) / TRACE_CURVE_STEPS
         pen.color.a = u8(math.lerp(alpha1, alpha2, progress))
-        on_curve := 0.5 * (2 * p1 + (p2 - p0) * progress + bend * progress * progress + twist * progress * progress * progress)
-        pen_line_to(pen, on_curve)
+        pen_line_to(pen, core.catmull_rom(p0, p1, p2, p3, progress))
     }
 }

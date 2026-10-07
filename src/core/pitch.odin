@@ -111,8 +111,8 @@ destroy_pitch_detector :: proc(self: ^PitchDetector) {
 // the filters from rest and the noise floor is learned again
 reset_pitch_detector :: proc(self: ^PitchDetector) {
     slice.zero(self.samples)
-    self.highpass.z1, self.highpass.z2 = 0, 0
-    self.lowpass.z1, self.lowpass.z2 = 0, 0
+    reset_biquad(&self.highpass)
+    reset_biquad(&self.lowpass)
     reset_noise_floor(&self.noise_floor)
 }
 
@@ -125,8 +125,8 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
 
     // Samples went by that the window didn't get, the filters start from rest on the new ones
     if i64(read) < elapsed {
-        self.highpass.z1, self.highpass.z2 = 0, 0
-        self.lowpass.z1, self.lowpass.z2 = 0, 0
+        reset_biquad(&self.highpass)
+        reset_biquad(&self.lowpass)
     }
 
     if read == 0 {

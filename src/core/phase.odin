@@ -339,12 +339,9 @@ wrap_phase :: proc(phase: f64) -> f64 {
 // Measures the new samples, nothing changes without any. is_tonal is a clear pitch from the pitch detection,
 // the bands' noise floors don't learn it as the background.
 run_phase_detection :: proc(self: ^PhaseComparator, is_tonal := false) {
-    // The longest window, the lowest partial's, which isn't always the first track's, and a frame's new
-    // samples before it for the hops. The newest samples come in without delay.
+    // The window every track shares, see set_phase_comparator_freq, and a frame's new samples before it for
+    // the hops. The newest samples come in without delay.
     window_size := self.bands[0].dft.window_size
-    if self.mode == .HARMONIC {
-        for band in self.bands do window_size = max(window_size, band.dft.window_size)
-    }
     resize_sample_buffer(self, window_size + MAX_FRAME_SAMPLES)
     read, elapsed := audio_capture_read(self, self.sample_buffer[:self.buffer_len])
     if read == 0 && elapsed > 0 {
@@ -359,6 +356,19 @@ run_phase_detection :: proc(self: ^PhaseComparator, is_tonal := false) {
 
     self.available = int(elapsed)
     self.sample_clock += elapsed
+
+    // The tracks that measure, all at once. Not one that a retune too low for the strobe left on another
+    // window, see set_phase_comparator_freq.
+    measured: [MAX_BANDS]^PhaseBand
+    measured_count := 0
+    for &band, band_index in self.bands {
+        if measures_band(self, band_index) && band.in_range && band.dft.window_size == window_size {
+            measured[measured_count] = &band
+            measured_count += 1
+        }
+    }
+    determine_band_phases(self, measured[:measured_count])
+    for band in measured[:measured_count] do update_band_noise_floor(self, band, is_tonal)
 
     for &band, band_index in self.bands {
         if !measures_band(self, band_index) {
@@ -376,9 +386,6 @@ run_phase_detection :: proc(self: ^PhaseComparator, is_tonal := false) {
             band.amp = 0
             band.snr_db = 0
             band.phase_diff = 0
-        } else {
-            determine_band_phase(self, &band)
-            update_band_noise_floor(self, &band, is_tonal)
         }
     }
 }
@@ -459,45 +466,65 @@ resize_sample_buffer :: proc(self: ^PhaseComparator, size: int) {
 }
 
 
-// A single bin DFT over the newest samples, demodulated against the band's reference oscillator
-determine_band_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
-    // The strobe turns by the measured phase, the shortest way from the previous frame's, nothing else
-    // carries over between frames. Once a frame a track more than half the frame rate off would alias, 30 Hz
-    // at 60 fps, a high note's partial is that far off within a semitone, and a low note an octave off leaks
-    // in that far. So the phase is measured a hop apart through the new samples, see HOPS_PER_PERIOD, each
-    // step the shortest way and the frame's advance their sum. The newest window last, its DFT is the band's
-    // amplitude. No advance on the first frame after a reset, the phase before it is arbitrary.
-    had_phase := band.has_phase
-    window_size := band.dft.window_size
-    span := min(self.available, self.buffer_len - window_size)
-    hop_size := SAMPLERATE / (HOPS_PER_PERIOD * self.base_freq_hz)
-    hops := max(int(math.ceil(f32(span) / hop_size)), 1) if had_phase else 1
-
-    phase_advance: f64
-    for hop in 1 ..= hops {
-        // Every band analyses up to the newest samples, i.e. the end of the buffer
-        window_end := self.buffer_len - span + span * hop / hops
-        hop_phase := lock_in_phase(self, band, window_end)
-        if had_phase do phase_advance += wrap_phase(f64(hop_phase - band.phase))
-        band.phase = hop_phase
-    }
-    band.amp = abs(band.dft.dft)
-    band.has_phase = true
-
-    update_onset(self, band)
+// A single bin DFT over the newest samples for each of the tracks, demodulated against its reference
+// oscillator. The tracks share the window, so they share the hops too, and each hop's DFTs run together.
+//
+// The strobe turns by the measured phase, the shortest way from the previous frame's, nothing else carries
+// over between frames. Once a frame a track more than half the frame rate off would alias, 30 Hz at 60 fps, a
+// high note's partial is that far off within a semitone, and a low note an octave off leaks in that far. So
+// the phase is measured a hop apart through the new samples, see HOPS_PER_PERIOD, each step the shortest way
+// and the frame's advance their sum. The newest window last, its DFT is the track's amplitude. No advance on
+// the first frame after a reset, the phase before it is arbitrary.
+determine_band_phases :: proc(self: ^PhaseComparator, bands: []^PhaseBand) {
+    if len(bands) == 0 do return
 
     // Lock-in / heterodyne: the DFT twiddles restart at 0 for every window, so rotate the result by
     // the reference oscillator phase at the window start (absolute sample index).
     // A signal exactly at the reference frequency then yields a constant phase.
-    lock_in_phase :: proc(self: ^PhaseComparator, band: ^PhaseBand, window_end: int) -> f32 {
-        window_size := band.dft.window_size
-        dft := run_single_dft(&band.dft, self.sample_buffer[window_end - window_size:window_end])
-
-        window_start := self.sample_clock - i64(self.buffer_len - window_end) - i64(window_size)
+    lock_in_phase :: proc(band: ^PhaseBand, window_start: i64) -> f32 {
         ref_phase := math.mod(f64(window_start) * band.ref_omega, math.TAU)
-        lock_in := complex128(dft) * complex(math.cos(ref_phase), -math.sin(ref_phase))
+        lock_in := complex128(band.dft.dft) * complex(math.cos(ref_phase), -math.sin(ref_phase))
         return f32(cmplx.phase(lock_in))
     }
+
+    window_size := bands[0].dft.window_size
+    span := min(self.available, self.buffer_len - window_size)
+    hop_size := SAMPLERATE / (HOPS_PER_PERIOD * self.base_freq_hz)
+
+    had_phase: [MAX_BANDS]bool
+    dfts: [MAX_BANDS]^SingleFreqDFT
+    for band, index in bands {
+        had_phase[index] = band.has_phase
+        dfts[index] = &band.dft
+    }
+
+    // The tracks start over together, after a reset there's nothing to hop from
+    hops := max(int(math.ceil(f32(span) / hop_size)), 1) if bands[0].has_phase else 1
+
+    phase_advances: [MAX_BANDS]f64
+    for hop in 1 ..= hops {
+        // Up to the newest samples, i.e. the end of the buffer
+        window_end := self.buffer_len - span + span * hop / hops
+        run_single_dfts(dfts[:len(bands)], self.sample_buffer[window_end - window_size:window_end])
+
+        window_start := self.sample_clock - i64(self.buffer_len - window_end) - i64(window_size)
+        for band, index in bands {
+            hop_phase := lock_in_phase(band, window_start)
+            if had_phase[index] do phase_advances[index] += wrap_phase(f64(hop_phase - band.phase))
+            band.phase = hop_phase
+        }
+    }
+
+    for band, index in bands {
+        band.amp = abs(band.dft.dft)
+        band.has_phase = true
+        advance_band(self, band, phase_advances[index], had_phase[index])
+    }
+}
+
+// The track's onset, rate, drift and the strobe's turn from the frame's phase advance
+advance_band :: proc(self: ^PhaseComparator, band: ^PhaseBand, phase_advance: f64, had_phase: bool) {
+    update_onset(self, band)
 
     // Rescaled so all notes spin at the same rate per cent
     band.phase_diff = f32(phase_advance * strobe_rescale(band.freq_hz))
@@ -593,7 +620,6 @@ update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
     alpha := 1.0 - math.exp(-f32(self.available) / (ONSET_ENVELOPE_TIME_S * SAMPLERATE))
     band.envelope += alpha * (band.amp - band.envelope)
 }
-
 
 
 // The stripes fade in between these SNRs, below it's the background noise (it stays under ~10 dB)

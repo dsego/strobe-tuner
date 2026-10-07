@@ -25,7 +25,6 @@ import "core:fmt"
 import "core:math"
 import "core:mem"
 import sdl "vendor:sdl3"
-import stbi "vendor:stb/image"
 import stbtt "vendor:stb/truetype"
 
 Texture :: struct {
@@ -43,7 +42,8 @@ RenderTarget :: struct {
     texture: Texture,
 }
 
-Shader :: ShaderKind
+// The program a load_shader kind draws with
+Shader :: Program
 
 Glyph :: struct {
     source:  Rect, // in the font atlas
@@ -64,6 +64,22 @@ Program :: enum {
     BLOOM,
     SHADOW,
     SCOPE,
+}
+
+// The textures each program's fragment shader samples, the strobe and the shadow draw theirs from uniforms
+PROGRAM_SAMPLERS :: [Program]u32 {
+    .SPRITE = 1,
+    .STROBE = 0,
+    .BLOOM  = 1,
+    .SHADOW = 0,
+    .SCOPE  = 1,
+}
+
+SHADER_PROGRAMS :: [ShaderKind]Program {
+    .STROBE = .STROBE,
+    .BLOOM  = .BLOOM,
+    .SHADOW = .SHADOW,
+    .SCOPE  = .SCOPE,
 }
 
 Vertex :: struct {
@@ -135,8 +151,6 @@ when ODIN_OS == .Darwin {
 scancodes := [Key]sdl.Scancode {
     .LEFT        = .LEFT,
     .RIGHT       = .RIGHT,
-    .UP          = .UP,
-    .DOWN        = .DOWN,
     .TAB         = .TAB,
     .SPACE       = .SPACE,
     .COMMA       = .COMMA,
@@ -145,7 +159,6 @@ scancodes := [Key]sdl.Scancode {
     .I           = .I,
     .R           = .R,
     .W           = .W,
-    .X           = .X,
     .LEFT_SHIFT  = .LSHIFT,
     .RIGHT_SHIFT = .RSHIFT,
     .LEFT_SUPER  = .LGUI,
@@ -234,17 +247,17 @@ init :: proc(width, height: i32, title: cstring) -> bool {
     gpu.window_format = sdl.GetGPUSwapchainTextureFormat(gpu.device, gpu.window)
 
     gpu.vertex_shader = create_shader(vertex_shader_code, .VERTEX, 0, 1)
-    gpu.fragment_shaders = {
-        .SPRITE = create_shader(fragment_shader_code[.SPRITE], .FRAGMENT, 1, 0),
-        .STROBE = create_shader(fragment_shader_code[.STROBE], .FRAGMENT, 0, 1),
-        .BLOOM  = create_shader(fragment_shader_code[.BLOOM], .FRAGMENT, 1, 1),
-        .SHADOW = create_shader(fragment_shader_code[.SHADOW], .FRAGMENT, 0, 1),
-        .SCOPE  = create_shader(fragment_shader_code[.SCOPE], .FRAGMENT, 1, 1),
-    }
-    for shader in gpu.fragment_shaders {
-        if shader == nil do return false
-    }
     if gpu.vertex_shader == nil do return false
+
+    // Every program but the sprite takes its uniforms
+    samplers := PROGRAM_SAMPLERS
+    for program in Program {
+        uniform_buffers: u32 = 0 if program == .SPRITE else 1
+        shader := create_shader(fragment_shader_code[program], .FRAGMENT, samplers[program], uniform_buffers)
+        if shader == nil do return false
+
+        gpu.fragment_shaders[program] = shader
+    }
 
     for program in Program {
         for blend in BlendMode {
@@ -384,10 +397,6 @@ last_frame_dropped :: proc() -> bool {
     return gpu.dropped
 }
 
-open_url :: proc(url: cstring) {
-    if !sdl.OpenURL(url) do fmt.eprintln("SDL_OpenURL failed:", sdl.GetError())
-}
-
 // SDL traps Android's back button and sends it as a key, see init. What the system does with it
 // otherwise, leave the app.
 system_back :: proc() {
@@ -460,11 +469,13 @@ end_frame :: proc() {
         // Bound and pushed only when they change
         pipeline: ^sdl.GPUGraphicsPipeline
         uniforms: UniformRange
+        samplers := PROGRAM_SAMPLERS
         for command in commands {
             if command.vertex_count == 0 do continue
 
             // A texture that failed to load
-            if command.program != .STROBE && command.texture == nil do continue
+            sampled := samplers[command.program] > 0
+            if sampled && command.texture == nil do continue
 
             if next := gpu.pipelines[command.program][command.blend][kind]; next != pipeline {
                 pipeline = next
@@ -480,7 +491,7 @@ end_frame :: proc() {
                     u32(uniforms.size),
                 )
             }
-            if command.program != .STROBE {
+            if sampled {
                 texture_binding := sdl.GPUTextureSamplerBinding{command.texture, gpu.sampler}
                 sdl.BindGPUFragmentSamplers(render_pass, 0, &texture_binding, 1)
             }
@@ -669,17 +680,6 @@ mouse_wheel :: proc() -> f32 {
     return gpu.wheel
 }
 
-load_texture :: proc(png: []u8) -> Texture {
-    width, height, channels: i32
-    pixels := stbi.load_from_memory(raw_data(png), i32(len(png)), &width, &height, &channels, 4)
-    if pixels == nil {
-        fmt.eprintln("Could not load image:", stbi.failure_reason())
-        return {}
-    }
-    defer stbi.image_free(pixels)
-    return create_texture(width, height, pixels[:width * height * 4])
-}
-
 // Straight alpha RGBA, the sampler is linear already
 load_texture_rgba :: proc(width, height: i32, pixels: []u8) -> Texture {
     return create_texture(width, height, pixels)
@@ -839,14 +839,6 @@ draw_rect :: proc(position: [2]f32, size: [2]f32, color: Color) {
     push_quad(gpu.white.handle, {position.x, position.y, size.x, size.y}, {0, 0}, {1, 1}, color)
 }
 
-draw_rect_lines :: proc(rect: Rect, thickness: f32, color: Color) {
-    line := thickness
-    draw_rect({rect.x, rect.y}, {rect.width, line}, color)
-    draw_rect({rect.x, rect.y + rect.height - line}, {rect.width, line}, color)
-    draw_rect({rect.x, rect.y + line}, {line, rect.height - 2 * line}, color)
-    draw_rect({rect.x + rect.width - line, rect.y + line}, {line, rect.height - 2 * line}, color)
-}
-
 draw_line :: proc(start, end: [2]f32, thickness: f32, color: Color) {
     delta := end - start
     length := math.sqrt(delta.x * delta.x + delta.y * delta.y)
@@ -937,13 +929,14 @@ set_blend_mode :: proc(mode: BlendMode) {
 }
 
 load_shader :: proc(kind: ShaderKind) -> Shader {
-    return kind
+    programs := SHADER_PROGRAMS
+    return programs[kind]
 }
 
 unload_shader :: proc(shader: Shader) {}
 
 begin_shader :: proc(shader: Shader) {
-    gpu.program = program_of(shader)
+    gpu.program = shader
 }
 
 end_shader :: proc() {
@@ -954,7 +947,7 @@ end_shader :: proc() {
 set_shader_uniforms :: proc(shader: Shader, uniforms: ^$T) {
     offset := len(gpu.uniform_data)
     append(&gpu.uniform_data, ..mem.ptr_to_bytes(uniforms))
-    gpu.uniforms[program_of(shader)] = {offset, size_of(T)}
+    gpu.uniforms[shader] = {offset, size_of(T)}
 }
 
 draw_shader_quad :: proc(rect: Rect) {
@@ -1014,21 +1007,6 @@ end_render_target :: proc() {
 draw_render_target :: proc(target: RenderTarget, dest: Rect, tint := WHITE) {
     size := render_target_size(target)
     draw_texture(target.texture, {0, 0, size.x, size.y}, dest, tint)
-}
-
-
-program_of :: proc(shader: Shader) -> Program {
-    switch shader {
-    case .STROBE:
-        return .STROBE
-    case .BLOOM:
-        return .BLOOM
-    case .SHADOW:
-        return .SHADOW
-    case .SCOPE:
-        return .SCOPE
-    }
-    return .SPRITE
 }
 
 begin_window_pass :: proc() {

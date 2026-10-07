@@ -23,15 +23,14 @@ StrobeColorway :: enum {
     MONO,
 }
 
-
-minty: [2]u32 : {0xB5F2DBFF, 0x6B3D7DFF}
-
-vibrant_red: [2]u32 : {0xFF6767FF, 0x6B4949FF}
-
-amber: [2]u32 : {0xFF9A4DFF, 0x6B4A38FF}
-
-// Black and white, the most contrast and no hue to tell apart
-mono: [2]u32 : {0xF2F1ECFF, 0x55565EFF}
+// The lit stripes and the dark ones
+COLORWAYS :: [StrobeColorway][2]u32 {
+    .VIBRANT_RED = {0xFF6767FF, 0x6B4949FF},
+    .MINTY       = {0xB5F2DBFF, 0x6B3D7DFF},
+    .AMBER       = {0xFF9A4DFF, 0x6B4A38FF},
+    // Black and white, the most contrast and no hue to tell apart
+    .MONO        = {0xF2F1ECFF, 0x55565EFF},
+}
 
 
 // Lamp glow on the strobe, the lamp-lit look of the old mechanical strobe tuners, toggled with G.
@@ -44,37 +43,26 @@ GlowParams :: struct {
     saturation: f32, // 1 keeps the full color, lower mixes in gray
 }
 
+GLOWS :: [StrobeColorway]GlowParams {
+    // The lamp only adds light, the filters are picked to land on the flat colors: the coral of the lit
+    // stripes and the grayish mauve of the dark ones, cooler than the coral to set the two hues apart. No gray
+    // mixed in, it turns the coral pink. A filter that pale passes a lot of light, the dark stripes are dimmed
+    // to keep the contrast.
+    .VIBRANT_RED = {color = 0xFF6D65FF, dark_color = 0xFFCBD3FF, dark_level = 0.6, exposure = 3.5, saturation = 1.0},
+    // A paler purple than the flat one, the filter saturates it. Lands on the flat purple with light on it.
+    .MINTY       = {color = 0x7DF2C4FF, dark_color = 0xE0A0FFFF, dark_level = 0.9, exposure = 3.0, saturation = 1.0},
+    .AMBER       = {color = 0xFF803CFF, dark_color = 0xFF803CFF, dark_level = 1.0, exposure = 4.5, saturation = 0.8},
+    // The warm white of a bulb, only a little off neutral, a yellow that's dimmed turns olive. A white filter
+    // passes all of the light, the dark stripes are dimmed the most here.
+    .MONO        = {color = 0xFFEEE0FF, dark_color = 0xFFF2EAFF, dark_level = 0.4, exposure = 3.5, saturation = 0.8},
+}
+
 glow_params :: proc(config: ^Config) -> GlowParams {
-    switch config.strobe_colorway {
-    case .VIBRANT_RED:
-        // The lamp only adds light, the filters are picked to land on the flat colors: the coral of the
-        // lit stripes and the grayish mauve of the dark ones, cooler than the coral to set the two hues apart.
-        // No gray mixed in, it turns the coral pink. A filter that pale passes a lot of light, the dark
-        // stripes are dimmed to keep the contrast.
-        return {color = 0xFF6D65FF, dark_color = 0xFFCBD3FF, dark_level = 0.6, exposure = 3.5, saturation = 1.0}
-    case .MINTY:
-        // A paler purple than the flat one, the filter saturates it. Lands on the flat purple with light on it.
-        return {color = 0x7DF2C4FF, dark_color = 0xE0A0FFFF, dark_level = 0.9, exposure = 3.0, saturation = 1.0}
-    case .AMBER:
-        return {color = 0xFF803CFF, dark_color = 0xFF803CFF, dark_level = 1.0, exposure = 4.5, saturation = 0.8}
-    case .MONO:
-        // The warm white of a bulb, only a little off neutral, a yellow that's dimmed turns olive.
-        // A white filter passes all of the light, the dark stripes are dimmed the most here.
-        return {color = 0xFFEEE0FF, dark_color = 0xFFF2EAFF, dark_level = 0.4, exposure = 3.5, saturation = 0.8}
-    }
-    return {}
+    glows := GLOWS
+    return glows[config.strobe_colorway]
 }
 
 strobe_colors :: proc(config: ^Config) -> [2]u32 {
-    switch config.strobe_colorway {
-    case .VIBRANT_RED:
-        return vibrant_red
-    case .MINTY:
-        return minty
-    case .AMBER:
-        return amber
-    case .MONO:
-        return mono
-    }
-    return vibrant_red
+    colorways := COLORWAYS
+    return colorways[config.strobe_colorway]
 }

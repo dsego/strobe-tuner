@@ -79,7 +79,7 @@ App :: struct {
 // This frame's measurements, for the main screen
 Reading :: struct {
     pitch:          core.PitchInfo, // the latest detection
-    steady:       core.PitchInfo, // the readout, the strong detections averaged
+    steady:         core.PitchInfo, // the readout, the strong detections averaged
     out_of_range:   bool, // another note than a locked one is played, see core.tuner_out_of_range
     strobe_readout: bool, // the readout is the strobe track's, none without one, see measure
     octaves:        int, // the note's shown this many octaves off the tuner's, the partial the readout measures
@@ -128,9 +128,8 @@ run_app :: proc(config: ^Config) {
     app.cents_trace = create_trace()
     defer destroy_trace(&app.cents_trace)
 
-    audio_capture, ok := audio.init()
-    if !ok do return
-
+    // Opened or not, the strobe area says why there's no input, see draw_strobe_area
+    audio_capture := audio.init()
     defer audio.destroy(audio_capture)
     app.audio_capture = audio_capture
 
@@ -189,9 +188,7 @@ run_app :: proc(config: ^Config) {
         defer gfx.end_frame()
         gui_press_taken = false
 
-        if app.restart_audio || app.audio_devices[app.audio_device_index].id != audio_capture.active_device {
-            switch_input(&app)
-        }
+        if app.restart_audio || picked_device(&app) != audio_capture.active_device do switch_input(&app)
 
         // The sheets slide up over the main screen, which keeps running under them and ignores taps until
         // they're all the way down again. They're drawn at the end of the frame.
@@ -274,12 +271,22 @@ wait_in_background :: proc(app: ^App) {
     app.restart_audio = true
 }
 
-// The input picked in the settings, or the same one again, the measurements start afresh on it
+// The input picked in the settings, or the same one again, the measurements start afresh on it. Without any
+// there's nothing to open, the list is made at the start.
 switch_input :: proc(app: ^App) {
     app.restart_audio = false
-    audio.switch_device(app.audio_capture, app.audio_devices[app.audio_device_index].id)
+    if len(app.audio_devices) == 0 do return
+
+    audio.switch_device(app.audio_capture, picked_device(app))
     core.reset_pitch_detector(&app.pitch_detector)
     core.reset_phase_comparator(app.phase_comparator)
+}
+
+// The input's index picked in the settings, the open one without a list
+picked_device :: proc(app: ^App) -> i32 {
+    if len(app.audio_devices) == 0 do return app.audio_capture.active_device
+
+    return app.audio_devices[app.audio_device_index].id
 }
 
 handle_keys :: proc(app: ^App) {
@@ -366,7 +373,7 @@ measure :: proc(app: ^App) -> (reading: Reading) {
 
         // The note and the Hz of the partial it measures, e.g. a low string's 2nd harmonic ringing on after
         // its fundamental died down. A locked note and a string keep their own.
-        if !tuner.locked && tuner.string_count == 0 {
+        if !core.measures_target(tuner) {
             reading.octaves = core.readout_octaves(band, core.tuner_target_freq(tuner))
             steady.detected_freq *= math.pow(2, f32(reading.octaves))
         }
@@ -417,11 +424,9 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
     strobe_hz := f64(app.phase_comparator.base_freq_hz)
     if scope.freq_hz != strobe_hz do core.set_scope_freq(scope, strobe_hz)
 
-
     // The lamp is the screen from above, it needs the sweep over time, and so do the tracks it turns
     sweep := config.scope_sweep if config.strobe_display_type == .SCOPE else .TIME
     if scope.sweep != sweep do core.set_scope_sweep(scope, sweep)
-
 
     scope.persistence_seconds = f64(config.scope_persistence_ms) / 1000
     scope.gain = config.scope_gain
@@ -531,6 +536,8 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     title, hint: cstring
     if audio.microphone_denied() {
         title, hint = "Microphone access is off", "Tap to allow it in Settings"
+    } else if len(app.audio_devices) == 0 {
+        title, hint = "No input found", "Connect one and start the app again"
     } else if audio.input_failed(app.audio_capture) {
         title, hint = "The input didn't open", "Tap to try again"
     }
@@ -592,12 +599,12 @@ draw_tuning_arrows :: proc(app: ^App, layout: Layout, reading: Reading) {
 // space, or tapping the note) locks the note, tapping another note on the ruler locks that one instead.
 draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     config, tuner := app.config, &app.tuner
-    string_mode := current_setup(config).instrument != .CHROMATIC
+    setup := current_setup(config)
+    string_mode := setup.instrument != .CHROMATIC
 
     // A transposing instrument reads the written note, only what's shown moves, the steps are relative and
     // work the same either way. With a capo the strings sound higher and keep the names of the open strings,
     // like the chord shapes played over it.
-    setup := current_setup(config)
     transpose := -capo_fret(setup) if string_mode else transpose_key(setup)
     // In the octave of the partial the readout measures
     shown_cents := tuner.target_note.cents + 1200 * reading.octaves
@@ -698,7 +705,6 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo, meter
     stat(fmt.ctprintf("Clarity %.3f", pitch.clarity), {500, 10}, large = true)
     if pitch.is_strong_pitch do stat("strong", {600, 10}, gfx.ORANGE, large = true)
     if pitch.is_weak_pitch do stat("weak", {600, 10}, gfx.PURPLE, large = true)
-
 
     font := pixel_fonts.label_small.font
     draw_nsdf(gfx.Rect{520, 40, 660, 200}, &app.pitch_detector.nsdf, font)

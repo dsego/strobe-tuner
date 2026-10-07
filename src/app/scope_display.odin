@@ -15,9 +15,10 @@
 
 package app
 
+import "core:math"
+
 import "../core"
 import "../gfx"
-import "core:math"
 
 // Two display types, both views of the scope in src/core/scope.odin that only draw what it gives them:
 //   scope   - its screen

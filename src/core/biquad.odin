@@ -63,6 +63,11 @@ init_butterworth :: proc(cutoff_hz: f32, samplerate: f32, highpass: bool) -> (bq
 }
 
 
+// From rest, the samples before are gone
+reset_biquad :: proc(bq: ^Biquad) {
+    bq.z1, bq.z2 = 0, 0
+}
+
 biquad_process :: proc(bq: ^Biquad, input: []f32, output: []f32) {
     assert(len(output) >= len(input))
 

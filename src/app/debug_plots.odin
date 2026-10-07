@@ -15,30 +15,31 @@
 
 package app
 
-import "../core"
-import "../gfx"
 import "core:fmt"
 import "core:math"
 
+import "../core"
+import "../gfx"
+
 // The debug plots of the DEBUG_STATS build, the NSDF and the spectrum of the latest pitch detection
 
-// The NSDF over the first lags, a cross on each key maximum, the chosen one pink
-draw_nsdf :: proc(rect: gfx.Rect,nsdf: ^core.NSDF, font: gfx.Font) {
+// The NSDF over the first lags, a cross on each key maximum, the chosen one pink. 1 at the top, the NSDF of
+// the zero lag.
+draw_nsdf :: proc(rect: gfx.Rect, nsdf: ^core.NSDF, font: gfx.Font) {
     LAGS :: 1500
     points: [LAGS][2]f32
 
     lag_width := rect.width / f32(LAGS - 1)
     middle := rect.y + rect.height / 2
-    gain := 1.0 / nsdf.values[0]
     for &point, lag in points {
-        point = {rect.x + f32(lag) * lag_width, middle - nsdf.values[lag] * (rect.height / 2) * gain}
+        point = {rect.x + f32(lag) * lag_width, middle - nsdf.values[lag] * (rect.height / 2)}
     }
 
     draw_time_plot(rect, LAGS, 1000, font)
     gfx.draw_line_strip(points[:], gfx.GOLD)
 
     for peak, index in nsdf.peaks {
-        cross := [2]f32{rect.x + peak.x * lag_width, middle - peak.y * gain * (rect.height / 2)}
+        cross := [2]f32{rect.x + peak.x * lag_width, middle - peak.y * (rect.height / 2)}
         if cross.x > rect.x + rect.width do break
 
         // A line down to the frequency, every other one lower so they don't overlap
@@ -53,7 +54,7 @@ draw_nsdf :: proc(rect: gfx.Rect,nsdf: ^core.NSDF, font: gfx.Font) {
 }
 
 
-draw_time_plot :: proc(rect: gfx.Rect,len_samples: int, div_samples: int, font: gfx.Font) {
+draw_time_plot :: proc(rect: gfx.Rect, len_samples: int, div_samples: int, font: gfx.Font) {
     // Horizontal lines at 1,0,-1
     gfx.draw_line({rect.x, rect.y}, {rect.x + rect.width, rect.y}, 0.5, gfx.LIGHTGRAY)
     gfx.draw_text(font, "1", {rect.x - 16, rect.y - 8}, 12, 0, gfx.LIGHTGRAY)
@@ -90,7 +91,7 @@ draw_time_plot :: proc(rect: gfx.Rect,len_samples: int, div_samples: int, font: 
 }
 
 // The power spectrum of the lowest bins in dB, the peaks that stand out marked with their frequency
-draw_freq_plot :: proc(rect: gfx.Rect,nsdf: ^core.NSDF, font: gfx.Font) {
+draw_freq_plot :: proc(rect: gfx.Rect, nsdf: ^core.NSDF, font: gfx.Font) {
     FreqPeak :: struct {
         position:  [2]f32,
         magnitude: f32,
