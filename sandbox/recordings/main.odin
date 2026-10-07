@@ -49,6 +49,13 @@ SHIFTED_STANDARD :: f32(442)
 SUSTAIN_FROM_S :: 0.5
 SUSTAIN_TRIM :: 0.1
 
+// A live input's room and mic noise never gets this quiet, the sustain ends where the recording falls
+// under it for good. A tail cleaner than the app ever hears isn't measured, e.g. a hum 50dB under the
+// note that the tuner follows once the string is gone, inaudible but over a digitally silent floor.
+LIVE_FLOOR_DBFS :: -60
+// The level's RMS over this long
+LEVEL_WINDOW_S :: 0.05
+
 // A lit track drifting the other way than it should this fast, its stripes turn the wrong way. Each track
 // is checked against its own drift at the same moment of the original plus the shift, a real string's
 // partials run sharp of its fundamental and wander, they don't agree with the readout or each other.
@@ -175,16 +182,20 @@ run_file :: proc(runs: ^[dynamic]Run, spectra: ^[dynamic]Spectrum, path, name: s
     original := play(path, 0, 440)
     defer delete(original)
 
+    samples, decoded := decode(path, SAMPLERATE)
+    if !decoded do return
+    defer delete(samples)
+
     first_lit, last_lit: f32 = -1, -1
     for detection in original {
         if !detection.active do continue
         if first_lit < 0 do first_lit = detection.time_s
         last_lit = detection.time_s
     }
-    sustain := [2]f32{first_lit + SUSTAIN_FROM_S, last_lit}
+    sustain := [2]f32{first_lit + SUSTAIN_FROM_S, min(last_lit, last_above_floor(samples))}
     sustain[1] -= SUSTAIN_TRIM * (sustain[1] - sustain[0])
     if first_lit < 0 || sustain[1] <= sustain[0] {
-        fmt.eprintln("  no sustain, the note is lit for under", SUSTAIN_FROM_S, "seconds")
+        fmt.eprintln("  no sustain, the note is lit and over", LIVE_FLOOR_DBFS, "dBFS for under", SUSTAIN_FROM_S, "seconds")
         return
     }
 
@@ -198,14 +209,9 @@ run_file :: proc(runs: ^[dynamic]Run, spectra: ^[dynamic]Spectrum, path, name: s
     }
     original_cents, _ := median_cents(original[:], sustain, expected_note)
 
-    spectrum: Spectrum
-    samples, decoded := decode(path, SAMPLERATE)
-    if decoded {
-        spectrum = measure_spectrum(samples, sustain, expected_note)
-        spectrum.file = name
-        append(spectra, spectrum)
-        delete(samples)
-    }
+    spectrum := measure_spectrum(samples, sustain, expected_note)
+    spectrum.file = name
+    append(spectra, spectrum)
     // A shift moves every harmonic by the same cents, their levels stay the original's
     harmonics := HARMONICS
     fundamental_index, _ := slice.linear_search(harmonics[:], 1)
@@ -436,6 +442,18 @@ dft_power :: proc(samples: []f64, freq_hz: f64) -> f64 {
         rotation *= step
     }
     return real(sum) * real(sum) + imag(sum) * imag(sum)
+}
+
+// The end of the last window at or over LIVE_FLOOR_DBFS
+last_above_floor :: proc(samples: []f32) -> (time_s: f32) {
+    window := int(LEVEL_WINDOW_S * SAMPLERATE)
+    floor := math.pow(10, f32(LIVE_FLOOR_DBFS) / 20)
+    for start := 0; start + window <= len(samples); start += window {
+        sum: f32
+        for sample in samples[start:start + window] do sum += sample * sample
+        if math.sqrt(sum / f32(window)) >= floor do time_s = f32(start + window) / SAMPLERATE
+    }
+    return
 }
 
 lit_s :: proc(detections: []Detection) -> (lit: f32) {
