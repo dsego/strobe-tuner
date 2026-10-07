@@ -63,6 +63,11 @@ WRONG_WAY_MIN_HZ :: 1
 // Only while the original is within this of its loudest, a fading tail rings with a weak partial or two
 // that wander, e.g. a bass whose fundamental still carries the level but can't be heard any more
 WRONG_WAY_WITHIN_DB :: 15
+// Nor after a partial's null, its level falling this far this fast: two close components of it cancel and
+// hand over, the phase of their sum jumps half a turn either way and the drift carries it a while
+NULL_DROP_DB :: 20
+NULL_FALL_S :: 0.15
+NULL_HOLD_S :: 3 * core.DRIFT_SMOOTH_S
 // -define:SHOW_WRONG_WAY=true prints every detection with a track turning the wrong way
 SHOW_WRONG_WAY :: #config(SHOW_WRONG_WAY, false)
 
@@ -86,10 +91,11 @@ Spectrum :: struct {
 }
 
 Track :: struct {
-    lit:      bool,
-    freq_hz:  f32,
-    drift_hz: f32,
-    snr_db:   f32,
+    lit:        bool,
+    freq_hz:    f32,
+    drift_hz:   f32,
+    snr_db:     f32,
+    after_null: bool, // see NULL_DROP_DB
 }
 
 // A fresh detection, the pitch in cents from A4 as the readout shows it
@@ -346,7 +352,7 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, re
 
         for track, index in detection.tracks {
             partial := then.tracks[index]
-            if !track.lit || !partial.lit do continue
+            if !track.lit || !partial.lit || track.after_null || partial.after_null do continue
 
             // The original's partial moved by the shift, from the note this run measures from
             partial_cents := core.cents_deviation(partial.freq_hz + partial.drift_hz, partial.freq_hz)
@@ -544,11 +550,31 @@ play :: proc(path: string, decode_rate: u32, pitch_standard: f32) -> (detections
         for band, index in strobe.bands[:len(detection.tracks)] {
             lit := band.in_range && band.snr_db >= 0.5 * (fade[0] + fade[1])
             lit &&= band.interval == math.round(band.interval)
-            detection.tracks[index] = {lit, band.freq_hz, band.drift_hz, band.snr_db}
+            detection.tracks[index] = {lit = lit, freq_hz = band.freq_hz, drift_hz = band.drift_hz, snr_db = band.snr_db}
         }
         append(&detections, detection)
     }
+
+    mark_nulls(detections[:])
     return
+}
+
+// Each track's detections up to NULL_HOLD_S after its level fell NULL_DROP_DB within NULL_FALL_S
+mark_nulls :: proc(detections: []Detection) {
+    for track_index in 0 ..< len(INTERVALS) {
+        null_s := f32(-1)
+        for &detection, index in detections {
+            track := &detection.tracks[track_index]
+            for earlier := index - 1; earlier >= 0; earlier -= 1 {
+                if detection.time_s - detections[earlier].time_s > NULL_FALL_S do break
+                if detections[earlier].tracks[track_index].snr_db - track.snr_db >= NULL_DROP_DB {
+                    null_s = detection.time_s
+                    break
+                }
+            }
+            track.after_null = null_s >= 0 && detection.time_s - null_s <= NULL_HOLD_S
+        }
+    }
 }
 
 // The whole file as mono decoded at decode_rate, after LEAD_IN_S of silence at the app's sample rate
@@ -622,8 +648,8 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
                for a B2 once its fundamental died down under the 2nd harmonic, right
   1x dB        the original's fundamental from its strongest harmonic, measured without the tuner
   wrong way    strobe tracks whose stripes turned the wrong way and in how many detections, 4x8 is the
-               4th harmonic's track 8 times, while the original is within 15dB of its loudest and both
-               read the same partial
+               4th harmonic's track 8 times, while the original is within 15dB of its loudest, both
+               read the same partial and neither track just fell 20dB through a null
   spread c     readout from the 10th to the 90th percentile over the sustain, the player's vibrato too
   lit s        seconds the note was lit
   ok           passed: no wrong note, aligned within 1c, no track turning the wrong way
