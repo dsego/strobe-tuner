@@ -1,4 +1,4 @@
-// Copyright (C) 2025  Davorin Šego
+// Copyright (C) 2026  Davorin Šego
 
 // This program is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by the Free
