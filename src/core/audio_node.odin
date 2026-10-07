@@ -22,14 +22,18 @@ import "core:testing"
 import "core:time"
 
 
-// The input's, miniaudio and AAudio convert the device's own. PITCH_FFT_SIZE, MAX_WINDOW_SIZE and the values
-// tuned with the sandbox tools are for it.
-SAMPLERATE :: 48_000
+// Until the input opens at its own rate, and the tests' audio. The input is never resampled, an interpolating
+// resampler leaves images of a note that land on the strobe's tracks, see Decimator for a fast one.
+DEFAULT_SAMPLE_RATE :: 48_000
 
 // The input of one consumer, the pitch detection, the strobe or the scope. The audio thread writes into its
 // ring buffer, the consumer reads from it every frame.
 AudioCaptureNode :: struct {
     name:            string, // debugging info
+    // The input's, each consumer sizes its buffers and filters for it. Only the consumer's thread reads it, a
+    // new rate comes with a reset, see set_pitch_detector_sample_rate and the others.
+    sample_rate:     f32,
+    // Holds 0.74 s at the fastest rate after the decimation, 88.2 kHz, see init_audio_capture_node
     ringbuffer:      RingBuffer,
     ringbuffer_data: []u8,
     // Samples that didn't fit, the main loop stalled for longer than the ring buffer holds. Written by the
@@ -41,9 +45,11 @@ AudioCaptureNode :: struct {
     newest_tick:     time.Tick,
 }
 
-init_audio_capture_node :: proc(self: ^AudioCaptureNode, name: string) {
-    // A power of 2 for the PortAudio ring buffer
+init_audio_capture_node :: proc(self: ^AudioCaptureNode, name: string, sample_rate: f32) {
+    // A power of 2 for the PortAudio ring buffer. In samples whatever the rate, the audio thread may be
+    // writing while the rate changes.
     self.name = name
+    self.sample_rate = sample_rate
     self.ringbuffer, self.ringbuffer_data = init_ringbuffer(65536)
 }
 
@@ -128,7 +134,7 @@ audio_capture_read :: proc(
 @(test)
 test_audio_capture_stall :: proc(t: ^testing.T) {
     node: AudioCaptureNode
-    init_audio_capture_node(&node, "test")
+    init_audio_capture_node(&node, "test", DEFAULT_SAMPLE_RATE)
     defer destroy_audio_capture_node(&node)
 
     SAMPLES :: 70_000

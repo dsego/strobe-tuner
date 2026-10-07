@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 565" width="1100" height="565" role="img" aria-labelledby="title desc">
   <title id="title">Strobie audio signal path</title>
-  <desc id="desc">On the audio thread the input is converted to mono 48 kHz by miniaudio and written into three lock-free ring buffers, one per reader. On the main thread, every display frame: the pitch lane filters its samples, runs the NSDF, picks the peak and holds the target note for 50 ms, which sets the reference frequency of the lock-in and the lamp. The lock-in lane runs a single-bin DFT per track and rotates it by the reference on the sample clock, its phase advance times the track speed turns the strobe tracks, and a least squares fit of the phase gives the cents for the readout and the trace. The lamp lane folds every sample onto two periods of the reference on a fading screen, which the scope view draws as it is and the lamp view from above; a DFT bin of the screen per track can turn the strobe tracks instead of the lock-in.</desc>
+  <desc id="desc">On the audio thread the input comes from miniaudio as mono at the device's own rate, never resampled, a rate of 88.2 kHz or more halved through halfband filters, and is written into three lock-free ring buffers, one per reader. On the main thread, every display frame: the pitch lane filters its samples, runs the NSDF, picks the peak and holds the target note for 50 ms, which sets the reference frequency of the lock-in and the lamp. The lock-in lane runs a single-bin DFT per track and rotates it by the reference on the sample clock, its phase advance times the track speed turns the strobe tracks, and a least squares fit of the phase gives the cents for the readout and the trace. The lamp lane folds every sample onto two periods of the reference on a fading screen, which the scope view draws as it is and the lamp view from above; a DFT bin of the screen per track can turn the strobe tracks instead of the lock-in.</desc>
   <style>
     text { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #111; }
     .bg { fill: #fff; }
@@ -116,7 +116,7 @@
     <text class="sub" x="105" y="122">or audio interface</text>
 
     <text class="title" x="105" y="214">miniaudio</text>
-    <text class="sub" x="105" y="232">mono f32, 48 kHz</text>
+    <text class="sub" x="105" y="232">mono f32, the device's rate</text>
 
     <text class="title" x="105" y="324">Ring buffers</text>
     <text class="sub" x="105" y="342">one per reader</text>

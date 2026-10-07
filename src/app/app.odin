@@ -137,6 +137,7 @@ run_app :: proc(config: ^Config) {
     audio.register_node(audio_capture, &app.pitch_detector)
     audio.register_node(audio_capture, app.phase_comparator)
     audio.register_node(audio_capture, &app.scope)
+    match_input_rate(&app)
     audio.start(audio_capture)
 
     for index in 0 ..< audio.device_count(audio_capture) {
@@ -281,6 +282,19 @@ switch_input :: proc(app: ^App) {
     audio.switch_device(app.audio_capture, picked_device(app))
     core.reset_pitch_detector(&app.pitch_detector)
     core.reset_phase_comparator(app.phase_comparator)
+    match_input_rate(app)
+}
+
+// The measurements at the rate the input opened at, their windows and filters sized for it. Only a new rate
+// changes anything, the strobe's windows are retuned to it. Nothing without an input.
+match_input_rate :: proc(app: ^App) {
+    sample_rate := app.audio_capture.sample_rate
+    if sample_rate == 0 || sample_rate == app.phase_comparator.sample_rate do return
+
+    core.set_pitch_detector_sample_rate(&app.pitch_detector, sample_rate)
+    core.set_phase_comparator_sample_rate(app.phase_comparator, sample_rate)
+    core.set_scope_sample_rate(&app.scope, sample_rate)
+    retune(app)
 }
 
 // The input's index picked in the settings, the open one without a list
@@ -477,6 +491,12 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
     // The input level, the microphone icon marks it as the input. The level is the rounded track cut off flat
     // where it ends.
     draw_icon(ICON_MICROPHONE, layout.level_meter + {0, -6}, icon_color)
+
+    // A slow input, a Bluetooth headset's microphone at 16 or 24 kHz, gets a warning before the icon. The high
+    // notes and the partials over its Nyquist are out of reach, their tracks show empty.
+    if sample_rate := app.audio_capture.sample_rate; sample_rate > 0 && sample_rate < core.LOW_SAMPLE_RATE {
+        draw_icon(ICON_WARNING, layout.level_meter + {-ICON_SIZE - 4, -6}, warning_color)
+    }
 
     meter := layout.level_meter + {20, 0}
     track := gfx.Rect{meter.x, meter.y, 60, 4}

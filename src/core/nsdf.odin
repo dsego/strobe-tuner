@@ -36,6 +36,7 @@ import pffft "../../external/odin-pffft"
 NSDF :: struct {
     pffft_setup:    rawptr,
     fft_size:       int,
+    sample_rate:    f32, // a lag's frequency
     spectrum:       []complex64, // the power spectrum once autocorrelated
     autocorr:       []f32,
     values:         []f32, // the NSDF of each lag
@@ -45,8 +46,9 @@ NSDF :: struct {
 }
 
 
-init_nsdf :: proc(fft_size: int) -> (self: NSDF) {
+init_nsdf :: proc(fft_size: int, sample_rate: f32) -> (self: NSDF) {
     self.fft_size = fft_size
+    self.sample_rate = sample_rate
     self.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
 
     // A real transform of fft_size samples has fft_size / 2 complex bins, see nsdf_autocorrelate
@@ -71,7 +73,7 @@ run_nsdf :: proc(self: ^NSDF, samples: []f32) -> (freq: f32, peak: Vec2) {
     nsdf_autocorrelate(self, samples)
     normalize(self, samples)
     peak = find_peak(self)
-    if peak.x > 0 do freq = SAMPLERATE / peak.x
+    if peak.x > 0 do freq = self.sample_rate / peak.x
 
     return
 
@@ -97,8 +99,8 @@ run_nsdf :: proc(self: ^NSDF, samples: []f32) -> (freq: f32, peak: Vec2) {
     find_peak :: proc(self: ^NSDF) -> Vec2 {
         clear(&self.peaks)
 
-        // The far lags rest on few samples, their peaks are left out
-        IGNORED_LAGS :: 256
+        // The far lags rest on few samples, their peaks are left out. The last 16th, 256 lags of 4096.
+        IGNORED_LAGS_FRACTION :: 16
 
         // The first of the key maxima this close to the highest is the period, not a multiple of it
         CHOSEN_RATIO :: 0.95
@@ -106,7 +108,7 @@ run_nsdf :: proc(self: ^NSDF, samples: []f32) -> (freq: f32, peak: Vec2) {
         // Lower maxima are no period, the NSDF of the zero lag is 1
         MIN_PEAK_VALUE :: 0.5
 
-        end := len(self.values) - IGNORED_LAGS
+        end := len(self.values) - len(self.values) / IGNORED_LAGS_FRACTION
         max_peak: Vec2
 
         lag := 1
@@ -195,7 +197,7 @@ parabolic :: proc(before: f32, middle: f32, after: f32) -> (offset: f32, value: 
 @(test)
 test_autocorrelation :: proc(t: ^testing.T) {
     FFT_SIZE :: 1024
-    self := init_nsdf(FFT_SIZE)
+    self := init_nsdf(FFT_SIZE, DEFAULT_SAMPLE_RATE)
     defer destroy_nsdf(&self)
 
     // DC and a tone at the Nyquist frequency of the padded transform go through its packed first bin
@@ -218,18 +220,20 @@ test_autocorrelation :: proc(t: ^testing.T) {
 // string's pull it sharp of the fundamental, towards the loud ones
 @(test)
 test_nsdf_accuracy :: proc(t: ^testing.T) {
-    FFT_SIZE :: PITCH_FFT_SIZE
+    // The pitch detection's at 48 kHz
+    FFT_SIZE :: 8192
+    SAMPLE_RATE :: DEFAULT_SAMPLE_RATE
 
     // Cents from the fundamental, partial n is at n * fundamental stretched by stretch_cents * (n² - 1)
     run :: proc(fundamental: f64, amplitudes: []f64, stretch_cents: f64) -> f32 {
-        self := init_nsdf(FFT_SIZE)
+        self := init_nsdf(FFT_SIZE, SAMPLE_RATE)
         defer destroy_nsdf(&self)
         samples: [FFT_SIZE / 2]f32
         for &sample, i in samples {
             for amplitude, partial in amplitudes {
                 n := f64(partial + 1)
                 freq := n * fundamental * math.pow(2, stretch_cents * (n * n - 1) / 1200)
-                sample += f32(amplitude * math.sin(math.TAU * freq * f64(i) / SAMPLERATE + n))
+                sample += f32(amplitude * math.sin(math.TAU * freq * f64(i) / SAMPLE_RATE + n))
             }
         }
         freq, _ := run_nsdf(&self, samples[:])

@@ -48,6 +48,7 @@ text_color_muted := gfx.hex(0x7D7E8FFF) // the note and readout without a pitch,
 text_color_disabled := gfx.hex(0x5C5D6AFF) // a control that does nothing right now, on a dark pill
 icon_color := gfx.hex(0x9A9BAAFF)
 accent_color := gfx.hex(0x82E2FFFF) // the input level, the arrows, the partial labels and the note offsets
+warning_color := gfx.hex(0xFFC857FF) // a slow input's warning next to its level
 
 // Buttons
 pill_gray := text_color_muted

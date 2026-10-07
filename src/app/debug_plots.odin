@@ -45,7 +45,7 @@ draw_nsdf :: proc(rect: gfx.Rect, nsdf: ^core.NSDF, font: gfx.Font) {
         // A line down to the frequency, every other one lower so they don't overlap
         gfx.draw_line(cross, {cross.x, rect.y + rect.height}, 0.5, gfx.LIGHTGRAY)
         label_y := rect.y + rect.height + (24 if index % 2 == 0 else 8)
-        gfx.draw_text(font, fmt.ctprintf("%.2fHz", core.SAMPLERATE / peak.x), {cross.x, label_y}, 12, 0, gfx.LIGHTGRAY)
+        gfx.draw_text(font, fmt.ctprintf("%.2fHz", nsdf.sample_rate / peak.x), {cross.x, label_y}, 12, 0, gfx.LIGHTGRAY)
 
         color := gfx.PINK if index == nsdf.chosen_peak else gfx.LIGHTGRAY
         gfx.draw_line(cross - {7, 0}, cross + {7, 0}, 2.0, color)
@@ -137,7 +137,7 @@ draw_freq_plot :: proc(rect: gfx.Rect, nsdf: ^core.NSDF, font: gfx.Font) {
         if magnitudes[bin] <= magnitudes[bin - 1] || magnitudes[bin] <= magnitudes[bin + 1] do continue
 
         offset, magnitude := core.parabolic(magnitudes[bin - 1], magnitudes[bin], magnitudes[bin + 1])
-        frequency := (f32(bin) + offset) * core.SAMPLERATE / f32(nsdf.fft_size)
+        frequency := (f32(bin) + offset) * nsdf.sample_rate / f32(nsdf.fft_size)
         candidates[candidate_count] = {points[bin], magnitude, frequency}
         candidate_count += 1
     }

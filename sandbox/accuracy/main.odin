@@ -17,7 +17,7 @@ import "core:slice"
 import "../../src/core"
 
 // The app's, see sandbox/replay
-SAMPLERATE :: core.SAMPLERATE
+SAMPLERATE :: core.DEFAULT_SAMPLE_RATE
 INTERVALS :: [?]f32{1, 2, 4}
 STROBE_SPEED :: 0.025
 // The app draws at 60 fps, e.g. -define:FRAME_SAMPLES=1024 for iOS's chunks of audio arriving every other frame

@@ -16,7 +16,7 @@ import ma "vendor:miniaudio"
 import "../../src/core"
 
 // The app's, see src/app/app.odin
-SAMPLERATE :: core.SAMPLERATE
+SAMPLERATE :: core.DEFAULT_SAMPLE_RATE
 note_switch_s: f32 = core.NOTE_SWITCH_S // NOTE_SWITCH_S in the environment tries another
 INTERVALS :: [?]f32{1, 2, 4}
 STROBE_SPEED :: 0.0125
@@ -190,13 +190,19 @@ main :: proc() {
     }
 }
 
-// The whole file as mono at the app's sample rate, after the lead-in's silence
+// The whole file as mono, after the lead-in's silence. Only at SAMPLERATE, miniaudio's resampler would leave
+// images of the notes, see core.DEFAULT_SAMPLE_RATE.
 decode :: proc(path: string) -> (samples: []f32, ok: bool) {
     decoder: ma.decoder
-    config := ma.decoder_config_init(.f32, 1, SAMPLERATE)
+    config := ma.decoder_config_init(.f32, 1, 0)
     cpath := fmt.ctprintf("%s", path)
     if ma.decoder_init_file(cpath, &config, &decoder) != .SUCCESS do return nil, false
     defer ma.decoder_uninit(&decoder)
+
+    if decoder.outputSampleRate != SAMPLERATE {
+        fmt.eprintfln("%v is at %v Hz, convert it to %v Hz first", path, decoder.outputSampleRate, SAMPLERATE)
+        return nil, false
+    }
 
     length: u64
     ma.decoder_get_length_in_pcm_frames(&decoder, &length)

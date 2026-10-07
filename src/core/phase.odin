@@ -40,7 +40,9 @@ import "core:time"
 
 MIN_STROBE_FREQ_HZ :: 16.0
 MAX_BANDS :: 5 // the strobe's tracks, the config holds as many
-MAX_WINDOW_SIZE :: 262_144 // the sample buffer, the window for the lowest note fits in it
+// The sample buffer, the window for the lowest note at a quarter of a semitone fits in it, 262 144 samples
+// at 48 kHz
+MAX_WINDOW_S :: 5.5
 
 // A band goes up to 90% of Nyquist (21.6 kHz at 48 kHz), above it the audio can't hold the frequency and
 // the input filters roll off before that anyway
@@ -136,10 +138,15 @@ PhaseComparator :: struct {
 }
 
 
-init_phase_comparator :: proc(base_freq_hz: f32, strobe_intervals: []f32, mode: StrobeMode) -> ^PhaseComparator {
+init_phase_comparator :: proc(
+    base_freq_hz: f32,
+    strobe_intervals: []f32,
+    mode: StrobeMode,
+    sample_rate: f32 = DEFAULT_SAMPLE_RATE,
+) -> ^PhaseComparator {
     self := new(PhaseComparator)
-    init_audio_capture_node(self, "phase-tracker")
-    self.sample_buffer = make([]f32, MAX_WINDOW_SIZE + MAX_FRAME_SAMPLES)
+    init_audio_capture_node(self, "phase-tracker", sample_rate)
+    self.sample_buffer = make([]f32, sample_buffer_size(sample_rate))
     self.mode = mode
     self.base_freq_hz = base_freq_hz
     self.band_cents = DFT_RESOLUTION_CENTS
@@ -162,6 +169,23 @@ destroy_phase_comparator :: proc(self: ^PhaseComparator) {
 
 destroy_phase_band :: proc(band: ^PhaseBand) {
     destroy_dft(&band.dft)
+}
+
+// The longest window and a frame's new samples, see MAX_WINDOW_S and MAX_FRAME_S
+sample_buffer_size :: proc(sample_rate: f32) -> int {
+    return int(math.ceil((MAX_WINDOW_S + MAX_FRAME_S) * sample_rate))
+}
+
+// The input opened at another rate. Everything starts over like for another input, see
+// reset_phase_comparator, and set_phase_comparator_freq has to size the windows for it before the next run.
+set_phase_comparator_sample_rate :: proc(self: ^PhaseComparator, sample_rate: f32) {
+    if sample_rate == self.sample_rate do return
+
+    self.sample_rate = sample_rate
+    delete(self.sample_buffer)
+    self.sample_buffer = make([]f32, sample_buffer_size(sample_rate))
+    self.buffer_len = 0
+    reset_phase_comparator(self)
 }
 
 // Vernier mode measures the first band only, the others show it at other speeds
@@ -239,8 +263,9 @@ DFT_RESOLUTION_CENTS :: 100
 // read how far, see hears_note.
 HOPS_PER_PERIOD :: 4
 
-// The new samples a frame walks through on top of the longest window, more and its oldest are skipped
-MAX_FRAME_SAMPLES :: 4096
+// The new samples a frame walks through on top of the longest window, more and its oldest are skipped. 4096
+// samples at 48 kHz.
+MAX_FRAME_S :: 0.085
 
 // Retunes every band to base_freq_hz, the tracks restart. The ring buffer stays, the samples are still valid
 // and the stream stays contiguous, and so do the noise floors, the background doesn't change with the note.
@@ -264,12 +289,12 @@ set_phase_comparator_freq :: proc(
     // Every track gets the fundamental's window. Sized in cents of its own partial an upper track's window would
     // be shorter, its band wider in Hz for a weaker partial, and it shimmers. Built once, the tracks only turn it
     // to their own frequency.
-    comb_samples := comb_periods(self.bands[:], mode) * SAMPLERATE / base_freq_hz
-    gamma_size := dft_window_size(base_freq_hz, SAMPLERATE, self.band_cents)
+    comb_samples := comb_periods(self.bands[:], mode) * self.sample_rate / base_freq_hz
+    gamma_size := dft_window_size(base_freq_hz, self.sample_rate, self.band_cents)
     window := gamma_comb_window(gamma_size, comb_samples)
 
     for &band, band_index in self.bands {
-        band.time_stretch = SAMPLERATE / base_freq_hz
+        band.time_stretch = self.sample_rate / base_freq_hz
         restart_band(&band)
 
         switch self.mode {
@@ -281,9 +306,9 @@ set_phase_comparator_freq :: proc(
             band.freq_hz = base_freq_hz
             band.note = freq_to_note(band.freq_hz, pitch_standard)
         }
-        band.norm_freq = band.freq_hz / SAMPLERATE
+        band.norm_freq = band.freq_hz / self.sample_rate
         band.in_range = band.norm_freq < MAX_BAND_NORM_FREQ
-        band.ref_omega = math.TAU * f64(band.freq_hz) / SAMPLERATE
+        band.ref_omega = math.TAU * f64(band.freq_hz) / f64(self.sample_rate)
 
         if measures_band(self, band_index) do set_dft_freq(&band.dft, band.norm_freq, window)
     }
@@ -342,7 +367,7 @@ run_phase_detection :: proc(self: ^PhaseComparator, is_tonal := false) {
     // The window every track shares, see set_phase_comparator_freq, and a frame's new samples before it for
     // the hops. The newest samples come in without delay.
     window_size := self.bands[0].dft.window_size
-    resize_sample_buffer(self, window_size + MAX_FRAME_SAMPLES)
+    resize_sample_buffer(self, window_size + int(MAX_FRAME_S * self.sample_rate))
     read, elapsed := audio_capture_read(self, self.sample_buffer[:self.buffer_len])
     if read == 0 && elapsed > 0 {
         // A stall, the buffer is silent and the tracks start over on the audio after it. The clock too, the
@@ -489,7 +514,7 @@ determine_band_phases :: proc(self: ^PhaseComparator, bands: []^PhaseBand) {
 
     window_size := bands[0].dft.window_size
     span := min(self.available, self.buffer_len - window_size)
-    hop_size := SAMPLERATE / (HOPS_PER_PERIOD * self.base_freq_hz)
+    hop_size := self.sample_rate / (HOPS_PER_PERIOD * self.base_freq_hz)
 
     had_phase: [MAX_BANDS]bool
     dfts: [MAX_BANDS]^SingleFreqDFT
@@ -530,16 +555,17 @@ advance_band :: proc(self: ^PhaseComparator, band: ^PhaseBand, phase_advance: f6
     band.phase_diff = f32(phase_advance * strobe_rescale(band.freq_hz))
 
     step := f64(self.available)
+    sample_rate := f64(self.sample_rate)
     if had_phase {
-        decay := math.exp(-step / (READOUT_FIT_S * SAMPLERATE))
+        decay := math.exp(-step / (READOUT_FIT_S * sample_rate))
         shift_fit(&band.fit, step, phase_advance, decay)
 
         // How far off the track is lately, the advances averaged with their sign, a waver on the note evens out
         // like it did in a narrow band's window. Noise's random advances even out too, the SNR fades its
         // stripes. An octave flat is as far as it goes, noise on a low track can advance by more than its
         // frequency.
-        drift_hz := f32(phase_advance / step * SAMPLERATE / math.TAU)
-        alpha := f32(1 - math.exp(-step / (DRIFT_SMOOTH_S * SAMPLERATE)))
+        drift_hz := f32(phase_advance / step * sample_rate / math.TAU)
+        alpha := f32(1 - math.exp(-step / (DRIFT_SMOOTH_S * sample_rate)))
         band.drift_hz += alpha * (drift_hz - band.drift_hz)
         band.drift_cents = abs(cents_deviation(max(band.freq_hz + band.drift_hz, 0.5 * band.freq_hz), band.freq_hz))
     }
@@ -554,7 +580,7 @@ advance_band :: proc(self: ^PhaseComparator, band: ^PhaseBand, phase_advance: f6
     if had_phase && band.snr_db >= READOUT_MIN_SNR_DB {
         if band.rate_time_s == 0 do band.fit = {}
 
-        band.rate_time_s += f32(self.available) / SAMPLERATE
+        band.rate_time_s += f32(self.available) / self.sample_rate
 
         // The new measurement at time 0 and phase 0 only adds its weight
         level := f64(band.amp / band.envelope) if band.envelope > 0 else 1
@@ -562,7 +588,7 @@ advance_band :: proc(self: ^PhaseComparator, band: ^PhaseBand, phase_advance: f6
         slope, has_slope := fit_slope(band.fit)
         band.rate = slope if has_slope else phase_advance / step
     }
-    freq_diff_hz := f32(band.rate * SAMPLERATE / math.TAU)
+    freq_diff_hz := f32(band.rate * sample_rate / math.TAU)
     band.err_cents = cents_deviation(band.freq_hz + freq_diff_hz, band.freq_hz)
 
     // The strobe turns by the phase times the track's speed
@@ -601,7 +627,7 @@ STROBE_AHEAD_MAX_S :: 0.03
 // moves evenly, and the next measurement takes over where it is.
 strobe_phase_ahead :: proc(self: ^PhaseComparator, band: PhaseBand) -> f32 {
     age := min(time.duration_seconds(time.tick_since(self.newest_tick)), STROBE_AHEAD_MAX_S)
-    advance := band.rate * age * SAMPLERATE * strobe_rescale(band.freq_hz)
+    advance := band.rate * age * f64(self.sample_rate) * strobe_rescale(band.freq_hz)
     return -f32(advance) * band.speed
 }
 
@@ -617,7 +643,7 @@ update_onset :: proc(self: ^PhaseComparator, band: ^PhaseBand) {
         return
     }
 
-    alpha := 1.0 - math.exp(-f32(self.available) / (ONSET_ENVELOPE_TIME_S * SAMPLERATE))
+    alpha := 1.0 - math.exp(-f32(self.available) / (ONSET_ENVELOPE_TIME_S * self.sample_rate))
     band.envelope += alpha * (band.amp - band.envelope)
 }
 
@@ -770,7 +796,7 @@ strobe_shows_note :: proc(self: ^PhaseComparator) -> bool {
 
 // Keep an up-to-date estimate of background noise (i.e. when no note is playing)
 update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, is_tonal: bool) {
-    dt := f32(self.available) / SAMPLERATE
+    dt := f32(self.available) / self.sample_rate
 
     // The window starts out on the silence the sample buffer is filled with
     window_full := self.sample_clock >= i64(band.dft.window_size)
@@ -783,18 +809,18 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
     FRAME :: 400 // samples per display frame at 120 FPS
     target_hz: f32 = 261.63
 
-    run :: proc(target_hz: f32, detune_cents: f32) -> (err_cents: [2]f32, phase_diff: f32) {
+    run :: proc(target_hz: f32, detune_cents: f32, sample_rate: f32) -> (err_cents: [2]f32, phase_diff: f32) {
         intervals := []f32{1, 2}
-        pc := init_phase_comparator(target_hz, intervals, .HARMONIC)
+        pc := init_phase_comparator(target_hz, intervals, .HARMONIC, sample_rate)
         defer destroy_phase_comparator(pc)
         set_phase_comparator_freq(pc, target_hz, 440, 0.025, 2, .HARMONIC)
 
         freq := f64(freq_at_cents(target_hz, detune_cents))
         chunk: [FRAME]f32
         clock := 0
-        for _ in 0 ..< 2 * SAMPLERATE / FRAME {
+        for _ in 0 ..< 2 * int(sample_rate) / FRAME {
             for &sample in chunk {
-                phase := math.TAU * freq * f64(clock) / SAMPLERATE
+                phase := math.TAU * freq * f64(clock) / f64(sample_rate)
                 sample = f32(0.1 * math.sin(phase) + 0.05 * math.sin(2 * phase))
                 clock += 1
             }
@@ -805,20 +831,23 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
         return {pc.bands[0].err_cents, pc.bands[1].err_cents}, pc.bands[0].phase_diff
     }
 
-    // In tune: the strobe stands still
-    err, diff := run(target_hz, 0)
-    testing.expectf(t, abs(err[0]) < 0.05 && abs(err[1]) < 0.05, "in tune, got %v cents", err)
-    testing.expectf(t, abs(diff) < 1e-4, "in tune, got phase advance %v", diff)
+    // At the input's own rate, 44.1 kHz isn't resampled to 48
+    for sample_rate in ([]f32{44_100, 48_000}) {
+        // In tune: the strobe stands still
+        err, diff := run(target_hz, 0, sample_rate)
+        testing.expectf(t, abs(err[0]) < 0.05 && abs(err[1]) < 0.05, "in tune at %v Hz, got %v cents", sample_rate, err)
+        testing.expectf(t, abs(diff) < 1e-4, "in tune at %v Hz, got phase advance %v", sample_rate, diff)
 
-    // Sharp: both bands report the detuning, the strobe phase advances
-    err, diff = run(target_hz, 3)
-    testing.expectf(t, abs(err[0] - 3) < 0.1 && abs(err[1] - 3) < 0.1, "+3 cents, got %v cents", err)
-    testing.expect(t, diff > 0)
+        // Sharp: both bands report the detuning, the strobe phase advances
+        err, diff = run(target_hz, 3, sample_rate)
+        testing.expectf(t, abs(err[0] - 3) < 0.1 && abs(err[1] - 3) < 0.1, "+3 cents at %v Hz, got %v cents", sample_rate, err)
+        testing.expect(t, diff > 0)
 
-    // Flat
-    err, diff = run(target_hz, -7)
-    testing.expectf(t, abs(err[0] + 7) < 0.1 && abs(err[1] + 7) < 0.1, "-7 cents, got %v cents", err)
-    testing.expect(t, diff < 0)
+        // Flat
+        err, diff = run(target_hz, -7, sample_rate)
+        testing.expectf(t, abs(err[0] + 7) < 0.1 && abs(err[1] + 7) < 0.1, "-7 cents at %v Hz, got %v cents", sample_rate, err)
+        testing.expect(t, diff < 0)
+    }
 }
 
 
@@ -850,7 +879,7 @@ test_note_away_and_back :: proc(t: ^testing.T) {
             for &sample in voice.chunk {
                 voice.noise = voice.noise * 1664525 + 1013904223
                 sample = 0.1 * (f32(voice.noise) / f32(max(u32)) - 0.5)
-                voice.phase += math.TAU * f64(voice.freq) / SAMPLERATE
+                voice.phase += math.TAU * f64(voice.freq) / DEFAULT_SAMPLE_RATE
                 phase := voice.phase
                 if voice.freq > 0 do sample += f32(0.1 * math.sin(phase) + 0.03 * math.sin(2 * phase) + 0.01 * math.sin(4 * phase))
             }
@@ -860,7 +889,7 @@ test_note_away_and_back :: proc(t: ^testing.T) {
         }
     }
 
-    SECOND :: SAMPLERATE / FRAME
+    SECOND :: DEFAULT_SAMPLE_RATE / FRAME
     GLIDE :: SECOND / 2
     voice := Voice{noise = 1}
     play(pc, &voice, 0, 3 * SECOND)
@@ -904,13 +933,13 @@ test_strobe_turn_rate :: proc(t: ^testing.T) {
         freq := f64(freq_at_cents(target_hz, detune_cents))
         chunk: [FRAME]f32
         clock := 0
-        frames_per_s := SAMPLERATE / FRAME
+        frames_per_s := DEFAULT_SAMPLE_RATE / FRAME
         start: f32
         for frame in 0 ..< 3 * frames_per_s {
             if frame == 2 * frames_per_s do start = pc.bands[0].scaled_phase
 
             for &sample in chunk {
-                sample = f32(0.1 * math.sin(math.TAU * freq * f64(clock) / SAMPLERATE))
+                sample = f32(0.1 * math.sin(math.TAU * freq * f64(clock) / DEFAULT_SAMPLE_RATE))
                 clock += 1
             }
             audio_capture_write(pc, chunk[:])

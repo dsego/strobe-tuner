@@ -188,7 +188,7 @@ test_comb_rejects_partials :: proc(t: ^testing.T) {
 
     amp :: proc(dft: ^SingleFreqDFT, freq: f32) -> f32 {
         samples := make([]f32, dft.window_size, context.temp_allocator)
-        for &sample, index in samples do sample = math.sin(math.TAU * freq * f32(index) / SAMPLERATE)
+        for &sample, index in samples do sample = math.sin(math.TAU * freq * f32(index) / DEFAULT_SAMPLE_RATE)
 
         return abs(run_single_dft(dft, samples))
     }
@@ -196,8 +196,8 @@ test_comb_rejects_partials :: proc(t: ^testing.T) {
     plain, comb: SingleFreqDFT
     defer destroy_dft(&plain)
     defer destroy_dft(&comb)
-    set_dft_freq(&plain, freq / SAMPLERATE, gamma_comb_window(WINDOW))
-    set_dft_freq(&comb, freq / SAMPLERATE, gamma_comb_window(WINDOW, SAMPLERATE / freq))
+    set_dft_freq(&plain, freq / DEFAULT_SAMPLE_RATE, gamma_comb_window(WINDOW))
+    set_dft_freq(&comb, freq / DEFAULT_SAMPLE_RATE, gamma_comb_window(WINDOW, DEFAULT_SAMPLE_RATE / freq))
 
     // Half the window's mean, as without the comb. The plain window is off it, this wide its band takes in
     // some of the sine's negative frequency, which the comb nulls too.

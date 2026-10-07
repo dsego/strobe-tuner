@@ -43,6 +43,11 @@ Capture :: struct {
     active_device:      i32, // index into capture_infos
     nodes:              [dynamic]^core.AudioCaptureNode,
 
+    // What the nodes get, the device's own rate or a fast one decimated, see set_input_rate
+    sample_rate:        f32,
+    decimator:          core.Decimator,
+    decimate_chunk:     [DECIMATE_CHUNK]f32,
+
     // Set from miniaudio's thread when an iOS audio interruption (a call, Siri, an alarm) is over.
     // miniaudio stops the device when one begins but doesn't start it again.
     interruption_ended: bool,
@@ -62,7 +67,10 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
     config := ma.device_config_init(.capture)
     config.capture.format = .f32
     config.capture.channels = 1
-    config.sampleRate = core.SAMPLERATE
+
+    // The device's own rate. Asked for another, miniaudio interpolates between the samples, and the images
+    // that leaves of a note land near its partials and light the strobe's tracks for them.
+    config.sampleRate = 0
     config.performanceProfile = .low_latency
     config.noFixedSizedCallback = true // the nodes' ring buffers take chunks of any size
     config.dataCallback = stream_callback
@@ -83,6 +91,7 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
 
     if failed(ma.device_init(&self.ctx, &config, &self.device)) do return false
 
+    set_input_rate(self, f32(self.device.capture.internalSampleRate))
     self.device_open = true
 
     fmt.println("Opened input stream")

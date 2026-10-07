@@ -30,22 +30,23 @@ import "core:time"
 import ".."
 import pffft "../../../external/odin-pffft"
 
-SAMPLERATE :: core.SAMPLERATE
+SAMPLERATE :: core.DEFAULT_SAMPLE_RATE
+PITCH_FFT_SIZE :: 8192 // the pitch detection's at 48 kHz, see core.PITCH_WINDOW_S
 ITERATIONS :: 1000
 TRACKS :: 5 // core.MAX_BANDS, every track on the fundamental's window
 FRAMES_PER_SECOND :: 120
 
 main :: proc() {
-    samples := make([]f32, core.MAX_WINDOW_SIZE)
+    samples := make([]f32, core.sample_buffer_size(SAMPLERATE))
     defer delete(samples)
     for &sample in samples do sample = rand.float32_range(-1, 1)
 
     sink: f32
 
     {
-        out := make([]f32, core.PITCH_FFT_SIZE)
+        out := make([]f32, PITCH_FFT_SIZE)
         defer delete(out)
-        setup := pffft.new_setup(core.PITCH_FFT_SIZE, pffft.Transform.REAL)
+        setup := pffft.new_setup(PITCH_FFT_SIZE, pffft.Transform.REAL)
         defer pffft.destroy_setup(setup)
 
         stopwatch: time.Stopwatch
@@ -56,7 +57,7 @@ main :: proc() {
         }
         time.stopwatch_stop(&stopwatch)
         microseconds := time.duration_microseconds(time.stopwatch_duration(stopwatch)) / ITERATIONS
-        fmt.printfln("pffft, %v points (pitch detection): %.1f µs", core.PITCH_FFT_SIZE, microseconds)
+        fmt.printfln("pffft, %v points (pitch detection): %.1f µs", PITCH_FFT_SIZE, microseconds)
     }
 
     // A track's window as set_phase_comparator_freq sizes it, the comb's box of one period included

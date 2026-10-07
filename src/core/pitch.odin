@@ -24,7 +24,8 @@ import "core:testing"
 
 // Tuned on test recordings with the sandbox tools, not in the settings
 
-PITCH_FFT_SIZE :: 8192 // the window is half of it, 4096 samples
+// The window, 4096 samples at 48 kHz, a power of 2 at least this long at any rate. The FFT is twice as long.
+PITCH_WINDOW_S :: 0.085
 
 // Under a guitar's low E (82 Hz), it takes out DC and low frequency rumble. A lower note like a bass's E1
 // (41 Hz) loses its fundamental here, it's still found from its harmonics.
@@ -51,8 +52,12 @@ MAINS_CENTS :: 8
 DETECTIONS_PER_SECOND :: 60
 
 // The pitch detection hears up to here, above C8 (4186 Hz). Hiss and pick noise over it only blur the
-// period, the strobe still gets the whole band.
+// period, the strobe still gets the whole band. A slow input's under its Nyquist, see pitch_lowpass_hz.
 PITCH_LOWPASS_HZ :: 5000
+
+// Under this rate a Bluetooth headset's microphone, 16 or 24 kHz, the app warns that high notes and the
+// partials over Nyquist are out of reach
+LOW_SAMPLE_RATE :: 44_100
 
 
 PitchDetector :: struct {
@@ -89,15 +94,12 @@ PitchInfo :: struct {
 }
 
 
-init_pitch_detector :: proc(pitch_standard: f32 = 440.0) -> (self: PitchDetector) {
-    self.samples = make([]f32, PITCH_FFT_SIZE / 2)
-    self.highpass = init_highpass(PITCH_HIGHPASS_HZ, SAMPLERATE)
-    self.lowpass = init_lowpass(PITCH_LOWPASS_HZ, SAMPLERATE)
-    self.nsdf = init_nsdf(PITCH_FFT_SIZE)
+init_pitch_detector :: proc(pitch_standard: f32 = 440.0, sample_rate: f32 = DEFAULT_SAMPLE_RATE) -> (self: PitchDetector) {
     self.noise_floor = init_noise_floor()
     self.pitch_standard = pitch_standard
 
-    init_audio_capture_node(&self, "pitch")
+    init_audio_capture_node(&self, "pitch", sample_rate)
+    size_pitch_detector(&self)
     return
 }
 
@@ -105,6 +107,34 @@ destroy_pitch_detector :: proc(self: ^PitchDetector) {
     destroy_nsdf(&self.nsdf)
     destroy_audio_capture_node(self)
     delete(self.samples)
+}
+
+// The input opened at another rate, the window and the filters are made again for it and everything starts
+// over like for another input, see reset_pitch_detector
+set_pitch_detector_sample_rate :: proc(self: ^PitchDetector, sample_rate: f32) {
+    if sample_rate == self.sample_rate do return
+
+    self.sample_rate = sample_rate
+    destroy_nsdf(&self.nsdf)
+    delete(self.samples)
+    size_pitch_detector(self)
+    reset_noise_floor(&self.noise_floor)
+}
+
+// The window, the NSDF and the filters at the node's rate
+size_pitch_detector :: proc(self: ^PitchDetector) {
+    window := 1
+    for f32(window) < PITCH_WINDOW_S * self.sample_rate do window *= 2
+
+    self.samples = make([]f32, window)
+    self.nsdf = init_nsdf(2 * window, self.sample_rate)
+    self.highpass = init_highpass(PITCH_HIGHPASS_HZ, self.sample_rate)
+    self.lowpass = init_lowpass(pitch_lowpass_hz(self.sample_rate), self.sample_rate)
+}
+
+// PITCH_LOWPASS_HZ, or under Nyquist on a slow input, an 8 kHz phone line's 4 kHz
+pitch_lowpass_hz :: proc(sample_rate: f32) -> f32 {
+    return min(PITCH_LOWPASS_HZ, 0.4 * sample_rate)
 }
 
 // Another input's signal is unrelated to the previous one's: the window starts out silent like at launch,
@@ -121,7 +151,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info := PitchInfo{}
 
     // Once a display frame's worth of new samples is in, the read wants more than its minimum
-    read, elapsed := audio_capture_read(self, self.samples, SAMPLERATE / DETECTIONS_PER_SECOND - 1)
+    read, elapsed := audio_capture_read(self, self.samples, i32(self.sample_rate) / DETECTIONS_PER_SECOND - 1)
 
     // Samples went by that the window didn't get, the filters start from rest on the new ones
     if i64(read) < elapsed {
@@ -148,7 +178,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.rms = max(calculate_rms(self.samples), MIN_RMS_TRACKABLE)
     info.rms_dbfs = dbfs(info.rms)
 
-    dt := f32(elapsed) / SAMPLERATE
+    dt := f32(elapsed) / self.sample_rate
     info.elapsed_s = dt
 
     // A0 to C8, the piano's notes the ruler has, up to half a semitone out, at the pitch standard
@@ -200,29 +230,29 @@ dbfs :: proc(signal: $T) -> T {
 }
 
 
-// Hum with its harmonics doesn't name a note at either mains frequency, the notes either side of it do
 // The last detection of half a second of a note, a high note's partials go over Nyquist, a sine has one
-detect_test_note :: proc(fundamental: f32, partials := 5) -> PitchInfo {
-    detector := init_pitch_detector()
+detect_test_note :: proc(fundamental: f32, partials := 5, sample_rate: f32 = DEFAULT_SAMPLE_RATE) -> PitchInfo {
+    detector := init_pitch_detector(sample_rate = sample_rate)
     defer destroy_pitch_detector(&detector)
 
     // Half a second a display frame at a time like the app, the high-pass settles from its start
-    FRAME :: SAMPLERATE / DETECTIONS_PER_SECOND
+    frame := make([]f32, int(sample_rate) / DETECTIONS_PER_SECOND, context.temp_allocator)
     info: PitchInfo
-    for start := 0; start < SAMPLERATE / 2; start += FRAME {
-        frame: [FRAME]f32
+    for start := 0; start < int(sample_rate) / 2; start += len(frame) {
         for &sample, i in frame {
+            sample = 0
             for partial in 1 ..= partials {
-                phase := math.TAU * f64(partial) * f64(fundamental) * f64(start + i) / SAMPLERATE
+                phase := math.TAU * f64(partial) * f64(fundamental) * f64(start + i) / f64(sample_rate)
                 sample += f32(0.01 * math.sin(phase))
             }
         }
-        audio_capture_write(&detector, frame[:])
+        audio_capture_write(&detector, frame)
         info = run_pitch_detection(&detector, info)
     }
     return info
 }
 
+// Hum with its harmonics doesn't name a note at either mains frequency, the notes either side of it do
 @(test)
 test_mains_hum :: proc(t: ^testing.T) {
     for mains_hz in MAINS_HZ {
@@ -243,4 +273,24 @@ test_highest_note :: proc(t: ^testing.T) {
 
     d8 := detect_test_note(4698.64, partials = 1)
     testing.expectf(t, d8.is_weak_pitch && !d8.is_strong_pitch && !d8.is_tonal, "D8: %v", d8)
+}
+
+// The input's own rate, no resampling: the piano's ends at 44.1 kHz and a headset's 16 kHz, a decimated
+// 192 kHz comes in at 48. A headset's C8 has 4 to 6 samples a period, the lag between them is a guess some
+// cents off. The note is still right, the strobe reads the cents.
+@(test)
+test_pitch_at_input_rates :: proc(t: ^testing.T) {
+    for sample_rate in ([]f32{16_000, 24_000, 44_100, 48_000, 64_000}) {
+        for freq in ([]f32{27.5, 110, 4186.01}) {
+            // A0 only has its harmonics over the highpass
+            pitch := detect_test_note(freq, partials = 5 if freq < 100 else 1, sample_rate = sample_rate)
+            cents := cents_deviation(pitch.detected_freq, freq)
+            if sample_rate >= LOW_SAMPLE_RATE {
+                testing.expectf(t, pitch.is_strong_pitch && abs(cents) < 1, "%v Hz at %v Hz: %v cents, %v", freq, sample_rate, cents, pitch)
+            } else {
+                note := freq_to_note(freq)
+                testing.expectf(t, !pitch.is_weak_pitch && pitch.detected_note.cents == note.cents, "%v Hz at %v Hz: %v", freq, sample_rate, pitch)
+            }
+        }
+    }
 }

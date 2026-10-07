@@ -8,8 +8,10 @@
 // the filename, e.g. bass_E1.wav, middle C as C4. A folder in MIDDLE_C3_FOLDERS names middle C as C3 and
 // reads an octave up, a %23 in a filename reads as #. csv prints the runs as CSV instead, to diff two commits.
 //
-// The shift decodes at SAMPLERATE × 2^(−cents/1200) and plays at SAMPLERATE, the pitch rises by the cents
-// and the length shrinks by the same ratio. Report only, nothing fails the run.
+// The shift plays the same samples to a tuner told the rate is 2^(cents/1200) times the file's, the pitch
+// rises by exactly the cents and the length shrinks by the same ratio. Nothing is resampled, a file at 44.1 kHz
+// plays at 44.1 kHz like the app's input would, a fast one is decimated like it. Report only, nothing fails
+// the run.
 //
 // The note an octave up counts apart from a wrong note, the readout is the same in any octave. A
 // spectrum of each original, made without the tuner, shows why, e.g. a bass string with a weak fundamental:
@@ -27,10 +29,9 @@ import ma "vendor:miniaudio"
 import "../../src/core"
 
 // The app's, see sandbox/replay
-SAMPLERATE :: core.SAMPLERATE
 INTERVALS :: [?]f32{1, 2, 4}
 STROBE_SPEED :: 0.025
-FRAME_SAMPLES :: SAMPLERATE / 60
+FPS :: 60
 
 TOLERANCE_CENTS :: 1 // like the generated tones', see sandbox/accuracy
 
@@ -115,7 +116,7 @@ Detection :: struct {
 
 Run :: struct {
     file:           string,
-    shift_cents:    f32, // the decode rate's, rounded to a whole Hz
+    shift_cents:    f32, // the rate the tuner's told over the file's
     pitch_standard: f32,
     expected_cents: f32, // how far the pitch should move from the original's
     error_cents:    f32,
@@ -191,11 +192,18 @@ main :: proc() {
 
 // The original, then every shift against it
 run_file :: proc(runs: ^[dynamic]Run, spectra: ^[dynamic]Spectrum, path, name: string, named_octave_cents: int) {
-    original := play(path, 0, 440)
+    recording, sample_rate, decoded := decode(path)
+    if !decoded {
+        fmt.eprintln("Can't decode", path)
+        return
+    }
+    defer delete(recording)
+
+    original := play(recording, sample_rate, 440)
     defer delete(original)
 
-    samples, decoded := decode(path, SAMPLERATE)
-    if !decoded do return
+    // As the original's tuner heard it, for its levels and spectrum
+    samples := with_lead_in(recording, sample_rate)
     defer delete(samples)
 
     first_lit, last_lit: f32 = -1, -1
@@ -204,7 +212,7 @@ run_file :: proc(runs: ^[dynamic]Run, spectra: ^[dynamic]Spectrum, path, name: s
         if first_lit < 0 do first_lit = detection.time_s
         last_lit = detection.time_s
     }
-    levels := levels_db(samples)
+    levels := levels_db(samples, sample_rate)
     defer delete(levels)
 
     sustain := [2]f32{first_lit + SUSTAIN_FROM_S, min(last_lit, last_above_floor(levels))}
@@ -224,7 +232,7 @@ run_file :: proc(runs: ^[dynamic]Run, spectra: ^[dynamic]Spectrum, path, name: s
     }
     original_cents, _ := median_cents(original[:], sustain, expected_note)
 
-    spectrum := measure_spectrum(samples, sustain, expected_note)
+    spectrum := measure_spectrum(samples, sample_rate, sustain, expected_note)
     spectrum.file = name
     append(spectra, spectrum)
     // A shift moves every harmonic by the same cents, their levels stay the original's
@@ -247,12 +255,11 @@ run_file :: proc(runs: ^[dynamic]Run, spectra: ^[dynamic]Spectrum, path, name: s
     shift_cases[len(SHIFTS_CENTS)] = {core.freq_to_cents(SHIFTED_STANDARD), SHIFTED_STANDARD}
 
     for shift_case in shift_cases {
-        wanted_cents, pitch_standard := shift_case[0], shift_case[1]
-        decode_rate := u32(math.round(SAMPLERATE * math.pow(2, -wanted_cents / 1200)))
-        shift_cents := 1200 * math.log2(f32(SAMPLERATE) / f32(decode_rate))
-        ratio := f32(decode_rate) / SAMPLERATE
+        shift_cents, pitch_standard := shift_case[0], shift_case[1]
+        told_rate := core.freq_at_cents(sample_rate, shift_cents)
+        ratio := sample_rate / told_rate
 
-        shifted := play(path, decode_rate, pitch_standard)
+        shifted := play(recording, told_rate, pitch_standard)
         defer delete(shifted)
 
         // The same part of the performance, it plays faster or slower after the lead-in
@@ -430,10 +437,10 @@ percentile :: proc(sorted: []f32, fraction: f32) -> f32 {
 
 // The original's sustain through a plain Hann windowed DFT, nothing of the tuner's, the peak near each
 // harmonic of the note
-measure_spectrum :: proc(samples: []f32, sustain: [2]f32, note: int) -> (spectrum: Spectrum) {
+measure_spectrum :: proc(samples: []f32, sample_rate: f32, sustain: [2]f32, note: int) -> (spectrum: Spectrum) {
     spectrum.note = note
 
-    segment := samples[int(sustain[0] * SAMPLERATE):min(int(sustain[1] * SAMPLERATE), len(samples))]
+    segment := samples[int(sustain[0] * sample_rate):min(int(sustain[1] * sample_rate), len(samples))]
     windowed := make([]f64, len(segment))
     defer delete(windowed)
     for sample, index in segment {
@@ -446,7 +453,7 @@ measure_spectrum :: proc(samples: []f32, sustain: [2]f32, note: int) -> (spectru
     powers: [len(HARMONICS)]f64
     for harmonic, index in harmonics {
         for offset := -PEAK_SEARCH_CENTS; offset <= PEAK_SEARCH_CENTS; offset += PEAK_STEP_CENTS {
-            power := dft_power(windowed, note_hz * f64(harmonic) * math.pow(2, f64(offset) / 1200))
+            power := dft_power(windowed, note_hz * f64(harmonic) * math.pow(2, f64(offset) / 1200), f64(sample_rate))
             if power > powers[index] do powers[index], spectrum.offsets_cents[index] = power, f32(offset)
         }
     }
@@ -461,8 +468,8 @@ measure_spectrum :: proc(samples: []f32, sustain: [2]f32, note: int) -> (spectru
 }
 
 // The power at one frequency, the phase turned by a running rotation instead of a sin and cos per sample
-dft_power :: proc(samples: []f64, freq_hz: f64) -> f64 {
-    angle := 2 * math.PI * freq_hz / SAMPLERATE
+dft_power :: proc(samples: []f64, freq_hz, sample_rate: f64) -> f64 {
+    angle := 2 * math.PI * freq_hz / sample_rate
     step := complex(math.cos(angle), -math.sin(angle))
     rotation := complex128(1)
     sum: complex128
@@ -474,8 +481,8 @@ dft_power :: proc(samples: []f64, freq_hz: f64) -> f64 {
 }
 
 // The RMS in dBFS of each LEVEL_WINDOW_S from the start
-levels_db :: proc(samples: []f32) -> []f32 {
-    window := int(LEVEL_WINDOW_S * SAMPLERATE)
+levels_db :: proc(samples: []f32, sample_rate: f32) -> []f32 {
+    window := int(LEVEL_WINDOW_S * sample_rate)
     levels := make([]f32, len(samples) / window)
     for &level, index in levels {
         sum: f32
@@ -500,24 +507,21 @@ lit_s :: proc(detections: []Detection) -> (lit: f32) {
     return
 }
 
-// The recording decoded at decode_rate, the original's at 0, through the app's loop like sandbox/replay
-play :: proc(path: string, decode_rate: u32, pitch_standard: f32) -> (detections: [dynamic]Detection) {
+// The recording through the app's loop like sandbox/replay, at sample_rate: the file's, or another one for
+// a shift, see run_file
+play :: proc(recording: []f32, sample_rate: f32, pitch_standard: f32) -> (detections: [dynamic]Detection) {
     // Every retune makes its window's weights there
     defer free_all(context.temp_allocator)
 
-    samples, ok := decode(path, decode_rate if decode_rate > 0 else SAMPLERATE)
-    if !ok {
-        fmt.eprintln("Can't decode", path)
-        return
-    }
+    samples := with_lead_in(recording, sample_rate)
     defer delete(samples)
 
-    detector := core.init_pitch_detector(pitch_standard)
+    detector := core.init_pitch_detector(pitch_standard, sample_rate)
     defer core.destroy_pitch_detector(&detector)
     tuner := core.init_tuner(110, pitch_standard, true)
 
     intervals := INTERVALS
-    strobe := core.init_phase_comparator(110, intervals[:], .HARMONIC)
+    strobe := core.init_phase_comparator(110, intervals[:], .HARMONIC, sample_rate)
     defer core.destroy_phase_comparator(strobe)
     retune :: proc(strobe: ^core.PhaseComparator, freq_hz, pitch_standard: f32) {
         core.set_phase_comparator_freq(strobe, freq_hz, pitch_standard, STROBE_SPEED, 2, .HARMONIC)
@@ -527,9 +531,10 @@ play :: proc(path: string, decode_rate: u32, pitch_standard: f32) -> (detections
     readout_track := -1
     readout_ready := false
     retuned_s := f32(-1)
-    for start := 0; start + FRAME_SAMPLES <= len(samples); start += FRAME_SAMPLES {
-        time_s := f32(start + FRAME_SAMPLES) / SAMPLERATE
-        frame := samples[start:start + FRAME_SAMPLES]
+    frame_samples := int(sample_rate) / FPS
+    for start := 0; start + frame_samples <= len(samples); start += frame_samples {
+        time_s := f32(start + frame_samples) / sample_rate
+        frame := samples[start:start + frame_samples]
         core.audio_capture_write(&detector, frame)
         core.audio_capture_write(strobe, frame)
         pitch := core.run_pitch_detection(&detector, tuner.pitch)
@@ -601,22 +606,31 @@ mark_nulls :: proc(detections: []Detection) {
     }
 }
 
-// The whole file as mono decoded at decode_rate, after LEAD_IN_S of silence at the app's sample rate
-decode :: proc(path: string, decode_rate: u32) -> (samples: []f32, ok: bool) {
+// The whole file as mono at its own rate, a fast one decimated like the app's input, sample_rate is what
+// comes out
+decode :: proc(path: string) -> (samples: []f32, sample_rate: f32, ok: bool) {
     decoder: ma.decoder
-    config := ma.decoder_config_init(.f32, 1, decode_rate)
-    // The linear resampler's images land far above the pitch detection's lowpass, its filter keeps them down
-    config.resampling.linear.lpfOrder = 8
+    config := ma.decoder_config_init(.f32, 1, 0)
     cpath := fmt.ctprintf("%s", path)
-    if ma.decoder_init_file(cpath, &config, &decoder) != .SUCCESS do return nil, false
+    if ma.decoder_init_file(cpath, &config, &decoder) != .SUCCESS do return nil, 0, false
     defer ma.decoder_uninit(&decoder)
 
     length: u64
     ma.decoder_get_length_in_pcm_frames(&decoder, &length)
-    lead_in := u64(LEAD_IN_S * SAMPLERATE)
-    samples = make([]f32, lead_in + length)
-    ma.decoder_read_pcm_frames(&decoder, raw_data(samples[lead_in:]), length, nil)
-    return samples, true
+    samples = make([]f32, length)
+    ma.decoder_read_pcm_frames(&decoder, raw_data(samples), length, nil)
+
+    decimator: core.Decimator
+    decimator, sample_rate = core.init_decimator(f32(decoder.outputSampleRate))
+    return samples[:core.decimate(&decimator, samples)], sample_rate, true
+}
+
+// The recording after LEAD_IN_S of silence at sample_rate, a new buffer
+with_lead_in :: proc(recording: []f32, sample_rate: f32) -> []f32 {
+    lead_in := int(LEAD_IN_S * sample_rate)
+    samples := make([]f32, lead_in + len(recording))
+    copy(samples[lead_in:], recording)
+    return samples
 }
 
 // An octave up only when the recording explains it, its 2nd harmonic louder than the fundamental

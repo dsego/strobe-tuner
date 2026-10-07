@@ -129,8 +129,8 @@ Scope :: struct {
 }
 
 
-init_scope :: proc(columns, rows: int) -> (self: Scope) {
-    init_audio_capture_node(&self, "scope")
+init_scope :: proc(columns, rows: int, sample_rate: f32 = DEFAULT_SAMPLE_RATE) -> (self: Scope) {
+    init_audio_capture_node(&self, "scope", sample_rate)
     self.columns = columns
     self.rows = rows
     self.screen = make([]f32, columns * rows)
@@ -162,9 +162,19 @@ destroy_scope :: proc(self: ^Scope) {
 // Starts with a dark screen at the new reference frequency. A held level lets go, it's another note.
 set_scope_freq :: proc(self: ^Scope, freq_hz: f64) {
     self.freq_hz = freq_hz
-    self.step = freq_hz / (SAMPLERATE * SCOPE_PERIODS)
+    self.step = freq_hz / (f64(self.sample_rate) * SCOPE_PERIODS)
     clear_scope(self)
     if self.gain == .HOLD do self.level = SCOPE_MIN_LEVEL
+}
+
+// The input opened at another rate, the beam moves across by its samples. It starts over on a dark screen,
+// like after a stall.
+set_scope_sample_rate :: proc(self: ^Scope, sample_rate: f32) {
+    if sample_rate == self.sample_rate do return
+
+    self.sample_rate = sample_rate
+    self.coupling = {}
+    set_scope_freq(self, self.freq_hz)
 }
 
 clear_scope :: proc(self: ^Scope) {
@@ -200,7 +210,7 @@ update_scope :: proc(self: ^Scope) {
     if self.persistence_seconds <= 0 do clear_scope(self)
 
     // A one pole highpass, the output follows the changes of the input and lets the steady part go
-    pole := f32(math.exp(f64(-math.TAU * SCOPE_AC_COUPLING_HZ / SAMPLERATE)))
+    pole := f32(math.exp(-math.TAU * SCOPE_AC_COUPLING_HZ / f64(self.sample_rate)))
 
     for available > 0 {
         count := min(available, len(self.chunk))
@@ -237,10 +247,11 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
     if self.step <= 0 || len(samples) == 0 do return
 
     // Of one sample
+    sample_rate := f64(self.sample_rate)
     decay: f64 = 1
-    if self.persistence_seconds > 0 do decay = math.exp(-1 / (self.persistence_seconds * SAMPLERATE))
+    if self.persistence_seconds > 0 do decay = math.exp(-1 / (self.persistence_seconds * sample_rate))
 
-    release: f32 = 1 if self.gain == .HOLD else f32(math.exp(f64(-1 / (SCOPE_LEVEL_RELEASE_SECONDS * SAMPLERATE))))
+    release: f32 = 1 if self.gain == .HOLD else f32(math.exp(-1 / (SCOPE_LEVEL_RELEASE_SECONDS * sample_rate)))
     clock := self.sample_clock - i64(len(samples))
     min_level := max(self.noise_floor * SCOPE_NOISE_HEADROOM, SCOPE_MIN_LEVEL)
 
@@ -414,11 +425,11 @@ scope_test_fundamental :: proc(heights: []f32) -> (phase: f64, amp: f64) {
 
 scope_test_sine :: proc(samples: []f32, freq_hz: f64, clock: i64) {
     for &sample, i in samples {
-        sample = f32(math.sin(math.TAU * freq_hz * f64(clock + i64(i)) / SAMPLERATE))
+        sample = f32(math.sin(math.TAU * freq_hz * f64(clock + i64(i)) / DEFAULT_SAMPLE_RATE))
     }
 }
 
-SCOPE_TEST_FRAME :: SAMPLERATE / 60
+SCOPE_TEST_FRAME :: DEFAULT_SAMPLE_RATE / 60
 
 // The screen of the scope display type
 scope_test_init :: proc(freq_hz: f64) -> Scope {
@@ -473,7 +484,7 @@ test_scope_detuned_drifts :: proc(t: ^testing.T) {
         sweep_samples(&scope, samples[:])
         heights, _ := scope_from_above(&scope, .RAW_WAVEFORM)
         phase, _ := scope_test_fundamental(heights)
-        middle_s := (f64(scope.sample_clock) - SCOPE_TEST_FRAME / 2) / SAMPLERATE
+        middle_s := (f64(scope.sample_clock) - SCOPE_TEST_FRAME / 2) / DEFAULT_SAMPLE_RATE
         expected := wrap_phase(math.TAU * OFF_HZ * middle_s)
         testing.expectf(t, abs(wrap_phase(phase - expected)) < 0.02, "phase %v, expected %v", phase, expected)
     }

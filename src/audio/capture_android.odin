@@ -35,6 +35,11 @@ Capture :: struct {
     active_device:      i32, // always 0, the one input
     nodes:              [dynamic]^core.AudioCaptureNode,
 
+    // What the nodes get, the device's own rate or a fast one decimated, see set_input_rate
+    sample_rate:        f32,
+    decimator:          core.Decimator,
+    decimate_chunk:     [DECIMATE_CHUNK]f32,
+
     // Set from AAudio's thread when the stream was disconnected, a headset plugged in or out, then it's
     // opened again
     interruption_ended: bool,
@@ -91,22 +96,15 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
         AAudioStreamBuilder_setDirection(builder, .INPUT)
         AAudioStreamBuilder_setFormat(builder, .PCM_FLOAT)
         AAudioStreamBuilder_setChannelCount(builder, 1)
-        AAudioStreamBuilder_setSampleRate(builder, core.SAMPLERATE)
         AAudioStreamBuilder_setPerformanceMode(builder, .LOW_LATENCY)
         AAudioStreamBuilder_setInputPreset(builder, preset)
         AAudioStreamBuilder_setDataCallback(builder, stream_callback, self)
         AAudioStreamBuilder_setErrorCallback(builder, error_callback, self)
 
+        // No rate asked for, the device's own. AAudio would convert to another one.
         if failed(AAudioStreamBuilder_openStream(builder, &self.stream)) do continue
 
-        // AAudio converts to the rate asked for. Should it open at another, every note would read off by
-        // the ratio, a semitone and a half from 48 to 44.1 kHz.
-        if rate := AAudioStream_getSampleRate(self.stream); rate != core.SAMPLERATE {
-            fmt.println("Input opened at", rate, "Hz instead of", core.SAMPLERATE)
-            failed(AAudioStream_close(self.stream))
-            self.stream = nil
-            return false
-        }
+        set_input_rate(self, f32(AAudioStream_getSampleRate(self.stream)))
         self.device_open = true
         fmt.println("Opened input stream, preset", preset)
         return true
