@@ -60,6 +60,9 @@ LEVEL_WINDOW_S :: 0.05
 // is checked against its own drift at the same moment of the original plus the shift, a real string's
 // partials run sharp of its fundamental and wander, they don't agree with the readout or each other.
 WRONG_WAY_MIN_HZ :: 1
+// Only while the original is within this of its loudest, a fading tail rings with a weak partial or two
+// that wander, e.g. a bass whose fundamental still carries the level but can't be heard any more
+WRONG_WAY_WITHIN_DB :: 15
 // -define:SHOW_WRONG_WAY=true prints every detection with a track turning the wrong way
 SHOW_WRONG_WAY :: #config(SHOW_WRONG_WAY, false)
 
@@ -192,7 +195,10 @@ run_file :: proc(runs: ^[dynamic]Run, spectra: ^[dynamic]Spectrum, path, name: s
         if first_lit < 0 do first_lit = detection.time_s
         last_lit = detection.time_s
     }
-    sustain := [2]f32{first_lit + SUSTAIN_FROM_S, min(last_lit, last_above_floor(samples))}
+    levels := levels_db(samples)
+    defer delete(levels)
+
+    sustain := [2]f32{first_lit + SUSTAIN_FROM_S, min(last_lit, last_above_floor(levels))}
     sustain[1] -= SUSTAIN_TRIM * (sustain[1] - sustain[0])
     if first_lit < 0 || sustain[1] <= sustain[0] {
         fmt.eprintln("  no sustain, the note is lit and over", LIVE_FLOOR_DBFS, "dBFS for under", SUSTAIN_FROM_S, "seconds")
@@ -247,7 +253,8 @@ run_file :: proc(runs: ^[dynamic]Run, spectra: ^[dynamic]Spectrum, path, name: s
         // In the original's octave, a hop away from it is already a wrong note
         note := 100 * int(math.round((original_cents + expected_cents) / 100))
 
-        run := measure(shifted[:], scaled, note, Reference{original[:], expected_note, ratio, expected_cents})
+        reference := Reference{original[:], expected_note, ratio, expected_cents, levels, slice.max(levels) - WRONG_WAY_WITHIN_DB}
+        run := measure(shifted[:], scaled, note, reference)
         shifted_cents, _ := median_cents(shifted[:], scaled, note)
         run.file = name
         run.fundamental_db = fundamental_db
@@ -267,6 +274,8 @@ Reference :: struct {
     note:       int,
     ratio:      f32, // the shifted run's length over the original's
     cents:      f32, // the shift the tracks should move by
+    levels_db:  []f32, // the original's, see levels_db
+    loud_db:    f32, // the tracks turn the wrong way only at or over it, see WRONG_WAY_WITHIN_DB
 }
 
 // The tracks turning the wrong way only with the original to compare with
@@ -300,12 +309,16 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, re
         // The original at the same moment of the performance
         original, aligned := reference.?
         then: Detection
+        loud := false
         if aligned {
             original_s := LEAD_IN_S + (detection.time_s - LEAD_IN_S) / original.ratio
             for cursor + 1 < len(original.detections) && original.detections[cursor + 1].time_s <= original_s {
                 cursor += 1
             }
             then = original.detections[cursor]
+
+            level := original.levels_db[clamp(int(original_s / LEVEL_WINDOW_S), 0, len(original.levels_db) - 1)]
+            loud = level >= original.loud_db
         }
 
         // The readout's pitch on any note, e.g. the neighbour half way between them
@@ -325,7 +338,11 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, re
         }
         if detection.octaves != 0 do run.partial += 1
 
-        if !then.active || then.note_cents != original.note do continue
+        if !then.active || then.note_cents != original.note || !loud do continue
+
+        // The readout on another partial than the original's, the recording hops between them there and
+        // the tracks don't follow the same partials moment by moment
+        if detection.read && then.read && detection.octaves != then.octaves do continue
 
         for track, index in detection.tracks {
             partial := then.tracks[index]
@@ -444,14 +461,22 @@ dft_power :: proc(samples: []f64, freq_hz: f64) -> f64 {
     return real(sum) * real(sum) + imag(sum) * imag(sum)
 }
 
-// The end of the last window at or over LIVE_FLOOR_DBFS
-last_above_floor :: proc(samples: []f32) -> (time_s: f32) {
+// The RMS in dBFS of each LEVEL_WINDOW_S from the start
+levels_db :: proc(samples: []f32) -> []f32 {
     window := int(LEVEL_WINDOW_S * SAMPLERATE)
-    floor := math.pow(10, f32(LIVE_FLOOR_DBFS) / 20)
-    for start := 0; start + window <= len(samples); start += window {
+    levels := make([]f32, len(samples) / window)
+    for &level, index in levels {
         sum: f32
-        for sample in samples[start:start + window] do sum += sample * sample
-        if math.sqrt(sum / f32(window)) >= floor do time_s = f32(start + window) / SAMPLERATE
+        for sample in samples[index * window:(index + 1) * window] do sum += sample * sample
+        level = 10 * math.log10(max(sum / f32(window), 1e-12))
+    }
+    return levels
+}
+
+// The end of the last window at or over LIVE_FLOOR_DBFS
+last_above_floor :: proc(levels: []f32) -> (time_s: f32) {
+    for level, index in levels {
+        if level >= LIVE_FLOOR_DBFS do time_s = f32(index + 1) * LEVEL_WINDOW_S
     }
     return
 }
@@ -597,7 +622,8 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
                for a B2 once its fundamental died down under the 2nd harmonic, right
   1x dB        the original's fundamental from its strongest harmonic, measured without the tuner
   wrong way    strobe tracks whose stripes turned the wrong way and in how many detections, 4x8 is the
-               4th harmonic's track 8 times
+               4th harmonic's track 8 times, while the original is within 15dB of its loudest and both
+               read the same partial
   spread c     readout from the 10th to the 90th percentile over the sustain, the player's vibrato too
   lit s        seconds the note was lit
   ok           passed: no wrong note, aligned within 1c, no track turning the wrong way
