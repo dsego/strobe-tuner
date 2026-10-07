@@ -151,8 +151,10 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     dt := f32(elapsed) / SAMPLERATE
     info.elapsed_s = dt
 
-    // Down to A0, flat by up to half a semitone, at the pitch standard
+    // A0 to C8, the piano's notes the ruler has, up to half a semitone out, at the pitch standard
     min_freq := cents_to_freq(LOWEST_NOTE * 100 - 50, self.pitch_standard)
+    max_freq := cents_to_freq(HIGHEST_NOTE * 100 + 50, self.pitch_standard)
+    in_range := info.detected_freq >= min_freq && info.detected_freq <= max_freq
     mains := false
 
     for mains_hz in MAINS_HZ {
@@ -161,7 +163,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
 
     // A pitch is a note, not the background, even before the floor knows how loud that is. A voice or a
     // muddied string can be one, noise doesn't repeat that well.
-    info.is_tonal = info.detected_freq >= min_freq && info.clarity >= PITCH_CLARITY_LOW && !mains
+    info.is_tonal = in_range && info.clarity >= PITCH_CLARITY_LOW && !mains
     self.snr_db = update_noise_floor(&self.noise_floor, info.rms, dt, is_tonal = info.is_tonal)
     info.snr_db = self.snr_db
     info.noise_floor = self.noise_floor.level
@@ -178,7 +180,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.is_strong_pitch = info.is_tonal && info.clarity >= PITCH_CLARITY_HIGH && info.snr_db >= strong_snr_db
     info.is_weak_pitch =
         mains ||
-        info.detected_freq < min_freq ||
+        !in_range ||
         info.clarity < PITCH_CLARITY_LOW ||
         info.snr_db < weak_snr_db
 
@@ -199,35 +201,46 @@ dbfs :: proc(signal: $T) -> T {
 
 
 // Hum with its harmonics doesn't name a note at either mains frequency, the notes either side of it do
+// The last detection of half a second of a note, a high note's partials go over Nyquist, a sine has one
+detect_test_note :: proc(fundamental: f32, partials := 5) -> PitchInfo {
+    detector := init_pitch_detector()
+    defer destroy_pitch_detector(&detector)
+
+    // Half a second a display frame at a time like the app, the high-pass settles from its start
+    FRAME :: SAMPLERATE / DETECTIONS_PER_SECOND
+    info: PitchInfo
+    for start := 0; start < SAMPLERATE / 2; start += FRAME {
+        frame: [FRAME]f32
+        for &sample, i in frame {
+            for partial in 1 ..= partials {
+                phase := math.TAU * f64(partial) * f64(fundamental) * f64(start + i) / SAMPLERATE
+                sample += f32(0.01 * math.sin(phase))
+            }
+        }
+        audio_capture_write(&detector, frame[:])
+        info = run_pitch_detection(&detector, info)
+    }
+    return info
+}
+
 @(test)
 test_mains_hum :: proc(t: ^testing.T) {
-    detect :: proc(fundamental: f32) -> PitchInfo {
-        detector := init_pitch_detector()
-        defer destroy_pitch_detector(&detector)
-
-        // Half a second a display frame at a time like the app, the high-pass settles from its start
-        FRAME :: SAMPLERATE / DETECTIONS_PER_SECOND
-        info: PitchInfo
-        for start := 0; start < SAMPLERATE / 2; start += FRAME {
-            frame: [FRAME]f32
-            for &sample, i in frame {
-                for partial in 1 ..= 5 {
-                    phase := math.TAU * f64(partial) * f64(fundamental) * f64(start + i) / SAMPLERATE
-                    sample += f32(0.01 * math.sin(phase))
-                }
-            }
-            audio_capture_write(&detector, frame[:])
-            info = run_pitch_detection(&detector, info)
-        }
-        return info
-    }
-
     for mains_hz in MAINS_HZ {
-        hum := detect(mains_hz)
+        hum := detect_test_note(mains_hz)
         testing.expectf(t, hum.is_weak_pitch && !hum.is_strong_pitch && !hum.is_tonal, "%v Hz hum: %v", mains_hz, hum)
     }
     for note_hz in ([]f32{49.0, 61.74}) {
-        note := detect(note_hz)
+        note := detect_test_note(note_hz)
         testing.expectf(t, note.is_strong_pitch && note.is_tonal, "%v Hz note: %v", note_hz, note)
     }
+}
+
+// Up to C8 like the ruler, a higher pitch is no note
+@(test)
+test_highest_note :: proc(t: ^testing.T) {
+    c8 := detect_test_note(4186.01, partials = 1)
+    testing.expectf(t, c8.is_strong_pitch && c8.is_tonal, "C8: %v", c8)
+
+    d8 := detect_test_note(4698.64, partials = 1)
+    testing.expectf(t, d8.is_weak_pitch && !d8.is_strong_pitch && !d8.is_tonal, "D8: %v", d8)
 }

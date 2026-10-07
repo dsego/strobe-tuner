@@ -79,10 +79,10 @@ GlowFrame :: struct {
     tracks:     StrobeTracks,
 }
 
-// Each track's uniforms from the centre outwards, a track too high for the sample rate isn't drawn
+// Each track's uniforms from the centre outwards. A track too high for the sample rate is drawn dark, like a
+// partial too quiet to show, see core.run_phase_detection.
 StrobeTracks :: struct {
     uniforms: [core.MAX_BANDS]gfx.StrobeUniforms,
-    shown:    [core.MAX_BANDS]bool,
     count:    int,
 }
 
@@ -418,9 +418,6 @@ draw_strobe_display :: proc(
                 label_y = on_ring.y - 0.5 * pixel_fonts.band_label.size
             }
 
-            // Hidden, too high for the sample rate
-            if !band.in_range do continue
-
             // How far off this partial is, nothing while it's too quiet to measure. Right aligned on the
             // decimal point like the readout, the digits don't shift as the value changes.
             if config.show_band_cents && band.snr_db > core.NOISE_FLOOR_SNR_DB_THRESHOLD {
@@ -629,9 +626,6 @@ strobe_tracks :: proc(
         uniforms.highlight = self.selection if selected else 0
         uniforms.dim = 0 if selected else self.selection
 
-        // A partial too high for the sample rate leaves a gap, its sheet still opens there
-        tracks.shown[band_index] = band.in_range
-
         // Each vernier track turns faster, its stripes are packed twice as tight
         if mode == .VERNIER do period_count *= 2.0
     }
@@ -642,9 +636,7 @@ draw_strobe_tracks :: proc(self: ^StrobeDisplay, tracks: ^StrobeTracks) {
     gfx.begin_shader(self.strobe_shader)
     defer gfx.end_shader()
 
-    for &uniforms, index in tracks.uniforms[:tracks.count] {
-        if !tracks.shown[index] do continue
-
+    for &uniforms in tracks.uniforms[:tracks.count] {
         // A curved track drops below the top of its quad, see CURVED_TRACK_DROP
         rect := uniforms.bounding_rect
         offset: f32 = 0 if uniforms.flat_track != 0 else CURVED_TRACK_DROP
