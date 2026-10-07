@@ -43,7 +43,9 @@ SNR_HYSTERESIS_DB :: 1.5
 
 // Mains hum repeats as steadily as a held note, and the grid holds it to a few cents of 50 or 60 Hz where
 // no note is tuned: G1 +35 ¢, A♯1 +50 ¢, B1 -49 ¢. It's the background, a string tuned through it loses
-// its note for a moment.
+// its note for a moment. Off, a note held there stayed dark the whole time and a pitch is a note, e.g.
+// -define:MAINS_HUM=true to try it.
+MAINS_HUM :: #config(MAINS_HUM, false)
 MAINS_HZ :: [?]f32{50, 60}
 MAINS_CENTS :: 8
 
@@ -187,8 +189,10 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     in_range := info.detected_freq >= min_freq && info.detected_freq <= max_freq
     mains := false
 
-    for mains_hz in MAINS_HZ {
-        if abs(cents_deviation(info.detected_freq, mains_hz)) <= MAINS_CENTS do mains = true
+    when MAINS_HUM {
+        for mains_hz in MAINS_HZ {
+            if abs(cents_deviation(info.detected_freq, mains_hz)) <= MAINS_CENTS do mains = true
+        }
     }
 
     // A pitch is a note, not the background, even before the floor knows how loud that is. A voice or a
@@ -255,6 +259,8 @@ detect_test_note :: proc(fundamental: f32, partials := 5, sample_rate: f32 = DEF
 // Hum with its harmonics doesn't name a note at either mains frequency, the notes either side of it do
 @(test)
 test_mains_hum :: proc(t: ^testing.T) {
+    when !MAINS_HUM do return
+
     for mains_hz in MAINS_HZ {
         hum := detect_test_note(mains_hz)
         testing.expectf(t, hum.is_weak_pitch && !hum.is_strong_pitch && !hum.is_tonal, "%v Hz hum: %v", mains_hz, hum)

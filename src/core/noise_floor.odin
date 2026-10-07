@@ -64,7 +64,7 @@ reset_noise_floor :: proc(self: ^NoiseFloor) {
 // Updates with the level measured over the last dt seconds, returns its SNR over the floor before the update.
 // Without warming_up the warmup time doesn't run out, e.g. while the window is still on the silence it
 // starts out with. is_tonal is a pitch, the warmup waits it out however long it rings, a note playing
-// when the app starts isn't the background. Hum isn't a pitch, see MAINS_HZ.
+// when the app starts isn't the background. Hum is one, unless MAINS_HUM.
 update_noise_floor :: proc(
     self: ^NoiseFloor,
     measured_level: f32,
