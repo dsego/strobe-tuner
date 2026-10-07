@@ -35,6 +35,10 @@ FPS :: 60
 
 TOLERANCE_CENTS :: 1 // like the generated tones', see sandbox/accuracy
 
+// A pitch this close to half way between two notes may show either, the player's drift decides. The
+// readout hides past half a semitone, so there only one side of the drift reads and its median leans.
+HALF_WAY_CENTS :: 10
+
 LEAD_IN_S :: 2
 
 // Named with middle C as C3, as Yamaha, Ableton and many sample libraries do
@@ -82,6 +86,9 @@ PEAK_STEP_CENTS :: 2
 // The named note looks an octave too low with its 1x and 3x both this far under the strongest, a real
 // note's 3x stays even when its fundamental is weak
 NAMED_LOW_DB :: -40
+// The 1x and 2x compared over this long around each moment, long enough to part a low bass's, C#1's
+// are 35 Hz apart
+MOMENT_WINDOW_S :: 0.25
 
 Spectrum :: struct {
     file:          string,
@@ -127,11 +134,12 @@ Run :: struct {
     expected_note:  int,
     shown_note:     int, // the most common in the sustain
     wrong_note:     int, // detections in the sustain on another note, or none
+    half_way:       int, // on the neighbour, the pitch within HALF_WAY_CENTS of half way to it
     octave:         int, // on the note an octave up, the others count as a wrong note
+    // Of those, the original's 2nd harmonic louder than its fundamental at the moment, the tuner follows it
+    octave_louder:  int,
     partial:        int, // on the note, shown in the octave of the partial the readout measures
     fundamental_db: f32, // the original's, from its strongest harmonic, see measure_spectrum
-    // The original's 2nd harmonic louder than its fundamental, showing the octave up is following it
-    second_louder:  bool,
     wrong_way:      [len(INTERVALS)]int, // detections per track
     // of the readout over the sustain, from the 10th to the 90th percentile. An octave off counts as the
     // note, the readout is the same cents in any octave.
@@ -238,14 +246,13 @@ run_file :: proc(runs: ^[dynamic]Run, spectra: ^[dynamic]Spectrum, path, name: s
     // A shift moves every harmonic by the same cents, their levels stay the original's
     harmonics := HARMONICS
     fundamental_index, _ := slice.linear_search(harmonics[:], 1)
-    second_index, _ := slice.linear_search(harmonics[:], 2)
     fundamental_db := spectrum.levels_db[fundamental_index]
-    second_louder := spectrum.levels_db[second_index] > fundamental_db
+    second_louder := second_louder_moments(samples, sample_rate, spectrum)
+    defer delete(second_louder)
 
-    original_run := measure(original[:], sustain, expected_note, nil)
+    original_run := measure(original[:], sustain, expected_note, second_louder, nil)
     original_run.file = name
     original_run.fundamental_db = fundamental_db
-    original_run.second_louder = second_louder
     original_run.pitch_standard = 440
     original_run.lit_s = lit_s(original[:])
     append(runs, original_run)
@@ -270,11 +277,10 @@ run_file :: proc(runs: ^[dynamic]Run, spectra: ^[dynamic]Spectrum, path, name: s
         note := 100 * int(math.round((original_cents + expected_cents) / 100))
 
         reference := Reference{original[:], expected_note, ratio, expected_cents, levels, slice.max(levels) - WRONG_WAY_WITHIN_DB}
-        run := measure(shifted[:], scaled, note, reference)
+        run := measure(shifted[:], scaled, note, second_louder, reference)
         shifted_cents, _ := median_cents(shifted[:], scaled, note)
         run.file = name
         run.fundamental_db = fundamental_db
-        run.second_louder = second_louder
         run.shift_cents = shift_cents
         run.pitch_standard = pitch_standard
         run.expected_cents = expected_cents
@@ -294,8 +300,9 @@ Reference :: struct {
     loud_db:    f32, // the tracks turn the wrong way only at or over it, see WRONG_WAY_WITHIN_DB
 }
 
-// The tracks turning the wrong way only with the original to compare with
-measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, reference: Maybe(Reference)) -> (run: Run) {
+// The tracks turning the wrong way and a neighbour half way only with the original to compare with.
+// second_louder is the original's, see second_louder_moments.
+measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, second_louder: []bool, reference: Maybe(Reference)) -> (run: Run) {
     run.expected_note = expected_note
 
     cents: [dynamic]f32
@@ -324,29 +331,41 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, re
 
         // The original at the same moment of the performance
         original, aligned := reference.?
+        original_s := detection.time_s
+        if aligned do original_s = LEAD_IN_S + (detection.time_s - LEAD_IN_S) / original.ratio
+        moment := clamp(int(original_s / LEVEL_WINDOW_S), 0, len(second_louder) - 1)
         then: Detection
         loud := false
         if aligned {
-            original_s := LEAD_IN_S + (detection.time_s - LEAD_IN_S) / original.ratio
             for cursor + 1 < len(original.detections) && original.detections[cursor + 1].time_s <= original_s {
                 cursor += 1
             }
             then = original.detections[cursor]
-
-            level := original.levels_db[clamp(int(original_s / LEVEL_WINDOW_S), 0, len(original.levels_db) - 1)]
-            loud = level >= original.loud_db
+            loud = original.levels_db[moment] >= original.loud_db
         }
 
-        // The readout's pitch on any note, e.g. the neighbour half way between them
-        if detection.read && then.active && then.read {
-            moved := fold_octave(detection.cents, expected_note) - fold_octave(then.cents, original.note)
-            append(&aligned_errors, moved - original.cents)
+        // Where the pitch should be, the original's moved by the shift
+        expected_cents: Maybe(f32)
+        if then.active && then.read do expected_cents = fold_octave(then.cents, original.note) + original.cents
+
+        // The readout's pitch on any note, e.g. the neighbour half way between them, while it reads on both sides
+        if pitch, known := expected_cents.?; known && detection.read {
+            from_strobe := fold_octave(pitch, detection.strobe_cents) - f32(detection.strobe_cents)
+            if abs(from_strobe) <= core.READOUT_RANGE_CENTS - HALF_WAY_CENTS {
+                moved := fold_octave(detection.cents, expected_note) - fold_octave(then.cents, original.note)
+                append(&aligned_errors, moved - original.cents)
+            }
         }
 
         // On another note the tracks are other partials
         if detection.note_cents != expected_note {
+            pitch, known := expected_cents.?
+            half_way := known && abs(abs(f32(detection.note_cents) - pitch) - 50) <= HALF_WAY_CENTS
             if detection.note_cents - expected_note == 1200 {
                 run.octave += 1
+                if second_louder[moment] do run.octave_louder += 1
+            } else if half_way && abs(detection.note_cents - expected_note) == 100 {
+                run.half_way += 1
             } else {
                 run.wrong_note += 1
             }
@@ -440,13 +459,8 @@ percentile :: proc(sorted: []f32, fraction: f32) -> f32 {
 measure_spectrum :: proc(samples: []f32, sample_rate: f32, sustain: [2]f32, note: int) -> (spectrum: Spectrum) {
     spectrum.note = note
 
-    segment := samples[int(sustain[0] * sample_rate):min(int(sustain[1] * sample_rate), len(samples))]
-    windowed := make([]f64, len(segment))
+    windowed := hann(samples[int(sustain[0] * sample_rate):min(int(sustain[1] * sample_rate), len(samples))])
     defer delete(windowed)
-    for sample, index in segment {
-        window := 0.5 - 0.5 * math.cos(2 * math.PI * f64(index) / f64(len(segment) - 1))
-        windowed[index] = f64(sample) * window
-    }
 
     note_hz := f64(core.cents_to_freq(f32(note)))
     harmonics := HARMONICS
@@ -465,6 +479,40 @@ measure_spectrum :: proc(samples: []f32, sample_rate: f32, sustain: [2]f32, note
     third_index, _ := slice.linear_search(harmonics[:], 3)
     spectrum.named_low = spectrum.levels_db[fundamental_index] < NAMED_LOW_DB && spectrum.levels_db[third_index] < NAMED_LOW_DB
     return
+}
+
+// For each LEVEL_WINDOW_S like levels_db, whether the note's 2nd harmonic is louder than its fundamental
+// over MOMENT_WINDOW_S around it, at the peaks the sustain's spectrum found. A bass's fundamental can die
+// away under its 2nd harmonic late in a note whose sustain it leads.
+second_louder_moments :: proc(samples: []f32, sample_rate: f32, spectrum: Spectrum) -> []bool {
+    harmonics := HARMONICS
+    fundamental_index, _ := slice.linear_search(harmonics[:], 1)
+    second_index, _ := slice.linear_search(harmonics[:], 2)
+    note_hz := f64(core.cents_to_freq(f32(spectrum.note)))
+    fundamental_hz := note_hz * math.pow(2, f64(spectrum.offsets_cents[fundamental_index]) / 1200)
+    second_hz := 2 * note_hz * math.pow(2, f64(spectrum.offsets_cents[second_index]) / 1200)
+
+    step := int(LEVEL_WINDOW_S * sample_rate)
+    length := min(int(MOMENT_WINDOW_S * sample_rate), len(samples))
+    louder := make([]bool, len(samples) / step)
+    for &second, index in louder {
+        start := clamp(index * step + (step - length) / 2, 0, len(samples) - length)
+        windowed := hann(samples[start:start + length])
+        defer delete(windowed)
+
+        second = dft_power(windowed, second_hz, f64(sample_rate)) > dft_power(windowed, fundamental_hz, f64(sample_rate))
+    }
+    return louder
+}
+
+// A new buffer
+hann :: proc(segment: []f32) -> []f64 {
+    windowed := make([]f64, len(segment))
+    for sample, index in segment {
+        window := 0.5 - 0.5 * math.cos(2 * math.PI * f64(index) / f64(len(segment) - 1))
+        windowed[index] = f64(sample) * window
+    }
+    return windowed
 }
 
 // The power at one frequency, the phase turned by a running rotation instead of a sin and cos per sample
@@ -633,17 +681,19 @@ with_lead_in :: proc(recording: []f32, sample_rate: f32) -> []f32 {
     return samples
 }
 
-// An octave up only when the recording explains it, its 2nd harmonic louder than the fundamental
+// An octave up only when the recording explains it, its 2nd harmonic louder than the fundamental then
 passed :: proc(run: Run) -> bool {
-    if run.octave > 0 && !run.second_louder do return false
+    if run.octave_louder < run.octave do return false
 
     return run.wrong_note == 0 && abs(run.aligned_cents) <= TOLERANCE_CENTS && run.wrong_way == {}
 }
 
-// "ok", "ok 2x>1x" when it showed the octave up the recording explains, empty when it failed
+// "ok", "ok 2x>1x" when it showed the octave up the recording explains, "ok half" when it showed the
+// neighbour half way, empty when it failed
 status_text :: proc(run: Run) -> string {
     if !passed(run) do return ""
-    return "ok 2x>1x" if run.octave > 0 else "ok"
+    if run.octave > 0 do return "ok 2x>1x"
+    return "ok half" if run.half_way > 0 else "ok"
 }
 
 // The tracks turning the wrong way and in how many detections, e.g. "4×110", "-" for none
@@ -675,12 +725,15 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
   A            the pitch standard the tuner was set to
   error c      readout's move minus the shift, the medians over the sustain
   aligned      the same, each detection against the original's at the same moment of the performance,
-               the note's drift cancels, within 1c passes
+               the note's drift cancels, within 1c passes. Not within 10c of half way to the next
+               note, the readout hides past it and reads only one side of the drift there.
   unread       detections in the sustain lit without a readout, before a track settled or one more than
                half a semitone off, report only
   shown/named  the note the tuner showed most, then the filename's note if they differ
   wrong note   detections in the sustain on another note or dark, out of all of them in the sustain,
                an octave down or two up count here too
+  half way     detections on the neighbour while the pitch is within 10c of half way to it, which
+               note shows is a coin toss there
   octave up    detections on the right note one octave up, the readout is the same there
   partial      detections on the right note named after the partial the readout measures, e.g. B3
                for a B2 once its fundamental died down under the 2nd harmonic, right
@@ -692,25 +745,24 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
   spread c     readout from the 10th to the 90th percentile over the sustain, the player's vibrato too
   lit s        seconds the note was lit
   ok           passed: no wrong note, aligned within 1c, no track turning the wrong way
-  ok 2x>1x     passed showing the octave up, the original's 2nd harmonic is louder than its
-               fundamental so the tuner follows it, e.g. a bass with a weak fundamental. An octave
-               up on a recording whose fundamental is the louder fails.
-
-  +-49c lands half way between two notes, which note shows is a coin toss there.
+  ok 2x>1x     passed showing the octave up, the original's 2nd harmonic louder than its fundamental
+               at the time so the tuner follows it, e.g. a bass whose fundamental died down. An
+               octave up while the fundamental is the louder fails.
+  ok half      passed showing the neighbour half way
 `)
 
     // Plain ASCII, the padding counts bytes and a ¢ is two
-    rule := "+-----------------+----------+-----+---------+---------+------------+-------------+------------+------------+------------+-------+------------+---------+-------+----------+"
+    rule := "+-----------------+----------+-----+---------+---------+------------+-------------+------------+------------+------------+------------+-------+------------+---------+-------+----------+"
     fmt.println()
     fmt.println(rule)
-    fmt.println("| file            | shift c  | A   | error c | aligned | unread     | shown/named | wrong note | octave up  | partial    | 1x dB | wrong way  | spread c| lit s |          |")
+    fmt.println("| file            | shift c  | A   | error c | aligned | unread     | shown/named | wrong note | half way   | octave up  | partial    | 1x dB | wrong way  | spread c| lit s |          |")
     fmt.println(rule)
     for run in sorted {
         note := note_name(run.shown_note)
         if run.shown_note != run.expected_note do note = fmt.tprintf("%v/%v", note, note_name(run.expected_note))
         fmt.printfln(
             // Odin pads a width on a float with zeros, they go in as text
-            "| %-15v | %8v | %3v | %7v | %7v | %10v | %-11v | %10v | %10v | %10v | %5v | %-10v | %7v | %5v | %-8v |",
+            "| %-15v | %8v | %3v | %7v | %7v | %10v | %-11v | %10v | %10v | %10v | %10v | %5v | %-10v | %7v | %5v | %-8v |",
             os.stem(run.file),
             "original" if run.shift_cents == 0 else fmt.tprintf("%+.2f", run.shift_cents),
             fmt.tprintf("%.0f", run.pitch_standard),
@@ -719,6 +771,7 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
             fmt.tprintf("%v/%v", run.unread, run.measured),
             note,
             fmt.tprintf("%v/%v", run.wrong_note, run.measured),
+            fmt.tprintf("%v/%v", run.half_way, run.measured),
             fmt.tprintf("%v/%v", run.octave, run.measured),
             fmt.tprintf("%v/%v", run.partial, run.measured),
             fmt.tprintf("%.0f", run.fundamental_db),
@@ -766,10 +819,10 @@ print_spectra :: proc(spectra: []Spectrum) {
 }
 
 print_csv :: proc(runs: []Run) {
-    fmt.println("file,shift_cents,pitch_standard,error_cents,aligned_cents,unread,expected_note,shown_note,wrong_note,octave,partial,measured,fundamental_db,wrong_way,spread_cents,lit_s")
+    fmt.println("file,shift_cents,pitch_standard,error_cents,aligned_cents,unread,expected_note,shown_note,wrong_note,half_way,octave,octave_louder,partial,measured,fundamental_db,wrong_way,spread_cents,lit_s")
     for run in runs {
         fmt.printfln(
-            "%v,%.3f,%.0f,%.3f,%.3f,%v,%v,%v,%v,%v,%v,%v,%.1f,%v,%.2f,%.2f",
+            "%v,%.3f,%.0f,%.3f,%.3f,%v,%v,%v,%v,%v,%v,%v,%v,%v,%.1f,%v,%.2f,%.2f",
             run.file,
             run.shift_cents,
             run.pitch_standard,
@@ -779,7 +832,9 @@ print_csv :: proc(runs: []Run) {
             note_name(run.expected_note),
             note_name(run.shown_note),
             run.wrong_note,
+            run.half_way,
             run.octave,
+            run.octave_louder,
             run.partial,
             run.measured,
             run.fundamental_db,
