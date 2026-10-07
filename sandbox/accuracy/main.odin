@@ -176,7 +176,7 @@ run_case :: proc(test_case: Case) -> (result: Result) {
     result.test_case = test_case
 
     note := core.cents_to_note(f32(100 * test_case.note_semitones), test_case.pitch_standard)
-    freq_hz := note.frequency * math.pow(2, test_case.offset_cents / 1200)
+    freq_hz := core.freq_at_cents(note.frequency, test_case.offset_cents)
     before_hz: f32
     if before, ok := test_case.before_semitones.?; ok {
         before_hz = core.cents_to_note(f32(100 * before), test_case.pitch_standard).frequency
@@ -241,7 +241,7 @@ run_case :: proc(test_case: Case) -> (result: Result) {
             if !band.in_range || band.snr_db < 0.5 * (fade[0] + fade[1]) do continue
             if !has_partial(test_case.waveform, band.interval * math.pow(2, f32(partial_octaves))) do continue
 
-            expected_hz := band.freq_hz * (math.pow(2, test_case.offset_cents / 1200) - 1)
+            expected_hz := core.freq_at_cents(band.freq_hz, test_case.offset_cents) - band.freq_hz
             if abs(expected_hz) >= WRONG_WAY_MIN_HZ && band.drift_hz * expected_hz < 0 {
                 result.wrong_way += 1
                 break

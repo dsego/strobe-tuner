@@ -276,7 +276,7 @@ set_phase_comparator_freq :: proc(
         case .HARMONIC:
             // Named after the exact partial, a big offset would otherwise land on the next note
             band.note = freq_to_note(band.interval * base_freq_hz, pitch_standard)
-            band.freq_hz = band.interval * base_freq_hz * math.pow(2, band.offset_cents / 1200)
+            band.freq_hz = freq_at_cents(band.interval * base_freq_hz, band.offset_cents)
         case .VERNIER:
             band.freq_hz = base_freq_hz
             band.note = freq_to_note(band.freq_hz, pitch_standard)
@@ -789,7 +789,7 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
         defer destroy_phase_comparator(pc)
         set_phase_comparator_freq(pc, target_hz, 440, 0.025, 2, .HARMONIC)
 
-        freq := f64(cents_to_freq(detune_cents, target_hz))
+        freq := f64(freq_at_cents(target_hz, detune_cents))
         chunk: [FRAME]f32
         clock := 0
         for _ in 0 ..< 2 * SAMPLERATE / FRAME {
@@ -901,7 +901,7 @@ test_strobe_turn_rate :: proc(t: ^testing.T) {
         set_phase_comparator_tracks(pc, intervals, {0}, {speed_scale})
         set_phase_comparator_freq(pc, target_hz, 440, BASE_SPEED, 2, .HARMONIC)
 
-        freq := f64(cents_to_freq(detune_cents, target_hz))
+        freq := f64(freq_at_cents(target_hz, detune_cents))
         chunk: [FRAME]f32
         clock := 0
         frames_per_s := SAMPLERATE / FRAME
@@ -925,7 +925,8 @@ test_strobe_turn_rate :: proc(t: ^testing.T) {
         for speed_scale in ([]f32{0.25, 1}) {
             for cents in ([]f32{1, 5, 10, 25, 50, -50}) {
                 rate := run(target_hz, cents, speed_scale)
-                ideal := math.TAU * STROBE_REFERENCE_HZ * (math.pow(2, cents / 1200) - 1) * BASE_SPEED * speed_scale
+                drift_hz := freq_at_cents(STROBE_REFERENCE_HZ, cents) - STROBE_REFERENCE_HZ
+                ideal := math.TAU * drift_hz * BASE_SPEED * speed_scale
                 testing.expectf(
                     t,
                     abs(rate - ideal) < 0.02 * abs(ideal),

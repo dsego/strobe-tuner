@@ -374,14 +374,15 @@ measure :: proc(app: ^App) -> (reading: Reading) {
 
     if reading.strobe_readout {
         band := app.phase_comparator.bands[app.readout_track]
-        steady.detected_freq = core.cents_to_freq(band.err_cents - steady.err_cents, steady.detected_freq)
+        steady.detected_freq = core.freq_at_cents(steady.detected_freq, band.err_cents - steady.err_cents)
         steady.err_cents = band.err_cents
 
         // The note and the Hz of the partial it measures, e.g. a low string's 2nd harmonic ringing on after
-        // its fundamental died down. A locked note and a string keep their own.
+        // its fundamental died down. The Hz are the track's, the pitch detection may still read the
+        // fundamental under a target that moved up to the partial. A locked note and a string keep their own.
         if !core.measures_target(tuner) {
             reading.octaves = core.readout_octaves(band, core.tuner_target_freq(tuner))
-            steady.detected_freq *= math.pow(2, f32(reading.octaves))
+            steady.detected_freq = core.freq_at_cents(band.freq_hz, band.err_cents)
         }
     }
 

@@ -129,7 +129,7 @@ main :: proc() {
         // desktop's stripes a second by the drift, they fade from a quarter of a stripe a frame, see the app's
         // STROBE_ALIAS_FADE_STRIPES.
         for band in strobe.bands {
-            drift_hz := band.freq_hz * (math.pow(2, band.drift_cents / 1200) - 1)
+            drift_hz := core.freq_at_cents(band.freq_hz, band.drift_cents) - band.freq_hz
             stripes_per_s := DESKTOP_PERIODS * drift_hz * f32(core.strobe_rescale(band.freq_hz)) * band.speed
             fmt.printf(
                 "  %v× %-7v %-6v %-6v %-5v",

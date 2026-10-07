@@ -277,3 +277,15 @@ test_chromatic_range :: proc(t: ^testing.T) {
 cents_deviation :: proc(freq_hz: f32, reference_hz: f32) -> f32 {
     return freq_to_cents(freq_hz, reference_hz)
 }
+
+// The frequency this many cents above reference_hz, below for negative cents
+freq_at_cents :: proc(reference_hz: f32, cents: f32) -> f32 {
+    return reference_hz * libc.exp2(cents / 1200.0)
+}
+
+@(test)
+test_freq_at_cents :: proc(t: ^testing.T) {
+    testing.expect_value(t, freq_at_cents(110, 1200), 220)
+    testing.expect_value(t, freq_at_cents(110, -1200), 55)
+    testing.expect(t, abs(cents_deviation(freq_at_cents(61.74, 7.5), 61.74) - 7.5) < 0.001)
+}

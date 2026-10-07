@@ -611,7 +611,7 @@ strobe_tracks :: proc(
         // tracks by the first one's, at their own speed. The lamp's tracks move by the screen, about as fast.
         frame_time := min(gfx.frame_time(), STROBE_MAX_FRAME_TIME_S)
         drift_cents := bands[0].drift_cents if mode == .VERNIER else band.drift_cents
-        drift_hz := band.freq_hz * (math.pow(2, drift_cents / 1200) - 1)
+        drift_hz := core.freq_at_cents(band.freq_hz, drift_cents) - band.freq_hz
         phase_per_s := math.TAU * drift_hz * f32(core.strobe_rescale(band.freq_hz)) * band.speed
         stripes_per_s := period_count * phase_per_s / density / math.TAU
 

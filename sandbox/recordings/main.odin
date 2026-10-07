@@ -363,7 +363,7 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, re
             // The original's partial moved by the shift, from the note this run measures from
             partial_cents := core.cents_deviation(partial.freq_hz + partial.drift_hz, partial.freq_hz)
             expected_cents := f32(original.note - expected_note) + partial_cents + original.cents
-            expected_hz := track.freq_hz * (math.pow(2, expected_cents / 1200) - 1)
+            expected_hz := core.freq_at_cents(track.freq_hz, expected_cents) - track.freq_hz
             if abs(expected_hz) < WRONG_WAY_MIN_HZ || track.drift_hz * expected_hz >= 0 do continue
 
             run.wrong_way[index] += 1

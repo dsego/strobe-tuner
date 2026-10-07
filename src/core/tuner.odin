@@ -190,7 +190,7 @@ steady_readout :: proc(self: ^Tuner, freq: f32, elapsed_s: f32) {
     } else {
         // In cents rather than Hz, the same smoothing for every note
         smoothing := 1 - math.exp(-elapsed_s / READOUT_SMOOTHING_S)
-        self.steady_freq = cents_to_freq(smoothing * cents_deviation(freq, self.steady_freq), self.steady_freq)
+        self.steady_freq = freq_at_cents(self.steady_freq, smoothing * cents_deviation(freq, self.steady_freq))
     }
 }
 
@@ -338,7 +338,7 @@ note_offset_cents :: proc(self: ^Tuner, note: Note) -> f32 {
 
 // What the strobe is tuned to, the target note with its offset
 tuner_target_freq :: proc(self: ^Tuner) -> f32 {
-    return cents_to_freq(note_offset_cents(self, self.target_note), self.target_note.frequency)
+    return freq_at_cents(self.target_note.frequency, note_offset_cents(self, self.target_note))
 }
 
 // Another note is played than the target, a locked note's neighbour. The strobe and the readout have
@@ -435,11 +435,11 @@ test_tuner :: proc(t: ^testing.T) {
     update_tuner(&tuner, medium(A2))
     update_tuner(&tuner, medium(A2 * 2.0 / 3.0))
     update_tuner(&tuner, medium(A2))
-    testing.expect(t, !update_tuner(&tuner, medium(cents_to_freq(1, A2))))
+    testing.expect(t, !update_tuner(&tuner, medium(freq_at_cents(A2, 1))))
     testing.expect(t, !tuner.active)
-    testing.expect(t, !update_tuner(&tuner, medium(cents_to_freq(10, A2))))
-    update_tuner(&tuner, medium(cents_to_freq(12, A2)))
-    testing.expect(t, update_tuner(&tuner, medium(cents_to_freq(9, A2))))
+    testing.expect(t, !update_tuner(&tuner, medium(freq_at_cents(A2, 10))))
+    update_tuner(&tuner, medium(freq_at_cents(A2, 12)))
+    testing.expect(t, update_tuner(&tuner, medium(freq_at_cents(A2, 9))))
     testing.expect(t, tuner.active)
     testing.expect_value(t, tuner.target_note.name, 'A')
 
@@ -503,10 +503,10 @@ test_tuner :: proc(t: ^testing.T) {
     // The readout averages small wobbles, a bigger change jumps straight there
     tuner = init_tuner(A2, 440, true, 0)
     update_tuner(&tuner, detection(A2))
-    update_tuner(&tuner, detection(cents_to_freq(2, A2)))
+    update_tuner(&tuner, detection(freq_at_cents(A2, 2)))
     steady = tuner_readout(&tuner)
     testing.expect(t, steady.err_cents > 0.3 && steady.err_cents < 0.5)
-    update_tuner(&tuner, detection(cents_to_freq(20, A2)))
+    update_tuner(&tuner, detection(freq_at_cents(A2, 20)))
     steady = tuner_readout(&tuner)
     testing.expect(t, abs(steady.err_cents - 20) < 0.01)
 
@@ -514,8 +514,8 @@ test_tuner :: proc(t: ^testing.T) {
     tuner = init_tuner(A2, 440, true, 0)
     a2_index, _ := note_index(tuner.target_note)
     tuner.offsets_cents[a2_index] = -10
-    testing.expect(t, abs(tuner_target_freq(&tuner) - cents_to_freq(-10, A2)) < 0.001)
-    update_tuner(&tuner, detection(cents_to_freq(-10, A2)))
+    testing.expect(t, abs(tuner_target_freq(&tuner) - freq_at_cents(A2, -10)) < 0.001)
+    update_tuner(&tuner, detection(freq_at_cents(A2, -10)))
     steady = tuner_readout(&tuner)
     testing.expect(t, abs(steady.err_cents) < 0.01)
 
