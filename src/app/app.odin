@@ -197,24 +197,31 @@ run_app :: proc(config: ^Config) {
 
         // The sheets slide up over the main screen, which keeps running under them and ignores taps until
         // they're all the way down again. They're drawn at the end of the frame.
+        // A sheet all the way up covers the panel under the strobe, the instrument sheet the strobe too. A
+        // phone's strobe area still shows above that, behind the notch. Not while a sheet is dragged, it may
+        // move down later in the frame.
         gui_disabled = false
+        panel_covered := false
         for sheet in ([]^Sheet{&app.settings_sheet, &app.track_sheet, &app.instrument_sheet, &app.input_sheet}) {
             slide_sheet(sheet)
             if sheet.open || sheet.slide > 0 do gui_disabled = true
+            if sheet.slide == 1 && !sheet.drag.active do panel_covered = true
         }
 
-        // The instrument sheet all the way up covers the main screen. A phone's strobe area still shows
-        // above it, behind the notch. Not while it's dragged, it may move down later in the frame.
         instrument_sheet := app.instrument_sheet
         covered := instrument_sheet.slide == 1 && !instrument_sheet.drag.active
         strobe_shows := !covered || safe.y > 0
 
         feed_scope(&app, strobe_shows)
 
-        if !covered {
-            draw_main_screen(&app, layout, reading)
-        } else if strobe_shows {
+        // The arrows are on the strobe, they show above the sheet
+        if covered {
+            if strobe_shows do draw_strobe_area(&app, layout)
+        } else if panel_covered {
             draw_strobe_area(&app, layout)
+            draw_tuning_arrows(&app, layout, reading)
+        } else {
+            draw_main_screen(&app, layout, reading)
         }
         draw_sheets(&app, layout, reading)
 
@@ -793,7 +800,8 @@ draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
     app.input_stats_age += gfx.frame_time()
     if app.input_stats_age >= INPUT_STATS_HOLD_S {
         pitch := reading.pitch
-        app.input_stats = {pitch.rms_dbfs, core.dbfs(pitch.noise_floor), pitch.snr_db}
+        // The floor is the level's average, quiet wobbles under it, the SNR of the background is 0
+        app.input_stats = {pitch.rms_dbfs, core.dbfs(pitch.noise_floor), max(pitch.snr_db, 0)}
         app.input_stats_age = 0
     }
 
