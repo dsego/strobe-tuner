@@ -30,7 +30,7 @@ FONT_CODEPOINTS :: " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#/+-−
 //   uvx --from opentype-feature-freezer pyftfeatfreeze -f tnum Inter-Regular.ttf Inter-Regular-tnum.ttf
 //   uvx --from fonttools pyftsubset Inter-Regular-tnum.ttf --text="0123456789.+-×½#ABCDEFGHz¢" \
 //       --layout-features='' --no-hinting --output-file=assets/fonts/inter/Inter-Regular-Tabular.ttf
-TABULAR_CODEPOINTS :: "0123456789.+-×½#ABCDEFGHz¢"
+TABULAR_CODEPOINTS :: "0123456789.+-×½#ABCDEFGHbz¢"
 
 // Phosphor Regular (phosphoricons.com), the font is cut down to these, to add one:
 //   uvx --from fonttools pyftsubset Phosphor.ttf --unicodes=U+E272,U+E326,... --no-hinting \
@@ -74,9 +74,11 @@ RULER_NOTE_SIZE :: 88 // the target note
 RULER_NEIGHBOUR_SIZE :: 52
 RULER_OCTAVE_SIZE :: 26
 
-// The sharps 3/8 of their letter
+// The sharps 3/8 of their letter. Noto's flat is short and thin next to its sharp, larger it's as tall.
 RULER_NOTE_SHARP_SIZE :: 33
 RULER_NEIGHBOUR_SHARP_SIZE :: 20
+RULER_NOTE_FLAT_SIZE :: 50
+RULER_NEIGHBOUR_FLAT_SIZE :: 30
 READOUT_SIZE :: 24 // the Hz and cents values, they grow with the ruler
 STROBE_ARROW_SIZE :: 22 // over the strobe, which way to tune
 OFFSET_VALUE_SIZE :: 32 // the value in the popup of the note offsets
@@ -113,6 +115,8 @@ PixelFonts :: struct {
         octave:           PixelFont,
         note_sharp:       PixelFont,
         neighbour_sharp:  PixelFont,
+        note_flat:        PixelFont,
+        neighbour_flat:   PixelFont,
         readout:          PixelFont,
         strobe_arrow:     PixelFont,
         offset_value:     PixelFont,
@@ -161,9 +165,11 @@ update_pixel_fonts :: proc() {
         octave           = load(inter_medium, RULER_SCALE * RULER_OCTAVE_SIZE, scale, "0123456789"),
         note_sharp       = load(noto_sans_mono, RULER_SCALE * RULER_NOTE_SHARP_SIZE, scale, "♯"),
         neighbour_sharp  = load(noto_sans_mono, RULER_SCALE * RULER_NEIGHBOUR_SHARP_SIZE, scale, "♯"),
+        note_flat        = load(noto_sans_mono, RULER_SCALE * RULER_NOTE_FLAT_SIZE, scale, "♭"),
+        neighbour_flat   = load(noto_sans_mono, RULER_SCALE * RULER_NEIGHBOUR_FLAT_SIZE, scale, "♭"),
         readout          = load(inter_tabular, RULER_SCALE * READOUT_SIZE, scale, TABULAR_CODEPOINTS),
         strobe_arrow     = load(inter_medium, STROBE_ARROW_SIZE, scale, "◀▶"),
-        offset_value     = load(inter_medium, OFFSET_VALUE_SIZE, scale, "ABCDEFG#0123456789.+-¢"),
+        offset_value     = load(inter_medium, OFFSET_VALUE_SIZE, scale, "ABCDEFG#b0123456789.+-¢"),
         band_label       = load(inter_tabular, LABEL_LARGE_SIZE, scale, TABULAR_CODEPOINTS),
         band_label_small = load(inter_tabular, LABEL_SIZE, scale, TABULAR_CODEPOINTS),
     }

@@ -99,7 +99,7 @@ reset_note_offsets_editing :: proc() {
 // where they are. A finger would cover what it steps, tapped the note or the cents open a popup over the row
 // with the steppers large.
 gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Config, target: int) -> (changed: bool) {
-    NAMES :: [12]cstring{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
+    NAMES :: [12]cstring{"C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"}
 
     // From C0 as it's shown, the octave changes at C
     FROM_C0 :: 57 + core.LOWEST_NOTE

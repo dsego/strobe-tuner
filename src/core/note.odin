@@ -23,11 +23,18 @@ import "core:math"
 import "core:testing"
 
 
+// A black key is spelled the way most musicians name it, C# and F# sharp, Eb, Ab and Bb flat
+Accidental :: enum {
+    NATURAL,
+    SHARP,
+    FLAT,
+}
+
 // A note of equal temperament
 Note :: struct {
-    name:           rune, // the letter, without the sharp
+    name:           rune, // the letter, without the sharp or the flat
     semitone_index: int, // C = 0, C# = 1, ... B = 11
-    is_accidental:  bool,
+    accidental:     Accidental,
     octave:         int,
     cents:          int, // from A4, a whole number of semitones
     frequency:      f32,
@@ -62,18 +69,20 @@ test_note_index :: proc(t: ^testing.T) {
 }
 
 
-// The letter, the sharp and the octave, e.g. "A#2"
+// The letter, the sharp or the flat and the octave, e.g. "C#2" or "Bb2"
 note_name :: proc(note: Note, allocator := context.temp_allocator) -> string {
-    return fmt.aprintf("%v%v%v", note.name, "#" if note.is_accidental else "", note.octave, allocator = allocator)
+    ACCIDENTALS :: [Accidental]string{.NATURAL = "", .SHARP = "#", .FLAT = "b"}
+    accidentals := ACCIDENTALS
+    return fmt.aprintf("%v%v%v", note.name, accidentals[note.accidental], note.octave, allocator = allocator)
 }
 
 
-// The note named by a letter, an optional sharp and a single digit octave, e.g. "A#2"
+// The note named by a letter, an optional sharp or flat and a single digit octave, e.g. "A#2" or "Bb2"
 parse_note :: proc(name: string, pitch_standard: f32 = 440.0) -> (note: Note, ok: bool) {
     if len(name) < 2 || len(name) > 3 do return
 
     is_accidental := len(name) == 3
-    if is_accidental && name[1] != '#' do return
+    if is_accidental && name[1] != '#' && name[1] != 'b' do return
 
     digit := name[len(name) - 1]
     if digit < '0' || digit > '9' do return
@@ -90,7 +99,7 @@ parse_note :: proc(name: string, pitch_standard: f32 = 440.0) -> (note: Note, ok
     case 'B': semitone = 2
     case: return
     }
-    if is_accidental do semitone += 1
+    if is_accidental do semitone += 1 if name[1] == '#' else -1
 
     octave := int(digit - '0')
     return cents_to_note(f32(100 * (semitone + 12 * (octave - 4))), pitch_standard), true
@@ -106,13 +115,24 @@ test_parse_note :: proc(t: ^testing.T) {
 
     note, ok = parse_note("A#5")
     testing.expect_value(t, ok, true)
-    testing.expect_value(t, note.name, 'A')
+    testing.expect_value(t, note.name, 'B') // spelled Bb
     testing.expect_value(t, note.octave, 5)
     testing.expect(t, abs(note.frequency - 932.33) < 0.01)
-    testing.expect_value(t, note_name(note), "A#5")
+    testing.expect_value(t, note_name(note), "Bb5")
 
-    // A flat, a negative octave, no octave and other junk
-    for bad in ([]string{"", "K", "A#2#", "Ab2", "C-1", "AX", "H2"}) {
+    // A flat is the same key, C# and F# keep their sharps
+    flat, _ := parse_note("Bb5")
+    testing.expect_value(t, flat.cents, note.cents)
+    for name in ([]string{"C#3", "Eb3", "F#3", "Ab3", "Bb3"}) {
+        note, ok = parse_note(name)
+        testing.expectf(t, ok, "%q didn't parse", name)
+        testing.expect_value(t, note_name(note), name)
+    }
+    note, _ = parse_note("Cb4")
+    testing.expect_value(t, note_name(note), "B3")
+
+    // A negative octave, no octave and other junk
+    for bad in ([]string{"", "K", "A#2#", "Ax2", "C-1", "AX", "H2"}) {
         _, ok = parse_note(bad)
         testing.expectf(t, !ok, "%q parsed", bad)
     }
@@ -145,8 +165,8 @@ test_cents_to_freq :: proc(t: ^testing.T) {
 
 // The note nearest to the cents from the pitch standard, A4
 cents_to_note :: proc(cents: f32, pitch_standard: f32 = 440.0) -> (note: Note) {
-    NAMES :: [12]rune{'C', 'C', 'D', 'D', 'E', 'F', 'F', 'G', 'G', 'A', 'A', 'B'}
-    ACCIDENTALS :: [12]bool{1 = true, 3 = true, 6 = true, 8 = true, 10 = true}
+    NAMES :: [12]rune{'C', 'C', 'D', 'E', 'E', 'F', 'F', 'G', 'A', 'A', 'B', 'B'}
+    ACCIDENTALS :: [12]Accidental{1 = .SHARP, 3 = .FLAT, 6 = .SHARP, 8 = .FLAT, 10 = .FLAT}
 
     // From A4, the octave numbers change at C, 9 semitones below A
     semitones := int(math.round(cents / 100))
@@ -159,7 +179,7 @@ cents_to_note :: proc(cents: f32, pitch_standard: f32 = 440.0) -> (note: Note) {
     note.octave = 4 + math.floor_div(from_c4, 12)
     names, accidentals := NAMES, ACCIDENTALS
     note.name = names[note.semitone_index]
-    note.is_accidental = accidentals[note.semitone_index]
+    note.accidental = accidentals[note.semitone_index]
     return
 }
 
@@ -183,14 +203,20 @@ test_freq_to_note :: proc(t: ^testing.T) {
     note := freq_to_note(280.0)
     testing.expect_value(t, note.octave, 4)
     testing.expect_value(t, note.semitone_index, 1)
-    testing.expect_value(t, note.is_accidental, true)
+    testing.expect_value(t, note.accidental, Accidental.SHARP)
     testing.expect_value(t, note.name, 'C')
+
+    // Eb 311.13 Hz
+    note = freq_to_note(311)
+    testing.expect_value(t, note.semitone_index, 3)
+    testing.expect_value(t, note.accidental, Accidental.FLAT)
+    testing.expect_value(t, note.name, 'E')
 
     // G4 391.995 Hz
     note = freq_to_note(391)
     testing.expect_value(t, note.octave, 4)
     testing.expect_value(t, note.semitone_index, 7)
-    testing.expect_value(t, note.is_accidental, false)
+    testing.expect_value(t, note.accidental, Accidental.NATURAL)
     testing.expect_value(t, note.name, 'G')
 
     // The octave changes at C, below the piano too

@@ -136,7 +136,7 @@ draw_strobe_partial :: proc(position: [2]f32, type: PartialLabelType, band: core
         font = pixel_fonts.band_label_small
         text = fmt.ctprintf("%.1fHz", band.freq_hz)
     } else if type == .NOTE_NAMES {
-        // Inter has no ♯, a plain # reads fine at this size
+        // Inter has no ♯ or ♭, a plain # and b read fine at this size
         text = fmt.ctprintf("%s", core.note_name(band.note))
     } else {
         text = fmt.ctprintf("%v×", partial_text(band.interval))
@@ -421,25 +421,33 @@ ruler_tap :: proc(layout: RulerLayout, notes: []core.Note, position: f32, target
     return
 }
 
-// The name centred on pos, the sharp and the octave to the right, octave is how much of it shows (in the
-// middle). large is how far it's grown from a neighbour to the target, in between it's drawn from the large
-// letters scaled down, settled at the fonts' own sizes, texel for pixel.
+// The name centred on pos, the sharp or the flat and the octave to the right, octave is how much of it shows
+// (in the middle). large is how far it's grown from a neighbour to the target, in between it's drawn from the
+// large letters scaled down, settled at the fonts' own sizes, texel for pixel.
 draw_ruler_note :: proc(note: core.Note, pos: [2]f32, large, octave: f32, color: gfx.Color) {
+    SIGNS :: [core.Accidental]cstring{.NATURAL = "", .SHARP = "♯", .FLAT = "♭"}
+    // From the letter's top right, of its size, the tops of both signs level with the letter's and their left
+    // edges in the octave's column. Noto's monospace flat sits lower and further in in its larger font.
+    SIGN_OFFSETS :: [core.Accidental][2]f32{.NATURAL = {0, 0}, .SHARP = {0, 0.1}, .FLAT = {-0.05, -0.05}}
+
     name_font := lerp_font(pixel_fonts.neighbour, pixel_fonts.note, large)
-    sharp_font := lerp_font(pixel_fonts.neighbour_sharp, pixel_fonts.note_sharp, large)
+    sign_font := lerp_font(pixel_fonts.neighbour_sharp, pixel_fonts.note_sharp, large)
+    if note.accidental == .FLAT do sign_font = lerp_font(pixel_fonts.neighbour_flat, pixel_fonts.note_flat, large)
     size := name_font.size
 
     name := fmt.ctprintf("%v", note.name)
     name_size := gfx.measure_text(name_font.font, name, size, 0)
     octave_label := fmt.ctprintf("%v", note.octave)
+    signs, sign_offsets := SIGNS, SIGN_OFFSETS
+    sign := signs[note.accidental]
 
-    // The sharp and the octave hang off to the right. Centred on the letter the note looks pushed right,
+    // The sign and the octave hang off to the right. Centred on the letter the note looks pushed right,
     // centred with them the letter looks pushed left, they're small and thin and weigh less than their
     // width. Halfway looks centred, once it's settled. A neighbour is centred on its letter so the letters
     // are evenly spaced.
     OPTICAL_WEIGHT :: 0.5
     suffix := octave * measure_label(pixel_fonts.octave, octave_label).x
-    if note.is_accidental do suffix = max(suffix, gfx.measure_text(sharp_font.font, "♯", sharp_font.size, 0).x)
+    if note.accidental != .NATURAL do suffix = max(suffix, gfx.measure_text(sign_font.font, sign, sign_font.size, 0).x)
 
     center := pos - {large * OPTICAL_WEIGHT * suffix / 2, 0}
 
@@ -447,9 +455,9 @@ draw_ruler_note :: proc(note: core.Note, pos: [2]f32, large, octave: f32, color:
     gfx.draw_text(name_font.font, name, top_left, size, 0, color)
 
     right := top_left.x + name_size.x
-    if note.is_accidental {
-        sharp_pos := snap_to_pixels({right, top_left.y + 0.1 * size})
-        gfx.draw_text(sharp_font.font, "♯", sharp_pos, sharp_font.size, 0, color)
+    if note.accidental != .NATURAL {
+        sign_pos := snap_to_pixels({right, top_left.y} + sign_offsets[note.accidental] * size)
+        gfx.draw_text(sign_font.font, sign, sign_pos, sign_font.size, 0, color)
     }
 
     if octave > 0 {

@@ -100,10 +100,7 @@ main :: proc() {
 
         kind := "strong" if pitch.is_strong_pitch else "weak" if pitch.is_weak_pitch else "-"
         note := "-"
-        if pitch.detected_freq > 0 {
-            n := pitch.detected_note
-            note = fmt.tprintf("%v%v%v", n.name, "#" if n.is_accidental else "", n.octave)
-        }
+        if pitch.detected_freq > 0 do note = core.note_name(pitch.detected_note)
         // From the strobe's note, to compare with the tracks
         cents := core.cents_deviation(pitch.detected_freq, tuner.target_note.frequency) if pitch.detected_freq > 0 else 0
         fmt.printf(

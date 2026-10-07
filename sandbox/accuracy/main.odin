@@ -445,8 +445,7 @@ print_by_offset :: proc(results: []Result) {
 
 print_case :: proc(result: Result) {
     note_name :: proc(semitones: int, pitch_standard: f32) -> string {
-        note := core.cents_to_note(f32(100 * semitones), pitch_standard)
-        return fmt.tprintf("%v%v%v", note.name, "#" if note.is_accidental else "", note.octave)
+        return core.note_name(core.cents_to_note(f32(100 * semitones), pitch_standard))
     }
 
     name := note_name(result.note_semitones, result.pitch_standard)
