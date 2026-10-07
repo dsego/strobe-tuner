@@ -493,26 +493,27 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
 
     // The input level, the microphone icon marks it as the input. The level is the rounded track cut off flat
     // where it ends.
-    draw_icon(ICON_MICROPHONE, layout.level_meter + {0, -6}, icon_color)
+    icon_y := f32(LEVEL_METER_HEIGHT - ICON_SIZE) / 2
+    draw_icon(ICON_MICROPHONE, layout.level_meter + {0, icon_y}, icon_color)
 
     // A slow input, a Bluetooth headset's microphone at 16 or 24 kHz, gets a warning before the icon. The high
     // notes and the partials over its Nyquist are out of reach, their tracks show empty.
     WARNING_GAP :: 4
     if sample_rate := app.audio_capture.sample_rate; sample_rate > 0 && sample_rate < core.LOW_SAMPLE_RATE {
-        draw_icon(ICON_WARNING, layout.level_meter + {-ICON_SIZE - WARNING_GAP, -6}, warning_color)
+        draw_icon(ICON_WARNING, layout.level_meter + {-ICON_SIZE - WARNING_GAP, icon_y}, warning_color)
     }
 
     meter := layout.level_meter + {20, 0}
-    track := gfx.Rect{meter.x, meter.y, 60, 4}
-    gfx.draw_rounded_rect(track, 2, pill_dark)
-    gfx.begin_scissor({meter.x, meter.y, 60 + clamp(reading.pitch.rms_dbfs, -60, 0), 4})
-    gfx.draw_rounded_rect(track, 2, accent_color)
+    track := gfx.Rect{meter.x, meter.y, 60, LEVEL_METER_HEIGHT}
+    gfx.draw_rounded_rect(track, LEVEL_METER_HEIGHT / 2, pill_dark)
+    gfx.begin_scissor({meter.x, meter.y, 60 + clamp(reading.pitch.rms_dbfs, -60, 0), LEVEL_METER_HEIGHT})
+    gfx.draw_rounded_rect(track, LEVEL_METER_HEIGHT / 2, accent_color)
     gfx.end_scissor()
 
     // The warning, the icon and the level open the input's sheet, a finger tall around the thin meter. Its
     // levels show right away, not after the first hold.
     left := layout.level_meter.x - ICON_SIZE - WARNING_GAP
-    if gui_button({left, meter.y + 2 - 22, LEVEL_METER_WIDTH + ICON_SIZE + WARNING_GAP, 44}) {
+    if gui_button({left, meter.y + LEVEL_METER_HEIGHT / 2 - 22, LEVEL_METER_WIDTH + ICON_SIZE + WARNING_GAP, 44}) {
         app.input_sheet.open = true
         app.input_stats_age = INPUT_STATS_HOLD_S
     }
@@ -730,8 +731,8 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo, meter
     }
 
     floor_level := core.dbfs(pitch.noise_floor)
-    gfx.draw_rect(meter + {0, 4}, {60, 3}, gfx.hex(strobe_bg_color))
-    gfx.draw_rect(meter + {0, 4}, {60 + floor_level, 3}, gfx.PURPLE)
+    gfx.draw_rect(meter + {0, LEVEL_METER_HEIGHT}, {60, 3}, gfx.hex(strobe_bg_color))
+    gfx.draw_rect(meter + {0, LEVEL_METER_HEIGHT}, {60 + floor_level, 3}, gfx.PURPLE)
 
     base_band := app.phase_comparator.bands[0]
     stat(fmt.ctprintf("Band SNR %.1f", base_band.snr_db), layout.stats)

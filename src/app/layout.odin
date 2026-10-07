@@ -43,6 +43,7 @@ STROBE_HEIGHT :: 306
 PANEL_PADDING :: 16
 DESKTOP_HEIGHT :: 620 // the window, as wide as the strobe, most of the strobe shows above the settings
 LEVEL_METER_WIDTH :: 80 // the microphone icon and the bar after it
+LEVEL_METER_HEIGHT :: 6 // the bar's
 
 RULER_HEIGHT :: 110
 
@@ -85,9 +86,9 @@ panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, offsets: bool) {
     panel := layout.strobe.y + layout.strobe.height
 
     // The response changes how fast the strobe spins, it sits just under it on the left, the level meter
-    // opposite it on the right. The 4pt bar lines up with the LED.
+    // opposite it on the right. The bar lines up with the LED.
     layout.response = {left, panel + 20}
-    layout.level_meter = {right - LEVEL_METER_WIDTH, layout.response.y - 2}
+    layout.level_meter = {right - LEVEL_METER_WIDTH, layout.response.y - LEVEL_METER_HEIGHT / 2}
 
     // A row along the bottom like the one under the strobe
     corners := bottom - SETTINGS_ICON_SIZE / 2
@@ -100,7 +101,7 @@ panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, offsets: bool) {
     readout_top := layout.response.y - LABEL_SIZE / 2
     readout_bottom := readout_top + READOUT_VALUE_Y + BASELINE * RULER_SCALE * READOUT_SIZE
     layout.response.y = readout_bottom - CAP_HALF * RULER_SCALE * READOUT_SIZE
-    layout.level_meter.y = layout.response.y - 2
+    layout.level_meter.y = layout.response.y - LEVEL_METER_HEIGHT / 2
     rows_bottom := corners - BOTTOM_ROW_CLEARANCE
 
     // The readout, the letter with its octave, the gauge, the lock and the bottom row evenly apart. A
