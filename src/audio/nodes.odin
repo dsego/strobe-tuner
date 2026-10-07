@@ -33,6 +33,7 @@ register_node :: proc(self: ^Capture, node: ^core.AudioCaptureNode) {
 // The input opened at the device's own rate. Never resampled, a fast one is decimated, see
 // core.init_decimator. Before the stream starts, the audio thread isn't running yet.
 set_input_rate :: proc(self: ^Capture, device_rate: f32) {
+    self.device_rate = device_rate
     self.decimator, self.sample_rate = core.init_decimator(device_rate)
     fmt.printfln("Input at %v Hz, measured at %v Hz", device_rate, self.sample_rate)
 }

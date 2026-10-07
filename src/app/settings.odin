@@ -29,9 +29,9 @@ import "../gfx"
 
 SEGMENT_WIDTH :: 60
 
-// The rows in gui_settings, a phone has no input row. The display's options page is as tall, the strobe's
-// four options are the most of any display.
-SETTINGS_ROWS :: 5 when gfx.MOBILE else 6
+// The rows in gui_settings. The display's options page is as tall, the strobe's five options are the most of
+// any display.
+SETTINGS_ROWS :: 5
 
 // For the longer labels of the display's options, three of them as wide as the four colors
 WIDE_SEGMENT_WIDTH :: 80
@@ -43,7 +43,7 @@ DISPLAY_NAMES :: [len(StrobeDisplayType)]cstring{"Strobe", "Scope", "Trace", "La
 STEP_LABELS :: []cstring{"Short", "Medium", "Long"}
 
 
-// The dropdown whose menu is open, one at a time, on the settings or the instrument's sheet
+// The dropdown whose menu is open, one at a time, on the input's or the instrument's sheet
 SettingsMenu :: enum {
     NONE,
     INPUT,
@@ -76,9 +76,6 @@ gui_settings_dropdown :: proc(
 gui_settings :: proc(
     sheet_layout: SheetLayout,
     config: ^Config,
-    audio_devices: []GuiOption,
-    audio_device_index: ^int,
-    menu: ^SettingsMenu,
     display_options: ^bool,
 ) -> (
     close: bool,
@@ -151,20 +148,6 @@ gui_settings :: proc(
     // Lights the stripes like a lamp behind the disc, in the hue of the colors above
     if gui_settings_segmented(sheet_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow) {
         changed = true
-    }
-
-    // A phone routes the input itself: built-in mic, headset or an audio interface. Without any the row
-    // stays empty, the strobe area says so.
-    when !gfx.MOBILE {
-        // The menu opens upwards over the rows above
-        input_rect := settings_row(sheet_layout, row, "Input", 240)
-        row += 1
-
-        // TODO: add refresh button to show newly connected devices
-        if len(audio_devices) > 0 {
-            gui_settings_dropdown(menu, .INPUT, input_rect, audio_devices, audio_device_index, left_pad = 36)
-            draw_centered_icon(ICON_MICROPHONE, {input_rect.x + 12, input_rect.y, ICON_SIZE, input_rect.height}, icon_color)
-        }
     }
 
     {
@@ -375,6 +358,96 @@ gui_track_settings :: proc(
     }
 
     return
+}
+
+
+// The input's sheet, opened by tapping its level on the main screen. A phone routes the input itself, built-in
+// mic, headset or an audio interface, it has no picker.
+INPUT_ROWS :: 4 when gfx.MOBILE else 5
+
+// The input's levels on its sheet, held a moment to be read, see INPUT_STATS_HOLD_S
+InputStats :: struct {
+    level_dbfs:      f32,
+    background_dbfs: f32, // the pitch detection's noise floor, the room with no note
+    snr_db:          f32, // the level over it
+}
+
+// How long the levels on the input's sheet stay before the next ones, they change every frame
+INPUT_STATS_HOLD_S :: 0.25
+
+// The picker, the rate the input runs at and what's measured of it, and how far its level is over the
+// background. device_rate is the device's own, sample_rate what's measured after a fast one's decimation.
+// Returns close when ✕ is tapped.
+gui_input :: proc(
+    sheet_layout: SheetLayout,
+    device_name: string,
+    device_rate: f32,
+    sample_rate: f32,
+    stats: InputStats,
+    audio_devices: []GuiOption,
+    audio_device_index: ^int,
+    menu: ^SettingsMenu,
+) -> (
+    close: bool,
+) {
+    close = draw_sheet_header(sheet_layout, "Input", fmt.ctprintf("%s", device_name))
+    row := 0
+
+    // The picker's row, its menu opens down over the rows under it and is drawn after them
+    picker: gfx.Rect
+    when !gfx.MOBILE {
+        picker = settings_row(sheet_layout, row, "Device", 240)
+        row += 1
+    }
+
+    // Never resampled. A fast one is halved to what's measured, a slow one can't hold the high partials.
+    {
+        text := khz(sample_rate)
+        color := text_color_white
+        if device_rate != sample_rate {
+            text = fmt.ctprintf("%s, measured at %s", khz(device_rate), khz(sample_rate))
+        } else if sample_rate < core.LOW_SAMPLE_RATE {
+            text = fmt.ctprintf("%s, nothing over %s", khz(sample_rate), khz(core.MAX_BAND_NORM_FREQ * sample_rate))
+            color = warning_color
+        }
+        if sample_rate == 0 do text = "-"
+        value_row(sheet_layout, &row, "Sample rate", text, color)
+    }
+
+    value_row(sheet_layout, &row, "Level", decibels(stats.level_dbfs, "dBFS"))
+    value_row(sheet_layout, &row, "Noise floor", decibels(stats.background_dbfs, "dBFS"))
+    value_row(sheet_layout, &row, "SNR", decibels(stats.snr_db, "dB"))
+
+    when !gfx.MOBILE {
+        // TODO: add refresh button to show newly connected devices
+        if len(audio_devices) > 0 {
+            gui_settings_dropdown(menu, .INPUT, picker, audio_devices, audio_device_index, left_pad = 36, down = true)
+            draw_centered_icon(ICON_MICROPHONE, {picker.x + 12, picker.y, ICON_SIZE, picker.height}, icon_color)
+        }
+    }
+    return
+
+    // A row of a value to read, right aligned like the controls
+    value_row :: proc(sheet_layout: SheetLayout, row: ^int, label, text: cstring, color := text_color_white) {
+        rect := settings_row(sheet_layout, row^, label, 0)
+        row^ += 1
+        font := pixel_fonts.label
+        draw_text_right(font.font, text, {rect.x + rect.width, rect.y + (rect.height - LABEL_SIZE) / 2}, font.size, 1, color)
+    }
+
+    // 48 kHz, 44.1 kHz
+    khz :: proc(hz: f32) -> cstring {
+        if math.mod(hz, 1000) == 0 do return fmt.ctprintf("%.0f kHz", hz / 1000)
+
+        return fmt.ctprintf("%.1f kHz", hz / 1000)
+    }
+
+    // A level, none before there is one or for silence
+    decibels :: proc(value: f32, unit: string) -> cstring {
+        if math.is_nan(value) || math.is_inf(value) do return "-"
+
+        return fmt.ctprintf("%.1f %s", value, unit)
+    }
 }
 
 // Where the track's partial, offset and speed are in the config, the tracks are the partials above 0

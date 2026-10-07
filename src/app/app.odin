@@ -63,6 +63,9 @@ App :: struct {
     track_sheet:        Sheet, // a track's own, opened by tapping the track
     selected_track:     int,
     instrument_sheet:   Sheet, // the instruments and the presets, opened from the bottom left corner
+    input_sheet:        Sheet, // the picker, the rate and the levels, opened by tapping the input's level
+    input_stats:        InputStats, // on its sheet, held INPUT_STATS_HOLD_S
+    input_stats_age:    f32,
 
     // The arrows on the strobe, see draw_tuning_arrows
     flat_arrow:         bool,
@@ -195,7 +198,7 @@ run_app :: proc(config: ^Config) {
         // The sheets slide up over the main screen, which keeps running under them and ignores taps until
         // they're all the way down again. They're drawn at the end of the frame.
         gui_disabled = false
-        for sheet in ([]^Sheet{&app.settings_sheet, &app.track_sheet, &app.instrument_sheet}) {
+        for sheet in ([]^Sheet{&app.settings_sheet, &app.track_sheet, &app.instrument_sheet, &app.input_sheet}) {
             slide_sheet(sheet)
             if sheet.open || sheet.slide > 0 do gui_disabled = true
         }
@@ -213,7 +216,7 @@ run_app :: proc(config: ^Config) {
         } else if strobe_shows {
             draw_strobe_area(&app, layout)
         }
-        draw_sheets(&app, layout)
+        draw_sheets(&app, layout, reading)
 
         if config^ != config_before do app.unsaved = true
 
@@ -494,8 +497,9 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
 
     // A slow input, a Bluetooth headset's microphone at 16 or 24 kHz, gets a warning before the icon. The high
     // notes and the partials over its Nyquist are out of reach, their tracks show empty.
+    WARNING_GAP :: 4
     if sample_rate := app.audio_capture.sample_rate; sample_rate > 0 && sample_rate < core.LOW_SAMPLE_RATE {
-        draw_icon(ICON_WARNING, layout.level_meter + {-ICON_SIZE - 4, -6}, warning_color)
+        draw_icon(ICON_WARNING, layout.level_meter + {-ICON_SIZE - WARNING_GAP, -6}, warning_color)
     }
 
     meter := layout.level_meter + {20, 0}
@@ -504,6 +508,14 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
     gfx.begin_scissor({meter.x, meter.y, 60 + clamp(reading.pitch.rms_dbfs, -60, 0), 4})
     gfx.draw_rounded_rect(track, 2, accent_color)
     gfx.end_scissor()
+
+    // The warning, the icon and the level open the input's sheet, a finger tall around the thin meter. Its
+    // levels show right away, not after the first hold.
+    left := layout.level_meter.x - ICON_SIZE - WARNING_GAP
+    if gui_button({left, meter.y + 2 - 22, LEVEL_METER_WIDTH + ICON_SIZE + WARNING_GAP, 44}) {
+        app.input_sheet.open = true
+        app.input_stats_age = INPUT_STATS_HOLD_S
+    }
 
     when DEBUG_STATS do draw_debug_stats(app, layout, reading.pitch, meter)
 }
@@ -739,16 +751,18 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo, meter
 }
 
 // The sheets that are up, over the main screen
-draw_sheets :: proc(app: ^App, layout: Layout) {
+draw_sheets :: proc(app: ^App, layout: Layout, reading: Reading) {
     // Android's back button is Escape. It closes a sheet, with none up it leaves the app as anywhere else.
     when gfx.ANDROID {
         sheets_down := app.settings_sheet.slide == 0 && app.track_sheet.slide == 0 && app.instrument_sheet.slide == 0
+        sheets_down &&= app.input_sheet.slide == 0
         if gfx.key_pressed(.ESCAPE) && sheets_down do gfx.system_back()
     }
 
     draw_settings_sheet(app, layout)
     draw_track_sheet(app, layout)
     draw_instrument_sheet(app, layout)
+    draw_input_sheet(app, layout, reading)
 }
 
 draw_settings_sheet :: proc(app: ^App, layout: Layout) {
@@ -756,14 +770,7 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
     if sheet.slide == 0 do return
 
     sheet_layout, swiped := begin_sheet(sheet, SETTINGS_ROWS, &app.strobe_display, layout.strobe)
-    close, changed := gui_settings(
-        sheet_layout,
-        app.config,
-        app.audio_devices[:],
-        &app.audio_device_index,
-        &app.settings_menu,
-        &app.display_options,
-    )
+    close, changed := gui_settings(sheet_layout, app.config, &app.display_options)
     if changed do app.config_changed = true
 
     grab_sheet(sheet, sheet_layout)
@@ -772,6 +779,41 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
     if app.display_options && gfx.key_pressed(.ESCAPE) {
         app.display_options = false
     } else if close || sheet_dismissed(sheet_layout, swiped) {
+        close_sheet(sheet)
+        exclusive_control_mode = false
+    }
+}
+
+draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
+    sheet := &app.input_sheet
+    if sheet.slide == 0 do return
+
+    // A few times a second, the latest detection's
+    app.input_stats_age += gfx.frame_time()
+    if app.input_stats_age >= INPUT_STATS_HOLD_S {
+        pitch := reading.pitch
+        app.input_stats = {pitch.rms_dbfs, core.dbfs(pitch.noise_floor), pitch.snr_db}
+        app.input_stats_age = 0
+    }
+
+    capture := app.audio_capture
+    device_name := "No input"
+    if audio.device_count(capture) > 0 do device_name = audio.device_name(capture, capture.active_device)
+
+    sheet_layout, swiped := begin_sheet(sheet, INPUT_ROWS, &app.strobe_display, layout.strobe)
+    close := gui_input(
+        sheet_layout,
+        device_name,
+        capture.device_rate,
+        capture.sample_rate,
+        app.input_stats,
+        app.audio_devices[:],
+        &app.audio_device_index,
+        &app.settings_menu,
+    )
+    grab_sheet(sheet, sheet_layout)
+
+    if close || sheet_dismissed(sheet_layout, swiped) {
         close_sheet(sheet)
         app.settings_menu = .NONE
         exclusive_control_mode = false
@@ -833,7 +875,7 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
 // Written once the sheets are down, a quit that skips the save at the end keeps what was changed: the stop
 // button of a debugger, Ctrl+C in the terminal, a crash
 save_when_settled :: proc(app: ^App) {
-    sheets_open := app.settings_sheet.open || app.track_sheet.open || app.instrument_sheet.open
+    sheets_open := app.settings_sheet.open || app.track_sheet.open || app.instrument_sheet.open || app.input_sheet.open
     if !app.unsaved || sheets_open do return
 
     save_config(app.config^)
@@ -849,7 +891,7 @@ limit_frame_rate :: proc(app: ^App) {
     }
     touched := gfx.mouse_down() || gfx.mouse_pressed() || gfx.mouse_wheel() != 0
     sliding := note_ruler.swipe.gesture == .COASTING
-    for sheet in ([]Sheet{app.settings_sheet, app.track_sheet, app.instrument_sheet}) {
+    for sheet in ([]Sheet{app.settings_sheet, app.track_sheet, app.instrument_sheet, app.input_sheet}) {
         if sheet.slide != f32(int(sheet.open)) do sliding = true
     }
 

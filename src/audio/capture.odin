@@ -44,6 +44,7 @@ Capture :: struct {
     nodes:              [dynamic]^core.AudioCaptureNode,
 
     // What the nodes get, the device's own rate or a fast one decimated, see set_input_rate
+    device_rate:        f32,
     sample_rate:        f32,
     decimator:          core.Decimator,
     decimate_chunk:     [DECIMATE_CHUNK]f32,
