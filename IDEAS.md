@@ -164,6 +164,27 @@ Open:
   with the offset taken off. Check that nothing shown reads the pitch detection's once a temperament
   is set.
 
+## Sharper fonts
+
+The text is baked at its exact pixel size and drawn texel for pixel, but stb_truetype doesn't hint. A stem
+of Inter Medium at 14 pt is about 2.4 px wide on a 2× screen and lands wherever the outline falls, so
+most stems carry a grey column, small grey labels on the grey sheets look soft.
+
+- A per-glyph shift: bake each glyph at the fraction of a pixel, of 8 tried, that leaves the most pixels
+  solid (`MakeCodepointBitmapSubpixel`), its stems as close to the grid as its shape allows. No new
+  dependency, at most half a pixel more or less between letters. A heuristic, an "m" can only line up
+  one of its stems. Try it behind a `-define` first.
+- Tried and dropped, FreeType's auto-hinter through SDL3_ttf (`vendor:sdl3/ttf`), the glyphs from
+  `RenderGlyph_Blended` into the same atlas. On the 2× Mac normal hinting gave solid stems up close but
+  was barely noticeable in use, not worth building SDL3_ttf for every platform. Worth another look for
+  a 1× screen. Its rounded advances were the part that showed, those are in.
+- Tried and dropped, a curve on the glyphs' coverage pushing the edges towards solid, today's look stays.
+- The labels' 1 pt letter spacing is a fraction of a pixel at a fractional scale, Android's 2.625 or
+  Windows' 1.25 and 1.5, every letter after the first lands between pixels. Rounded to whole pixels in
+  `draw_label` it stays as it is at 2× and 3×.
+- Not sharpness but close: kerning isn't applied (`GetCodepointKernAdvance`), pairs like "Te", "AV" and
+  "7." keep their unkerned gaps. Rounded to whole pixels per pair, in `draw_text` and `measure_text`.
+
 ## Gamma window as a recursive filter
 
 Every hop runs a whole window's DFT, about 4 × the note's frequency of them a second per track

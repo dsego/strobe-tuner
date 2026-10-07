@@ -772,12 +772,14 @@ load_font :: proc(ttf: []u8, size: i32, codepoints: string) -> (font: Font) {
         row_height = max(row_height, box.height)
         append(&boxes, box)
 
+        // The advance rounded to whole pixels, the next glyph lands texel for pixel too. Cut down instead the
+        // letters sit up to a pixel too close, unevenly.
         advance, left_side_bearing: i32
         stbtt.GetCodepointHMetrics(&info, codepoint, &advance, &left_side_bearing)
         font.glyphs[codepoint] = Glyph {
             source  = {f32(box.atlas.x), f32(box.atlas.y), f32(box.width), f32(box.height)},
             offset  = {f32(box.x0), f32(box.y0 + i32(f32(ascent) * scale))},
-            advance = f32(i32(f32(advance) * scale)),
+            advance = math.round(f32(advance) * scale),
         }
     }
     atlas_height := pen.y + row_height + PADDING
