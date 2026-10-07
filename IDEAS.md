@@ -22,6 +22,14 @@ real strobe as the string comes within about 50 to 100 cents.
 - The handover is the hard part, the simulated stripes and the real ones have to meet without a
   jump in phase or speed. May not be worth it if it can't be made seamless.
 
+## Partial next to the readout
+
+When the fundamental dies down under a partial, the strobe moves up to that partial and the note shown is
+named after it, e.g. D#2 for a bass's D#1. The tracks then count from the partial, 1× is D#2. As an
+alternative to moving the strobe, it could stay on the note played with a small "×2" next to the readout,
+saying which track the note and the Hz come from. No restart of the stripes mid-note, but the track labels
+don't count from the note shown.
+
 ## In-tune cues
 
 One setting, all optional.

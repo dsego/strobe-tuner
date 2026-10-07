@@ -199,6 +199,9 @@ run_case :: proc(test_case: Case) -> (result: Result) {
     measure_from := len(samples) - int(MEASURE_S * SAMPLERATE)
     readout_track := -1
     readout_ready := false
+    // Moved up to the partial the readout gave way to, the tracks start over until it settles again. A tone
+    // right on the handover's level moves late, see core.READOUT_WEAK_FUNDAMENTAL_DB.
+    moving := false
     for start := 0; start + FRAME_SAMPLES <= len(samples); start += FRAME_SAMPLES {
         // Like sandbox/replay, the app's loop
         frame := samples[start:start + FRAME_SAMPLES]
@@ -206,24 +209,37 @@ run_case :: proc(test_case: Case) -> (result: Result) {
         core.audio_capture_write(strobe, frame)
         pitch := core.run_pitch_detection(&detector, tuner.pitch)
         core.run_phase_detection(strobe, pitch.is_tonal)
+        was_ready := readout_ready
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
         if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) {
             retune(strobe, tuner.target_note.frequency, test_case.pitch_standard)
             readout_ready = false
         }
+        if core.follow_readout_partial(&tuner, strobe, readout_track, readout_ready, was_ready) {
+            retune(strobe, tuner.target_note.frequency, test_case.pitch_standard)
+            readout_ready = false
+            moving = true
+        }
+        if readout_ready do moving = false
         if !pitch.fresh || start < measure_from do continue
 
-        if !tuner.active || tuner.target_note.cents != note.cents {
+        // The note played under the partial the strobe moved up to
+        partial_octaves := 0
+        if core.plays_under_partial(&tuner, tuner.detected_note) {
+            partial_octaves = (tuner.target_note.cents - tuner.detected_note.cents) / 1200
+        }
+        if !tuner.active || tuner.target_note.cents - 1200 * partial_octaves != note.cents {
             result.wrong_note += 1
             continue
         }
+        if moving do continue
 
         // Lit like core.strobe_shows_note counts it, on a partial the tone has. A sine's empty tracks can light
         // up from its leakage, their drift is the fundamental's and says nothing about the stripes.
         fade := core.STROBE_FADE_SNR_DB
         for band in strobe.bands {
             if !band.in_range || band.snr_db < 0.5 * (fade[0] + fade[1]) do continue
-            if !has_partial(test_case.waveform, band.interval) do continue
+            if !has_partial(test_case.waveform, band.interval * math.pow(2, f32(partial_octaves))) do continue
 
             expected_hz := band.freq_hz * (math.pow(2, test_case.offset_cents / 1200) - 1)
             if abs(expected_hz) >= WRONG_WAY_MIN_HZ && band.drift_hz * expected_hz < 0 {

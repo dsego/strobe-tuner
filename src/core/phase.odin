@@ -649,15 +649,8 @@ strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: in
     // Vernier mode measures the first track, the others show it at other speeds
     count := 1 if self.mode == .VERNIER else len(self.bands)
 
-    loudest, fundamental := -1, -1
-    for band, index in self.bands[:count] {
-        if !is_octave_track(band) || !hears_note(band) || band.snr_db < READOUT_MIN_SNR_DB do continue
-        if loudest < 0 || band.snr_db > self.bands[loudest].snr_db do loudest = index
-        if band.interval == 1 do fundamental = index
-    }
-
-    // A pluck lifts the loudest partial, a faint one's level wobbling isn't one
-    plucked := loudest >= 0 && self.bands[loudest].onset
+    loudest, fundamental := readout_candidates(self)
+    plucked := strobe_plucked(self)
 
     // Held, unless a pluck brings another track to pick or the held one fades under a ringing partial
     held := current >= 0 && current < count && settled(self.bands[current])
@@ -675,6 +668,26 @@ strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: in
         track = fundamental
     }
     return track, settled(self.bands[track])
+}
+
+// The loudest track the readout can follow and the fundamental's, -1 for none
+readout_candidates :: proc(self: ^PhaseComparator) -> (loudest, fundamental: int) {
+    loudest, fundamental = -1, -1
+
+    // Vernier mode measures the first track, the others show it at other speeds
+    count := 1 if self.mode == .VERNIER else len(self.bands)
+    for band, index in self.bands[:count] {
+        if !is_octave_track(band) || !hears_note(band) || band.snr_db < READOUT_MIN_SNR_DB do continue
+        if loudest < 0 || band.snr_db > self.bands[loudest].snr_db do loudest = index
+        if band.interval == 1 do fundamental = index
+    }
+    return
+}
+
+// A pluck lifts the loudest partial, a faint one's level wobbling isn't one
+strobe_plucked :: proc(self: ^PhaseComparator) -> bool {
+    loudest, _ := readout_candidates(self)
+    return loudest >= 0 && self.bands[loudest].onset
 }
 
 // The fundamental's or an octave's track, the others' partials are another note, e.g. a fifth

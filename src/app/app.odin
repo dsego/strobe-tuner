@@ -69,7 +69,8 @@ App :: struct {
     sharp_arrow:        bool,
 
     readout_track:      int, // the strobe track the readout follows, see core.strobe_readout_track
-    traced_track:       int, // the track the readout followed, the trace stays on it while its stripes show
+    readout_ready:      bool, // and whether it had settled, the frame before
+    traced_track:      int, // the track the readout followed, the trace stays on it while its stripes show
     config_changed:     bool, // the tuner and the strobe need the new config, see apply_config
     unsaved:            bool, // the config changed since it was saved, see save_when_settled
     restart_audio:      bool, // opens the input again, after the background or an interruption
@@ -354,6 +355,11 @@ measure :: proc(app: ^App) -> (reading: Reading) {
         retune(app)
         ready = false
     }
+    if core.follow_readout_partial(tuner, app.phase_comparator, app.readout_track, ready, app.readout_ready) {
+        retune(app)
+        ready = false
+    }
+    app.readout_ready = ready
 
     reading.out_of_range = core.tuner_out_of_range(tuner)
     reading.steady = core.tuner_readout(tuner)

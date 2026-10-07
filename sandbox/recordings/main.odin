@@ -102,9 +102,12 @@ Track :: struct {
 Detection :: struct {
     time_s:     f32,
     active:     bool,
-    note_cents: int, // the target note's
-    // The readout's track's over the note, the note's shown that much higher, see core.readout_octaves
-    octaves:    int,
+    note_cents:   int, // the note played, the target's or the one under the partial it moved up to
+    strobe_cents: int, // the target note's, the strobe's tracks are its partials
+    // The readout's track's over the note played, the note's shown that much higher, see core.readout_octaves
+    octaves:      int,
+    // Within NULL_HOLD_S of a retune, the tracks started over and their drift is still on its way from 0
+    retuned:      bool,
     read:       bool, // a readout, none until a strobe track settled, like the app's
     cents:      f32, // the note's plus the readout
     tracks:     [len(INTERVALS)]Track,
@@ -344,7 +347,10 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, re
         }
         if detection.octaves != 0 do run.partial += 1
 
-        if !then.active || then.note_cents != original.note || !loud do continue
+        if !then.active || then.note_cents != original.note || !loud || detection.retuned || then.retuned do continue
+
+        // The strobes on other partials of the note, their tracks are other partials
+        if detection.strobe_cents - detection.note_cents != then.strobe_cents - then.note_cents do continue
 
         // The readout on another partial than the original's, the recording hops between them there and
         // the tracks don't follow the same partials moment by moment
@@ -520,30 +526,48 @@ play :: proc(path: string, decode_rate: u32, pitch_standard: f32) -> (detections
 
     readout_track := -1
     readout_ready := false
+    retuned_s := f32(-1)
     for start := 0; start + FRAME_SAMPLES <= len(samples); start += FRAME_SAMPLES {
+        time_s := f32(start + FRAME_SAMPLES) / SAMPLERATE
         frame := samples[start:start + FRAME_SAMPLES]
         core.audio_capture_write(&detector, frame)
         core.audio_capture_write(strobe, frame)
         pitch := core.run_pitch_detection(&detector, tuner.pitch)
         core.run_phase_detection(strobe, pitch.is_tonal)
+        was_ready := readout_ready
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
         if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) {
             retune(strobe, tuner.target_note.frequency, pitch_standard)
             readout_ready = false
+            retuned_s = time_s
+        }
+        if core.follow_readout_partial(&tuner, strobe, readout_track, readout_ready, was_ready) {
+            retune(strobe, tuner.target_note.frequency, pitch_standard)
+            readout_ready = false
+            retuned_s = time_s
         }
         if !pitch.fresh do continue
 
+        // The note played under the partial the strobe moved up to
+        partial_octaves := 0
+        if core.plays_under_partial(&tuner, tuner.detected_note) {
+            partial_octaves = (tuner.target_note.cents - tuner.detected_note.cents) / 1200
+        }
+
         // The strobe's track from the target, none until one settled, see src/app/app.odin
         detection := Detection {
-            time_s     = f32(start + FRAME_SAMPLES) / SAMPLERATE,
-            active     = tuner.active,
-            note_cents = tuner.target_note.cents,
+            time_s       = time_s,
+            active       = tuner.active,
+            retuned      = retuned_s >= 0 && time_s - retuned_s <= NULL_HOLD_S,
+            note_cents   = tuner.target_note.cents - 1200 * partial_octaves,
+            strobe_cents = tuner.target_note.cents,
+            octaves      = partial_octaves,
         }
         if readout_ready && abs(strobe.bands[readout_track].err_cents) <= core.READOUT_RANGE_CENTS {
             band := strobe.bands[readout_track]
             detection.read = true
             detection.cents = f32(tuner.target_note.cents) + band.err_cents
-            detection.octaves = core.readout_octaves(band, tuner.target_note.frequency)
+            detection.octaves += core.readout_octaves(band, tuner.target_note.frequency)
         }
         // Lit like sandbox/accuracy counts it, an instrument's partials are whole multiples
         fade := core.STROBE_FADE_SNR_DB
@@ -649,7 +673,8 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
   1x dB        the original's fundamental from its strongest harmonic, measured without the tuner
   wrong way    strobe tracks whose stripes turned the wrong way and in how many detections, 4x8 is the
                4th harmonic's track 8 times, while the original is within 15dB of its loudest, both
-               read the same partial and neither track just fell 20dB through a null
+               read the same partial, neither track just fell 20dB through a null and neither strobe
+               just retuned
   spread c     readout from the 10th to the 90th percentile over the sustain, the player's vibrato too
   lit s        seconds the note was lit
   ok           passed: no wrong note, aligned within 1c, no track turning the wrong way
