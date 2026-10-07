@@ -86,6 +86,7 @@ Key :: enum {
     G,
     I,
     R,
+    W,
     X,
     LEFT_SHIFT,
     RIGHT_SHIFT,

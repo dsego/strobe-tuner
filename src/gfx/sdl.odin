@@ -144,6 +144,7 @@ scancodes := [Key]sdl.Scancode {
     .G           = .G,
     .I           = .I,
     .R           = .R,
+    .W           = .W,
     .X           = .X,
     .LEFT_SHIFT  = .LSHIFT,
     .RIGHT_SHIFT = .RSHIFT,

@@ -125,6 +125,7 @@ PhaseComparator :: struct {
     sample_buffer:    []f32,
     bands:            [dynamic]PhaseBand,
     mode:             StrobeMode,
+    band_cents:       int, // the width of each track's band, DFT_RESOLUTION_CENTS, set_phase_comparator_freq retunes it
     available:        int, // the new samples of the latest run_phase_detection
 
     // Absolute index of the sample just past the end of the newest window, i.e. the lock-in clock
@@ -141,6 +142,7 @@ init_phase_comparator :: proc(base_freq_hz: f32, strobe_intervals: []f32, mode: 
     self.sample_buffer = make([]f32, MAX_WINDOW_SIZE + MAX_FRAME_SAMPLES)
     self.mode = mode
     self.base_freq_hz = base_freq_hz
+    self.band_cents = DFT_RESOLUTION_CENTS
 
     for interval in strobe_intervals {
         if interval >= 1.0 do append_phase_band(self, interval)
@@ -263,7 +265,7 @@ set_phase_comparator_freq :: proc(
     // be shorter, its band wider in Hz for a weaker partial, and it shimmers. Built once, the tracks only turn it
     // to their own frequency.
     comb_samples := comb_periods(self.bands[:], mode) * SAMPLERATE / base_freq_hz
-    gamma_size := dft_window_size(base_freq_hz, SAMPLERATE, DFT_RESOLUTION_CENTS)
+    gamma_size := dft_window_size(base_freq_hz, SAMPLERATE, self.band_cents)
     window := gamma_comb_window(gamma_size, comb_samples)
 
     for &band, band_index in self.bands {
@@ -711,8 +713,8 @@ test_readout_track :: proc(t: ^testing.T) {
     testing.expect_value(t, track, 0)
 }
 
-// A track hears its note while it drifts less than a semitone, as wide as its window. Further out it's
-// another note leaking in.
+// A track hears its note while it drifts less than a semitone, as wide as its window by default. Further
+// out it's another note leaking in.
 hears_note :: proc(band: PhaseBand) -> bool {
     return band.in_range && band.drift_cents <= DFT_RESOLUTION_CENTS
 }

@@ -5,11 +5,12 @@
 //   odin run sandbox/lamp_jitter -- <file.wav|mp3|flac>
 //
 // Both turn by their phase advance, rescaled so all notes spin at the same rate per cent, times the
-// strobe's speed. The tracks measure it with their DFT on the samples, the lamp with a DFT of the
-// scope's screen from above, at a few persistences of the screen.
+// strobe's speed. The tracks measure it with their DFT on the samples, at a few widths of their band, the
+// lamp with a DFT of the scope's screen from above, at a few persistences of the screen.
 //
-// Only the frames where both show the track: the tuner holds the note, the attack has passed and both
-// are over the SNR where the stripes are fully lit.
+// Only the frames where the app's tracks show: the tuner holds the note and the lamp's screen has settled.
+// Apart where the stripes are fully lit and where they fade out with the note, by the SNR of the app's
+// tracks, so every row measures the same moments.
 //
 //   speed  - the mean movement, in fundamental stripes a second, both should agree
 //   jitter - the RMS of the change of the movement from one frame to the next over √2, in percent of a
@@ -34,6 +35,7 @@ TRACKS_PERIODS :: 12 // DESKTOP_TRACKS_PERIODS, the fundamental's stripes across
 HARMONICS :: 3
 INTERVALS :: [HARMONICS]f32{1, 2, 3}
 PERSISTENCES_MS :: [?]f64{0, 40, 100, 200}
+BAND_WIDTHS_CENTS :: [?]int{core.DFT_RESOLUTION_CENTS, 50, 25} // the app's first, see W in the app
 
 // Listed as they happen, a frame's advance of a harmonic over this, at the app's default persistence
 APP_PERSISTENCE_MS :: 40
@@ -42,6 +44,19 @@ JUMP_RADIANS :: math.PI / 2
 FRAME_SAMPLES :: SAMPLERATE / 60
 // The screen fills in after a new reference, this long of it counts as one
 SETTLE_S :: 0.25
+
+// Where a frame's stripes are, by the app's tracks
+Region :: enum {
+    LIT, // the SNR where they're fully lit
+    TAIL, // fading out, still showing
+    DARK,
+}
+
+REGION_NAMES :: [Region]string {
+    .LIT  = "fully lit",
+    .TAIL = "fading out",
+    .DARK = "dark",
+}
 
 // The movement of a track over the frames it was measured in
 Movement :: struct {
@@ -69,12 +84,20 @@ skip_movement :: proc(self: ^Movement) {
     self.has_previous = false
 }
 
+// A frame's movement into its region's, the others skip it
+add_in_region :: proc(movements: ^[Region]Movement, region: Region, step: f64) {
+    for &movement, each in movements {
+        if each == region do add_movement(&movement, step)
+        else do skip_movement(&movement)
+    }
+}
+
 Lamp :: struct {
     scope:     core.Scope,
     phases:    [HARMONICS]f64,
     freq_hz:   f64,
     settle:    f64, // seconds left
-    movements: [HARMONICS]Movement,
+    movements: [HARMONICS][Region]Movement,
 }
 
 main :: proc() {
@@ -94,13 +117,21 @@ main :: proc() {
     tuner := core.init_tuner(110, 440, true)
 
     intervals := INTERVALS
-    strobe := core.init_phase_comparator(110, intervals[:], .HARMONIC)
-    defer core.destroy_phase_comparator(strobe)
+    widths := BAND_WIDTHS_CENTS
+    strobes: [len(widths)]^core.PhaseComparator
     retune :: proc(strobe: ^core.PhaseComparator, freq_hz: f32) {
         core.set_phase_comparator_freq(strobe, freq_hz, 440, STROBE_SPEED, 2, .HARMONIC)
     }
-    retune(strobe, 110)
-    tracks: [HARMONICS]Movement
+    for &strobe, index in strobes {
+        strobe = core.init_phase_comparator(110, intervals[:], .HARMONIC)
+        strobe.band_cents = widths[index]
+        retune(strobe, 110)
+    }
+    defer for strobe in strobes do core.destroy_phase_comparator(strobe)
+
+    // The app's, the tuner follows it and its SNR places the frames
+    strobe := strobes[0]
+    tracks: [len(widths)][HARMONICS][Region]Movement
 
     persistences := PERSISTENCES_MS
     lamps: [len(persistences)]Lamp
@@ -116,20 +147,32 @@ main :: proc() {
     for start := 0; start + FRAME_SAMPLES <= len(samples); start += FRAME_SAMPLES {
         frame := samples[start:start + FRAME_SAMPLES]
         core.audio_capture_write(&detector, frame)
-        core.audio_capture_write(strobe, frame)
+        for each in strobes do core.audio_capture_write(each, frame)
         for &lamp in lamps do core.audio_capture_write(&lamp.scope, frame)
 
         // Like the app, see sandbox/replay
         pitch := core.run_pitch_detection(&detector, tuner.pitch)
-        core.run_phase_detection(strobe, pitch.is_tonal)
-        if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) do retune(strobe, tuner.target_note.frequency)
+        for each in strobes do core.run_phase_detection(each, pitch.is_tonal)
+        if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) {
+            for each in strobes do retune(each, tuner.target_note.frequency)
+        }
+
+        regions: [HARMONICS]Region
+        for band, index in strobe.bands {
+            regions[index] = .DARK
+            if !tuner.active do continue
+
+            if band.snr_db >= fully_lit do regions[index] = .LIT
+            else if band.snr_db > core.STROBE_FADE_SNR_DB[0] do regions[index] = .TAIL
+        }
 
         // The tracks, as strobe_tracks turns them, in fundamental stripes: a track's phase moves its
         // stripes by the phase over its partial
-        for &band, index in strobe.bands {
-            shown := tuner.active && band.snr_db >= fully_lit
-            if shown do add_movement(&tracks[index], f64(band.phase_diff * band.speed) * TRACKS_PERIODS / f64(band.interval) / math.TAU)
-            else do skip_movement(&tracks[index])
+        for each, width_index in strobes {
+            for band, index in each.bands {
+                step := f64(band.phase_diff * band.speed) * TRACKS_PERIODS / f64(band.interval) / math.TAU
+                add_in_region(&tracks[width_index][index], regions[index], step)
+            }
         }
 
         // The lamp's, as lamp_comparator turns them
@@ -172,23 +215,23 @@ main :: proc() {
                     )
                 }
 
-                shown := tuner.active && band.snr_db >= fully_lit && snr_db >= f64(fully_lit)
-                shown &&= lamp.settle <= 0
-                if !shown {
-                    skip_movement(&lamp.movements[index])
-                    continue
-                }
                 // phase_diff times the speed, the harmonic's rescale and speed cancel out
                 phase := advance * core.STROBE_REFERENCE_HZ / scope.freq_hz * STROBE_SPEED
-                add_movement(&lamp.movements[index], phase * TRACKS_PERIODS / f64(index + 1) / math.TAU)
+                region := regions[index] if lamp.settle <= 0 else .DARK
+                add_in_region(&lamp.movements[index], region, phase * TRACKS_PERIODS / f64(index + 1) / math.TAU)
             }
         }
     }
 
-    // An exponential window lags by its time constant, a rectangular one by half its length
-    window_ms := 1000 * f64(strobe.bands[0].dft.window_size) / SAMPLERATE
-    fmt.printf("%v, the tracks' window %.0fms, as late as a persistence of %.0fms\n", os.args[1], window_ms, window_ms / 2)
-    fmt.println("                     speed (stripes/s)        jitter (% of a stripe)")
+    // An exponential screen lags by its persistence, the tracks' window by its mean age and half the comb, at
+    // the last note
+    fmt.println(os.args[1])
+    comb_samples := core.comb_periods(strobe.bands[:], .HARMONIC) * SAMPLERATE / strobe.base_freq_hz
+    for width in widths {
+        gamma_size := core.dft_window_size(strobe.base_freq_hz, SAMPLERATE, width)
+        lag_ms := 1000 * f64(core.gamma_comb_delay(gamma_size, comb_samples)) / SAMPLERATE
+        fmt.printf("  tracks %vc lag %.0fms at %.1f Hz\n", width, lag_ms, strobe.base_freq_hz)
+    }
     print_movement :: proc(name: string, harmonic: int, movement: Movement, frame_s: f64) {
         if movement.count == 0 || movement.changes == 0 {
             fmt.printf("  %-16v %v×  -\n", name, harmonic)
@@ -199,10 +242,16 @@ main :: proc() {
         // fmt pads numbers with zeros, the text pads with spaces
         fmt.printf("  %-16v %v×  %-24v %-22v frames %v\n", name, harmonic, fmt.tprintf("%+.3f", speed), fmt.tprintf("%.3f", jitter), movement.count)
     }
-    for index in 0 ..< HARMONICS {
-        print_movement("tracks", index + 1, tracks[index], frame_s)
-        for lamp, lamp_index in lamps {
-            print_movement(fmt.tprintf("lamp %vms", persistences[lamp_index]), index + 1, lamp.movements[index], frame_s)
+    names := REGION_NAMES
+    for region in Region.LIT ..= Region.TAIL {
+        fmt.printf("\n%-21v speed (stripes/s)        jitter (%% of a stripe)\n", names[region])
+        for index in 0 ..< HARMONICS {
+            for width, width_index in widths {
+                print_movement(fmt.tprintf("tracks %vc", width), index + 1, tracks[width_index][index][region], frame_s)
+            }
+            for lamp, lamp_index in lamps {
+                print_movement(fmt.tprintf("lamp %vms", persistences[lamp_index]), index + 1, lamp.movements[index][region], frame_s)
+            }
         }
     }
 }

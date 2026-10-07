@@ -307,6 +307,14 @@ handle_keys :: proc(app: ^App) {
         retune(app)
     }
 
+    // Hidden, the tracks' band a semitone, a half or a quarter wide: each half has half the noise and twice the lag
+    if gfx.key_pressed(.W) {
+        comparator := app.phase_comparator
+        comparator.band_cents = comparator.band_cents / 2 if comparator.band_cents > 25 else core.DFT_RESOLUTION_CENTS
+        fmt.println("Strobe band:", comparator.band_cents, "cents")
+        retune(app)
+    }
+
     // Debug builds only, Cmd+Shift+, reloads the config file and Cmd+, opens it in TextEdit. The store builds
     // edit everything in the settings, and the shell that starts TextEdit wouldn't run in the sandbox anyway.
     command := gfx.key_down(.LEFT_SUPER) || gfx.key_down(.RIGHT_SUPER)
