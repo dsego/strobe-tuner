@@ -217,3 +217,17 @@ rotation goes away.
   retune to keep that, about one window's pass.
 - Only worth it if the hops get in the way, more of them a period, or the DFT shows up on the phone's
   profile. With the SIMD DFT five tracks take under 1% of a desktop core.
+
+## Input name under the level meter
+
+With no sound coming in, it isn't obvious why until the input sheet is open: the wrong device may be
+picked, BlackHole or an interface with nothing plugged in. The input's name under the level meter,
+desktop only, iOS and Android only have "Microphone".
+
+- No short names from the system, CoreAudio and miniaudio give the full "MacBook Pro Microphone". Cut
+  to the meter's width with an ellipsis rather than shortening by rules. CoreAudio's transport type
+  (built-in, USB, Bluetooth, virtual) could give "USB", but can't tell two interfaces apart.
+- Always shown and dim, or only on digital silence, under about -90 dBFS for a second or two. A real
+  microphone never gets there, room noise keeps it around -70 to -50 dBFS. Silence only keeps the
+  screen clear, but misses the wrong microphone that works, the laptop's instead of the interface's.
+- Or both, always dim and in the warning color on silence.
