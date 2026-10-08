@@ -56,23 +56,9 @@ draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: gf
     display.scope_visibility += alpha * (target - display.scope_visibility)
 
     if config.strobe_display_type == .SCOPE && config.strobe_glow {
-        // Offscreen, it's as large as rect and cuts off what is outside
-        ensure_glow_targets(display, {rect.width, rect.height})
-        gfx.begin_render_target(display.scene_rt, display.background, {rect.x, rect.y}, display.glow_scale)
+        begin_glow(display, rect, display.background)
         draw_scope_screen(display, rect, scope, beam_color, dark_color)
-        gfx.end_render_target()
-        render_bloom(display)
-
-        // Not the strobe's any more
-        display.glow_drawn = {}
-
-        gfx.set_blend_mode(.REPLACE)
-        gfx.draw_render_target(display.scene_rt, rect)
-        gfx.set_blend_mode(.ADD)
-        for _ in 0 ..< SCOPE_BLOOM_PASSES {
-            gfx.draw_render_target(display.bloom_rt[0], rect)
-        }
-        gfx.set_blend_mode(.ALPHA)
+        end_glow(display, rect, SCOPE_BLOOM_PASSES)
         return
     }
 

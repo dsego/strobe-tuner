@@ -221,6 +221,29 @@ ensure_glow_targets :: proc(self: ^StrobeDisplay, size: [2]f32) {
     self.glow_size = size
 }
 
+// A view other than the strobe drawn with the glow, between begin_glow and end_glow: offscreen, as large
+// as rect and cut off outside it, then over the screen with its bloom added passes times over
+begin_glow :: proc(self: ^StrobeDisplay, rect: gfx.Rect, background: gfx.Color) {
+    ensure_glow_targets(self, {rect.width, rect.height})
+    gfx.begin_render_target(self.scene_rt, background, {rect.x, rect.y}, self.glow_scale)
+}
+
+end_glow :: proc(self: ^StrobeDisplay, rect: gfx.Rect, passes: int) {
+    gfx.end_render_target()
+    render_bloom(self)
+
+    // Not the strobe's any more
+    self.glow_drawn = {}
+
+    gfx.set_blend_mode(.REPLACE)
+    gfx.draw_render_target(self.scene_rt, rect)
+    gfx.set_blend_mode(.ADD)
+    for _ in 0 ..< passes {
+        gfx.draw_render_target(self.bloom_rt[0], rect)
+    }
+    gfx.set_blend_mode(.ALPHA)
+}
+
 // Separable gaussian blur, ping-pongs between the two targets and ends up in rts[0]
 blur_render_targets :: proc(
     self: ^StrobeDisplay,

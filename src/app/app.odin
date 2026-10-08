@@ -446,6 +446,13 @@ measure :: proc(app: ^App) -> (reading: Reading) {
 
     record_trace(&app.cents_trace, traced_cents, light, reading.pitch.fresh, gfx.frame_time())
 
+    // The detection's spectrum, only while it's the display
+    config := app.config
+    if config.strobe_display_type == .SPECTRUM {
+        pitch := reading.pitch
+        update_spectrum_view(&app.spectrum_view, &app.pitch_detector.nsdf, pitch.fresh, pitch.elapsed_s, config.spectrum_average_s)
+    }
+
     return
 }
 
@@ -582,21 +589,17 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         draw_cents_trace(&app.cents_trace, view, seconds, range, gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color))
 
     case .SPECTRUM:
-        detector, spectrum := &app.pitch_detector, &app.spectrum_view
-        pitch := app.tuner.pitch
-        update_spectrum_view(spectrum, &detector.nsdf, pitch.fresh, pitch.elapsed_s, config.spectrum_average_s)
-
-        comparator := app.phase_comparator
+        comparator, nsdf := app.phase_comparator, &app.pitch_detector.nsdf
         track_hz := make([]f32, len(comparator.bands), context.temp_allocator)
         for band, index in comparator.bands do track_hz[index] = band.freq_hz
 
         colors := strobe_colors(config)
         draw_spectrum_view(
-            spectrum,
+            &app.spectrum_view,
             display,
             view,
-            detector.nsdf.sample_rate,
-            detector.nsdf.fft_size,
+            nsdf.sample_rate,
+            nsdf.fft_size,
             track_hz,
             app.tuner.active,
             config,

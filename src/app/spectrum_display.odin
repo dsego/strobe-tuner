@@ -88,14 +88,19 @@ update_spectrum_view :: proc(self: ^SpectrumView, nsdf: ^core.NSDF, fresh: bool,
     full_scale_db := 20 * math.log10(f32(nsdf.fft_size) / 4)
     alpha := 1 - math.exp(-elapsed_s / max(average_s, 0.01))
 
+    // Only up to the plot's top and the noise window past it, the rest up to Nyquist is never shown, e.g.
+    // 900 of the 4096 bins at 48 kHz
+    bin_hz := nsdf.sample_rate / f32(nsdf.fft_size)
+    used := min(int(core.pitch_lowpass_hz(nsdf.sample_rate) / bin_hz) + SPECTRUM_NOISE_BINS + 1, len(self.power))
+
     // The first bin packs DC and Nyquist, see nsdf_autocorrelate
-    for &power, bin in self.power {
+    for &power, bin in self.power[:used] {
         if bin > 0 do power += alpha * (real(nsdf.spectrum[bin]) - power)
         self.levels[bin] = max(10 * math.log10(max(power, 1e-20)) - full_scale_db, SPECTRUM_FLOOR_DB)
     }
 
     // The noise at every few bins, the window held in at the ends
-    levels := self.levels
+    levels := self.levels[:used]
     around := make([]f32, 2 * SPECTRUM_NOISE_BINS + 1, context.temp_allocator)
     noise_at :: proc(levels, around: []f32, bin: int) -> f32 {
         start := clamp(bin - SPECTRUM_NOISE_BINS, 0, len(levels) - len(around))
@@ -119,6 +124,16 @@ update_spectrum_view :: proc(self: ^SpectrumView, nsdf: ^core.NSDF, fresh: bool,
     }
 }
 
+// Across the plot, low notes on the left on a log scale
+spectrum_x :: proc(freq, low_hz, high_hz: f32, plot: gfx.Rect) -> f32 {
+    return plot.x + plot.width * math.ln(freq / low_hz) / math.ln(high_hz / low_hz)
+}
+
+// Up the plot, range is its bottom and top in dB
+spectrum_y :: proc(db: f32, range: [2]f32, plot: gfx.Rect) -> f32 {
+    return plot.y + plot.height * (1 - clamp((db - range[0]) / (range[1] - range[0]), 0, 1))
+}
+
 // Low notes on the left on a log scale, a C every octave. track_hz are the strobe tracks' partials, marked
 // and lit while the tuner has the note.
 draw_spectrum_view :: proc(
@@ -133,19 +148,12 @@ draw_spectrum_view :: proc(
     line_color, band_color, background: gfx.Color,
 ) {
     gfx.draw_rect({rect.x, rect.y}, {rect.width, rect.height}, background)
-    if len(self.levels) == 0 do return
-
-    x_at :: proc(freq, low_hz, high_hz: f32, plot: gfx.Rect) -> f32 {
-        return plot.x + plot.width * math.ln(freq / low_hz) / math.ln(high_hz / low_hz)
-    }
-    y_at :: proc(db: f32, range: [2]f32, plot: gfx.Rect) -> f32 {
-        return plot.y + plot.height * (1 - clamp((db - range[0]) / (range[1] - range[0]), 0, 1))
-    }
 
     // Room for the labels above the peaks and the octaves under the plot
     PADDING_TOP :: 40
     PADDING_BOTTOM :: 28
     plot := gfx.Rect{rect.x, rect.y + PADDING_TOP, rect.width, rect.height - PADDING_TOP - PADDING_BOTTOM}
+    if len(self.levels) == 0 || plot.width <= 0 || plot.height <= 0 do return
     low_hz: f32 = SPECTRUM_LOW_HZ
     high_hz := core.pitch_lowpass_hz(sample_rate)
     bin_hz := sample_rate / f32(fft_size)
@@ -159,11 +167,11 @@ draw_spectrum_view :: proc(
     octave_x := make([dynamic][2]f32, context.temp_allocator) // x and the octave
     for octave in 1 ..= 8 {
         c_hz := core.cents_to_freq(f32((octave - 4) * 1200 - 900), pitch_standard)
-        if c_hz >= low_hz && c_hz <= high_hz do append(&octave_x, [2]f32{x_at(c_hz, low_hz, high_hz, plot), f32(octave)})
+        if c_hz >= low_hz && c_hz <= high_hz do append(&octave_x, [2]f32{spectrum_x(c_hz, low_hz, high_hz, plot), f32(octave)})
     }
     track_x := make([dynamic]f32, context.temp_allocator)
     for freq in track_hz {
-        if freq >= low_hz && freq <= high_hz do append(&track_x, x_at(freq, low_hz, high_hz, plot))
+        if freq >= low_hz && freq <= high_hz do append(&track_x, spectrum_x(freq, low_hz, high_hz, plot))
     }
 
     // The curve, a point every couple of points across: the loudest bin under it, or between two bins where
@@ -182,26 +190,15 @@ draw_spectrum_view :: proc(
             below := min(int(from), last - 1)
             db = math.lerp(shown[below], shown[below + 1], from - f32(below))
         }
-        append(&points, [2]f32{plot.x + x, y_at(db, range, plot)})
+        append(&points, [2]f32{plot.x + x, spectrum_y(db, range, plot)})
     }
 
-    // With the retro glow the curve glows like the scope's beam, through the strobe display's render targets
+    // With the retro glow the curve glows like the scope's beam, the bloom added once: the scope's thin
+    // beam takes it a few times over, the curve's thicker and busier
     if config.strobe_glow {
-        ensure_glow_targets(display, {rect.width, rect.height})
-        gfx.begin_render_target(display.scene_rt, background, {rect.x, rect.y}, display.glow_scale)
+        begin_glow(display, rect, background)
         draw_plot(plot, points[:], octave_x[:], track_x[:], active, line_color, band_color, background)
-        gfx.end_render_target()
-        render_bloom(display)
-
-        // Not the strobe's any more
-        display.glow_drawn = {}
-
-        gfx.set_blend_mode(.REPLACE)
-        gfx.draw_render_target(display.scene_rt, rect)
-        // Once, the scope's thin beam takes it a few times over, the curve's thicker and busier
-        gfx.set_blend_mode(.ADD)
-        gfx.draw_render_target(display.bloom_rt[0], rect)
-        gfx.set_blend_mode(.ALPHA)
+        end_glow(display, rect, 1)
     }
 
     gfx.begin_scissor(rect)
@@ -239,7 +236,7 @@ draw_spectrum_view :: proc(
         loudest := peaks[0]
         for peak in peaks do if peak.level > loudest.level do loudest = peak
 
-        y := plot.y + plot.height * (1 - clamp((loudest.shown - range[0]) / (range[1] - range[0]), 0, 1))
+        y := spectrum_y(loudest.shown, range, plot)
         line := text_color_muted
         line.a = 140
         gfx.draw_rect({plot.x, y - 0.5}, {plot.width, 1}, line)
@@ -270,8 +267,7 @@ draw_spectrum_view :: proc(
         mark.a = 160 if active else 60
         for x in track_x do gfx.draw_rect({x - 0.5, plot.y}, {1.5, plot.height}, mark)
 
-        fill: gfx.Color
-        for channel in 0 ..< 3 do fill[channel] = u8(math.lerp(f32(background[channel]), f32(line_color[channel]), f32(0.2)))
+        fill := lerp_color(background, line_color, 0.2)
         fill.a = 255
         bottom := plot.y + plot.height
         for index in 0 ..< len(points) - 1 {
@@ -279,15 +275,21 @@ draw_spectrum_view :: proc(
             gfx.draw_rect({point.x, point.y}, {points[index + 1].x - point.x, bottom - point.y}, fill)
         }
 
-        // Thinner than the trace's, a spectrum is jagged and the fill under it carries the shape
+        // Thinner than the trace's, a spectrum is jagged and the fill under it carries the shape. The glow's
+        // dots are half its radius apart, the thin line is straight pieces, its dots would take thousands.
         GLOW_RADIUS :: 2.5
-        LINE_RADIUS :: 0.6
+        LINE_WIDTH :: 1.2
         glow := line_color
         glow.a = 16
-        for pen in ([]Pen{{radius = GLOW_RADIUS, color = glow}, {radius = LINE_RADIUS, color = line_color}}) {
-            pen := pen
-            pen_start(&pen, points[0])
-            for point in points[1:] do pen_line_to(&pen, point)
+        pen := Pen {
+            radius = GLOW_RADIUS,
+            color  = glow,
+        }
+        pen_start(&pen, points[0])
+        for point in points[1:] do pen_line_to(&pen, point)
+
+        for index in 1 ..< len(points) {
+            gfx.draw_line(points[index - 1], points[index], LINE_WIDTH, line_color)
         }
     }
 
@@ -345,9 +347,8 @@ draw_spectrum_view :: proc(
             GAP :: 4
             width := max(name_size.x, hz_size.x)
             height := name_size.y + hz_size.y + (GAP if labels == .BOTH else 0)
-            x := plot.x + plot.width * math.ln(peak.freq / low_hz) / math.ln(high_hz / low_hz)
-            peak_y := plot.y + plot.height * (1 - clamp((peak.shown - range[0]) / (range[1] - range[0]), 0, 1))
-            top := max(peak_y - height - 6, plot.y - height)
+            x := spectrum_x(peak.freq, low_hz, high_hz, plot)
+            top := max(spectrum_y(peak.shown, range, plot) - height - 6, plot.y - height)
             bounds := gfx.Rect{clamp(x - width / 2, plot.x + 4, plot.x + plot.width - width - 4), top, width, height}
 
             covers := false
