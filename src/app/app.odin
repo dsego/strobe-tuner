@@ -74,6 +74,7 @@ App :: struct {
 
     readout_track:      int, // the strobe track the readout follows, see core.strobe_readout_track
     readout_ready:      bool, // and whether it had settled, the frame before
+    held_readout:       HeldReadout, // the last one shown while the note was lit, see measure
     traced_track:      int, // the track the readout followed, the trace stays on it while its stripes show
     config_changed:     bool, // the tuner and the strobe need the new config, see apply_config
     unsaved:            bool, // the config changed since it was saved, see save_when_settled
@@ -88,6 +89,14 @@ Reading :: struct {
     out_of_range:   bool, // another note than a locked one is played, see core.tuner_out_of_range
     strobe_readout: bool, // the readout is the strobe track's, none without one, see measure
     octaves:        int, // the note's shown this many octaves off the tuner's, the partial the readout measures
+}
+
+// The readout as the note went dark
+HeldReadout :: struct {
+    shown:   bool,
+    freq:    f32,
+    cents:   f32,
+    octaves: int,
 }
 
 
@@ -239,6 +248,7 @@ run_app :: proc(config: ^Config) {
 retune :: proc(app: ^App) {
     config := app.config
     app.traced_track = -1 // the tracks are at another note now
+    app.held_readout = {}
     core.set_phase_comparator_tracks(
         app.phase_comparator,
         config.strobe_intervals[:],
@@ -429,6 +439,17 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     // The track the readout followed carries on as the note decays and the readout gives way, the line as lit as
     // its stripes and dark with them, not the noisy weak detections.
     if reading.strobe_readout do app.traced_track = app.readout_track
+
+    // Lit, the readout is the track's as it measures. Dark, it keeps the last one shown: the track goes on
+    // measuring whatever passes through its band, the room's noise would read as a wandering pitch. Another
+    // note starts over, see retune.
+    held := &app.held_readout
+    if tuner.active {
+        if reading.strobe_readout do held^ = {true, steady.detected_freq, steady.err_cents, reading.octaves}
+    } else {
+        reading.strobe_readout = held.shown
+        steady.detected_freq, steady.err_cents, reading.octaves = held.freq, held.cents, held.octaves
+    }
 
     light: f32 = 1
     traced_cents := math.nan_f32()
