@@ -118,11 +118,9 @@ main :: proc() {
         // None until a track settles, like the app's
         readout := "-"
         if readout_ready && abs(strobe.bands[readout_track].err_cents) <= core.READOUT_RANGE_CENTS {
-            // The note the app names, the partial the track measures
+            // The note the app names, the target's, it moves up to the partial the readout gives way to
             band := strobe.bands[readout_track]
-            octaves := core.readout_octaves(band, tuner.target_note.frequency)
-            shown := core.cents_to_note(f32(tuner.target_note.cents + 1200 * octaves), PITCH_STANDARD)
-            readout = fmt.tprintf("%+.1f¢ %v× %v", band.err_cents, band.interval, core.note_name(shown))
+            readout = fmt.tprintf("%+.1f¢ %v× %v", band.err_cents, band.interval, core.note_name(tuner.target_note))
         }
         fmt.printf("%-13v ", readout)
         // The stripes fade out between 16 and 8 dB, see core.STROBE_FADE_SNR_DB. And by their speed, the

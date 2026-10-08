@@ -198,8 +198,12 @@ steady_readout :: proc(self: ^Tuner, freq: f32, elapsed_s: f32) {
 // note shown, 1× is the partial. A pluck goes back to the note played, its fundamental may ring again. A
 // locked note and a string keep their own. track and ready are strobe_readout_track's, was_ready its
 // ready of the frame before: the tracks start over on a retune and a fresh one's first level is a pluck.
-// Called after update_tuner, returns whether the strobe has to be retuned.
+// Only while the note is lit, a string still ringing: dark, a click or a bump in the tracks would move it
+// up and up. Not past the highest note. Called after update_tuner, returns whether the strobe has to be
+// retuned.
 follow_readout_partial :: proc(self: ^Tuner, strobe: ^PhaseComparator, track: int, ready, was_ready: bool) -> (retune: bool) {
+    if !self.active do return false
+
     if self.on_partial && was_ready && strobe_plucked(strobe) {
         self.on_partial = false
         if self.detected_note.cents == -1 || self.detected_note.cents == self.target_note.cents do return false
@@ -218,7 +222,10 @@ follow_readout_partial :: proc(self: ^Tuner, strobe: ^PhaseComparator, track: in
         if band.interval == 1 && band.snr_db >= strobe.bands[track].snr_db do return false
     }
 
-    self.target_note = cents_to_note(f32(self.target_note.cents + 1200 * octaves), self.target_note.pitch_standard)
+    partial_cents := self.target_note.cents + 1200 * octaves
+    if partial_cents > HIGHEST_NOTE * 100 do return false
+
+    self.target_note = cents_to_note(f32(partial_cents), self.target_note.pitch_standard)
     self.on_partial = true
     return true
 }
@@ -633,6 +640,33 @@ test_tuner :: proc(t: ^testing.T) {
         testing.expect(t, !follow_readout_partial(&bass, strobe, 0, false, false))
         testing.expect(t, follow_readout_partial(&bass, strobe, 0, false, true))
         testing.expect_value(t, bass.target_note.octave, 1)
+
+        // Dark, a click or a bump loudest in a partial's track doesn't move it
+        bass.active = false
+        testing.expect(t, !follow_readout_partial(&bass, strobe, 0, true, true))
+        testing.expect_value(t, bass.target_note.octave, 1)
+    }
+
+    // Not past the highest note, C7's 4th harmonic is C9
+    {
+        C7 :: 2093.0
+        high := init_tuner(C7, 440, true, 0)
+        update_tuner(&high, detection(C7))
+
+        strobe := init_phase_comparator(C7, {1, 2, 4}, .HARMONIC)
+        defer destroy_phase_comparator(strobe)
+
+        set_phase_comparator_freq(strobe, C7, 440, 0.01, 2, .HARMONIC)
+        snrs := [?]f32{40, 50, 90}
+        for &band, index in strobe.bands {
+            band.in_range = true
+            band.rate_time_s = 1
+            band.snr_db = snrs[index]
+        }
+        track, ready := strobe_readout_track(strobe, -1)
+        testing.expect_value(t, track, 2)
+        testing.expect(t, !follow_readout_partial(&high, strobe, track, ready, false))
+        testing.expect_value(t, high.target_note.octave, 7)
     }
 
     // A seven string's high E is a string too

@@ -112,7 +112,8 @@ Detection :: struct {
     active:     bool,
     note_cents:   int, // the note played, the target's or the one under the partial it moved up to
     strobe_cents: int, // the target note's, the strobe's tracks are its partials
-    // The readout's track's over the note played, the note's shown that much higher, see core.readout_octaves
+    // The partial the target moved up to over the note played, the note's shown that much higher, see
+    // core.follow_readout_partial
     octaves:      int,
     // Within NULL_HOLD_S of a retune, the tracks started over and their drift is still on its way from 0
     retuned:      bool,
@@ -620,7 +621,6 @@ play :: proc(recording: []f32, sample_rate: f32, pitch_standard: f32) -> (detect
             band := strobe.bands[readout_track]
             detection.read = true
             detection.cents = f32(tuner.target_note.cents) + band.err_cents
-            detection.octaves += core.readout_octaves(band, tuner.target_note.frequency)
         }
         // Lit like sandbox/accuracy counts it, an instrument's partials are whole multiples
         fade := core.STROBE_FADE_SNR_DB

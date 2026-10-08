@@ -88,15 +88,13 @@ Reading :: struct {
     steady:         core.PitchInfo, // the readout, the strong detections averaged
     out_of_range:   bool, // another note than a locked one is played, see core.tuner_out_of_range
     strobe_readout: bool, // the readout is the strobe track's, none without one, see measure
-    octaves:        int, // the note's shown this many octaves off the tuner's, the partial the readout measures
 }
 
 // The readout as the note went dark
 HeldReadout :: struct {
-    shown:   bool,
-    freq:    f32,
-    cents:   f32,
-    octaves: int,
+    shown: bool,
+    freq:  f32,
+    cents: f32,
 }
 
 
@@ -426,13 +424,9 @@ measure :: proc(app: ^App) -> (reading: Reading) {
         steady.detected_freq = core.freq_at_cents(steady.detected_freq, band.err_cents - steady.err_cents)
         steady.err_cents = band.err_cents
 
-        // The note and the Hz of the partial it measures, e.g. a low string's 2nd harmonic ringing on after
-        // its fundamental died down. The Hz are the track's, the pitch detection may still read the
-        // fundamental under a target that moved up to the partial. A locked note and a string keep their own.
-        if !core.measures_target(tuner) {
-            reading.octaves = core.readout_octaves(band, core.tuner_target_freq(tuner))
-            steady.detected_freq = core.freq_at_cents(band.freq_hz, band.err_cents)
-        }
+        // The Hz are the track's, the pitch detection may still read the fundamental under a target that moved
+        // up to its partial, see core.follow_readout_partial. A locked note and a string keep their own.
+        if !core.measures_target(tuner) do steady.detected_freq = core.freq_at_cents(band.freq_hz, band.err_cents)
     }
 
     // The readout's cents, the strobe's so an in tune note is on the middle line, none before a track settled.
@@ -445,10 +439,10 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     // note starts over, see retune.
     held := &app.held_readout
     if tuner.active {
-        if reading.strobe_readout do held^ = {true, steady.detected_freq, steady.err_cents, reading.octaves}
+        if reading.strobe_readout do held^ = {true, steady.detected_freq, steady.err_cents}
     } else {
         reading.strobe_readout = held.shown
-        steady.detected_freq, steady.err_cents, reading.octaves = held.freq, held.cents, held.octaves
+        steady.detected_freq, steady.err_cents = held.freq, held.cents
     }
 
     light: f32 = 1
@@ -716,8 +710,7 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     // work the same either way. With a capo the strings sound higher and keep the names of the open strings,
     // like the chord shapes played over it.
     transpose := -capo_fret(setup) if string_mode else transpose_key(setup)
-    // In the octave of the partial the readout measures
-    shown_cents := tuner.target_note.cents + 1200 * reading.octaves
+    shown_cents := tuner.target_note.cents
     shown_note := core.cents_to_note(f32(shown_cents + 100 * transpose), tuner.target_note.pitch_standard)
 
     // No pitch yet, nothing to show
@@ -772,9 +765,6 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     // target following the detected note under the finger
     if swiping do lock_toggled = !tuner.locked
     if lock_toggled || step != 0 do app.quiet_time = 0
-
-    // The ruler is in the octave of the partial the readout measures, a step or a lock lands on the note shown
-    if step != 0 || (lock_toggled && !tuner.locked) do step += 12 * reading.octaves
 
     retune_target := lock_toggled && core.toggle_note_lock(tuner)
 
