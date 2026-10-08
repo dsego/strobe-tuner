@@ -132,6 +132,22 @@ and their phases so the normalization still matches. It flattens the hiss along 
 with white hiss 40 dB down the Strat's A2 reads right 13% of the time at k = 0.5 and 83% at 0.75,
 against 100%. Only the bass E1's decay gains, 77% to 90%, fewer octave errors.
 
+## Noise floor at the new note
+
+Seen in a noisy room: a hummed note stayed lit and measuring after it died out. Not confirmed on a
+recording yet. A retune starts the tracks over but each keeps the floor it learned at the old note's
+frequency. Room noise is much louder in the voice range than higher up, so at the hummed note it can
+sit 15 to 25 dB over that floor. The floor doesn't move during the pitch, and after it the room is
+over `NOISE_FLOOR_SNR_DB_THRESHOLD` so it only creeps at 1 dB/s, while `strobe_shows_note` holds
+the note from 12 dB. 25 dB over is about 13 s of stripes on noise.
+
+- A background spectrum learned all the time, an FFT of the input with a floor per frequency and
+  the same guards. A retune starts each track from the floor at its new frequency, its own floor
+  refines it from there. The FFT's levels have to be scaled to match the tracks' windows.
+- Resetting the floors on a retune would learn whatever still rings once the pitch detection lets
+  go, a string fading under the room goes dark early.
+- A faster creep only shortens it, and cuts real tails in a noisy room too.
+
 ## Temperaments
 
 A temperament is how the 12 notes of the octave are spaced, 12 offsets in cents from equal
