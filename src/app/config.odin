@@ -33,6 +33,7 @@ StrobeDisplayType :: enum {
     SCOPE, // the wave itself, like an oscilloscope synced to the strobe's frequency, see src/core/scope.odin
     TRACE, // a line of the cents over the last few seconds
     LAMP, // the scope from above, stripes as bright as the wave is high, the lamp of a mechanical strobe
+    SPECTRUM, // what the pitch detection hears, its peaks named, see src/app/spectrum_display.odin
 }
 
 StrobeShape :: enum {
@@ -78,6 +79,23 @@ SCOPE_PERSISTENCE_STEPS_MS :: [3]f32{15, 40, 150}
 // note can be off before it's the next one.
 TRACE_SPAN_STEPS_S :: [3]f32{1, 2, 5}
 TRACE_RANGE_STEPS_CENTS :: [2]f32{25, 50}
+
+// The spectrum's average, short, medium and long. Short shows a pluck sooner, long calms a noisy room.
+SPECTRUM_AVERAGE_STEPS_S :: [3]f32{0.1, 0.2, 0.5}
+
+// The spectrum's height, see src/app/spectrum_display.odin
+SpectrumScale :: enum {
+    SNR, // each bin over the noise around it, the room flat along the bottom
+    DBFS, // the level, sloping down with the room, how loud the input is
+}
+
+// What's written over the spectrum's peaks
+SpectrumLabels :: enum {
+    OFF,
+    NOTE,
+    HZ,
+    BOTH,
+}
 
 
 // Grouped by topic. The order is free, every field is its own key in the ini, see load_config.
@@ -160,6 +178,13 @@ Config :: struct {
     // Trace display: how many seconds it shows, and how many cents from the middle to its edges
     trace_seconds:                f32,
     trace_range_cents:            f32,
+
+    // Spectrum display: how long the power is averaged, its height and what the peaks are labelled with
+    spectrum_average_s:           f32,
+    spectrum_scale:               SpectrumScale,
+    spectrum_labels:              SpectrumLabels,
+    // a line across at the loudest peak with its level in dBFS
+    spectrum_peak_level:          bool,
 }
 
 // In the order of Config
@@ -193,6 +218,10 @@ config_defaults :: Config {
     scope_gain                   = .AUTO,
     trace_seconds                = 2,
     trace_range_cents            = 25,
+    spectrum_average_s           = 0.2,
+    spectrum_scale               = .SNR,
+    spectrum_labels              = .BOTH,
+    spectrum_peak_level          = true,
 }
 
 

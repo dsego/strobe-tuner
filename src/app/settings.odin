@@ -37,7 +37,7 @@ SETTINGS_ROWS :: 5
 WIDE_SEGMENT_WIDTH :: 80
 
 // In the order of StrobeDisplayType
-DISPLAY_NAMES :: [len(StrobeDisplayType)]cstring{"Strobe", "Scope", "Trace", "Lamp"}
+DISPLAY_NAMES :: [len(StrobeDisplayType)]cstring{"Strobe", "Scope", "Trace", "Lamp", "Peaks"}
 
 // The labels of the steps below that have three
 STEP_LABELS :: []cstring{"Short", "Medium", "Long"}
@@ -209,6 +209,11 @@ gui_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (chan
         // The positive half of the wave like a mechanical strobe's lamp, or the wave as it is
         gui_settings_segmented(sheet_layout, &row, "Rectifier", {"Half", "None"}, &config.lamp_shape)
         gui_screen_options(sheet_layout, &row, config)
+    case .SPECTRUM:
+        gui_steps(sheet_layout, &row, "Average", STEP_LABELS, &config.spectrum_average_s, SPECTRUM_AVERAGE_STEPS_S)
+        gui_settings_segmented(sheet_layout, &row, "Scale", {"SNR", "dBFS"}, &config.spectrum_scale)
+        gui_settings_segmented(sheet_layout, &row, "Labels", {"Off", "Note", "Hz", "Both"}, &config.spectrum_labels)
+        gui_settings_segmented(sheet_layout, &row, "Peak level", {"Off", "On"}, &config.spectrum_peak_level)
     }
     return
 

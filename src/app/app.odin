@@ -56,6 +56,7 @@ App :: struct {
     audio_device_index: int, // in audio_devices, picked in the settings
     strobe_display:     StrobeDisplay,
     cents_trace:        Trace,
+    spectrum_view:      SpectrumView,
 
     settings_menu:      SettingsMenu, // the dropdown whose menu is open
     settings_sheet:     Sheet,
@@ -131,6 +132,8 @@ run_app :: proc(config: ^Config) {
 
     app.cents_trace = create_trace()
     defer destroy_trace(&app.cents_trace)
+
+    defer destroy_spectrum_view(&app.spectrum_view)
 
     // Opened or not, the strobe area says why there's no input, see draw_strobe_area
     audio_capture := audio.init()
@@ -327,6 +330,18 @@ handle_keys :: proc(app: ^App) {
 
     if gfx.key_pressed(.TAB) {
         config.strobe_display_type = StrobeDisplayType((int(config.strobe_display_type) + 1) % len(StrobeDisplayType))
+    }
+
+    // Or straight to one, in the settings' order
+    DISPLAY_KEYS :: [StrobeDisplayType]gfx.Key {
+        .STROBE   = .NUM_1,
+        .SCOPE    = .NUM_2,
+        .TRACE    = .NUM_3,
+        .LAMP     = .NUM_4,
+        .SPECTRUM = .NUM_5,
+    }
+    for key, type in DISPLAY_KEYS {
+        if gfx.key_pressed(key) do config.strobe_display_type = type
     }
 
     // The next preset of the tracks, it replaces the partials and clears what was set on each track
@@ -565,6 +580,30 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         colors := strobe_colors(config)
         seconds, range := config.trace_seconds, config.trace_range_cents
         draw_cents_trace(&app.cents_trace, view, seconds, range, gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color))
+
+    case .SPECTRUM:
+        detector, spectrum := &app.pitch_detector, &app.spectrum_view
+        pitch := app.tuner.pitch
+        update_spectrum_view(spectrum, &detector.nsdf, pitch.fresh, pitch.elapsed_s, config.spectrum_average_s)
+
+        comparator := app.phase_comparator
+        track_hz := make([]f32, len(comparator.bands), context.temp_allocator)
+        for band, index in comparator.bands do track_hz[index] = band.freq_hz
+
+        colors := strobe_colors(config)
+        draw_spectrum_view(
+            spectrum,
+            display,
+            view,
+            detector.nsdf.sample_rate,
+            detector.nsdf.fft_size,
+            track_hz,
+            app.tuner.active,
+            config,
+            gfx.hex(colors.x),
+            gfx.hex(colors.y),
+            gfx.hex(strobe_bg_color),
+        )
 
     case .SCOPE, .LAMP:
         draw_scope_display(display, &app.scope, view, config, app.pitch_detector.snr_db)

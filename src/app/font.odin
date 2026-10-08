@@ -28,7 +28,7 @@ FONT_CODEPOINTS :: " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#/+-−
 // (extras/ttf in the zip of github.com/rsms/inter/releases), its tabular figures frozen in as the default
 // ones, the rest of the characters as they are, and cut down to these:
 //   uvx --from opentype-feature-freezer pyftfeatfreeze -f tnum Inter-Regular.ttf Inter-Regular-tnum.ttf
-//   uvx --from fonttools pyftsubset Inter-Regular-tnum.ttf --text="0123456789.+-×½#ABCDEFGHz¢" \
+//   uvx --from fonttools pyftsubset Inter-Regular-tnum.ttf --text="0123456789.+-×½#ABCDEFGHbz¢" \
 //       --layout-features='' --no-hinting --output-file=assets/fonts/inter/Inter-Regular-Tabular.ttf
 TABULAR_CODEPOINTS :: "0123456789.+-×½#ABCDEFGHbz¢"
 
