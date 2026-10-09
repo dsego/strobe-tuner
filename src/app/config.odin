@@ -77,7 +77,8 @@ PITCH_STANDARD_MIN :: 400
 PITCH_STANDARD_MAX :: 480
 
 // The screens' persistence, off, short, medium and long, in periods of the strobe's frequency: the scope's
-// and the lamp's beam, and the strobe's stripes, see strobe_persistence. A detuned wave drifts across the
+// and the lamp's beam, the Persistence setting, and the strobe's stripes, Motion smoothing on its options,
+// see strobe_persistence. A detuned wave drifts across the
 // screen by the cycles it slips, as many a second as the note is high: in milliseconds a high note smears
 // further and averages more cycles than a low one off by the same cents, in periods they look the same.
 // Medium is 40 ms at A4, about the window of the old narrow bands.

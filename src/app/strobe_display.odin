@@ -560,16 +560,21 @@ update_band_visibility :: proc(
 }
 
 // The persistence of the strobe's stripes, the lamp's smear on the lock-in's phase: the stripes' phasor
-// averaged over the persistence, as the lamp's screen averages the wave. The average's angle is where the
-// smeared stripes sit, a jittery phase comes out calm and lags like the lamp's tracks do, and its length is
-// their contrast, 1 for a steady phase and short for one that wandered within the window. phase is the
+// averaged over the persistence, as the lamp's screen averages the wave. The average rides along with the
+// stripes at the readout's rate, expected_step is how far they move this frame by it: the frames before are
+// carried that far on before the newest joins them, so a steady drift keeps them aligned and the stripes move
+// sharp and on time, as a disc's do for an eye that follows them, and only what wanders off the rate smears.
+// The average's angle is where the smeared stripes sit, a jittery phase comes out calm, and its length is
+// their contrast, 1 for a phase on the rate and short for one that wandered within the window. phase is the
 // track's as drawn and comes back averaged, period_count the shader's stripes per turn of it, drawn_phase
-// the previous frame's: the averaged phase goes on from it the shortest way round, so the motion blur sees
-// no wrap. Lit again after dark the stripes come in where they are, not out of a dark screen.
+// the previous frame's: the averaged phase goes on from where the rate takes it the shortest way round, so
+// the motion blur sees no wrap. Lit again after dark the stripes come in where they are, not out of a dark
+// screen.
 strobe_persistence :: proc(
     phasor: ^complex64,
     phase: ^f32,
     drawn_phase: f32,
+    expected_step: f32,
     period_count: f32,
     persistence_s: f32,
     frame_time: f32,
@@ -578,13 +583,16 @@ strobe_persistence :: proc(
 ) {
     angle := phase^ * period_count
     newest := complex(math.cos(angle), math.sin(angle))
+    carry := expected_step * period_count
     if phasor^ == 0 do phasor^ = newest
+    else do phasor^ *= complex(math.cos(carry), math.sin(carry))
 
     alpha := 1 - math.exp(-frame_time / persistence_s)
     phasor^ += complex(alpha, 0) * (newest - phasor^)
 
     averaged := math.atan2(imag(phasor^), real(phasor^))
-    phase^ = drawn_phase + f32(core.wrap_phase(f64(averaged - drawn_phase * period_count))) / period_count
+    predicted := drawn_phase + expected_step
+    phase^ = predicted + f32(core.wrap_phase(f64(averaged - predicted * period_count))) / period_count
     return abs(phasor^)
 }
 
@@ -642,13 +650,20 @@ strobe_tracks :: proc(
         uniforms.phase = (band.scaled_phase + ahead) / density
 
         // The persistence smears the stripes and calms a jittery phase like the lamp's screen. Not the lamp's
-        // tracks, their screen smeared already.
+        // tracks, their screen smeared already. A pluck starts it over, the plucked note's stripes come in
+        // where they are instead of through dark, as the lamp's loud attack outweighs its faded picture.
         frame_time := min(gfx.frame_time(), STROBE_MAX_FRAME_TIME_S)
         drawn_phase := &self.band_drawn_phases[band_index]
         smear: f32 = 1
         if !lamp && persistence_periods > 0 {
+            if band.onset do self.band_phasors[band_index] = 0
+
             persistence_s := persistence_periods / comparator.base_freq_hz
-            smear = strobe_persistence(&self.band_phasors[band_index], &uniforms.phase, drawn_phase^, period_count, persistence_s, frame_time)
+
+            // How far the stripes moved this frame at the readout's rate, the whole frame however long it
+            // took: a hitch moved them all the way
+            expected_step := core.strobe_phase_rate(comparator, band) * gfx.frame_time() / density
+            smear = strobe_persistence(&self.band_phasors[band_index], &uniforms.phase, drawn_phase^, expected_step, period_count, persistence_s, frame_time)
         }
 
         // How far the strobe moved since the previous frame as drawn

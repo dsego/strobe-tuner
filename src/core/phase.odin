@@ -624,14 +624,19 @@ strobe_rescale :: proc(freq_hz: f32) -> f64 {
 // Without audio the strobe stops going on after this long
 STROBE_AHEAD_MAX_S :: 0.03
 
+// How fast the strobe turns at the readout's rate, radians of the track a second, the way scaled_phase goes
+strobe_phase_rate :: proc(self: ^PhaseComparator, band: PhaseBand) -> f32 {
+    radians_per_s := band.rate * f64(self.sample_rate) * strobe_rescale(band.freq_hz)
+    return -f32(radians_per_s) * band.speed
+}
+
 // How far the strobe turned since its newest sample came in, at the readout's rate. The audio comes in chunks
 // that don't line up with the display's frames, 10 ms ones on a Mac at 120 Hz: a frame in six gets none and
 // the others a chunk and a bit, a steady drift drawn as measured steps and stalls. Drawn this far ahead it
 // moves evenly, and the next measurement takes over where it is.
 strobe_phase_ahead :: proc(self: ^PhaseComparator, band: PhaseBand) -> f32 {
     age := min(time.duration_seconds(time.tick_since(self.newest_tick)), STROBE_AHEAD_MAX_S)
-    advance := band.rate * age * f64(self.sample_rate) * strobe_rescale(band.freq_hz)
-    return -f32(advance) * band.speed
+    return strobe_phase_rate(self, band) * f32(age)
 }
 
 
