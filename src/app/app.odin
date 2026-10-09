@@ -491,7 +491,8 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
     sweep := config.scope_sweep if config.strobe_display_type == .SCOPE else .TIME
     if scope.sweep != sweep do core.set_scope_sweep(scope, sweep)
 
-    scope.persistence_seconds = f64(config.scope_persistence_ms) / 1000
+    // In periods of the strobe's frequency, the smear and the waver per cent look the same on every note
+    scope.persistence_seconds = f64(config.scope_persistence_periods) / strobe_hz
     scope.gain = config.scope_gain
     scope.noise_floor = app.pitch_detector.noise_floor.level
     core.update_scope(scope)

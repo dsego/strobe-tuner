@@ -71,8 +71,11 @@ strobe_speed :: proc(config: ^Config) -> f32 {
 PITCH_STANDARD_MIN :: 400
 PITCH_STANDARD_MAX :: 480
 
-// The scope's and the lamp's persistence, short, medium and long
-SCOPE_PERSISTENCE_STEPS_MS :: [3]f32{15, 40, 150}
+// The scope's and the lamp's persistence, short, medium and long, in periods of the strobe's frequency.
+// A detuned wave drifts across the screen by the cycles it slips, as many a second as the note is high: in
+// milliseconds a high note smears further and averages more cycles than a low one off by the same cents,
+// in periods they look the same. Medium is 40 ms at A4, about the window of the old narrow bands.
+SCOPE_PERSISTENCE_STEPS_PERIODS :: [3]f32{7, 18, 66}
 
 // The trace's span, short, medium and long, and its range from the middle to the edge, narrow and wide.
 // Narrow for an instrument's pluck settling, wide for a voice's vibrato, half a semitone is as far as a
@@ -165,9 +168,9 @@ Config :: struct {
     // How far off each track's partial is, next to the track
     show_band_cents:              bool,
 
-    // Scope and lamp displays: how long the beam stays on the screen, 0 shows only what came in since
-    // the previous frame
-    scope_persistence_ms:         f32,
+    // Scope and lamp displays: how long the beam stays on the screen, in periods of the strobe's frequency,
+    // 0 shows only what came in since the previous frame
+    scope_persistence_periods:    f32,
     // what the lamp shows, the positive half of the wave like a lamp or the wave as it is
     lamp_shape:                   core.ScopeShape,
     // the scope over time or as a Lissajous figure against the strobe's frequency, tapping it flips them
@@ -212,7 +215,7 @@ config_defaults :: Config {
     strobe_glow                  = true,
     partial_labels               = .MULTIPLES,
     show_band_cents              = false,
-    scope_persistence_ms         = 40,
+    scope_persistence_periods    = 18,
     lamp_shape                   = .HALF_RECTIFIED,
     scope_sweep                  = .TIME,
     scope_gain                   = .AUTO,

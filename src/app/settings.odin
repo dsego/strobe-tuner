@@ -224,7 +224,7 @@ gui_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (chan
     // The scope's and the lamp's screen. Held, a note's decay shows, the wave shrinks and the stripes dim
     // like a mechanical strobe's lamp. Auto keeps a fading note filling the screen.
     gui_screen_options :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config) {
-        gui_steps(sheet_layout, row, "Persistence", STEP_LABELS, &config.scope_persistence_ms, SCOPE_PERSISTENCE_STEPS_MS)
+        gui_steps(sheet_layout, row, "Persistence", STEP_LABELS, &config.scope_persistence_periods, SCOPE_PERSISTENCE_STEPS_PERIODS)
         gui_settings_segmented(sheet_layout, row, "Gain", {"Auto", "Hold"}, &config.scope_gain)
     }
 }
