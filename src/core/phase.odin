@@ -53,8 +53,9 @@ MAX_BAND_NORM_FREQ :: 0.45
 STROBE_REFERENCE_HZ :: 656.5
 
 // The cents of each track are the slope of a least squares line through the phase, older measurements
-// weighted down with this time constant. Its weight on the rate of each moment peaks this long ago and is
-// twice that on average, steady but a turned peg shows that much later than on the stripes.
+// weighted down with a time constant, readout_fit_s, this by default. Its weight on the rate of each moment
+// peaks that long ago and is twice that on average, steady but a turned peg shows that much later than on
+// the stripes.
 READOUT_FIT_S :: 0.15
 
 // The drift averages the chunks' phase advances this long, about the window of the old narrow bands a
@@ -128,6 +129,7 @@ PhaseComparator :: struct {
     bands:            [dynamic]PhaseBand,
     mode:             StrobeMode,
     band_cents:       int, // the width of each track's band, DFT_RESOLUTION_CENTS, set_phase_comparator_freq retunes it
+    readout_fit_s:    f32, // the time constant of the readout's fit, READOUT_FIT_S, longer is steadier and later
     available:        int, // the new samples of the latest run_phase_detection
 
     // Absolute index of the sample just past the end of the newest window, i.e. the lock-in clock
@@ -150,6 +152,7 @@ init_phase_comparator :: proc(
     self.mode = mode
     self.base_freq_hz = base_freq_hz
     self.band_cents = DFT_RESOLUTION_CENTS
+    self.readout_fit_s = READOUT_FIT_S
 
     for interval in strobe_intervals {
         if interval >= 1.0 do append_phase_band(self, interval)
@@ -555,7 +558,7 @@ advance_band :: proc(self: ^PhaseComparator, band: ^PhaseBand, phase_advance: f6
     step := f64(self.available)
     sample_rate := f64(self.sample_rate)
     if had_phase {
-        decay := math.exp(-step / (READOUT_FIT_S * sample_rate))
+        decay := math.exp(-step / (f64(self.readout_fit_s) * sample_rate))
         shift_fit(&band.fit, step, phase_advance, decay)
 
         // How far off the track is lately, the advances averaged with their sign, a waver on the note evens out

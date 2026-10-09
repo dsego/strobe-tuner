@@ -30,7 +30,7 @@ Layout :: struct {
     measurements:   [2]f32, // the top middle of the readout, see draw_measurements
     stats:          [2]f32,
     lock:           [2]f32, // the middle of the button
-    response:       [2]f32, // hidden with the trace
+    display:        [2]f32, // the display button's left edge and middle, see gui_display_button
     level_meter:    [2]f32, // left of the icon, top of the bar
     settings:       [2]f32,
     note_offset:    [2]f32, // the middle of the note's offset, between the letter and the lock
@@ -80,28 +80,28 @@ compute_layout :: proc(window: [2]f32, safe: gfx.Rect, offsets: bool) -> (layout
     return
 }
 
-// The response and the level meter in a row just under the strobe, the note with the readout above it
+// The display button and the level meter in a row just under the strobe, the note with the readout above it
 // and the lock under it, and the instrument and the settings in the bottom corners
 panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, offsets: bool) {
     panel := layout.strobe.y + layout.strobe.height
 
-    // The response changes how fast the strobe spins, it sits just under it on the left, the level meter
-    // opposite it on the right. The bar lines up with the LED.
-    layout.response = {left, panel + 20}
-    layout.level_meter = {right - LEVEL_METER_WIDTH, layout.response.y - LEVEL_METER_HEIGHT / 2}
+    // The display button picks what the strobe area shows, it sits just under it on the left, the level
+    // meter opposite it on the right. The bar lines up with the button's icon.
+    layout.display = {left, panel + 20}
+    layout.level_meter = {right - LEVEL_METER_WIDTH, layout.display.y - LEVEL_METER_HEIGHT / 2}
 
     // A row along the bottom like the one under the strobe
     corners := bottom - SETTINGS_ICON_SIZE / 2
     layout.settings = {right - SETTINGS_ICON_SIZE, corners - SETTINGS_ICON_SIZE / 2}
     layout.instrument = {left, corners}
 
-    // The readout in the top row, the response and the level meter centred on its values, the labels sit
-    // above. The note with the gauge and the lock under it between the readout values and the bottom row.
+    // The readout in the top row, the display button and the level meter centred on its values, the labels
+    // sit above. The note with the gauge and the lock under it between the readout values and the bottom row.
     // Offsets from the middle of the ruler.
-    readout_top := layout.response.y - LABEL_SIZE / 2
+    readout_top := layout.display.y - LABEL_SIZE / 2
     readout_bottom := readout_top + READOUT_VALUE_Y + BASELINE * RULER_SCALE * READOUT_SIZE
-    layout.response.y = readout_bottom - CAP_HALF * RULER_SCALE * READOUT_SIZE
-    layout.level_meter.y = layout.response.y - LEVEL_METER_HEIGHT / 2
+    layout.display.y = readout_bottom - CAP_HALF * RULER_SCALE * READOUT_SIZE
+    layout.level_meter.y = layout.display.y - LEVEL_METER_HEIGHT / 2
     rows_bottom := corners - BOTTOM_ROW_CLEARANCE
 
     // The readout, the letter with its octave, the gauge, the lock and the bottom row evenly apart. A

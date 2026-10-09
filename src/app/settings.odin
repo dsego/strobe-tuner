@@ -29,23 +29,33 @@ import "../gfx"
 
 SEGMENT_WIDTH :: 60
 
-// The rows in gui_settings. The display's options page is as tall, the strobe's five options are the most of
-// any display.
+// The rows in gui_settings. The display's options page is at least as tall, see DISPLAY_OPTION_ROWS
 SETTINGS_ROWS :: 5
+
+// The rows of each display's options page, see gui_display_options
+DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 8, .SCOPE = 3, .TRACE = 2, .LAMP = 3, .SPECTRUM = 4}
 
 // For the longer labels of the display's options, three of them as wide as the four colors
 WIDE_SEGMENT_WIDTH :: 80
 
 // In the order of StrobeDisplayType
-DISPLAY_NAMES :: [len(StrobeDisplayType)]cstring{"Strobe", "Scope", "Trace", "Lamp", "Peaks"}
+DISPLAY_NAMES :: [len(StrobeDisplayType)]cstring{"Strobe", "Scope", "Trace", "Lamp", "Spectrum"}
+
+// The same on the main screen's display button, in caps like the other controls' labels
+DISPLAY_LABELS :: [StrobeDisplayType]cstring{.STROBE = "STROBE", .SCOPE = "SCOPE", .TRACE = "TRACE", .LAMP = "LAMP", .SPECTRUM = "SPECTRUM"}
+
+// The display dropdown in the settings, as wide as the Concert A stepper over it
+DISPLAY_MENU_WIDTH :: 176
 
 // The labels of the steps below that have three
 STEP_LABELS :: []cstring{"Short", "Medium", "Long"}
+PERSISTENCE_LABELS :: []cstring{"Off", "Short", "Medium", "Long"}
 
 
-// The dropdown whose menu is open, one at a time, on the input's or the instrument's sheet
+// The dropdown whose menu is open, one at a time, on the settings', the input's or the instrument's sheet
 SettingsMenu :: enum {
     NONE,
+    DISPLAY,
     INPUT,
     PICK, // the instrument's sheet, what's tuned to
     INSTRUMENT,
@@ -78,6 +88,7 @@ gui_settings :: proc(
     config: ^Config,
     display_options: ^bool,
     confirm_reset: ^bool,
+    menu: ^SettingsMenu,
 ) -> (
     close: bool,
     changed: bool,
@@ -119,25 +130,17 @@ gui_settings :: proc(
         }
     }
 
+    // The displays in a dropdown, its menu opens down over the rows under it and is drawn after them. The ›
+    // after it under the ✕ opens the picked display's options.
+    display_rect := settings_row(sheet_layout, row, "Display", DISPLAY_MENU_WIDTH)
+    row += 1
     {
-        // The displays, and the › after them under the ✕ opens the picked one's options. On a narrow phone the
-        // segments shrink to leave room for the label.
-        LABEL_GAP :: 12
-        label: cstring = "Display"
-        room := sheet_layout.width - sheet_layout.end_inset - measure_label(pixel_fonts.label, label, 1).x - LABEL_GAP
-        segment_width := min(SEGMENT_WIDTH, room / len(StrobeDisplayType))
-        rect := settings_row(sheet_layout, row, label, len(StrobeDisplayType) * segment_width)
-        row += 1
-        if selected, ok := gui_segmented(rect, display_names[:], int(config.strobe_display_type)); ok {
-            config.strobe_display_type = StrobeDisplayType(selected)
-        }
-
-        right := rect.x + rect.width
-        draw_centered_icon(ICON_CARET_RIGHT, {right + CHEVRON_GAP, rect.y, ICON_SHEET_SIZE, rect.height}, icon_color, .SHEET)
+        right := display_rect.x + display_rect.width
+        draw_centered_icon(ICON_CARET_RIGHT, {right + CHEVRON_GAP, display_rect.y, ICON_SHEET_SIZE, display_rect.height}, icon_color, .SHEET)
 
         // From the control to the sheet's edge, the row's height
         sheet_right := sheet_layout.sheet.x + sheet_layout.sheet.width
-        if gui_button(touch_area({right, rect.y, sheet_right - right, rect.height})) {
+        if gui_button(touch_area({right, display_rect.y, sheet_right - right, display_rect.height})) {
             display_options^ = true
         }
     }
@@ -164,6 +167,14 @@ gui_settings :: proc(
         }
     }
 
+    {
+        options: [len(StrobeDisplayType)]GuiOption
+        for name, index in display_names do options[index] = {i32(index), string(name)}
+
+        selected := int(config.strobe_display_type)
+        gui_settings_dropdown(menu, .DISPLAY, display_rect, options[:], &selected, down = true)
+        config.strobe_display_type = StrobeDisplayType(selected)
+    }
     return
 
     // The header of the display's options, the ‹ before the title back to the settings. Returns close when
@@ -197,10 +208,25 @@ gui_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (chan
         if gui_settings_segmented(sheet_layout, &row, "Mode", {"Harmonic", "Vernier"}, &config.strobe_mode, WIDE_SEGMENT_WIDTH) {
             changed = true
         }
+        // 200% spins twice as fast per cent, for the final adjustment
+        if gui_settings_segmented(sheet_layout, &row, "Spin rate", {"100%", "200%"}, &config.strobe_fast, WIDE_SEGMENT_WIDTH) {
+            changed = true
+        }
+
+        // How long every cents number averages, the readout under the strobe and the labels on the tracks
+        // are the same fit. The longer evens out a voice's vibrato into its mean pitch, a turned peg shows
+        // later on the numbers while the stripes move at once.
+        if gui_steps(sheet_layout, &row, "Readout speed", {"0.15 s", "0.4 s"}, &config.readout_fit_s, READOUT_FIT_STEPS_S) {
+            changed = true
+        }
+
+        // The stripes smear and calm down on an unsteady note like the lamp's, the same setting as the scope's
+        // and the lamp's screen, see strobe_persistence
+        gui_steps(sheet_layout, &row, "Persistence", PERSISTENCE_LABELS, &config.persistence_periods, PERSISTENCE_STEPS_PERIODS, SEGMENT_WIDTH)
+
+        // The labels on the tracks: the partial, and how far off it is
         harmonic := config.strobe_mode == .HARMONIC
         gui_settings_segmented(sheet_layout, &row, "Partials", {"Off", "1×", "Hz", "Note"}, &config.partial_labels, enabled = harmonic)
-
-        // How far off each track's partial is, next to the track
         gui_settings_segmented(sheet_layout, &row, "Cents", {"Off", "On"}, &config.show_band_cents)
     case .SCOPE:
         // Tapping the scope flips it too
@@ -224,7 +250,7 @@ gui_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (chan
     // The scope's and the lamp's screen. Held, a note's decay shows, the wave shrinks and the stripes dim
     // like a mechanical strobe's lamp. Auto keeps a fading note filling the screen.
     gui_screen_options :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config) {
-        gui_steps(sheet_layout, row, "Persistence", STEP_LABELS, &config.scope_persistence_periods, SCOPE_PERSISTENCE_STEPS_PERIODS)
+        gui_steps(sheet_layout, row, "Persistence", PERSISTENCE_LABELS, &config.persistence_periods, PERSISTENCE_STEPS_PERIODS, SEGMENT_WIDTH)
         gui_settings_segmented(sheet_layout, row, "Gain", {"Auto", "Hold"}, &config.scope_gain)
     }
 }
@@ -316,9 +342,9 @@ gui_track_settings :: proc(
         }
     }
 
-    // On top of the strobe speed, a high partial spins faster than the rest. In percent, × is for partials.
+    // On top of the strobe's spin rate, a high partial spins faster than the rest. In percent, × is for partials.
     speed_labels := []cstring{"25%", "50%", "100%", "200%"}
-    if gui_steps(sheet_layout, &row, "Speed", speed_labels, &config.strobe_speeds[slot], [4]f32{0.25, 0.5, 1, 2}, SEGMENT_WIDTH) {
+    if gui_steps(sheet_layout, &row, "Spin rate", speed_labels, &config.strobe_speeds[slot], [4]f32{0.25, 0.5, 1, 2}, SEGMENT_WIDTH) {
         changed = true
     }
 

@@ -45,13 +45,14 @@ ICON_CARET_DOWN: cstring : "\ue136"
 ICON_MINUS: cstring : "\ue32a"
 ICON_PLUS: cstring : "\ue3d4"
 ICON_WARNING: cstring : "\ue4e0"
+ICON_ARROWS_LEFT_RIGHT: cstring : "\ue0a0"
 
 // Bold only, see ICON_SHEET_CODEPOINTS
 ICON_CARET_LEFT: cstring : "\ue138"
 ICON_CARET_RIGHT: cstring : "\ue13a"
 ICON_X: cstring : "\ue4f6"
 
-ICON_CODEPOINTS :: "\ue432\ue13c\ue9c8\uea8a\ue326\ue136\ue32a\ue3d4\ue4e0"
+ICON_CODEPOINTS :: "\ue432\ue13c\ue9c8\uea8a\ue326\ue136\ue32a\ue3d4\ue4e0\ue0a0"
 
 // Phosphor Bold, cut down the same way from Phosphor-Bold.ttf to Phosphor-Bold-Icons.ttf, for the large
 // steppers: beside their 32pt value the regular stroke is too thin. And with ICON_SHEET_CODEPOINTS the

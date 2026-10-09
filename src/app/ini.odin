@@ -129,6 +129,10 @@ load_config :: proc() -> Config {
     highest := core.freq_at_cents(config.pitch_standard, core.HIGHEST_NOTE * 100)
     config.target_freq_hz = clamp(config.target_freq_hz, lowest, highest)
 
+    // A readout time of 0 would fit the newest chunk alone and a negative one blow the fit up
+    fit_steps := READOUT_FIT_STEPS_S
+    config.readout_fit_s = clamp(config.readout_fit_s, fit_steps[0], fit_steps[len(fit_steps) - 1])
+
     // The strobe needs a track, and the I key steps on from a preset that exists
     defaults := config_defaults
     has_track := false

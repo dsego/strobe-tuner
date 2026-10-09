@@ -17,15 +17,16 @@ Strobie is coming to the App Store for Mac and iPhone. The source is here to rea
 - Smooth and responsive strobe display, the stripe sharpness adapts to the signal quality.
 - Note lock: keeps the strobe on the note, another note played pins the gauge at the end on its side.
 - Harmonic mode: shows the partials of the detected note on up to 5 strobe tracks.
-- Track settings: tap a track to choose its partial (1× to 8×, or the fifth at 1½×), move its target by up to ±50 cents (e.g. for a stretched octave) and change its speed.
+- Track settings: tap a track to choose its partial (1× to 8×, or the fifth at 1½×), move its target by up to ±50 cents (e.g. for a stretched octave) and change its spin rate.
 - Vernier mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity.
-- Fast toggle: the strobe spins 2× faster per cent of detuning, for the final adjustment.
-- Five displays, see [Displays](#displays):
+- Spin rate setting: 200% spins the strobe twice as fast per cent of detuning, for the final adjustment.
+- Readout speed setting: how long the cents readout averages, 0.4 s evens a vibrato into its mean pitch, 0.15 s follows a turned peg sooner.
+- Five displays, a button under the strobe cycles through them, see [Displays](#displays):
   - Strobe: curved tracks, a wheel or flat tracks, turned by a lock-in on each partial or by the lamp.
   - Lamp: the mechanical strobe, stripes lit by the wave.
   - Scope: the waveform synced to the strobe's frequency, tap it for a Lissajous figure.
   - Trace: the cents over time.
-  - Peaks: the spectrum of what the pitch detection hears, the loudest peaks named.
+  - Spectrum: the spectrum of what the pitch detection hears, the loudest peaks named.
 - Note offsets: tune a note up to ±25 cents off pitch, the strobe stands still at the offset note.
 - Transpose for B♭, E♭, F and other transposing instruments.
 - Guitar, bass and ukulele tunings with an optional capo, the ruler shows only their strings.
@@ -159,7 +160,7 @@ The first four show the same thing, how the note's phase slips against a referen
 - **Lamp**: the disc of a mechanical strobe lit by a lamp that flashes with the wave. Every sample is folded onto two periods of the reference, the stripes are as bright as the wave is high there. A detuned note drifts, a fast drift smears the stripes to gray, like the eye does with a real one.
 - **Scope**: the same folded screen as it is, an oscilloscope with its sweep synced to the reference. Tapped, it draws the wave against the reference's cosine instead, a Lissajous figure that stands still in tune and rolls open and shut when it isn't.
 - **Trace**: the cents of the readout over the last few seconds, to see a vibrato or a drift.
-- **Peaks**: the power spectrum of what the pitch detection hears, the loudest peaks named by their note. Not a way to tune, its peaks are about 12 Hz wide: it shows what's there and how far it stands over the noise, e.g. a fridge's hum louder than the string.
+- **Spectrum**: the power spectrum of what the pitch detection hears, the loudest peaks named by their note. Not a way to tune, its peaks are about 12 Hz wide: it shows what's there and how far it stands over the noise, e.g. a fridge's hum louder than the string.
 
 The cents readout and the trace come from the lock-in in every display.
 
@@ -179,7 +180,7 @@ Core steps:
 - Demodulation: Rotate the DFT result by the phase of a reference oscillator running on an absolute sample clock. When the input pitch matches the reference, this phase stands still; a detuned signal makes it rotate at the frequency difference.
 - Strobe motion: The stripes turn by the measured phase, times the track's speed.
 - Readout: The cents of each track are the slope of a least squares line through its phase, older measurements weighted down, restarted after each pluck's attack.
-- Stripe sharpness: The stripe edges are as sharp as the band's SNR allows, and the stripes fade out as it drops into the background noise. They also fade off the note, by how far the track drifts, like a narrow band's would, and before they move faster than the screen can show, a quarter to half a stripe a frame.
+- Stripe sharpness: The stripe edges are as sharp as the band's SNR allows, and the stripes fade out as it drops into the background noise. They also fade off the note, by how far the track drifts, like a narrow band's would, and before they move faster than the screen can show, a quarter to half a stripe a frame. With a persistence they smear and calm down on an unsteady note like the lamp's: the stripes' phasor is averaged over it, its angle is where they sit and its length their contrast.
 
 Every track's window is sized for a band a semitone wide around the fundamental, about 0.16 s at 110 Hz. The window is gamma shaped, weighted toward the newest samples like an analog lock-in's low-pass, so the phase is measured as of about 50 ms ago instead of half the window. A semitone lets the neighbouring partials in, so the window is also smoothed with a box one period of the note long (two for a fifth), a comb whose nulls fall on every other partial.
 

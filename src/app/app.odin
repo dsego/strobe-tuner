@@ -248,6 +248,7 @@ retune :: proc(app: ^App) {
     config := app.config
     app.traced_track = -1 // the tracks are at another note now
     app.held_readout = {}
+    app.phase_comparator.readout_fit_s = config.readout_fit_s
     core.set_phase_comparator_tracks(
         app.phase_comparator,
         config.strobe_intervals[:],
@@ -357,11 +358,14 @@ handle_keys :: proc(app: ^App) {
         retune(app)
     }
 
-    // Hidden, the tracks' band a semitone, a half or a quarter wide: each half has half the noise and twice the lag
+    // Hidden, the tracks' band a semitone, a half or a quarter wide: each half has half the noise and twice the lag.
+    // The screens' persistence follows, as many periods as the band's window, so the lamp's tracks narrow along
+    // with the lock-in's and the two can be compared like for like.
     if gfx.key_pressed(.W) {
         comparator := app.phase_comparator
         comparator.band_cents = comparator.band_cents / 2 if comparator.band_cents > 25 else core.DFT_RESOLUTION_CENTS
-        fmt.println("Strobe band:", comparator.band_cents, "cents")
+        config.persistence_periods = 1 / (math.pow(f32(2), f32(comparator.band_cents) / 1200) - 1)
+        fmt.printfln("Strobe band: %d cents, persistence %.0f periods", comparator.band_cents, config.persistence_periods)
         retune(app)
     }
 
@@ -492,7 +496,7 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
     if scope.sweep != sweep do core.set_scope_sweep(scope, sweep)
 
     // In periods of the strobe's frequency, the smear and the waver per cent look the same on every note
-    scope.persistence_seconds = f64(config.scope_persistence_periods) / strobe_hz
+    scope.persistence_seconds = f64(config.persistence_periods) / strobe_hz
     scope.gain = config.scope_gain
     scope.noise_floor = app.pitch_detector.noise_floor.level
     core.update_scope(scope)
@@ -515,12 +519,9 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
         app.tuner.active,
     )
 
-    // The trace and the scope's views don't spin
-    if config.strobe_display_type == .STROBE {
-        if gui_led_toggle(layout.response, "FAST", config.strobe_fast, pill_mint) {
-            config.strobe_fast = !config.strobe_fast
-            core.set_phase_comparator_speed(app.phase_comparator, strobe_speed(config))
-        }
+    // The displays in a cycle, the number keys go straight to one
+    if gui_display_button(layout.display, config.strobe_display_type) {
+        config.strobe_display_type = StrobeDisplayType((int(config.strobe_display_type) + 1) % len(StrobeDisplayType))
     }
 
     // Opens on the settings, not the display's options it was closed on
@@ -829,8 +830,15 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
     sheet := &app.settings_sheet
     if sheet.slide == 0 do return
 
-    sheet_layout, swiped := begin_sheet(sheet, SETTINGS_ROWS, &app.strobe_display, layout.strobe)
-    close, changed := gui_settings(sheet_layout, app.config, &app.display_options, &app.reset_confirm)
+    // The display's options page has rows of its own, the strobe's more than the settings
+    rows := SETTINGS_ROWS
+    if app.display_options {
+        option_rows := DISPLAY_OPTION_ROWS
+        rows = max(rows, option_rows[app.config.strobe_display_type])
+    }
+
+    sheet_layout, swiped := begin_sheet(sheet, rows, &app.strobe_display, layout.strobe)
+    close, changed := gui_settings(sheet_layout, app.config, &app.display_options, &app.reset_confirm, &app.settings_menu)
     if changed do app.config_changed = true
 
     grab_sheet(sheet, sheet_layout)
@@ -840,6 +848,7 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
         app.display_options = false
     } else if close || sheet_dismissed(sheet_layout, swiped) {
         close_sheet(sheet)
+        app.settings_menu = .NONE
         exclusive_control_mode = false
         app.reset_confirm = false
     }

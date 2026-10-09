@@ -52,7 +52,6 @@ warning_color := gfx.hex(0xFFC857FF) // a slow input's warning next to its level
 
 // Buttons
 pill_gray := text_color_muted
-pill_mint := gfx.hex(0x61FFCAFF)
 pill_violet := gfx.hex(0xA277FFFF)
 pill_yellow := gfx.hex(0xFFCA85FF)
 pill_dark := gfx.hex(0x2D2E35FF)
@@ -72,34 +71,23 @@ fade_color :: proc(color: gfx.Color, amount: f32) -> gfx.Color {
     return faded
 }
 
-// A label with an LED to its left that lights up while the toggle is on, like the indicator lamps on
-// old hardware. pos is the left edge, vertically centred.
-gui_led_toggle :: proc(pos: [2]f32, label: cstring, on: bool, color: gfx.Color) -> bool {
-    LED_SIZE :: 8
-    LABEL_GAP :: 10
+// The arrows icon and the shown display's name after it, a tap goes on to the next display. pos is the
+// left edge, vertically centred.
+gui_display_button :: proc(pos: [2]f32, type: StrobeDisplayType) -> bool {
+    ICON_GAP :: 8
     TOUCH_HEIGHT :: 44
 
-    draw_led({pos.x, pos.y - LED_SIZE / 2, LED_SIZE, LED_SIZE}, on, color)
+    draw_icon(ICON_ARROWS_LEFT_RIGHT, {pos.x, pos.y - ICON_SIZE / 2}, icon_color)
 
-    label_x := pos.x + LED_SIZE + LABEL_GAP
+    labels := DISPLAY_LABELS
+    label := labels[type]
+    label_x := pos.x + ICON_SIZE + ICON_GAP
     label_width := measure_label(pixel_fonts.label, label, 1).x
-    draw_label(pixel_fonts.label, label, {label_x, pos.y - 7}, text_color_white if on else text_color_light, 1)
+    draw_label(pixel_fonts.label, label, {label_x, pos.y - 7}, text_color_light, 1)
 
-    // The whole of the LED and the label, a little past them on each side
+    // The icon and the label, a little past them on each side
     width := label_x + label_width - pos.x
     return gui_button({pos.x - 12, pos.y - TOUCH_HEIGHT / 2, width + 24, TOUCH_HEIGHT})
-}
-
-draw_led :: proc(led: gfx.Rect, on: bool, color: gfx.Color) {
-    if on {
-        // A thin ring of light, stepped down over a few points
-        for ring in ([2][2]f32{{3, 50}, {1.5, 110}}) {
-            glow := color
-            glow.a = u8(ring[1])
-            gfx.draw_pill({led.x - ring[0], led.y - ring[0], led.width + 2 * ring[0], led.height + 2 * ring[0]}, glow)
-        }
-    }
-    gfx.draw_pill(led, color if on else pill_dark)
 }
 
 // The note lock as a labelled button, gray while off and violet while locked. center is the middle of the
