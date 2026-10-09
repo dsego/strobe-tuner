@@ -244,7 +244,7 @@ gui_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (chan
         gui_settings_segmented(sheet_layout, &row, "Rectifier", {"Half", "None"}, &config.lamp_shape)
         gui_screen_options(sheet_layout, &row, config)
     case .SPECTRUM:
-        gui_steps(sheet_layout, &row, "Average", STEP_LABELS, &config.spectrum_average_s, SPECTRUM_AVERAGE_STEPS_S)
+        gui_steps(sheet_layout, &row, "Window", {"85 ms", "170 ms", "340 ms"}, &config.spectrum_windows, SPECTRUM_WINDOW_STEPS)
         gui_settings_segmented(sheet_layout, &row, "Scale", {"SNR", "dBFS"}, &config.spectrum_scale)
         gui_settings_segmented(sheet_layout, &row, "Labels", {"Off", "Note", "Hz", "Both"}, &config.spectrum_labels)
         gui_settings_segmented(sheet_layout, &row, "Peak level", {"Off", "On"}, &config.spectrum_peak_level)

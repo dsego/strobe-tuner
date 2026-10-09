@@ -123,10 +123,16 @@ set_pitch_detector_sample_rate :: proc(self: ^PitchDetector, sample_rate: f32) {
     reset_noise_floor(&self.noise_floor)
 }
 
+// The window's samples at the rate, PITCH_WINDOW_S rounded up to a power of 2: 4096 at 48 kHz
+pitch_window :: proc(sample_rate: f32) -> int {
+    window := 1
+    for f32(window) < PITCH_WINDOW_S * sample_rate do window *= 2
+    return window
+}
+
 // The window, the NSDF and the filters at the node's rate
 size_pitch_detector :: proc(self: ^PitchDetector) {
-    window := 1
-    for f32(window) < PITCH_WINDOW_S * self.sample_rate do window *= 2
+    window := pitch_window(self.sample_rate)
 
     self.samples = make([]f32, window)
     self.nsdf = init_nsdf(2 * window, self.sample_rate)

@@ -165,13 +165,7 @@ nsdf_autocorrelate :: proc(self: ^NSDF, samples: []f32) {
         pffft.Direction.FORWARD,
     )
 
-    // Times the conjugate, the power spectrum. pffft packs the two real bins, DC and Nyquist, into the first
-    // element as (DC, Nyquist), each is squared on its own and they stay packed for the inverse transform.
-    dc_nyquist := self.spectrum[0]
-    self.spectrum[0] = complex(real(dc_nyquist) * real(dc_nyquist), imag(dc_nyquist) * imag(dc_nyquist))
-    for &bin in self.spectrum[1:] {
-        bin = complex(real(bin) * real(bin) + imag(bin) * imag(bin), 0)
-    }
+    square_spectrum(self.spectrum)
 
     pffft.transform_ordered(
         self.pffft_setup,
@@ -183,6 +177,16 @@ nsdf_autocorrelate :: proc(self: ^NSDF, samples: []f32) {
 
     // pffft doesn't scale the inverse transform
     for &value in self.autocorr do value /= f32(self.fft_size)
+}
+
+// Times the conjugate, the power spectrum in place. pffft packs the two real bins, DC and Nyquist, into the
+// first element as (DC, Nyquist), each is squared on its own and they stay packed for an inverse transform.
+square_spectrum :: proc(spectrum: []complex64) {
+    dc_nyquist := spectrum[0]
+    spectrum[0] = complex(real(dc_nyquist) * real(dc_nyquist), imag(dc_nyquist) * imag(dc_nyquist))
+    for &bin in spectrum[1:] {
+        bin = complex(real(bin) * real(bin) + imag(bin) * imag(bin), 0)
+    }
 }
 
 // Parabolic interpolation to find the more accurate peak location, its offset from the middle point and value

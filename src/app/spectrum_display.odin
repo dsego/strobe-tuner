@@ -23,17 +23,20 @@ import "core:slice"
 import "../core"
 import "../gfx"
 
-// What the pitch detection hears, its power spectrum, one of the display types. Not a way to tune, the
-// window's peaks are about 12 Hz wide: it shows what's there and how far it stands over the noise, e.g. a
-// fridge's 300 Hz hum louder than the string. The loudest peaks are named by their note, the marks are the
-// strobe's tracks, a note the tuner has sits on them.
+// What the pitch detection hears, the power spectrum of the input through its filters under a Hann window
+// as long as the Window setting says, its own transform, see core.WindowedSpectrum. One of the display
+// types. Not a way to tune, the peaks are about 8 Hz wide at 170 ms: it shows what's there and how far it
+// stands over the noise, e.g. a fridge's 300 Hz hum louder than the string. The loudest peaks are named by
+// their note, the marks are the strobe's tracks, a note the tuner has sits on them.
 // As SNR each bin is drawn over the noise around it, the room's rumble and hiss lie flat along the bottom
 // and only what stands out rises, as far as the tuner can tell it from the noise. As dBFS it's the level,
 // sloping down with the room.
-// The power is averaged, see SPECTRUM_AVERAGE_STEPS_S. One frame of noise spikes 10 dB here and there,
-// averaged it evens out while a steady tone stays, a pluck takes as long to come up.
+// The power is averaged over the window's length. One frame of noise spikes 10 dB here and there, averaged
+// it evens out while a steady tone stays, a pluck takes as long to come up.
 // The detector's band, after its highpass and lowpass, a bass E1's fundamental or the mains look weaker
-// than they are.
+// than they are. Its own samples, not the detector's window: a frame that takes longer than the window,
+// e.g. a debug build's at the longest setting, reads one whole window and skips the rest, and a history
+// of those showed a comb at the window's spacing, 12 Hz, with the note between its teeth.
 
 SPECTRUM_LOW_HZ :: 40
 SPECTRUM_FLOOR_DB :: -120 // dBFS, under any input's noise
@@ -43,9 +46,12 @@ SPECTRUM_SNR_DB :: [2]f32{0, 60}
 SPECTRUM_DBFS_DB :: [2]f32{-90, 0}
 
 // The noise around a bin, the median of the bins this far either side, a low note's partials between
-// are fewer than half of them. Worked out every few bins and drawn straight between.
-SPECTRUM_NOISE_BINS :: 32
-SPECTRUM_NOISE_STEP :: 8
+// are fewer than half of them. Worked out every few Hz and drawn straight between. Of as many bins at
+// every window, every other or every fourth of a long window's finer ones: the medians cost the same,
+// and a bin in a peak's lobe says what its neighbours do.
+SPECTRUM_NOISE_HZ :: 190
+SPECTRUM_NOISE_STEP_HZ :: 47
+SPECTRUM_NOISE_SAMPLES :: 32 // either side, every bin at 85 ms
 
 // Named, the loudest ones this far over the noise and not this far under the loudest
 SPECTRUM_MAX_LABELS :: 5
@@ -60,60 +66,119 @@ SpectrumPeak :: struct {
 }
 
 SpectrumView :: struct {
-    power:  []f32, // of each bin, averaged
-    levels: []f32, // the same in dBFS
-    over:   []f32, // dB over the noise around each bin
+    using node: core.AudioCaptureNode, // its own samples, read whole however long a frame takes
+    // The detector's, so it's what the detection hears, see core.PitchDetector
+    highpass:   core.Biquad,
+    lowpass:    core.Biquad,
+    transform:  core.WindowedSpectrum, // of the latest samples, as long as the Window setting says
+    power:      []f32, // of each bin, averaged
+    levels:     []f32, // the same in dBFS
+    over:       []f32, // dB over the noise around each bin
+}
+
+init_spectrum_view :: proc(sample_rate: f32 = core.DEFAULT_SAMPLE_RATE) -> (self: SpectrumView) {
+    core.init_audio_capture_node(&self, "spectrum", sample_rate)
+    size_spectrum_filters(&self)
+    return
 }
 
 destroy_spectrum_view :: proc(self: ^SpectrumView) {
+    core.destroy_audio_capture_node(self)
+    core.destroy_windowed_spectrum(&self.transform)
     delete(self.power)
     delete(self.levels)
     delete(self.over)
 }
 
-// Every frame, the new spectrum when the detection is fresh, elapsed_s of audio since the one before.
-// average_s is how long the power is averaged over.
-update_spectrum_view :: proc(self: ^SpectrumView, nsdf: ^core.NSDF, fresh: bool, elapsed_s, average_s: f32) {
-    if len(self.levels) != len(nsdf.spectrum) {
+// The input opened at another rate, the filters are made for it and everything starts over like for another
+// input, the transform is made at the next update
+set_spectrum_view_sample_rate :: proc(self: ^SpectrumView, sample_rate: f32) {
+    if sample_rate == self.sample_rate do return
+
+    self.sample_rate = sample_rate
+    size_spectrum_filters(self)
+    reset_spectrum_view(self)
+}
+
+size_spectrum_filters :: proc(self: ^SpectrumView) {
+    self.highpass = core.init_highpass(core.PITCH_HIGHPASS_HZ, self.sample_rate)
+    self.lowpass = core.init_lowpass(core.pitch_lowpass_hz(self.sample_rate), self.sample_rate)
+}
+
+// Another input's signal is unrelated to the previous one's, like core.reset_pitch_detector: the samples
+// start out silent, the filters from rest and the average from nothing
+reset_spectrum_view :: proc(self: ^SpectrumView) {
+    slice.zero(self.transform.samples)
+    slice.zero(self.power)
+    core.reset_biquad(&self.highpass)
+    core.reset_biquad(&self.lowpass)
+}
+
+// Every frame, the new spectrum of what came in since the one before. windows is the window's length in the
+// detector's, the Window setting. While another display shows nothing reads here, the ring buffer fills up
+// and the first read back skips what's stale, see core.audio_capture_read.
+update_spectrum_view :: proc(self: ^SpectrumView, windows: f32) {
+    window := int(windows) * core.pitch_window(self.sample_rate)
+    if len(self.transform.samples) != window {
+        core.destroy_windowed_spectrum(&self.transform)
         delete(self.power)
         delete(self.levels)
         delete(self.over)
-        self.power = make([]f32, len(nsdf.spectrum))
-        self.levels = make([]f32, len(nsdf.spectrum))
-        self.over = make([]f32, len(nsdf.spectrum))
+        self.transform = core.init_windowed_spectrum(window)
+        self.power = make([]f32, len(self.transform.spectrum))
+        self.levels = make([]f32, len(self.transform.spectrum))
+        self.over = make([]f32, len(self.transform.spectrum))
     }
-    if !fresh do return
 
-    // A full scale sine's bin is half the window's samples, the window is half the zero padded FFT
-    full_scale_db := 20 * math.log10(f32(nsdf.fft_size) / 4)
-    alpha := 1 - math.exp(-elapsed_s / max(average_s, 0.01))
+    // The newest samples at the end of the history, all of them however long the frame took
+    transform := &self.transform
+    read, elapsed := core.audio_capture_read(self, transform.samples)
+    if read == 0 do return
+
+    // Samples went by that the history didn't get, the filters start from rest on the new ones
+    if i64(read) < elapsed {
+        core.reset_biquad(&self.highpass)
+        core.reset_biquad(&self.lowpass)
+    }
+    new_samples := transform.samples[len(transform.samples) - read:]
+    core.biquad_process(&self.highpass, new_samples, new_samples)
+    core.biquad_process(&self.lowpass, new_samples, new_samples)
+    core.run_windowed_spectrum(transform)
+
+    full_scale_db := 20 * math.log10(transform.full_scale)
+    average_s := f32(window) / self.sample_rate
+    alpha := 1 - math.exp(-f32(elapsed) / self.sample_rate / average_s)
 
     // Only up to the plot's top and the noise window past it, the rest up to Nyquist is never shown, e.g.
-    // 900 of the 4096 bins at 48 kHz
-    bin_hz := nsdf.sample_rate / f32(nsdf.fft_size)
-    used := min(int(core.pitch_lowpass_hz(nsdf.sample_rate) / bin_hz) + SPECTRUM_NOISE_BINS + 1, len(self.power))
+    // 1800 of the 8192 bins at 48 kHz
+    bin_hz := self.sample_rate / f32(transform.fft_size)
+    noise_bins := int(SPECTRUM_NOISE_HZ / bin_hz)
+    used := min(int(core.pitch_lowpass_hz(self.sample_rate) / bin_hz) + noise_bins + 1, len(self.power))
 
-    // The first bin packs DC and Nyquist, see nsdf_autocorrelate
+    // The first bin packs DC and Nyquist, see core.square_spectrum
     for &power, bin in self.power[:used] {
-        if bin > 0 do power += alpha * (real(nsdf.spectrum[bin]) - power)
+        if bin > 0 do power += alpha * (real(transform.spectrum[bin]) - power)
         self.levels[bin] = max(10 * math.log10(max(power, 1e-20)) - full_scale_db, SPECTRUM_FLOOR_DB)
     }
 
-    // The noise at every few bins, the window held in at the ends
+    // The noise at every few bins of every stride-th, the span held in at the ends
+    stride := max(noise_bins / SPECTRUM_NOISE_SAMPLES, 1)
+    step := max(int(SPECTRUM_NOISE_STEP_HZ / bin_hz), 1)
     levels := self.levels[:used]
-    around := make([]f32, 2 * SPECTRUM_NOISE_BINS + 1, context.temp_allocator)
-    noise_at :: proc(levels, around: []f32, bin: int) -> f32 {
-        start := clamp(bin - SPECTRUM_NOISE_BINS, 0, len(levels) - len(around))
-        copy(around, levels[start:][:len(around)])
+    around := make([]f32, 2 * (noise_bins / stride) + 1, context.temp_allocator)
+    noise_at :: proc(levels, around: []f32, bin, stride: int) -> f32 {
+        span := stride * (len(around) - 1)
+        start := clamp(bin - span / 2, 0, len(levels) - 1 - span)
+        for &value, index in around do value = levels[start + index * stride]
         slice.sort(around)
         return around[len(around) / 2]
     }
 
     below_bin := 0
-    below := noise_at(levels, around, 0)
+    below := noise_at(levels, around, 0, stride)
     for below_bin < len(levels) {
-        above_bin := min(below_bin + SPECTRUM_NOISE_STEP, len(levels) - 1)
-        above := noise_at(levels, around, above_bin)
+        above_bin := min(below_bin + step, len(levels) - 1)
+        above := noise_at(levels, around, above_bin, stride)
         for bin in below_bin ..= above_bin {
             noise := math.lerp(below, above, f32(bin - below_bin) / f32(max(above_bin - below_bin, 1)))
             self.over[bin] = max(levels[bin] - noise, 0)
@@ -140,8 +205,6 @@ draw_spectrum_view :: proc(
     self: ^SpectrumView,
     display: ^StrobeDisplay,
     rect: gfx.Rect,
-    sample_rate: f32,
-    fft_size: int,
     track_hz: []f32,
     active: bool,
     config: ^Config,
@@ -155,8 +218,8 @@ draw_spectrum_view :: proc(
     plot := gfx.Rect{rect.x, rect.y + PADDING_TOP, rect.width, rect.height - PADDING_TOP - PADDING_BOTTOM}
     if len(self.levels) == 0 || plot.width <= 0 || plot.height <= 0 do return
     low_hz: f32 = SPECTRUM_LOW_HZ
-    high_hz := core.pitch_lowpass_hz(sample_rate)
-    bin_hz := sample_rate / f32(fft_size)
+    high_hz := core.pitch_lowpass_hz(self.sample_rate)
+    bin_hz := self.sample_rate / f32(self.transform.fft_size)
     pitch_standard := config.pitch_standard
 
     // What's drawn, and the plot's bottom and top in it
@@ -295,7 +358,7 @@ draw_spectrum_view :: proc(
 
     // The peaks that stand out over the noise, the one most over it first
     find_peaks :: proc(self: ^SpectrumView, shown: []f32, low_hz, high_hz, bin_hz: f32) -> []SpectrumPeak {
-        // The highest past the main lobe's neighbours, a sine's first sidelobes are 3 bins out and 13 dB down
+        // The highest past the main lobe, 4 bins either side under the Hann window, its first sidelobes 31 dB down
         SIDE_BINS :: 6
         peaks := make([dynamic]SpectrumPeak, context.temp_allocator)
         over := self.over

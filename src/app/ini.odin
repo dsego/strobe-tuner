@@ -133,6 +133,10 @@ load_config :: proc() -> Config {
     fit_steps := READOUT_FIT_STEPS_S
     config.readout_fit_s = clamp(config.readout_fit_s, fit_steps[0], fit_steps[len(fit_steps) - 1])
 
+    // A spectrum window of 0 would have nothing to transform
+    window_steps := SPECTRUM_WINDOW_STEPS
+    config.spectrum_windows = clamp(config.spectrum_windows, window_steps[0], window_steps[len(window_steps) - 1])
+
     // The strobe needs a track, and the I key steps on from a preset that exists
     defaults := config_defaults
     has_track := false

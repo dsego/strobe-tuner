@@ -140,6 +140,7 @@ run_app :: proc(config: ^Config) {
     app.cents_trace = create_trace()
     defer destroy_trace(&app.cents_trace)
 
+    app.spectrum_view = init_spectrum_view()
     defer destroy_spectrum_view(&app.spectrum_view)
 
     // Opened or not, the strobe area says why there's no input, see draw_strobe_area
@@ -150,6 +151,7 @@ run_app :: proc(config: ^Config) {
     audio.register_node(audio_capture, &app.pitch_detector)
     audio.register_node(audio_capture, app.phase_comparator)
     audio.register_node(audio_capture, &app.scope)
+    audio.register_node(audio_capture, &app.spectrum_view)
     match_input_rate(&app)
     audio.start(audio_capture)
 
@@ -304,6 +306,7 @@ switch_input :: proc(app: ^App) {
     audio.switch_device(app.audio_capture, picked_device(app))
     core.reset_pitch_detector(&app.pitch_detector)
     core.reset_phase_comparator(app.phase_comparator)
+    reset_spectrum_view(&app.spectrum_view)
     match_input_rate(app)
 }
 
@@ -316,6 +319,7 @@ match_input_rate :: proc(app: ^App) {
     core.set_pitch_detector_sample_rate(&app.pitch_detector, sample_rate)
     core.set_phase_comparator_sample_rate(app.phase_comparator, sample_rate)
     core.set_scope_sample_rate(&app.scope, sample_rate)
+    set_spectrum_view_sample_rate(&app.spectrum_view, sample_rate)
     retune(app)
 }
 
@@ -450,12 +454,9 @@ measure :: proc(app: ^App) -> (reading: Reading) {
 
     record_trace(&app.cents_trace, traced_cents, light, reading.pitch.fresh, gfx.frame_time())
 
-    // The detection's spectrum, only while it's the display
+    // The spectrum of what came in, only while it's the display
     config := app.config
-    if config.strobe_display_type == .SPECTRUM {
-        pitch := reading.pitch
-        update_spectrum_view(&app.spectrum_view, &app.pitch_detector.nsdf, pitch.fresh, pitch.elapsed_s, config.spectrum_average_s)
-    }
+    if config.strobe_display_type == .SPECTRUM do update_spectrum_view(&app.spectrum_view, config.spectrum_windows)
 
     return
 }
@@ -595,7 +596,7 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         draw_cents_trace(&app.cents_trace, view, seconds, range, gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color))
 
     case .SPECTRUM:
-        comparator, nsdf := app.phase_comparator, &app.pitch_detector.nsdf
+        comparator := app.phase_comparator
         track_hz := make([]f32, len(comparator.bands), context.temp_allocator)
         for band, index in comparator.bands do track_hz[index] = band.freq_hz
 
@@ -604,8 +605,6 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
             &app.spectrum_view,
             display,
             view,
-            nsdf.sample_rate,
-            nsdf.fft_size,
             track_hz,
             app.tuner.active,
             config,

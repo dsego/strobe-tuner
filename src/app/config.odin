@@ -90,8 +90,9 @@ PERSISTENCE_STEPS_PERIODS :: [4]f32{0, 7, 18, 66}
 TRACE_SPAN_STEPS_S :: [3]f32{1, 2, 5}
 TRACE_RANGE_STEPS_CENTS :: [2]f32{25, 50}
 
-// The spectrum's average, short, medium and long. Short shows a pluck sooner, long calms a noisy room.
-SPECTRUM_AVERAGE_STEPS_S :: [3]f32{0.1, 0.2, 0.5}
+// The spectrum's window, as many of the detector's: 85, 170 and 340 ms at 48 kHz. Longer, two partials closer
+// together come apart and a pluck takes longer to show, the power is averaged over as long.
+SPECTRUM_WINDOW_STEPS :: [3]f32{1, 2, 4}
 
 // The spectrum's height, see src/app/spectrum_display.odin
 SpectrumScale :: enum {
@@ -193,8 +194,9 @@ Config :: struct {
     trace_seconds:                f32,
     trace_range_cents:            f32,
 
-    // Spectrum display: how long the power is averaged, its height and what the peaks are labelled with
-    spectrum_average_s:           f32,
+    // Spectrum display: its window as many of the detector's, see SPECTRUM_WINDOW_STEPS, its height and what
+    // the peaks are labelled with
+    spectrum_windows:             f32,
     spectrum_scale:               SpectrumScale,
     spectrum_labels:              SpectrumLabels,
     // a line across at the loudest peak with its level in dBFS
@@ -233,7 +235,7 @@ config_defaults :: Config {
     scope_gain                   = .AUTO,
     trace_seconds                = 2,
     trace_range_cents            = 25,
-    spectrum_average_s           = 0.2,
+    spectrum_windows             = 2,
     spectrum_scale               = .SNR,
     spectrum_labels              = .BOTH,
     spectrum_peak_level          = true,
