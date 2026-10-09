@@ -227,7 +227,7 @@ gui_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (chan
         // The labels on the tracks: the partial, and how far off it is
         harmonic := config.strobe_mode == .HARMONIC
         gui_settings_segmented(sheet_layout, &row, "Partials", {"Off", "1×", "Hz", "Note"}, &config.partial_labels, enabled = harmonic)
-        gui_settings_segmented(sheet_layout, &row, "Cents", {"Off", "On"}, &config.show_band_cents)
+        gui_settings_segmented(sheet_layout, &row, "Track cents", {"Off", "On"}, &config.show_band_cents)
     case .SCOPE:
         // Tapping the scope flips it too
         gui_settings_segmented(sheet_layout, &row, "Sweep", {"Time", "X-Y"}, &config.scope_sweep)
