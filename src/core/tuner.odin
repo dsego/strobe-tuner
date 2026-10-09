@@ -43,10 +43,6 @@ Tuner :: struct {
     confirm_s:            f32, // seen this long in a row before switching, the last one strong or the run steady
     prevent_octave_jumps: bool,
 
-    // The target moved up to the partial the readout measures, octaves over the note played, see
-    // follow_readout_partial
-    on_partial:           bool,
-
     // Cents each note from A0 up is tuned off equal temperament, e.g. a ukulele's E a little flat so its
     // fretted chords sound right. The strobe and the readout follow, see note_offset_cents.
     offsets_cents:        [NOTE_COUNT]f32,
@@ -141,14 +137,7 @@ update_tuner :: proc(self: ^Tuner, pitch: PitchInfo, strobe_hears := false) -> (
 
                 new_target = string_note(self, self.string_index)
             } else if !self.locked {
-                // On a partial the note played is still under it, e.g. the pitch detection going between the
-                // fundamental and the 2nd harmonic. Another note starts over from that one.
-                if plays_under_partial(self, detected) {
-                    new_target = self.target_note
-                } else {
-                    new_target = detected
-                    self.on_partial = false
-                }
+                new_target = detected
             }
 
             if new_target.cents != self.target_note.cents {
@@ -199,53 +188,9 @@ steady_readout :: proc(self: ^Tuner, freq: f32, elapsed_s: f32) {
     }
 }
 
-// The readout gave way to a partial over the target, the strobe moves up to it so its tracks count from the
-// note shown, 1× is the partial. A pluck goes back to the note played, its fundamental may ring again. A
-// locked note and a string keep their own. track and ready are strobe_readout_track's, was_ready its
-// ready of the frame before: the tracks start over on a retune and a fresh one's first level is a pluck.
-// Only while the note is lit, a string still ringing: dark, a click or a bump in the tracks would move it
-// up and up. Not past the highest note. Called after update_tuner, returns whether the strobe has to be
-// retuned.
-follow_readout_partial :: proc(self: ^Tuner, strobe: ^PhaseComparator, track: int, ready, was_ready: bool) -> (retune: bool) {
-    if !self.active do return false
-
-    if self.on_partial && was_ready && strobe_plucked(strobe) {
-        self.on_partial = false
-        detected, has_detected := self.detected_note.?
-        if !has_detected || detected.cents == self.target_note.cents do return false
-
-        self.target_note = detected
-        return true
-    }
-    if !ready || measures_target(self) do return false
-
-    octaves := readout_octaves(strobe.bands[track], tuner_target_freq(self))
-    if octaves <= 0 do return false
-
-    // Only with the fundamental under the partial. Its track can lose the note for a moment while it catches
-    // the attack, the readout's loudest is then a partial the note may not have.
-    for band in strobe.bands {
-        if band.interval == 1 && band.snr_db >= strobe.bands[track].snr_db do return false
-    }
-
-    partial_cents := self.target_note.cents + 1200 * octaves
-    if partial_cents > HIGHEST_NOTE * 100 do return false
-
-    self.target_note = cents_to_note(f32(partial_cents), self.target_note.pitch_standard)
-    self.on_partial = true
-    return true
-}
-
-// The note played under the partial the target moved up to, the target's note at or below it
-plays_under_partial :: proc(self: ^Tuner, note: Note) -> bool {
-    below := self.target_note.cents - note.cents
-    return self.on_partial && !measures_target(self) && below >= 0 && below % 1200 == 0
-}
-
 // Unlocked, the target follows the detected note again, or the string nearest to it
 toggle_note_lock :: proc(self: ^Tuner) -> (retune: bool) {
     self.locked = !self.locked
-    self.on_partial = false
     detected, has_detected := self.detected_note.?
     if self.locked || !has_detected do return false
 
@@ -264,7 +209,6 @@ step_target_note :: proc(self: ^Tuner, steps: int) -> (retune: bool) {
     if steps == 0 do return false
 
     self.locked = true
-    self.on_partial = false
     prev := self.target_note
     if self.string_count > 0 {
         self.string_index = clamp(self.string_index + steps, 0, self.string_count - 1)
@@ -362,7 +306,7 @@ tuner_out_of_range :: proc(self: ^Tuner) -> bool {
     detected, has_detected := self.detected_note.?
     if self.string_count > 0 || !has_detected do return false
 
-    return detected.cents != self.target_note.cents && !plays_under_partial(self, detected)
+    return detected.cents != self.target_note.cents
 }
 
 // How far the played note is from the target while out of range, in cents, a whole number of semitones
@@ -663,71 +607,4 @@ test_tuner_string_steps :: proc(t: ^testing.T) {
     testing.expect_value(t, tuner.string_count, 7)
     step_target_note(&tuner, 10)
     testing.expect_value(t, tuner.target_note.cents, -500)
-}
-
-// A bass's fundamental dies down under its 2nd harmonic, the strobe moves up to it. The pitch detection
-// still reads the fundamental, it stays, and it's not another note out of range. A pluck goes back down.
-@(test)
-test_tuner_follows_partial :: proc(t: ^testing.T) {
-    E1 :: 41.2
-    bass := init_tuner(E1, 440, true, 0)
-    update_tuner(&bass, test_detection(E1))
-
-    strobe := init_phase_comparator(E1, {1, 2, 4}, .HARMONIC)
-    defer destroy_phase_comparator(strobe)
-
-    set_phase_comparator_freq(strobe, E1, 440, 0.01, 2, .HARMONIC)
-    snrs := [?]f32{40, 90, 60}
-    for &band, index in strobe.bands {
-        band.in_range = true
-        band.rate_time_s = 1
-        band.snr_db = snrs[index]
-    }
-    track, ready := strobe_readout_track(strobe, -1)
-    testing.expect(t, follow_readout_partial(&bass, strobe, track, ready, false))
-    testing.expect_value(t, bass.target_note.octave, 2)
-
-    update_tuner(&bass, test_detection(E1))
-    testing.expect_value(t, bass.target_note.octave, 2)
-    testing.expect(t, !tuner_out_of_range(&bass))
-
-    // Retuned, the partial is the 1× track and the loudest. The tracks start over there, their first level
-    // is no pluck.
-    set_phase_comparator_freq(strobe, 2 * E1, 440, 0.01, 2, .HARMONIC)
-    for &band in strobe.bands {
-        band.in_range = true
-        band.snr_db = 90 if band.interval == 1 else 50
-    }
-    strobe.bands[0].onset = true
-    testing.expect(t, !follow_readout_partial(&bass, strobe, 0, false, false))
-    testing.expect(t, follow_readout_partial(&bass, strobe, 0, false, true))
-    testing.expect_value(t, bass.target_note.octave, 1)
-
-    // Dark, a click or a bump loudest in a partial's track doesn't move it
-    bass.active = false
-    testing.expect(t, !follow_readout_partial(&bass, strobe, 0, true, true))
-    testing.expect_value(t, bass.target_note.octave, 1)
-}
-
-// Not past the highest note, C7's 4th harmonic is C9
-@(test)
-test_tuner_partial_not_past_highest :: proc(t: ^testing.T) {
-    C7 :: 2093.0
-    high := init_tuner(C7, 440, true, 0)
-    update_tuner(&high, test_detection(C7))
-
-    strobe := init_phase_comparator(C7, {1, 2, 4}, .HARMONIC)
-    defer destroy_phase_comparator(strobe)
-
-    set_phase_comparator_freq(strobe, C7, 440, 0.01, 2, .HARMONIC)
-    snrs := [?]f32{40, 50, 90}
-    for &band, index in strobe.bands {
-        band.in_range = true
-        band.rate_time_s = 1
-        band.snr_db = snrs[index]
-    }
-    track, ready := strobe_readout_track(strobe, -1)
-    testing.expect_value(t, track, 2)
-    testing.expect(t, !follow_readout_partial(&high, strobe, track, ready, false))
-    testing.expect_value(t, high.target_note.octave, 7)
 }

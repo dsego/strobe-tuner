@@ -24,11 +24,18 @@ real strobe as the string comes within about 50 to 100 cents.
 
 ## Partial next to the readout
 
-When the fundamental dies down under a partial, the strobe moves up to that partial and the note shown is
-named after it, e.g. D#2 for a bass's D#1. The tracks then count from the partial, 1× is D#2. As an
-alternative to moving the strobe, it could stay on the note played with a small "×2" next to the readout,
-saying which track the note and the Hz come from. No restart of the stripes mid-note, but the track labels
-don't count from the note shown.
+When the fundamental dies down under a partial, the readout gives way to that partial's track for its
+cents, the note and the strobe stay on the note played. A small "×2" next to the readout could say which
+track the cents come from.
+
+Tried from 2026-10-07 to 10-09 and dropped: the strobe moved up to the partial so its tracks counted from
+it, 1× the partial, and a pluck brought it back. A ukulele's C4 walked up to C8: a beat null in the
+fundamental's track lasts one frame, the readout gave way to a partial's track still reading over 16 dB,
+and the target followed it in that frame. The fresh tracks did the same from there, C4 to C6 to C8 inside
+a second. On C8 nothing hears the string between plucks, so no pluck brought it back, and the pitch
+detection's C4 couldn't, the target only changes when the detected note does. The way back was noise too,
+a tail's level wobbling counted as a pluck. The readout's own 20 dB "faded" rule flips on the same
+one-frame null, it still does.
 
 ## In-tune cues
 

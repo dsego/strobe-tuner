@@ -74,7 +74,6 @@ App :: struct {
     sharp_arrow:        bool,
 
     readout_track:      int, // the strobe track the readout follows, see core.strobe_readout_track
-    readout_ready:      bool, // and whether it had settled, the frame before
     held_readout:       HeldReadout, // the last one shown while the note was lit, see measure
     traced_track:      int, // the track the readout followed, the trace stays on it while its stripes show
     config_changed:     bool, // the tuner and the strobe need the new config, see apply_config
@@ -401,11 +400,6 @@ measure :: proc(app: ^App) -> (reading: Reading) {
         retune(app)
         ready = false
     }
-    if core.follow_readout_partial(tuner, app.phase_comparator, app.readout_track, ready, app.readout_ready) {
-        retune(app)
-        ready = false
-    }
-    app.readout_ready = ready
 
     reading.out_of_range = core.tuner_out_of_range(tuner)
     reading.steady = core.tuner_readout(tuner)
@@ -422,10 +416,6 @@ measure :: proc(app: ^App) -> (reading: Reading) {
         band := app.phase_comparator.bands[app.readout_track]
         steady.detected_freq = core.freq_at_cents(steady.detected_freq, band.err_cents - steady.err_cents)
         steady.err_cents = band.err_cents
-
-        // The Hz are the track's, the pitch detection may still read the fundamental under a target that moved
-        // up to its partial, see core.follow_readout_partial. A locked note and a string keep their own.
-        if !core.measures_target(tuner) do steady.detected_freq = core.freq_at_cents(band.freq_hz, band.err_cents)
     }
 
     // The readout's cents, the strobe's so an in tune note is on the middle line, none before a track settled.

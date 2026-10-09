@@ -671,8 +671,7 @@ READOUT_SETTLE_S :: 0.05 // the track's fit since the pluck before the readout f
 // partial. The partials read a few cents apart, so once its track is ready the readout stays on it and
 // keeps its last reading as it fades, until a pluck or another note starts the tracks over. Only a partial
 // still ringing this far over it takes the readout on, e.g. a low string's fundamental dies down first.
-// Only an octave track reads out, the note is named after the partial it measures, see readout_octaves.
-// -1 for none.
+// Only an octave track reads out, its cents from its partial are the note's. -1 for none.
 //
 // ready once its track has fitted a little since the pluck, until then the readout is the pitch detection's.
 strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: int, ready: bool) {
@@ -730,12 +729,6 @@ is_octave_track :: proc(band: PhaseBand) -> bool {
     return band.interval > 0 && abs(octaves - math.round(octaves)) < 0.01
 }
 
-// The octaves the readout's track is over the tuner's note, the note it measures is named that much higher.
-// From the track's frequency, a strobe kept an octave off the note has its octave track on the note.
-readout_octaves :: proc(band: PhaseBand, note_freq_hz: f32) -> int {
-    return int(math.round(math.log2(band.freq_hz / note_freq_hz)))
-}
-
 @(test)
 test_readout_track :: proc(t: ^testing.T) {
     self := init_phase_comparator(123.47, {1, 2, 4}, .HARMONIC)
@@ -760,13 +753,11 @@ test_readout_track :: proc(t: ^testing.T) {
     testing.expect_value(t, track, 0)
     self.bands[2].onset = false
 
-    // The fundamental dies down under the 2nd harmonic still ringing, the readout goes on with that one, a
-    // B3 for the B2
+    // The fundamental dies down under the 2nd harmonic still ringing, the readout goes on with that one
     self.bands[0].snr_db = 70
     track, ready = strobe_readout_track(self, track)
     testing.expect_value(t, track, 1)
     testing.expect(t, ready)
-    testing.expect_value(t, readout_octaves(self.bands[track], 123.47), 1)
 
     // A pluck on the loudest track picks again, the fundamental back up
     self.bands[0].snr_db = 92

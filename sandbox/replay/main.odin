@@ -13,7 +13,6 @@
 package replay
 
 import "core:fmt"
-import "core:math"
 import "core:os"
 import "core:strconv"
 import ma "vendor:miniaudio"
@@ -78,15 +77,9 @@ main :: proc() {
         core.audio_capture_write(strobe, frame)
         pitch := core.run_pitch_detection(&detector, tuner.pitch)
         core.run_phase_detection(strobe, pitch.is_tonal)
-        // Like the app's readout, and the strobe keeps the note lit while it shows it and moves up to the
-        // partial the readout gives way to
-        was_ready := readout_ready
+        // Like the app's readout, and the strobe keeps the note lit while it shows it
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
         if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) {
-            retune(strobe, tuner.target_note.frequency)
-            readout_ready = false
-        }
-        if core.follow_readout_partial(&tuner, strobe, readout_track, readout_ready, was_ready) {
             retune(strobe, tuner.target_note.frequency)
             readout_ready = false
         }
@@ -118,7 +111,7 @@ main :: proc() {
         // None until a track settles, like the app's
         readout := "-"
         if readout_ready && abs(strobe.bands[readout_track].err_cents) <= core.READOUT_RANGE_CENTS {
-            // The note the app names, the target's, it moves up to the partial the readout gives way to
+            // The note the app names, the target's
             band := strobe.bands[readout_track]
             readout = fmt.tprintf("%+.1f¢ %v× %v", band.err_cents, band.interval, core.note_name(tuner.target_note))
         }
