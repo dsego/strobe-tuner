@@ -144,7 +144,8 @@ main :: proc() {
 
         hmm_step(&belief, detector.nsdf.peaks[:], pitch.snr_db)
 
-        tuner_shows := core.note_name(tuner.detected_note) if tuner.active else "-"
+        tuner_shows := "-"
+        if detected, has_detected := tuner.detected_note.?; has_detected && tuner.active do tuner_shows = core.note_name(detected)
         best_state := UNVOICED
         for state in 0 ..< core.NOTE_COUNT {
             if belief[state] > belief[best_state] do best_state = state

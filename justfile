@@ -44,15 +44,15 @@ setup:
 dev target="": setup
     #!/usr/bin/env sh
     case "{{target}}" in
-        "") odin run src/app -debug ;;
-        stats) odin run src/app -debug -define:DEBUG_STATS=true ;;
+        "") odin run src/app -debug -vet ;;
+        stats) odin run src/app -debug -vet -define:DEBUG_STATS=true ;;
         ios) sh platform/ios/build-sim.sh ;;
         *) echo "Unknown target '{{target}}', use stats or ios"; exit 1 ;;
     esac
 
 # Optimized build for this machine
 build: setup
-    odin build src/app -o:speed -microarch:native
+    odin build src/app -o:speed -microarch:native -vet
 
 # Signed .ipa for iPhone: IOS_PROFILE=path/to/profile.mobileprovision [IOS_DEVICE=<name>] just ipa
 ipa: setup
@@ -68,7 +68,7 @@ pkg: setup
 
 # Runs the unit tests in core
 test:
-    odin test src/core
+    odin test src/core -vet
 
 # Generated tones through the tuner, checks the note and the readout: just accuracy [full]
 accuracy mode="": setup

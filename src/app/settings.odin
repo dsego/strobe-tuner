@@ -72,11 +72,12 @@ gui_settings_dropdown :: proc(
 
 // Returns close when ✕ is tapped, changed when the strobe or the note detection needs updating. With
 // display_options the sheet is the picked display's options, a page of their own behind the › after the
-// displays, the ‹ back to the settings.
+// displays, the ‹ back to the settings. confirm_reset is whether RESET was tapped once and asks.
 gui_settings :: proc(
     sheet_layout: SheetLayout,
     config: ^Config,
     display_options: ^bool,
+    confirm_reset: ^bool,
 ) -> (
     close: bool,
     changed: bool,
@@ -141,22 +142,25 @@ gui_settings :: proc(
         }
     }
 
-    if gui_settings_segmented(sheet_layout, &row, "Colors", {"Red", "Mint", "Amber", "Mono"}, &config.strobe_colorway) {
-        changed = true
-    }
+    // The displays read the colors and the glow from the config as they draw, nothing to retune
+    gui_settings_segmented(sheet_layout, &row, "Colors", {"Red", "Mint", "Amber", "Mono"}, &config.strobe_colorway)
 
     // Lights the stripes like a lamp behind the disc, in the hue of the colors above
-    if gui_settings_segmented(sheet_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow) {
-        changed = true
-    }
+    gui_settings_segmented(sheet_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow)
 
     {
-        // Everything back to the defaults like the R key
+        // Everything back to the defaults, the presets stay. The first tap asks, the second resets, a tap
+        // anywhere else leaves the settings as they are.
         rect := settings_row(sheet_layout, row, "Reset to defaults", 0)
         row += 1
-        if gui_small_button(rect.x, rect, "RESET") {
-            reset_config(config)
-            changed = true
+        if gui_small_button(rect.x, rect, "SURE?" if confirm_reset^ else "RESET", warn = confirm_reset^) {
+            if confirm_reset^ {
+                reset_config(config)
+                changed = true
+            }
+            confirm_reset^ = !confirm_reset^
+        } else if gfx.mouse_pressed() {
+            confirm_reset^ = false
         }
     }
 
@@ -345,12 +349,14 @@ gui_track_settings :: proc(
         remove_width := icon_button_width("Remove")
         width := remove_width + GAP + icon_button_width("Add")
         pos := [2]f32{sheet_layout.rows.x + math.round((sheet_layout.width - width) / 2), sheet_layout.bottom - height}
+        // Not above the highest partial, a track added there would be the top one again
+        partials := TRACK_PARTIALS
+        highest := partials[len(partials) - 1]
         remove := gui_icon_button(pos, height, ICON_MINUS, "Remove", count > 1)
         pos.x += remove_width + GAP
-        add := gui_icon_button(pos, height, ICON_PLUS, "Add", top + 1 < core.MAX_BANDS)
+        add := gui_icon_button(pos, height, ICON_PLUS, "Add", top + 1 < core.MAX_BANDS && config.strobe_intervals[top] < highest)
         if add {
-            partials := TRACK_PARTIALS
-            config.strobe_intervals[top + 1] = min(math.floor(config.strobe_intervals[top]) + 1, partials[len(partials) - 1])
+            config.strobe_intervals[top + 1] = min(math.floor(config.strobe_intervals[top]) + 1, highest)
             changed = true
         } else if remove {
             config.strobe_intervals[top] = 0
@@ -549,8 +555,9 @@ touch_area :: proc(rect: gfx.Rect) -> gfx.Rect {
 
 // For what can't be undone, a reset or a clear: smaller than the controls and in capitals, it isn't tapped
 // in passing. right is its right edge, control is where settings_row puts the row's control, the button is
-// in its middle and the touch area as tall as the row. Dimmed and dead when not enabled.
-gui_small_button :: proc(right: f32, control: gfx.Rect, label: cstring, enabled := true) -> bool {
+// in its middle and the touch area as tall as the row. Dimmed and dead when not enabled. warn is the
+// question it asks first, SURE? in amber.
+gui_small_button :: proc(right: f32, control: gfx.Rect, label: cstring, enabled := true, warn := false) -> bool {
     HEIGHT :: 26
 
     font := pixel_fonts.label_small
@@ -559,8 +566,11 @@ gui_small_button :: proc(right: f32, control: gfx.Rect, label: cstring, enabled 
     rect := gfx.Rect{right - width, middle - HEIGHT / 2, width, HEIGHT}
     touch := touch_area({rect.x, control.y, width, control.height})
 
-    gfx.draw_pill(rect, pill_gray if enabled && gui_button_held(touch) else pill_dark)
+    fill := pill_gray if enabled && gui_button_held(touch) else pill_dark
     label_color := text_color_white if enabled else text_color_disabled
+    if warn do fill, label_color = pill_yellow, text_color_dark
+
+    gfx.draw_pill(rect, fill)
     draw_label(font, label, {rect.x + SMALL_BUTTON_PADDING, middle - LABEL_SMALL_SIZE / 2}, label_color, 1)
 
     return enabled && gui_button(touch)

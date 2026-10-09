@@ -225,8 +225,8 @@ run_case :: proc(test_case: Case) -> (result: Result) {
 
         // The note played under the partial the strobe moved up to
         partial_octaves := 0
-        if core.plays_under_partial(&tuner, tuner.detected_note) {
-            partial_octaves = (tuner.target_note.cents - tuner.detected_note.cents) / 1200
+        if detected, ok := tuner.detected_note.?; ok && core.plays_under_partial(&tuner, detected) {
+            partial_octaves = (tuner.target_note.cents - detected.cents) / 1200
         }
         if !tuner.active || tuner.target_note.cents - 1200 * partial_octaves != note.cents {
             result.wrong_note += 1

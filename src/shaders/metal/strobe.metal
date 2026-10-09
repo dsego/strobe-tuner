@@ -44,7 +44,6 @@ struct StrobeUniforms {
     float visibility; // 0..1, fades the stripes out when the signal is buried in noise
     float norm_freq;
     float band_height;
-    float err_cents;
     float period_count;
     float min_radius;
     float max_radius;

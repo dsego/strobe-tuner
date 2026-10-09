@@ -38,7 +38,6 @@ StrobeDisplay :: struct {
     strobe_shader:   gfx.Shader,
     bloom_shader:    gfx.Shader,
     shadow_shader:   gfx.Shader,
-    colors:          [2]gfx.Color,
     background:      gfx.Color,
 
     // bloom for the strobe glow, the strobe is rendered into scene_rt and blurred through bloom_rt
@@ -173,8 +172,7 @@ strobe_track_at :: proc(shape: StrobeShape, rect: gfx.Rect, scale: f32, band_cou
 }
 
 
-init_strobe_display :: proc(colors: [2]u32, background: u32) -> (self: StrobeDisplay) {
-    self.colors = {gfx.hex(colors.x), gfx.hex(colors.y)}
+init_strobe_display :: proc(background: u32) -> (self: StrobeDisplay) {
     self.background = gfx.hex(background)
 
     self.strobe_shader = gfx.load_shader(.STROBE)
@@ -326,10 +324,6 @@ render_bloom :: proc(self: ^StrobeDisplay) {
     blur_render_targets(self, self.bloom_rt, BLOOM_ITERATIONS, BLOOM_TAP_SPACING)
 }
 
-set_strobe_colors :: proc(self: ^StrobeDisplay, colors: [2]u32) {
-    self.colors = {gfx.hex(colors.x), gfx.hex(colors.y)}
-}
-
 // See strobe_geometry for the layout. bands are the comparator's, or the lamp's, see lamp_bands.
 draw_strobe_display :: proc(
     self: ^StrobeDisplay,
@@ -343,6 +337,8 @@ draw_strobe_display :: proc(
     geometry := strobe_geometry(shape, rect, scale, len(bands))
     band_height := geometry.band_height
 
+    // The colorway and the glow as the config has them, a change shows the next frame
+    colors := strobe_colors(config)
     glow_enabled := config.strobe_glow
     glow := glow_params(config)
 
@@ -357,8 +353,8 @@ draw_strobe_display :: proc(
         lamp_spread     = 1000.0 if shape == .WHEEL else 0.45,
         glow_exposure   = glow.exposure,
         glow_saturation = glow.saturation,
-        color_a         = gfx.normalize_color(self.colors.x),
-        color_b         = gfx.normalize_color(self.colors.y),
+        color_a         = gfx.normalize_color(gfx.hex(colors.x)),
+        color_b         = gfx.normalize_color(gfx.hex(colors.y)),
         // The inner edge of the innermost track and the outer edge of the outermost
         min_radius      = geometry.curvature_radius - band_height,
         max_radius      = geometry.curvature_radius + band_height * f32(len(bands) - 1),
@@ -640,10 +636,9 @@ strobe_tracks :: proc(
         uniforms.amp = STROBE_AMP * response * response
         uniforms.visibility = update_band_visibility(self, &band, band_index, response, stripes_per_s, frame_time)
         uniforms.norm_freq = band.norm_freq
-        uniforms.err_cents = band.err_cents
 
         // Without stripes the track looks the same whatever its phase, and doesn't change from frame to frame
-        if uniforms.visibility == 0 do uniforms.phase, uniforms.phase_step, uniforms.err_cents = 0, 0, 0
+        if uniforms.visibility == 0 do uniforms.phase, uniforms.phase_step = 0, 0
 
         selected := band_index == self.selected_track
         uniforms.highlight = self.selection if selected else 0

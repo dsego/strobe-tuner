@@ -21,6 +21,7 @@ package gfx
 // Drawing only records vertices and draw commands, end_frame uploads the vertices in one go
 // and replays the commands. Every begin/end_render_target splits the frame into another render pass.
 
+import "base:intrinsics"
 import "core:fmt"
 import "core:math"
 import "core:mem"
@@ -157,7 +158,6 @@ scancodes := [Key]sdl.Scancode {
     .ESCAPE      = .ESCAPE,
     .G           = .G,
     .I           = .I,
-    .R           = .R,
     .W           = .W,
     .NUM_1       = ._1,
     .NUM_2       = ._2,
@@ -206,7 +206,7 @@ gpu: struct {
 
     // input
     quit:             bool,
-    background:       bool, // set by watch_app_events
+    background:       bool, // set by watch_app_events, on whichever thread SDL pushes the event from
     max_fps:          int, // see limit_fps
     keys_pressed:     bit_set[Key],
     mouse_clicked:    bool,
@@ -367,13 +367,13 @@ should_close :: proc() -> bool {
 }
 
 in_background :: proc() -> bool {
-    return gpu.background
+    return intrinsics.atomic_load(&gpu.background)
 }
 
 // Blocks until the app is back in front, or quit
 wait_for_foreground :: proc() {
     event: sdl.Event
-    for gpu.background && !gpu.quit {
+    for intrinsics.atomic_load(&gpu.background) && !gpu.quit {
         if sdl.WaitEvent(&event) && event.type == .QUIT do gpu.quit = true
     }
 
@@ -413,9 +413,9 @@ watch_app_events :: proc "c" (userdata: rawptr, event: ^sdl.Event) -> bool {
     // Center or the microphone permission alert, and it may keep drawing then
     #partial switch event.type {
     case .DID_ENTER_BACKGROUND:
-        gpu.background = true
+        intrinsics.atomic_store(&gpu.background, true)
     case .WILL_ENTER_FOREGROUND:
-        gpu.background = false
+        intrinsics.atomic_store(&gpu.background, false)
     }
     return true
 }

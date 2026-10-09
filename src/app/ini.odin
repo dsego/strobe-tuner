@@ -24,10 +24,12 @@ import "core:reflect"
 import "core:slice"
 import "core:strconv"
 import "core:strings"
-import sdl "vendor:sdl3"
 
 import "../core"
-import "../gfx"
+
+// Only used on Android, required so a -vet build elsewhere doesn't count them as unused
+@(require) import sdl "vendor:sdl3"
+@(require) import "../gfx"
 
 CONFIG_NAME :: "config.ini"
 
@@ -54,7 +56,8 @@ config_path :: proc() -> string {
 }
 
 // From the standard OS path, e.g. ~/Library/Application Support/<APP_NAME>/config.ini on macOS, see
-// config_directory. What's missing or doesn't parse keeps its default.
+// config_directory. What's missing or doesn't parse keeps its default, a number that isn't finite too, and
+// an array's missing trailing elements are zero. A few values are then held in range, see the end.
 // A field is an enum, a float, an integer, a bool or a fixed array of f32 or integers, an array of arrays
 // too, e.g. the note offsets per preset. Others keep their default: slices, dynamic and enumerated arrays,
 // arrays of anything else. An array of f64 would be read wrong, as f32.
@@ -77,7 +80,7 @@ load_config :: proc() -> Config {
                 write_int_field(ptr, field.type.size, int(value))
             }
         case reflect.Type_Info_Float:
-            if value, ok := strconv.parse_f32(section[field.name]); ok {
+            if value, ok := parse_finite_f32(section[field.name]); ok {
                 (^f32)(ptr)^ = value
             }
         case reflect.Type_Info_Integer:
@@ -111,7 +114,7 @@ load_config :: proc() -> Config {
                     }
                     trimmed := strings.trim(split[i], "[] ")
                     if reflect.is_float(element_type) {
-                        if value, ok := strconv.parse_f32(trimmed); ok do (^f32)(element)^ = value
+                        if value, ok := parse_finite_f32(trimmed); ok do (^f32)(element)^ = value
                     } else if reflect.is_integer(element_type) {
                         if value, ok := strconv.parse_int(trimmed); ok do write_int_field(element, element_type.size, value)
                     }
@@ -120,17 +123,26 @@ load_config :: proc() -> Config {
         }
     }
 
-    // Hand edited out of range, or not a number, the tuner would have no note to start on
-    within :: proc(value, low, high, default: f32) -> f32 {
-        return default if math.is_nan(value) else clamp(value, low, high)
-    }
+    // Hand edited out of range, the tuner would have no note to start on
+    config.pitch_standard = clamp(config.pitch_standard, PITCH_STANDARD_MIN, PITCH_STANDARD_MAX)
+    lowest := core.freq_at_cents(config.pitch_standard, core.LOWEST_NOTE * 100)
+    highest := core.freq_at_cents(config.pitch_standard, core.HIGHEST_NOTE * 100)
+    config.target_freq_hz = clamp(config.target_freq_hz, lowest, highest)
+
+    // The strobe needs a track, and the I key steps on from a preset that exists
     defaults := config_defaults
-    config.pitch_standard = within(config.pitch_standard, PITCH_STANDARD_MIN, PITCH_STANDARD_MAX, defaults.pitch_standard)
-    lowest := core.cents_to_freq(core.LOWEST_NOTE * 100, config.pitch_standard)
-    highest := core.cents_to_freq(core.HIGHEST_NOTE * 100, config.pitch_standard)
-    config.target_freq_hz = within(config.target_freq_hz, lowest, highest, defaults.target_freq_hz)
+    has_track := false
+    for interval in config.strobe_intervals do has_track ||= interval >= 1
+    if !has_track do config.strobe_intervals = defaults.strobe_intervals
+    config.strobe_intervals_index = clamp(config.strobe_intervals_index, 0, len(INTERVAL_OPTIONS) - 1)
 
     return config
+}
+
+// A hand edited "nan" or "inf" would spread through the measurements, it keeps the default like a typo
+parse_finite_f32 :: proc(text: string) -> (value: f32, ok: bool) {
+    value, ok = strconv.parse_f32(text)
+    return value, ok && !math.is_nan(value) && !math.is_inf(value)
 }
 
 

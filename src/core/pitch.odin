@@ -184,8 +184,8 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.elapsed_s = dt
 
     // A0 to C8, the piano's notes the ruler has, up to half a semitone out, at the pitch standard
-    min_freq := cents_to_freq(LOWEST_NOTE * 100 - 50, self.pitch_standard)
-    max_freq := cents_to_freq(HIGHEST_NOTE * 100 + 50, self.pitch_standard)
+    min_freq := freq_at_cents(self.pitch_standard, LOWEST_NOTE * 100 - 50)
+    max_freq := freq_at_cents(self.pitch_standard, HIGHEST_NOTE * 100 + 50)
     in_range := info.detected_freq >= min_freq && info.detected_freq <= max_freq
     mains := false
 

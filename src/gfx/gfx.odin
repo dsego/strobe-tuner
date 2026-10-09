@@ -84,7 +84,6 @@ Key :: enum {
     ESCAPE,
     G,
     I,
-    R,
     W,
     NUM_1,
     NUM_2,
@@ -131,7 +130,6 @@ StrobeUniforms :: struct #align (16) {
     visibility:       f32, // 0..1, fades the stripes out when the signal is buried in noise
     norm_freq:        f32,
     band_height:      f32,
-    err_cents:        f32,
     period_count:     f32,
     min_radius:       f32,
     max_radius:       f32,

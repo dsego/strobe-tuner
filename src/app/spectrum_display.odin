@@ -166,7 +166,7 @@ draw_spectrum_view :: proc(
     // The octaves' Cs and the tracks' partials across the plot
     octave_x := make([dynamic][2]f32, context.temp_allocator) // x and the octave
     for octave in 1 ..= 8 {
-        c_hz := core.cents_to_freq(f32((octave - 4) * 1200 - 900), pitch_standard)
+        c_hz := core.freq_at_cents(pitch_standard, f32((octave - 4) * 1200 - 900))
         if c_hz >= low_hz && c_hz <= high_hz do append(&octave_x, [2]f32{spectrum_x(c_hz, low_hz, high_hz, plot), f32(octave)})
     }
     track_x := make([dynamic]f32, context.temp_allocator)

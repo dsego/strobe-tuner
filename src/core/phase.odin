@@ -397,14 +397,12 @@ run_phase_detection :: proc(self: ^PhaseComparator, is_tonal := false) {
 
     for &band, band_index in self.bands {
         if !measures_band(self, band_index) {
-            // Vernier mode, the first track at another speed
+            // Vernier mode, the first track's measurement at another speed
             base_band := self.bands[0]
-            band.amp = base_band.amp
-            band.phase_diff = base_band.phase_diff
-            band.rate = base_band.rate
-            band.drift_cents = base_band.drift_cents
-            band.noise_floor = base_band.noise_floor
-            band.snr_db = base_band.snr_db
+            band.amp, band.envelope, band.onset = base_band.amp, base_band.envelope, base_band.onset
+            band.phase_diff, band.rate, band.err_cents = base_band.phase_diff, base_band.rate, base_band.err_cents
+            band.drift_hz, band.drift_cents = base_band.drift_hz, base_band.drift_cents
+            band.noise_floor, band.snr_db = base_band.noise_floor, base_band.snr_db
             band.scaled_phase -= band.phase_diff * band.speed
         } else if !band.in_range {
             // Nothing to measure up there, quiet so the track stays dark
@@ -588,8 +586,10 @@ advance_band :: proc(self: ^PhaseComparator, band: ^PhaseBand, phase_advance: f6
         slope, has_slope := fit_slope(band.fit)
         band.rate = slope if has_slope else phase_advance / step
     }
+    // An octave flat is as far as it goes, like the drift: noise on a low track can fit a rate past its own
+    // frequency, and a negative frequency has no cents
     freq_diff_hz := f32(band.rate * sample_rate / math.TAU)
-    band.err_cents = cents_deviation(band.freq_hz + freq_diff_hz, band.freq_hz)
+    band.err_cents = cents_deviation(max(band.freq_hz + freq_diff_hz, 0.5 * band.freq_hz), band.freq_hz)
 
     // The strobe turns by the phase times the track's speed
     band.scaled_phase -= band.phase_diff * band.speed

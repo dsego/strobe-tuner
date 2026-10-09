@@ -12,7 +12,7 @@ Far out, show a simulated rotation at a steady rate in the right direction, and 
 real strobe as the string comes within about 50 to 100 cents.
 
 - The band's window is a semitone wide now (`DFT_RESOLUTION_CENTS`), so the lock-in hears the string
-  further out than it used to, but the readout only follows a track within 30 cents
+  further out than it used to, but the readout only follows a track within 50 cents
   (`READOUT_RANGE_CENTS`). How far down the band hears a string 50 or 100 cents off needs measuring
   again. Past that the direction and distance have to come from the pitch detection, like the
   readout's cents.

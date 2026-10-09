@@ -87,8 +87,8 @@ record_trace :: proc(self: ^Trace, cents, light: f32, fresh: bool, frame_time: f
 // The line in the colorway's lit color, the in tune band in its second color
 draw_cents_trace :: proc(self: ^Trace, rect: gfx.Rect, seconds, range_cents: f32, line_color, band_color, background: gfx.Color) {
     // As the config file has them, none or longer than the readings kept is as far as they go
-    seconds := clamp(seconds, TRACE_MIN_SECONDS, TRACE_MAX_SECONDS)
-    range_cents := max(range_cents, TRACE_BAND)
+    span := clamp(seconds, TRACE_MIN_SECONDS, TRACE_MAX_SECONDS)
+    cents_range := max(range_cents, TRACE_BAND)
     gfx.draw_rect({rect.x, rect.y}, {rect.width, rect.height}, background)
 
     PADDING :: 28
@@ -99,8 +99,8 @@ draw_cents_trace :: proc(self: ^Trace, rect: gfx.Rect, seconds, range_cents: f32
     band := band_color
     band.a = 110
 
-    // ±TRACE_BAND of the ±range_cents the plot covers
-    band_height := TRACE_BAND / range_cents * plot.height
+    // ±TRACE_BAND of the ±cents_range the plot covers
+    band_height := TRACE_BAND / cents_range * plot.height
     gfx.draw_rect({plot.x, middle - band_height / 2}, {plot.width, band_height}, band)
     center_line := line_color
     center_line.a = 120
@@ -109,8 +109,8 @@ draw_cents_trace :: proc(self: ^Trace, rect: gfx.Rect, seconds, range_cents: f32
     // Inside the plot's top and bottom edges, clear of the tuning arrows above it, in the font and color of
     // the partials on the strobe's tracks
     font := pixel_fonts.band_label
-    draw_label(font, fmt.ctprintf("+%.0f¢", range_cents), {plot.x + 10, plot.y + 4}, accent_color)
-    draw_label(font, fmt.ctprintf("-%.0f¢", range_cents), {plot.x + 10, plot.y + plot.height - 4 - font.size}, accent_color)
+    draw_label(font, fmt.ctprintf("+%.0f¢", cents_range), {plot.x + 10, plot.y + 4}, accent_color)
+    draw_label(font, fmt.ctprintf("-%.0f¢", cents_range), {plot.x + 10, plot.y + plot.height - 4 - font.size}, accent_color)
 
     // Like a lit pen: a soft see-through glow under the line. Both are stamped as anti-aliased dots evenly
     // spaced along the whole line, so the edges and joins are smooth and the glow builds up the same
@@ -121,7 +121,7 @@ draw_cents_trace :: proc(self: ^Trace, rect: gfx.Rect, seconds, range_cents: f32
     glow.a = 16
 
     // The plot's scales, seconds and cents to points
-    scale := [2]f32{plot.width / seconds, plot.height / 2 / range_cents}
+    scale := [2]f32{plot.width / span, plot.height / 2 / cents_range}
 
     gfx.begin_scissor(rect)
     defer gfx.end_scissor()

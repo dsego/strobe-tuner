@@ -67,12 +67,6 @@ comb_box :: proc(weights: []f64, gamma_size: int, comb_samples: f32) {
     }
 }
 
-// How far back gamma_comb_window measures, in samples: the gamma window's mean age, the box adds half
-// its length
-gamma_comb_delay :: proc(gamma_size: int, comb_samples: f32 = 0) -> int {
-    return int(GAMMA_WINDOW_DELAY * f32(gamma_size) + comb_samples / 2)
-}
-
 // Every sample the same weight
 flat_window :: proc(size: int, allocator := context.temp_allocator) -> []f64 {
     weights := make([]f64, size, allocator)

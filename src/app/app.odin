@@ -61,6 +61,7 @@ App :: struct {
     settings_menu:      SettingsMenu, // the dropdown whose menu is open
     settings_sheet:     Sheet,
     display_options:    bool, // the settings sheet shows the display's options, see gui_settings
+    reset_confirm:      bool, // RESET on the settings sheet was tapped once and asks
     track_sheet:        Sheet, // a track's own, opened by tapping the track
     selected_track:     int,
     instrument_sheet:   Sheet, // the instruments and the presets, opened from the bottom left corner
@@ -134,7 +135,7 @@ run_app :: proc(config: ^Config) {
     app.scope = core.init_scope(SCOPE_COLUMNS, SCOPE_ROWS)
     defer core.destroy_scope(&app.scope)
 
-    app.strobe_display = init_strobe_display(strobe_colors(config), strobe_bg_color)
+    app.strobe_display = init_strobe_display(strobe_bg_color)
     defer destroy_strobe_display(&app.strobe_display)
 
     app.cents_trace = create_trace()
@@ -270,7 +271,8 @@ configure_tuner :: proc(app: ^App) {
     core.set_tuner_strings(tuner, tuning_strings(config))
 }
 
-// The pitch detection, the tuner and the strobe brought up to the config
+// The pitch detection, the tuner and the strobe brought up to the config. The tracks start over, so only
+// for what they measure: the displays read their colors and options from the config as they draw.
 apply_config :: proc(app: ^App) {
     config := app.config
 
@@ -279,7 +281,6 @@ apply_config :: proc(app: ^App) {
     core.set_tuner_pitch_standard(&app.tuner, config.pitch_standard)
     configure_tuner(app)
 
-    set_strobe_colors(&app.strobe_display, strobe_colors(config))
     retune(app)
     app.config_changed = false
 }
@@ -327,12 +328,6 @@ picked_device :: proc(app: ^App) -> i32 {
 
 handle_keys :: proc(app: ^App) {
     config := app.config
-
-    if gfx.key_pressed(.R) {
-        fmt.println("Reset config to defaults")
-        reset_config(config)
-        app.config_changed = true
-    }
 
     if gfx.key_pressed(.G) do config.strobe_glow = !config.strobe_glow
 
@@ -550,9 +545,13 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
     meter := layout.level_meter + {20, 0}
     track := gfx.Rect{meter.x, meter.y, 60, LEVEL_METER_HEIGHT}
     gfx.draw_rounded_rect(track, LEVEL_METER_HEIGHT / 2, pill_dark)
-    gfx.begin_scissor({meter.x, meter.y, 60 + clamp(reading.pitch.rms_dbfs, -60, 0), LEVEL_METER_HEIGHT})
-    gfx.draw_rounded_rect(track, LEVEL_METER_HEIGHT / 2, accent_color)
-    gfx.end_scissor()
+
+    // Empty until something was measured, e.g. without an input, a reading that isn't one would be 0 dBFS
+    if reading.pitch.measured {
+        gfx.begin_scissor({meter.x, meter.y, 60 + clamp(reading.pitch.rms_dbfs, -60, 0), LEVEL_METER_HEIGHT})
+        gfx.draw_rounded_rect(track, LEVEL_METER_HEIGHT / 2, accent_color)
+        gfx.end_scissor()
+    }
 
     // The warning, the icon and the level open the input's sheet, a finger tall around the thin meter. Its
     // levels show right away, not after the first hold.
@@ -647,7 +646,6 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     }
 
     if title != nil {
-        strobe := layout.strobe
         gfx.draw_rect({strobe.x, strobe.y}, {strobe.width, strobe.height}, gfx.hex(strobe_bg_color))
         center := [2]f32{strobe.x + strobe.width / 2, strobe.y + strobe.height / 2}
         title_size := measure_label(pixel_fonts.title, title)
@@ -676,7 +674,7 @@ draw_tuning_arrows :: proc(app: ^App, layout: Layout, reading: Reading) {
     // note, like the readout. On another note than the locked one, as far as the notes are apart.
     cents := core.tuner_cents_off(tuner, tuner.last_good_pitch.detected_freq)
     if reading.strobe_readout do cents = reading.steady.err_cents
-    if reading.out_of_range do cents = f32(tuner.detected_note.cents - tuner.target_note.cents)
+    if reading.out_of_range do cents = core.tuner_out_of_range_cents(tuner)
 
     distance := abs(cents)
     measures_target := core.measures_target(tuner)
@@ -831,7 +829,7 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
     if sheet.slide == 0 do return
 
     sheet_layout, swiped := begin_sheet(sheet, SETTINGS_ROWS, &app.strobe_display, layout.strobe)
-    close, changed := gui_settings(sheet_layout, app.config, &app.display_options)
+    close, changed := gui_settings(sheet_layout, app.config, &app.display_options, &app.reset_confirm)
     if changed do app.config_changed = true
 
     grab_sheet(sheet, sheet_layout)
@@ -842,6 +840,7 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
     } else if close || sheet_dismissed(sheet_layout, swiped) {
         close_sheet(sheet)
         exclusive_control_mode = false
+        app.reset_confirm = false
     }
 }
 
@@ -853,8 +852,11 @@ draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
     app.input_stats_age += gfx.frame_time()
     if app.input_stats_age >= INPUT_STATS_HOLD_S {
         pitch := reading.pitch
-        // The floor is the level's average, quiet wobbles under it, the SNR of the background is 0
-        app.input_stats = {pitch.rms_dbfs, core.dbfs(pitch.noise_floor), max(pitch.snr_db, 0)}
+        // The floor is the level's average, quiet wobbles under it, the SNR of the background is 0. None
+        // until something was measured, e.g. without an input, a reading that isn't one would be 0 dBFS.
+        none := math.nan_f32()
+        app.input_stats = {none, none, none}
+        if pitch.measured do app.input_stats = {pitch.rms_dbfs, core.dbfs(pitch.noise_floor), max(pitch.snr_db, 0)}
         app.input_stats_age = 0
     }
 

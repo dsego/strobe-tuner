@@ -139,27 +139,23 @@ test_parse_note :: proc(t: ^testing.T) {
 }
 
 
-// Cents from the pitch standard, A4
-freq_to_cents :: proc(freq: f32, pitch_standard: f32 = 440.0) -> f32 {
-    return 1200.0 * math.log2(freq / pitch_standard)
+// How many cents freq_hz is above reference_hz, e.g. the pitch standard A4
+cents_deviation :: proc(freq_hz: f32, reference_hz: f32) -> f32 {
+    return 1200.0 * math.log2(freq_hz / reference_hz)
+}
+
+// The frequency this many cents above reference_hz, below for negative cents
+freq_at_cents :: proc(reference_hz: f32, cents: f32) -> f32 {
+    return reference_hz * libc.exp2(cents / 1200.0)
 }
 
 @(test)
-test_freq_to_cents :: proc(t: ^testing.T) {
-    cents := freq_to_cents(880.0)
-    testing.expect_value(t, cents, 1200.0)
-}
-
-
-cents_to_freq :: proc(cents: f32, pitch_standard: f32 = 440.0) -> f32 {
-    return pitch_standard * libc.exp2(cents / 1200.0)
-}
-
-
-@(test)
-test_cents_to_freq :: proc(t: ^testing.T) {
-    freq := cents_to_freq(1200.0)
-    testing.expect_value(t, freq, 880.0)
+test_cents_and_freq :: proc(t: ^testing.T) {
+    testing.expect_value(t, cents_deviation(880.0, 440.0), 1200.0)
+    testing.expect_value(t, freq_at_cents(440.0, 1200.0), 880.0)
+    testing.expect_value(t, freq_at_cents(110, 1200), 220)
+    testing.expect_value(t, freq_at_cents(110, -1200), 55)
+    testing.expect(t, abs(cents_deviation(freq_at_cents(61.74, 7.5), 61.74) - 7.5) < 0.001)
 }
 
 
@@ -174,7 +170,7 @@ cents_to_note :: proc(cents: f32, pitch_standard: f32 = 440.0) -> (note: Note) {
 
     note.pitch_standard = pitch_standard
     note.cents = semitones * 100
-    note.frequency = cents_to_freq(f32(note.cents), pitch_standard)
+    note.frequency = freq_at_cents(pitch_standard, f32(note.cents))
     note.semitone_index = from_c4 %% 12
     note.octave = 4 + math.floor_div(from_c4, 12)
     names, accidentals := NAMES, ACCIDENTALS
@@ -194,7 +190,7 @@ test_cents_to_note :: proc(t: ^testing.T) {
 
 
 freq_to_note :: proc(freq: f32, pitch_standard: f32 = 440.0) -> Note {
-    return cents_to_note(freq_to_cents(freq, pitch_standard), pitch_standard)
+    return cents_to_note(cents_deviation(freq, pitch_standard), pitch_standard)
 }
 
 @(test)
@@ -270,22 +266,4 @@ test_chromatic_range :: proc(t: ^testing.T) {
         testing.expect_value(t, prev_chromatic_note(a0).cents, a0.cents)
         testing.expect_value(t, prev_chromatic_note(next_chromatic_note(a0)).cents, a0.cents)
     }
-}
-
-
-// How many cents freq_hz is above reference_hz
-cents_deviation :: proc(freq_hz: f32, reference_hz: f32) -> f32 {
-    return freq_to_cents(freq_hz, reference_hz)
-}
-
-// The frequency this many cents above reference_hz, below for negative cents
-freq_at_cents :: proc(reference_hz: f32, cents: f32) -> f32 {
-    return reference_hz * libc.exp2(cents / 1200.0)
-}
-
-@(test)
-test_freq_at_cents :: proc(t: ^testing.T) {
-    testing.expect_value(t, freq_at_cents(110, 1200), 220)
-    testing.expect_value(t, freq_at_cents(110, -1200), 55)
-    testing.expect(t, abs(cents_deviation(freq_at_cents(61.74, 7.5), 61.74) - 7.5) < 0.001)
 }

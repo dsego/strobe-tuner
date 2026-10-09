@@ -260,7 +260,7 @@ run_file :: proc(runs: ^[dynamic]Run, spectra: ^[dynamic]Spectrum, path, name: s
 
     shift_cases: [len(SHIFTS_CENTS) + 1][2]f32
     for shift, index in SHIFTS_CENTS do shift_cases[index] = {shift, 440}
-    shift_cases[len(SHIFTS_CENTS)] = {core.freq_to_cents(SHIFTED_STANDARD), SHIFTED_STANDARD}
+    shift_cases[len(SHIFTS_CENTS)] = {core.cents_deviation(SHIFTED_STANDARD, 440), SHIFTED_STANDARD}
 
     for shift_case in shift_cases {
         shift_cents, pitch_standard := shift_case[0], shift_case[1]
@@ -273,7 +273,7 @@ run_file :: proc(runs: ^[dynamic]Run, spectra: ^[dynamic]Spectrum, path, name: s
         // The same part of the performance, it plays faster or slower after the lead-in
         scaled := LEAD_IN_S + (sustain - LEAD_IN_S) * ratio
         // The tuner set to A=442 measures from it
-        expected_cents := shift_cents - core.freq_to_cents(pitch_standard)
+        expected_cents := shift_cents - core.cents_deviation(pitch_standard, 440)
         // In the original's octave, a hop away from it is already a wrong note
         note := 100 * int(math.round((original_cents + expected_cents) / 100))
 
@@ -463,7 +463,7 @@ measure_spectrum :: proc(samples: []f32, sample_rate: f32, sustain: [2]f32, note
     windowed := hann(samples[int(sustain[0] * sample_rate):min(int(sustain[1] * sample_rate), len(samples))])
     defer delete(windowed)
 
-    note_hz := f64(core.cents_to_freq(f32(note)))
+    note_hz := f64(core.freq_at_cents(440, f32(note)))
     harmonics := HARMONICS
     powers: [len(HARMONICS)]f64
     for harmonic, index in harmonics {
@@ -489,7 +489,7 @@ second_louder_moments :: proc(samples: []f32, sample_rate: f32, spectrum: Spectr
     harmonics := HARMONICS
     fundamental_index, _ := slice.linear_search(harmonics[:], 1)
     second_index, _ := slice.linear_search(harmonics[:], 2)
-    note_hz := f64(core.cents_to_freq(f32(spectrum.note)))
+    note_hz := f64(core.freq_at_cents(440, f32(spectrum.note)))
     fundamental_hz := note_hz * math.pow(2, f64(spectrum.offsets_cents[fundamental_index]) / 1200)
     second_hz := 2 * note_hz * math.pow(2, f64(spectrum.offsets_cents[second_index]) / 1200)
 
@@ -604,8 +604,8 @@ play :: proc(recording: []f32, sample_rate: f32, pitch_standard: f32) -> (detect
 
         // The note played under the partial the strobe moved up to
         partial_octaves := 0
-        if core.plays_under_partial(&tuner, tuner.detected_note) {
-            partial_octaves = (tuner.target_note.cents - tuner.detected_note.cents) / 1200
+        if detected, ok := tuner.detected_note.?; ok && core.plays_under_partial(&tuner, detected) {
+            partial_octaves = (tuner.target_note.cents - detected.cents) / 1200
         }
 
         // The strobe's track from the target, none until one settled, see src/app/app.odin

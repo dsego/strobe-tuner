@@ -19,12 +19,13 @@ Strobie is coming to the App Store for Mac and iPhone. The source is here to rea
 - Harmonic mode: shows the partials of the detected note on up to 5 strobe tracks.
 - Track settings: tap a track to choose its partial (1× to 8×, or the fifth at 1½×), move its target by up to ±50 cents (e.g. for a stretched octave) and change its speed.
 - Vernier mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity.
-- Fast toggle: the strobe spins 4× faster per cent of detuning, for the final adjustment.
-- Four displays, see [Displays](#displays):
+- Fast toggle: the strobe spins 2× faster per cent of detuning, for the final adjustment.
+- Five displays, see [Displays](#displays):
   - Strobe: curved tracks, a wheel or flat tracks, turned by a lock-in on each partial or by the lamp.
   - Lamp: the mechanical strobe, stripes lit by the wave.
   - Scope: the waveform synced to the strobe's frequency, tap it for a Lissajous figure.
   - Trace: the cents over time.
+  - Peaks: the spectrum of what the pitch detection hears, the loudest peaks named.
 - Note offsets: tune a note up to ±25 cents off pitch, the strobe stands still at the offset note.
 - Transpose for B♭, E♭, F and other transposing instruments.
 - Guitar, bass and ukulele tunings with an optional capo, the ruler shows only their strings.
@@ -103,7 +104,7 @@ The first run clones and compiles the dependencies into `external/`, later runs 
 | `just pkg` | Signed build for the Mac App Store, see `platform/macos/build-pkg.sh`, links SDL in statically |
 | `just test` | Unit tests of the pitch detection and strobe code |
 | `just accuracy` | Generated tones with and without noise through the tuner, checks the note and the readout within 1¢, `just accuracy full` for every note and three concert pitches |
-| `just recordings` | The recordings in `sandbox/media` shifted by known cents through the tuner, checks the readout moves by the shift, report only, `just recordings <folder> csv` for another folder as CSV |
+| `just recordings` | Your recordings in `sandbox/samples`, one note per file named at the end like `strat_E2.wav`, the folder isn't in the repo, shifted by known cents through the tuner, checks the readout moves by the shift, report only, `just recordings <folder> csv` for another folder as CSV |
 
 Debug builds also have <kbd>Cmd</kbd><kbd>,</kbd> to open the config file and <kbd>Cmd</kbd><kbd>Shift</kbd><kbd>,</kbd> to reload it.
 
@@ -150,7 +151,7 @@ To install on a phone, tap Build number in Settings → About phone 7 times, tur
 
 #### Displays
 
-All four show the same thing, how the note's phase slips against a reference at the target pitch, in four ways:
+The first four show the same thing, how the note's phase slips against a reference at the target pitch, in four ways, the fifth what the pitch detection hears:
 
 - **Strobe**: the tracks of a strobe tuner, one per partial in harmonic mode, standing still when the partial is in tune and turning left when flat, right when sharp. The shape is flat, a wheel or curved tracks. They can be turned by:
   - **Lock-in** (the default): each track measures its own partial with a single-bin DFT, see [Stroboscopic effect](#stroboscopic-effect). Smooth, with each partial measured on its own.
@@ -158,6 +159,7 @@ All four show the same thing, how the note's phase slips against a reference at 
 - **Lamp**: the disc of a mechanical strobe lit by a lamp that flashes with the wave. Every sample is folded onto two periods of the reference, the stripes are as bright as the wave is high there. A detuned note drifts, a fast drift smears the stripes to gray, like the eye does with a real one.
 - **Scope**: the same folded screen as it is, an oscilloscope with its sweep synced to the reference. Tapped, it draws the wave against the reference's cosine instead, a Lissajous figure that stands still in tune and rolls open and shut when it isn't.
 - **Trace**: the cents of the readout over the last few seconds, to see a vibrato or a drift.
+- **Peaks**: the power spectrum of what the pitch detection hears, the loudest peaks named by their note. Not a way to tune, its peaks are about 12 Hz wide: it shows what's there and how far it stands over the noise, e.g. a fridge's hum louder than the string.
 
 The cents readout and the trace come from the lock-in in every display.
 

@@ -228,8 +228,10 @@ main :: proc() {
     fmt.println(os.args[1])
     comb_samples := core.comb_periods(strobe.bands[:], .HARMONIC) * SAMPLERATE / strobe.base_freq_hz
     for width in widths {
+        // The gamma window's mean age, the box adds half its length
         gamma_size := core.dft_window_size(strobe.base_freq_hz, SAMPLERATE, width)
-        lag_ms := 1000 * f64(core.gamma_comb_delay(gamma_size, comb_samples)) / SAMPLERATE
+        lag_samples := core.GAMMA_WINDOW_DELAY * f32(gamma_size) + comb_samples / 2
+        lag_ms := 1000 * f64(lag_samples) / SAMPLERATE
         fmt.printf("  tracks %vc lag %.0fms at %.1f Hz\n", width, lag_ms, strobe.base_freq_hz)
     }
     print_movement :: proc(name: string, harmonic: int, movement: Movement, frame_s: f64) {

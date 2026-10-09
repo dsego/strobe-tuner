@@ -18,9 +18,11 @@ package app
 
 import "base:runtime"
 import "core:c"
-import "core:fmt"
-import "core:mem"
-import sdl "vendor:sdl3"
+
+// Only used in debug builds and on iOS, required so a -vet build doesn't count them as unused
+@(require) import "core:fmt"
+@(require) import "core:mem"
+@(require) import sdl "vendor:sdl3"
 
 import "../gfx"
 
