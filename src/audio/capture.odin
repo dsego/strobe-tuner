@@ -222,6 +222,14 @@ when IOS {
         AVAudioSessionModeMeasurement: rawptr
     }
 
+    // Odin dev-2026-10 crashes on a message to a class with "missing procedure 'objc_lookUpClass'", its checker
+    // declares the runtime's class lookup only on seeing objc_find_class. Fixed on master, drop this with the
+    // next Odin release (odin-lang/Odin#7793).
+    @(init)
+    declare_objc_class_lookup :: proc "contextless" () {
+        _ = intrinsics.objc_find_class("AVAudioSession")
+    }
+
     activate_audio_session :: proc() {
         session := intrinsics.objc_send(^AVAudioSession, AVAudioSession, "sharedInstance")
         if !intrinsics.objc_send(bool, session, "setMode:error:", AVAudioSessionModeMeasurement, rawptr(nil)) {
