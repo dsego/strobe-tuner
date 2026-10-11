@@ -59,9 +59,10 @@ compute_sheet_layout :: proc(
 ) -> (
     sheet_layout: SheetLayout,
 ) {
+    // The rows as wide as the panel's controls and lined up with them, see panel_content
     panel := layout.panel
-    left := panel.x + PANEL_PADDING
-    sheet_layout.width = panel.width - 2 * PANEL_PADDING
+    left, width := panel_content(panel)
+    sheet_layout.width = width
 
     // Below the rows, the home indicator on a phone
     below := window.y - (safe.y + safe.height) + PANEL_PADDING / 2

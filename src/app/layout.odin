@@ -57,6 +57,12 @@ STROBE_CUTOUT :: 0.0
 
 PANEL_PADDING :: 16
 PANEL_MIN_WIDTH :: 424 // the column beside the strobe at its narrowest, the readout still clears the display button and the level meter
+
+// The controls and a sheet's rows at their widest, PANEL_PADDING inside, centred in a wider panel. A tablet
+// held upright has the panel the whole window across, a label at one edge with its control at the other
+// would be a reach apart. The desktop window is 488 and never reaches it, a tablet's landscape column is
+// about 590 to 680.
+PANEL_MAX_WIDTH :: 600
 STROBE_MIN_WIDTH :: 360 // a phone's, the narrowest the strobe gets
 DESKTOP_HEIGHT :: 620 // the window, as wide as the strobe, most of the strobe shows above the settings
 WINDOW_MIN_SIZE :: [2]i32{STROBE_MIN_WIDTH, DESKTOP_HEIGHT} // the desktop window shrinks to a phone's width and stretches for the panel beside the strobe
@@ -125,8 +131,8 @@ compute_layout :: proc(window: [2]f32, safe: gfx.Rect, offsets: bool) -> (layout
 // above it and the lock under it, and the instrument and the settings in the bottom corners
 panel_layout :: proc(layout: ^Layout, offsets: bool) {
     panel := layout.panel
-    left := panel.x + PANEL_PADDING
-    right := panel.x + panel.width - PANEL_PADDING
+    left, width := panel_content(panel)
+    right := left + width
     bottom := panel.y + panel.height - PANEL_PADDING
 
     // The display button picks what the strobe area shows, it sits at the top of the panel on the left, the
@@ -182,6 +188,14 @@ panel_layout :: proc(layout: ^Layout, offsets: bool) {
     layout.gauge = {center, middle + gauge_y}
     layout.lock = {center, middle + lock_y}
     layout.note_offset = {center, middle + caption_y}
+}
+
+// Where the panel's controls and a sheet's rows go across the panel: inside PANEL_PADDING, and past
+// PANEL_MAX_WIDTH centred in it. Returns their left edge and width.
+panel_content :: proc(panel: gfx.Rect) -> (left, width: f32) {
+    width = min(panel.width, PANEL_MAX_WIDTH) - 2 * PANEL_PADDING
+    left = panel.x + (panel.width - width) / 2
+    return
 }
 
 SETTINGS_ICON_SIZE :: ICON_LARGE_SIZE // the sliders, right aligned on the main screen
