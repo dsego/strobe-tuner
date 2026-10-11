@@ -148,27 +148,37 @@ panel_layout :: proc(layout: ^Layout, offsets: bool) {
     layout.level_meter.y = layout.display.y - LEVEL_METER_HEIGHT / 2
     rows_bottom := corners - BOTTOM_ROW_CLEARANCE
 
-    // The readout, the letter with its octave, the gauge, the lock and the bottom row evenly apart. A
-    // preset's note offset is a caption under the gauge, the gap to the lock is under the caption.
+    // The readout, the letter with its octave, the gauge, the lock and the bottom row evenly apart, the gaps
+    // growing with the panel up to MAX_GAP. Past that the room is spare and the group of them, the readout
+    // down to the lock, sinks to the middle of the panel instead of spreading out, the rows staying in the
+    // corners. A preset's note offset is a caption under the gauge, the gap to the lock is under the caption.
     OCTAVE_BELOW :: 4 // past the letter's baseline
     MIN_GAP :: 12
+    MAX_GAP :: 32 // a phone's, the desktop window opens with 16
     CAPTION_GAP :: 6 // from the gauge to the offset
     caption: f32 = CAPTION_GAP + LABEL_SIZE if offsets else 0
     note_top: f32 = -CAP_HALF * RULER_SCALE * RULER_NOTE_SIZE
     note_bottom := -note_top + RULER_SCALE * OCTAVE_BELOW
     contents := note_bottom - note_top + GAUGE_HEIGHT + caption + LOCK_BUTTON_HEIGHT
-    gap := max((rows_bottom - readout_bottom - contents) / 4, MIN_GAP)
+    slack := rows_bottom - readout_bottom - contents
+    gap := clamp(slack / 4, MIN_GAP, MAX_GAP)
+    spare := max(slack - 4 * gap, 0)
     gauge_y := note_bottom + gap
     caption_y := gauge_y + GAUGE_HEIGHT + CAPTION_GAP + LABEL_SIZE / 2
     lock_y := gauge_y + GAUGE_HEIGHT + caption + gap + LOCK_BUTTON_HEIGHT / 2
     middle := readout_bottom + gap - note_top
+
+    // As far toward the panel's middle as the spare room goes, never up
+    group_middle := (readout_top + middle + lock_y + LOCK_BUTTON_HEIGHT / 2) / 2
+    sink := clamp(panel.y + panel.height / 2 - group_middle, 0, spare)
+    middle += sink
 
     center := (left + right) / 2
 
     // Centred on the notes and stopping above the gauge, a press on the gauge doesn't swipe the notes
     height := min(RULER_SCALE * RULER_HEIGHT, 2 * gauge_y)
     layout.ruler = {left, middle - height / 2, right - left, height}
-    layout.measurements = {center, readout_top}
+    layout.measurements = {center, readout_top + sink}
     layout.gauge = {center, middle + gauge_y}
     layout.lock = {center, middle + lock_y}
     layout.note_offset = {center, middle + caption_y}
