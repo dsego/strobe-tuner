@@ -151,9 +151,14 @@ case "$BUNDLE_ID" in
     *) plutil -replace CFBundleIdentifier -string "$BUNDLE_ID" "$APP/Info.plist" ;;
 esac
 
-# The icon, actool makes the sizes from the 1024px one and lists them in a partial Info.plist
-xcrun actool "$ROOT/platform/ios/Assets.xcassets" --compile "$APP" --platform iphoneos --minimum-deployment-target $MIN_IOS \
-    --target-device iphone --target-device ipad --app-icon AppIcon --output-partial-info-plist "$OUT/icon-info.plist" > /dev/null
+# The icon, actool makes the sizes from the 1024px one and lists them in a partial Info.plist. Its report goes
+# to stdout, errors included, shown when it fails: with no simulator runtime installed it fails even for the
+# device, xcodebuild -downloadPlatform iOS fixes that.
+if ! xcrun actool "$ROOT/platform/ios/Assets.xcassets" --compile "$APP" --platform iphoneos --minimum-deployment-target $MIN_IOS \
+    --target-device iphone --target-device ipad --app-icon AppIcon --output-partial-info-plist "$OUT/icon-info.plist" > "$OUT/actool.plist"; then
+    cat "$OUT/actool.plist"
+    exit 1
+fi
 /usr/libexec/PlistBuddy -c "Merge $OUT/icon-info.plist" "$APP/Info.plist"
 plutil -replace CFBundleSupportedPlatforms -json '["iPhoneOS"]' "$APP/Info.plist"
 
