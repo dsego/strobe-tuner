@@ -18,13 +18,19 @@ package app
 
 import "../gfx"
 
-// Where everything goes, worked out every frame from the window size and the safe area, in points.
-// The same on the desktop and a phone, both are portrait windows: the strobe on top, the panel under it.
+// Where everything goes, worked out every frame from the window size and the safe area, in points. A window
+// taller than wide stacks the panel under the strobe: a phone, a tablet held upright, the desktop window as it
+// opens. One wider than tall puts the panel beside the strobe, on the right, and turns the strobe so the
+// disc's hub hides behind the panel as it does under it: a tablet on a music stand, the desktop window
+// stretched.
 
 Layout :: struct {
-    strobe:         gfx.Rect,
+    beside:         bool, // the panel is beside the strobe, not under it
+    strobe:         gfx.Rect, // the strobe's background, out to the window's edges or as wide as its disc allows
     strobe_view:    gfx.Rect, // the visible strobe below the notch, where the trace and the scope's views go
     strobe_scale:   f32, // size of the strobe tracks relative to the desktop
+    strobe_turned:  bool, // the strobe set into its pane a quarter turn, see strobe_upright
+    panel:          gfx.Rect, // the controls, in the safe area, a sheet covers it
     ruler:          gfx.Rect,
     gauge:          [2]f32, // under the ruler's note, the middle of its top, see draw_cents_gauge
     measurements:   [2]f32, // the top middle of the readout, see draw_measurements
@@ -37,11 +43,23 @@ Layout :: struct {
     instrument:     [2]f32, // the icon and the label of what's tuned to in the bottom left corner: their left edge and middle
 }
 
-STROBE_WIDTH :: 488
+STROBE_WIDTH :: 488 // the widest a strobe gets at its scale, see compute_layout
 STROBE_HEIGHT :: 306
 
+// The tracks grow with the window up to this many times the desktop's, see compute_layout. A tablet's
+// landscape pane fills with them at about 2.3.
+STROBE_MAX_SCALE :: 2.4
+
+// A wide window shows more of the disc than the desktop window does, the arcs sweep down to the corners.
+// Set, the strobe is cut down to this many times the desktop's width at its scale, in the middle with the
+// window's background either side. 0 shows the disc across the whole window.
+STROBE_CUTOUT :: 0.0
+
 PANEL_PADDING :: 16
+PANEL_MIN_WIDTH :: 424 // the column beside the strobe at its narrowest, the readout still clears the display button and the level meter
+STROBE_MIN_WIDTH :: 360 // a phone's, the narrowest the strobe gets
 DESKTOP_HEIGHT :: 620 // the window, as wide as the strobe, most of the strobe shows above the settings
+WINDOW_MIN_SIZE :: [2]i32{STROBE_MIN_WIDTH, DESKTOP_HEIGHT} // the desktop window shrinks to a phone's width and stretches for the panel beside the strobe
 LEVEL_METER_WIDTH :: 80 // the microphone icon and the bar after it
 LEVEL_METER_HEIGHT :: 6 // the bar's
 
@@ -65,29 +83,55 @@ READOUT_VALUE_Y :: 18
 
 // offsets is a preset's, room for the note's offset under the gauge
 compute_layout :: proc(window: [2]f32, safe: gfx.Rect, offsets: bool) -> (layout: Layout) {
-    left := safe.x + PANEL_PADDING
-    right := safe.x + safe.width - PANEL_PADDING
-    bottom := safe.y + safe.height - PANEL_PADDING
+    // Beside the strobe when the window is wider than tall and half of it is a column for the panel, under
+    // it otherwise
+    layout.beside = safe.width > safe.height && safe.width >= 2 * PANEL_MIN_WIDTH
 
-    // The strobe takes about half of the safe area, its background runs up behind the notch
-    layout.strobe_scale = clamp(0.5 * safe.height / STROBE_HEIGHT, 1, 1.4)
-    layout.strobe = {0, 0, window.x, safe.y + layout.strobe_scale * STROBE_HEIGHT}
-    layout.strobe_view = {0, safe.y, window.x, layout.strobe_scale * STROBE_HEIGHT}
-    panel := layout.strobe.y + layout.strobe.height
+    // The disc is the desktop's at the strobe's scale, the strobe the whole window across, or cut down to
+    // the desktop's proportions, see STROBE_CUTOUT
+    if layout.beside {
+        // The strobe and the panel split the window, the strobe on the left never wider than the panel.
+        // Turned, its tracks run the pane's height and grow to fill its width.
+        half := safe.width / 2
+        panel_x := safe.x + half
+        layout.panel = {panel_x, safe.y, half, safe.height}
+        layout.strobe_turned = true
+        layout.strobe_scale = clamp(panel_x / STROBE_HEIGHT, 1, STROBE_MAX_SCALE)
+        height := safe.height
+        when STROBE_CUTOUT > 0 do height = min(height, STROBE_CUTOUT * STROBE_WIDTH * layout.strobe_scale)
 
-    layout.stats = {left + 131, panel + 80}
-    panel_layout(&layout, left, right, bottom, offsets)
+        y := safe.y + (safe.height - height) / 2
+        layout.strobe = {0, y, panel_x, height}
+        layout.strobe_view = {safe.x, y, panel_x - safe.x, height}
+    } else {
+        // The strobe takes about half of the safe area, its background runs up behind the notch
+        layout.strobe_scale = clamp(0.5 * safe.height / STROBE_HEIGHT, 1, STROBE_MAX_SCALE)
+        width := window.x
+        when STROBE_CUTOUT > 0 do width = min(width, STROBE_CUTOUT * STROBE_WIDTH * layout.strobe_scale)
+
+        x := (window.x - width) / 2
+        layout.strobe = {x, 0, width, safe.y + layout.strobe_scale * STROBE_HEIGHT}
+        layout.strobe_view = {x, safe.y, width, layout.strobe_scale * STROBE_HEIGHT}
+        strobe_bottom := layout.strobe.y + layout.strobe.height
+        layout.panel = {safe.x, strobe_bottom, safe.width, safe.y + safe.height - strobe_bottom}
+    }
+
+    layout.stats = {layout.panel.x + PANEL_PADDING + 131, layout.panel.y + 80}
+    panel_layout(&layout, offsets)
     return
 }
 
-// The display button and the level meter in a row just under the strobe, the note with the readout above it
-// and the lock under it, and the instrument and the settings in the bottom corners
-panel_layout :: proc(layout: ^Layout, left, right, bottom: f32, offsets: bool) {
-    panel := layout.strobe.y + layout.strobe.height
+// The display button and the level meter in a row along the top of the panel, the note with the readout
+// above it and the lock under it, and the instrument and the settings in the bottom corners
+panel_layout :: proc(layout: ^Layout, offsets: bool) {
+    panel := layout.panel
+    left := panel.x + PANEL_PADDING
+    right := panel.x + panel.width - PANEL_PADDING
+    bottom := panel.y + panel.height - PANEL_PADDING
 
-    // The display button picks what the strobe area shows, it sits just under it on the left, the level
-    // meter opposite it on the right. The bar lines up with the button's icon.
-    layout.display = {left, panel + 20}
+    // The display button picks what the strobe area shows, it sits at the top of the panel on the left, the
+    // level meter opposite it on the right. The bar lines up with the button's icon.
+    layout.display = {left, panel.y + 20}
     layout.level_meter = {right - LEVEL_METER_WIDTH, layout.display.y - LEVEL_METER_HEIGHT / 2}
 
     // A row along the bottom like the one under the strobe

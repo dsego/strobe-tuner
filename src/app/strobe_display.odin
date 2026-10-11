@@ -75,6 +75,7 @@ StrobeDisplay :: struct {
 // The strobe in the glow's render targets, drawn again as it is while it's the same, see draw_strobe_display
 GlowFrame :: struct {
     rect:       gfx.Rect,
+    turned:     bool,
     scale:      f32,
     background: gfx.Color,
     tracks:     StrobeTracks,
@@ -120,8 +121,39 @@ strobe_density :: proc(half_width, radius: f32) -> f32 {
     return max(periods, DESKTOP_TRACKS_PERIODS) / DESKTOP_TRACKS_PERIODS
 }
 
+// The strobe is drawn in a frame of its own, upright: the tracks across it with the disc's hub below,
+// hidden under the panel. With the panel beside the strobe the frame is set into the strobe's pane a
+// quarter turn anticlockwise, its top along the pane's left edge and its bottom against the panel, so the
+// hub hides behind the panel again. The disc turns the same way, so the stripes climb when sharp.
+strobe_upright :: proc(pane: gfx.Rect, turned: bool) -> gfx.Rect {
+    if !turned do return pane
+
+    return {0, 0, pane.height, pane.width}
+}
+
+// Where a rect of the upright frame lands in the pane
+strobe_pane_rect :: proc(pane: gfx.Rect, turned: bool, rect: gfx.Rect) -> gfx.Rect {
+    if !turned do return rect
+
+    return {pane.x + rect.y, pane.y + pane.height - rect.x - rect.width, rect.height, rect.width}
+}
+
+// Where a point of the upright frame lands in the pane
+strobe_pane_point :: proc(pane: gfx.Rect, turned: bool, point: [2]f32) -> [2]f32 {
+    if !turned do return point
+
+    return {pane.x + point.y, pane.y + pane.height - point.x}
+}
+
+// A point of the pane in the upright frame, for a tap on a track
+strobe_upright_point :: proc(pane: gfx.Rect, turned: bool, point: [2]f32) -> [2]f32 {
+    if !turned do return point
+
+    return {pane.y + pane.height - point.y, point.x - pane.x}
+}
+
 // The tracks are laid out for the desktop size and scaled by scale, then aligned to the bottom of rect,
-// a taller rect only extends the background upwards (e.g. behind the notch).
+// a taller rect only extends the background upwards (e.g. behind the notch). rect is the upright frame.
 // Flat tracks fill the strobe, each is the top of a curved track's arc, with the stripes as wide.
 strobe_geometry :: proc(shape: StrobeShape, rect: gfx.Rect, scale: f32, band_count: int) -> (geometry: StrobeGeometry) {
     geometry.shape = shape
@@ -141,7 +173,8 @@ strobe_geometry :: proc(shape: StrobeShape, rect: gfx.Rect, scale: f32, band_cou
         geometry.band_height = scale * STROBE_HEIGHT / f32(max(band_count, 1))
     }
 
-    // The desktop's circle for the curved tracks and the flat ones, the top of its arc
+    // The desktop's circle for the curved tracks and the flat ones, the top of its arc, whatever the width
+    // shows of it
     geometry.curvature_radius = DESKTOP_TRACKS_RADIUS * scale
     geometry.density = strobe_density(rect.width / 2, geometry.curvature_radius)
     geometry.period_count = DESKTOP_TRACKS_PERIODS * geometry.density
@@ -149,14 +182,18 @@ strobe_geometry :: proc(shape: StrobeShape, rect: gfx.Rect, scale: f32, band_cou
 }
 
 // The track under point, -1 for none. The tracks are concentric, the gap outside a track counts as part
-// of it, so the whole ring from one track to the next is its touch area. Flat ones are stacked.
-strobe_track_at :: proc(shape: StrobeShape, rect: gfx.Rect, scale: f32, band_count: int, point: [2]f32) -> int {
+// of it, so the whole ring from one track to the next is its touch area. Flat ones are stacked. pane and
+// turned are the strobe's, see strobe_upright.
+strobe_track_at :: proc(shape: StrobeShape, pane: gfx.Rect, scale: f32, turned: bool, band_count: int, point: [2]f32) -> int {
+    if !gfx.point_in_rect(point, pane) do return -1
+
+    rect := strobe_upright(pane, turned)
+    upright_point := strobe_upright_point(pane, turned, point)
     geometry := strobe_geometry(shape, rect, scale, band_count)
-    if !gfx.point_in_rect(point, rect) do return -1
 
     if shape == .FLAT {
         // The first track is the bottom one
-        order := int(math.floor((point.y - geometry.y) / geometry.band_height))
+        order := int(math.floor((upright_point.y - geometry.y) / geometry.band_height))
         if order < 0 || order >= band_count do return -1
 
         return band_count - 1 - order
@@ -165,7 +202,7 @@ strobe_track_at :: proc(shape: StrobeShape, rect: gfx.Rect, scale: f32, band_cou
     // The centre of the circles, see strobe_tracks and the strobe shader
     outer_radius := geometry.curvature_radius + geometry.band_height * f32(band_count - 1)
     center := [2]f32{rect.x + rect.width / 2, geometry.y + CURVED_TRACK_DROP + outer_radius}
-    distance := linalg.length(point - center)
+    distance := linalg.length(upright_point - center)
 
     track := int(math.ceil((distance - geometry.curvature_radius) / geometry.band_height))
     if track < 0 || track >= band_count do return -1
@@ -326,17 +363,20 @@ render_bloom :: proc(self: ^StrobeDisplay) {
     blur_render_targets(self, self.bloom_rt, BLOOM_ITERATIONS, BLOOM_TAP_SPACING)
 }
 
-// See strobe_geometry for the layout. bands are the comparator's, or the lamp's, see lamp_bands.
+// See strobe_geometry for the layout. rect is the strobe's pane, turned sets the strobe into it a quarter
+// turn, see strobe_upright. bands are the comparator's, or the lamp's, see lamp_bands.
 draw_strobe_display :: proc(
     self: ^StrobeDisplay,
     rect: gfx.Rect,
     scale: f32,
+    turned: bool,
     bands: []core.PhaseBand,
     comparator: ^core.PhaseComparator,
     config: ^Config,
 ) {
     shape := config.strobe_shape
-    geometry := strobe_geometry(shape, rect, scale, len(bands))
+    upright := strobe_upright(rect, turned)
+    geometry := strobe_geometry(shape, upright, scale, len(bands))
     band_height := geometry.band_height
 
     // The colorway and the glow as the config has them, a change shows the next frame
@@ -364,17 +404,17 @@ draw_strobe_display :: proc(
     uniforms.glow_filter.rgb = glow_filter(glow.color)
     uniforms.glow_dark_filter.rgb = glow_filter(glow.dark_color) * glow.dark_level
     uniforms.highlight_color = gfx.normalize_color(accent_color)
-    tracks := strobe_tracks(self, rect, bands, comparator, config.strobe_source == .LAMP, config.persistence_periods, uniforms, geometry)
+    tracks := strobe_tracks(self, upright, bands, comparator, config.strobe_source == .LAMP, config.persistence_periods, uniforms, geometry)
 
     if glow_enabled {
         // Render the strobe offscreen so the bright parts can bloom over the surroundings. A dark strobe
         // stays the same from frame to frame, what the render targets hold is drawn again.
         ensure_glow_targets(self, {rect.width, rect.height})
-        frame := GlowFrame{rect, self.glow_scale, glow_background(self.background, glow), tracks}
+        frame := GlowFrame{rect, turned, self.glow_scale, glow_background(self.background, glow), tracks}
 
         if frame != self.glow_drawn || gfx.last_frame_dropped() {
             gfx.begin_render_target(self.scene_rt, frame.background, {rect.x, rect.y}, self.glow_scale)
-            draw_strobe_tracks(self, &tracks)
+            draw_strobe_tracks(self, &tracks, rect, turned)
             gfx.end_render_target()
 
             render_bloom(self)
@@ -396,18 +436,20 @@ draw_strobe_display :: proc(
         gfx.set_blend_mode(.ALPHA)
     } else {
         gfx.draw_rect({rect.x, rect.y}, {rect.width, rect.height}, self.background)
-        draw_strobe_tracks(self, &tracks)
+        draw_strobe_tracks(self, &tracks, rect, turned)
     }
 
     if config.strobe_mode == .HARMONIC && config.partial_labels != .NONE {
-        draw_track_labels(rect, bands, geometry, config)
+        draw_track_labels(rect, turned, upright, bands, geometry, config)
     }
 
     // The partial of each track, e.g. 1×, 2×: on the right, on the curve of a curved track a little in from
     // the edge or in the middle of a flat one, and on the top of a wheel's ring, where the ring runs level
-    // and the labels of the rings stack in a column
-    draw_track_labels :: proc(rect: gfx.Rect, bands: []core.PhaseBand, geometry: StrobeGeometry, config: ^Config) {
+    // and the labels of the rings stack in a column. The cents on the left. Turned, the right is the pane's
+    // top and the left its bottom: the labels sit along them over the ends of their tracks, upright.
+    draw_track_labels :: proc(pane: gfx.Rect, turned: bool, rect: gfx.Rect, bands: []core.PhaseBand, geometry: StrobeGeometry, config: ^Config) {
         band_height := geometry.band_height
+        label_height := pixel_fonts.band_label.size
 
         // The middle of a track down from its top, see STROBE_TRACK_GAP
         track_middle := 0.5 * (band_height - STROBE_TRACK_GAP)
@@ -433,23 +475,33 @@ draw_strobe_display :: proc(
                 up := math.sqrt(radius * radius - across * across)
                 label_y = geometry.y + band_height * (f32(order) + 0.6) + radius - up
             case .FLAT:
-                label_y = geometry.y + band_height * f32(order) + track_middle - 0.5 * pixel_fonts.band_label.size
+                label_y = geometry.y + band_height * f32(order) + track_middle - 0.5 * label_height
             case .WHEEL:
                 on_ring = {center.x, center.y - (radius - track_middle)}
-                label_y = on_ring.y - 0.5 * pixel_fonts.band_label.size
+                label_y = on_ring.y - 0.5 * label_height
             }
+
+            // Turned, the middle of the label across the pane
+            label_x := pane.x + label_y + 0.5 * label_height
 
             // How far off this partial is, nothing while it's too quiet to measure. Right aligned on the
             // decimal point like the readout, the digits don't shift as the value changes.
             if config.show_band_cents && band.snr_db > core.NOISE_FLOOR_SNR_DB_THRESHOLD {
                 font := pixel_fonts.band_label
-                right := rect.x + 16 + measure_label(font, "-00.0").x
+                width := measure_label(font, "-00.0").x
                 text := fmt.ctprintf("%+.1f", band.err_cents)
-                draw_text_right(font.font, text, {right, label_y}, font.size, 0, accent_color)
+                position := [2]f32{rect.x + 16 + width, label_y}
+                if turned do position = {label_x + 0.5 * width, pane.y + pane.height - 16 - label_height}
+                draw_text_right(font.font, text, position, font.size, 0, accent_color)
             }
 
-            if geometry.shape == .WHEEL do draw_strobe_partial(on_ring, config.partial_labels, band, centered = true)
-            else do draw_strobe_partial({rect.x + rect.width - 12, label_y}, config.partial_labels, band)
+            if geometry.shape == .WHEEL {
+                draw_strobe_partial(strobe_pane_point(pane, turned, on_ring), config.partial_labels, band, centered = true)
+            } else if turned {
+                draw_strobe_partial({label_x, pane.y + 12 + 0.5 * label_height}, config.partial_labels, band, centered = true)
+            } else {
+                draw_strobe_partial({rect.x + rect.width - 12, label_y}, config.partial_labels, band)
+            }
         }
     }
 }
@@ -712,7 +764,8 @@ strobe_tracks :: proc(
     return
 }
 
-draw_strobe_tracks :: proc(self: ^StrobeDisplay, tracks: ^StrobeTracks) {
+// pane and turned are the strobe's, see strobe_upright
+draw_strobe_tracks :: proc(self: ^StrobeDisplay, tracks: ^StrobeTracks, pane: gfx.Rect, turned: bool) {
     gfx.begin_shader(self.strobe_shader)
     defer gfx.end_shader()
 
@@ -721,6 +774,10 @@ draw_strobe_tracks :: proc(self: ^StrobeDisplay, tracks: ^StrobeTracks) {
         rect := uniforms.bounding_rect
         offset: f32 = 0 if uniforms.flat_track != 0 else CURVED_TRACK_DROP
         gfx.set_shader_uniforms(self.strobe_shader, &uniforms)
-        gfx.draw_shader_quad({rect.x, rect.y + offset, rect.z, rect.w})
+
+        // The quad is laid out in the upright frame, it lands in the pane turned with it
+        quad := strobe_pane_rect(pane, turned, {rect.x, rect.y + offset, rect.z, rect.w})
+        if turned do gfx.draw_shader_quad_turned(quad)
+        else do gfx.draw_shader_quad(quad)
     }
 }

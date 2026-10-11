@@ -22,9 +22,11 @@ import "../gfx"
 // screen keeps running under them and ignores taps until they're all the way down again. What's on them is
 // in settings.odin, instrument.odin and note_offsets.odin.
 
-// A sheet up from the bottom as tall as its rows, the strobe above it stays in sight to show the changes
+// A sheet up from the bottom as tall as its rows, the strobe above or beside it stays in sight to show the
+// changes
 SheetLayout :: struct {
     sheet:      gfx.Rect, // runs to the bottom of the window
+    outside:    gfx.Rect, // the strobe left in sight, above the sheet or beside it, a tap there closes the sheet
     title:      [2]f32,
     close:      gfx.Rect, // touch area of the ✕
     rows:       [2]f32, // top left of the first row
@@ -43,31 +45,37 @@ SHEET_TOP_PADDING :: 16 // above the title, the first row's own margin spaces th
 SHEET_TITLE_HEIGHT :: 34 // from the top of the title to the first row
 
 // open is how far the sheet has slid up, 0 is hidden below the window and 1 is all the way. The settings
-// have SETTINGS_ROWS, a track's sheet fewer. Either covers the whole panel under the strobe at least, a
-// short sheet would leave half the panel peeking out above it. extra is more room under the rows for what
-// isn't a row, the instrument's with its note offsets asks for the whole window.
+// have SETTINGS_ROWS, a track's sheet fewer. Either covers the whole panel at least, a short sheet would
+// leave half the panel peeking out above it. A panel beside the strobe is covered to the top, the sheet is
+// as wide as the panel's column. extra is more room under the rows for what isn't a row, the instrument's
+// with its note offsets asks for the whole window.
 compute_sheet_layout :: proc(
     window: [2]f32,
     safe: gfx.Rect,
+    layout: Layout,
     open: f32,
     rows: int,
-    strobe: gfx.Rect,
     extra: f32 = 0,
 ) -> (
     sheet_layout: SheetLayout,
 ) {
-    left := safe.x + PANEL_PADDING
-    sheet_layout.width = safe.width - 2 * PANEL_PADDING
+    panel := layout.panel
+    left := panel.x + PANEL_PADDING
+    sheet_layout.width = panel.width - 2 * PANEL_PADDING
 
     // Below the rows, the home indicator on a phone
     below := window.y - (safe.y + safe.height) + PANEL_PADDING / 2
     around := SHEET_TOP_PADDING + SHEET_TITLE_HEIGHT + extra + below
-    under_strobe := window.y - (strobe.y + strobe.height)
-    sheet_layout.row_height = clamp((under_strobe - around) / f32(rows), SHEET_ROW_HEIGHT, SHEET_ROW_MAX_HEIGHT)
-    height := max(around + f32(rows) * sheet_layout.row_height, under_strobe)
+    panel_height := window.y - panel.y // to the window's bottom edge
+    sheet_layout.row_height = clamp((panel_height - around) / f32(rows), SHEET_ROW_HEIGHT, SHEET_ROW_MAX_HEIGHT)
+    height := max(around + f32(rows) * sheet_layout.row_height, panel_height)
     height = min(height, window.y - safe.y)
-    sheet_layout.sheet = {0, window.y - open * height, window.x, height}
+    sheet_x: f32 = panel.x if layout.beside else 0
+    sheet_layout.sheet = {sheet_x, window.y - open * height, window.x - sheet_x, height}
     sheet_layout.bottom = sheet_layout.sheet.y + height - (window.y - (safe.y + safe.height)) - PANEL_PADDING
+
+    sheet_layout.outside = {0, 0, window.x, sheet_layout.sheet.y}
+    if layout.beside do sheet_layout.outside = {0, 0, sheet_x, window.y}
 
     top := sheet_layout.sheet.y + SHEET_TOP_PADDING
     sheet_layout.title = {left, top}
@@ -130,7 +138,7 @@ begin_sheet :: proc(
     sheet: ^Sheet,
     rows: int,
     strobe_display: ^StrobeDisplay,
-    strobe: gfx.Rect,
+    layout: Layout,
     extra: f32 = 0,
 ) -> (
     sheet_layout: SheetLayout,
@@ -162,15 +170,15 @@ begin_sheet :: proc(
     // Not the tap that opened it, not while it slides away or follows the finger
     gui_disabled = !(sheet.was_open && sheet.open) || sheet.drag.active
 
-    sheet_layout = compute_sheet_layout(gfx.window_size(), gfx.safe_area(), sheet.slide, rows, strobe, extra)
+    sheet_layout = compute_sheet_layout(gfx.window_size(), gfx.safe_area(), layout, sheet.slide, rows, extra)
     swiped = drag_sheet(sheet, sheet_layout)
     if sheet.drag.active {
-        sheet_layout = compute_sheet_layout(gfx.window_size(), gfx.safe_area(), sheet.slide, rows, strobe, extra)
+        sheet_layout = compute_sheet_layout(gfx.window_size(), gfx.safe_area(), layout, sheet.slide, rows, extra)
     }
 
     // The strobe looks set into the window above the sheet like above the panel, and the edge shades the
-    // panel on the way up
-    draw_strobe_bottom_shadow(strobe_display, strobe, sheet_layout.sheet.y)
+    // panel on the way up. A sheet beside the strobe doesn't reach it.
+    if !layout.beside do draw_strobe_bottom_shadow(strobe_display, layout.strobe, sheet_layout.sheet.y)
     return
 }
 
@@ -204,12 +212,7 @@ draw_sheet_header :: proc(sheet_layout: SheetLayout, title: cstring, details: cs
     return gui_button(close_area)
 }
 
-// The strobe above the sheet, a tap there closes it
-above_sheet :: proc(sheet_layout: SheetLayout) -> gfx.Rect {
-    return {0, 0, sheet_layout.sheet.width, sheet_layout.sheet.y}
-}
-
-// A tap on the strobe above a sheet closes it, like the ✕, Escape or a swipe down
+// A tap on the strobe outside a sheet closes it, like the ✕, Escape or a swipe down
 sheet_dismissed :: proc(sheet_layout: SheetLayout, swiped: bool) -> bool {
-    return gui_button(above_sheet(sheet_layout)) || gfx.key_pressed(.ESCAPE) || swiped
+    return gui_button(sheet_layout.outside) || gfx.key_pressed(.ESCAPE) || swiped
 }

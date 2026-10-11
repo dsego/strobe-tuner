@@ -216,7 +216,9 @@ gpu: struct {
     frame_time:       f32,
 }
 
-init :: proc(width, height: i32, title: cstring) -> bool {
+// On the desktop the window can be resized down to min_size, none keeps it the size it opened at. A phone's
+// is the screen.
+init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}) -> bool {
     if !sdl.Init({.VIDEO}) {
         fmt.eprintln("SDL_Init failed:", sdl.GetError())
         return false
@@ -236,6 +238,13 @@ init :: proc(width, height: i32, title: cstring) -> bool {
     if gpu.window == nil {
         fmt.eprintln("SDL_CreateWindow failed:", sdl.GetError())
         return false
+    }
+
+    when !MOBILE {
+        if min_size.x > 0 || min_size.y > 0 {
+            sdl.SetWindowResizable(gpu.window, true)
+            sdl.SetWindowMinimumSize(gpu.window, min_size.x, min_size.y)
+        }
     }
 
     gpu.device = sdl.CreateGPUDevice(SHADER_FORMAT, ODIN_DEBUG, nil)
@@ -959,6 +968,25 @@ set_shader_uniforms :: proc(shader: Shader, uniforms: ^$T) {
 
 draw_shader_quad :: proc(rect: Rect) {
     push_quad(gpu.white.handle, rect, {0, 0}, {1, 1}, WHITE)
+}
+
+// The shader over rect a quarter turn anticlockwise: the shader's top edge runs up the left side of rect
+// and its right edge along the top. rect is the quad as it lands on the screen, the shader sees its own
+// frame upright, its size is rect's transposed.
+draw_shader_quad_turned :: proc(rect: Rect) {
+    x0, y0 := rect.x, rect.y
+    x1, y1 := rect.x + rect.width, rect.y + rect.height
+    push_vertices(
+        gpu.white.handle,
+        {
+            {{x0, y0}, {1, 0}, WHITE},
+            {{x1, y0}, {1, 1}, WHITE},
+            {{x1, y1}, {0, 1}, WHITE},
+            {{x0, y0}, {1, 0}, WHITE},
+            {{x1, y1}, {0, 1}, WHITE},
+            {{x0, y1}, {0, 0}, WHITE},
+        },
+    )
 }
 
 load_render_target :: proc(width, height: i32) -> RenderTarget {

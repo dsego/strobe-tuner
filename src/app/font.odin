@@ -82,7 +82,7 @@ RULER_NEIGHBOUR_SHARP_SIZE :: 20
 RULER_NOTE_FLAT_SIZE :: 50
 RULER_NEIGHBOUR_FLAT_SIZE :: 30
 READOUT_SIZE :: 24 // the Hz and cents values, they grow with the ruler
-STROBE_ARROW_SIZE :: 22 // over the strobe, which way to tune
+STROBE_ARROW_SIZE :: 22 // over the strobe, which way to tune: sideways, or up and down on a turned strobe
 OFFSET_VALUE_SIZE :: 32 // the value in the popup of the note offsets
 
 // A font and the point size that draws it one texel to one pixel
@@ -170,7 +170,7 @@ update_pixel_fonts :: proc() {
         note_flat        = load(noto_sans_mono, RULER_SCALE * RULER_NOTE_FLAT_SIZE, scale, "♭"),
         neighbour_flat   = load(noto_sans_mono, RULER_SCALE * RULER_NEIGHBOUR_FLAT_SIZE, scale, "♭"),
         readout          = load(inter_tabular, RULER_SCALE * READOUT_SIZE, scale, TABULAR_CODEPOINTS),
-        strobe_arrow     = load(inter_medium, STROBE_ARROW_SIZE, scale, "◀▶"),
+        strobe_arrow     = load(inter_medium, STROBE_ARROW_SIZE, scale, "◀▶▲▼"),
         offset_value     = load(inter_medium, OFFSET_VALUE_SIZE, scale, "ABCDEFG#b0123456789.+-¢"),
         band_label       = load(inter_tabular, LABEL_LARGE_SIZE, scale, TABULAR_CODEPOINTS),
         band_label_small = load(inter_tabular, LABEL_SIZE, scale, TABULAR_CODEPOINTS),

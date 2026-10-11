@@ -111,7 +111,10 @@ run_app :: proc(config: ^Config) {
     // Saved for the next start
     defer config.target_freq_hz = tuner.target_note.frequency
 
-    if !gfx.init(1200 when DEBUG_STATS else STROBE_WIDTH, DESKTOP_HEIGHT, APP_NAME) do return
+    // The plots take a window of their own size, it stays as it is
+    min_size := WINDOW_MIN_SIZE
+    when DEBUG_STATS do min_size = {}
+    if !gfx.init(1200 when DEBUG_STATS else STROBE_WIDTH, DESKTOP_HEIGHT, APP_NAME, min_size) do return
 
     defer gfx.shutdown()
 
@@ -209,9 +212,9 @@ run_app :: proc(config: ^Config) {
 
         // The sheets slide up over the main screen, which keeps running under them and ignores taps until
         // they're all the way down again. They're drawn at the end of the frame.
-        // A sheet all the way up covers the panel under the strobe, the instrument sheet the strobe too. A
-        // phone's strobe area still shows above that, behind the notch. Not while a sheet is dragged, it may
-        // move down later in the frame.
+        // A sheet all the way up covers the panel, the instrument sheet the strobe too when the panel is under
+        // it. A phone's strobe area still shows above that, behind the notch. Not while a sheet is dragged, it
+        // may move down later in the frame.
         gui_disabled = false
         panel_covered := false
         for sheet in ([]^Sheet{&app.settings_sheet, &app.track_sheet, &app.instrument_sheet, &app.input_sheet}) {
@@ -221,7 +224,7 @@ run_app :: proc(config: ^Config) {
         }
 
         instrument_sheet := app.instrument_sheet
-        covered := instrument_sheet.slide == 1 && !instrument_sheet.drag.active
+        covered := !layout.beside && instrument_sheet.slide == 1 && !instrument_sheet.drag.active
         strobe_shows := !covered || safe.y > 0
 
         feed_scope(&app, strobe_shows)
@@ -579,11 +582,11 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         if config.strobe_source == .LAMP {
             bands = lamp_bands(display, &app.scope, bands, app.pitch_detector.snr_db)
         }
-        draw_strobe_display(display, strobe, layout.strobe_scale, bands, comparator, config)
+        draw_strobe_display(display, strobe, layout.strobe_scale, layout.strobe_turned, bands, comparator, config)
 
         // Vernier mode shows the same pitch on every track, there's nothing to set on one
         if config.strobe_mode == .HARMONIC && !input_missing(app) && gui_button(strobe) {
-            track := strobe_track_at(config.strobe_shape, strobe, layout.strobe_scale, len(bands), gfx.mouse_position())
+            track := strobe_track_at(config.strobe_shape, strobe, layout.strobe_scale, layout.strobe_turned, len(bands), gfx.mouse_position())
             if track >= 0 {
                 app.selected_track = track
                 app.track_sheet.open = true
@@ -677,6 +680,21 @@ draw_tuning_arrows :: proc(app: ^App, layout: Layout, reading: Reading) {
     app.sharp_arrow = core.schmitt_trigger(app.sharp_arrow, cents, 8, 10)
 
     arrow := pixel_fonts.strobe_arrow
+
+    // A turned strobe's stripes climb when sharp, see strobe_upright: flat at the bottom pointing up, sharp
+    // at the top pointing down, in the middle
+    if layout.strobe_turned {
+        strobe, view := layout.strobe, layout.strobe_view
+        glyph: cstring = "▲" if app.flat_arrow else "▼"
+        x := strobe.x + (strobe.width - gfx.measure_text(arrow.font, glyph, arrow.size, 0).x) / 2
+        if app.flat_arrow {
+            gfx.draw_text(arrow.font, glyph, snap_to_pixels({x, view.y + view.height - 10 - arrow.size}), arrow.size, 0, accent_color)
+        } else if app.sharp_arrow {
+            gfx.draw_text(arrow.font, glyph, snap_to_pixels({x, view.y + 10}), arrow.size, 0, accent_color)
+        }
+        return
+    }
+
     arrow_y := layout.strobe_view.y + 10
 
     if app.flat_arrow {
@@ -826,7 +844,7 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
         rows = max(rows, option_rows[app.config.strobe_display_type])
     }
 
-    sheet_layout, swiped := begin_sheet(sheet, rows, &app.strobe_display, layout.strobe)
+    sheet_layout, swiped := begin_sheet(sheet, rows, &app.strobe_display, layout)
     close, changed := gui_settings(sheet_layout, app.config, &app.display_options, &app.reset_confirm, &app.settings_menu)
     if changed do app.config_changed = true
 
@@ -863,7 +881,7 @@ draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
     device_name := "No input"
     if audio.device_count(capture) > 0 do device_name = audio.device_name(capture, capture.active_device)
 
-    sheet_layout, swiped := begin_sheet(sheet, INPUT_ROWS, &app.strobe_display, layout.strobe)
+    sheet_layout, swiped := begin_sheet(sheet, INPUT_ROWS, &app.strobe_display, layout)
     close := gui_input(
         sheet_layout,
         device_name,
@@ -889,16 +907,16 @@ draw_track_sheet :: proc(app: ^App, layout: Layout) {
 
     config := app.config
     bands := app.phase_comparator.bands[:]
-    sheet_layout, swiped := begin_sheet(sheet, TRACK_SETTINGS_ROWS, &app.strobe_display, layout.strobe)
+    sheet_layout, swiped := begin_sheet(sheet, TRACK_SETTINGS_ROWS, &app.strobe_display, layout)
     app.selected_track = min(app.selected_track, len(bands) - 1)
     close, changed := gui_track_settings(sheet_layout, config, app.selected_track, bands[app.selected_track])
     if changed do app.config_changed = true
 
     grab_sheet(sheet, sheet_layout)
 
-    // Tapping another track above the sheet switches to it, anywhere else closes the sheet
-    if gui_button(above_sheet(sheet_layout)) {
-        track := strobe_track_at(config.strobe_shape, layout.strobe, layout.strobe_scale, len(bands), gfx.mouse_position())
+    // Tapping another track outside the sheet switches to it, anywhere else closes the sheet
+    if gui_button(sheet_layout.outside) {
+        track := strobe_track_at(config.strobe_shape, layout.strobe, layout.strobe_scale, layout.strobe_turned, len(bands), gfx.mouse_position())
         if track >= 0 do app.selected_track = track
         else do close = true
     }
@@ -911,7 +929,7 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
     if sheet.slide == 0 do return
 
     // Over the whole window, room for every note offset of a preset
-    sheet_layout, swiped := begin_sheet(sheet, 0, &app.strobe_display, layout.strobe, gfx.window_size().y)
+    sheet_layout, swiped := begin_sheet(sheet, 0, &app.strobe_display, layout, gfx.window_size().y)
 
     // A new offset starts on the note the tuner is on
     target := -1

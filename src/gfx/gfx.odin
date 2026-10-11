@@ -21,7 +21,7 @@ import "core:math/linalg"
 // Rendering and input go through a small immediate mode API, sdl.odin implements it with SDL3 GPU: Metal
 // shaders in src/shaders/metal/ on macOS and iOS, Vulkan shaders in src/shaders/vulkan/ on Linux and Android.
 //
-//   init(width, height, title) -> bool, shutdown()
+//   init(width, height, title, min_size) -> bool, shutdown()   the desktop window resizes down to min_size
 //   should_close() -> bool              polls the window events, call once per frame
 //   begin_frame(clear), end_frame()
 //   frame_time() -> f32, dpi_scale() -> f32
@@ -46,6 +46,7 @@ import "core:math/linalg"
 //   Shader, load_shader(kind), unload_shader(shader)
 //   begin_shader(shader), end_shader(), set_shader_uniforms(shader, &uniforms)
 //   draw_shader_quad(rect)              runs the active shader over rect, texcoords 0..1
+//   draw_shader_quad_turned(rect)       the same a quarter turn anticlockwise, the shader's top edge on the left
 //
 //   RenderTarget, load_render_target(width, height), unload_render_target(target)
 //   begin_render_target(target, clear, offset, zoom), end_render_target()
