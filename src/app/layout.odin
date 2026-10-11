@@ -16,9 +16,12 @@
 
 package app
 
+import "core:math"
+
 import "../gfx"
 
-// Where everything goes, worked out every frame from the window size and the safe area, in points. A window
+// Where everything goes, worked out every frame from the window size and the safe area, in drawing points,
+// a tablet's larger than its own, see ui_scale. A window
 // taller than wide stacks the panel under the strobe: a phone, a tablet held upright, the desktop window as it
 // opens. One wider than tall puts the panel beside the strobe, on the right, and turns the strobe so the
 // disc's hub hides behind the panel as it does under it: a tablet on a music stand, the desktop window
@@ -86,6 +89,23 @@ READOUT_GUTTER :: 40
 
 // From the top of the labels to the top of the values
 READOUT_VALUE_Y :: 18
+
+// A tablet on a music stand is read from further away than a phone in the hand, so it draws in larger points
+// than its own: the labels, the readout, the note, the controls and the strobe's track labels all grow, the
+// strobe itself fills its half of the window either way. From the window's longer side, so a landscape
+// panel still fits beside the strobe, see PANEL_MIN_WIDTH, in eighths so the desktop window dragged out to
+// a tablet's size reloads the fonts a few times rather than on every frame, and no further than UI_SCALE_MAX.
+// An iPad mini comes out at 1.25, an 11-inch at 1.375, a 13-inch at the cap. A phone stays at 1.
+UI_SCALE_MAX :: #config(UI_SCALE_MAX, 1.5)
+TABLET_MIN_SIDE :: 600 // the window's shorter side, an iPad mini's is 744, a phone's under 450
+
+// window is the window's own size, in the system's points
+ui_scale :: proc(window: [2]f32) -> f32 {
+    if min(window.x, window.y) < TABLET_MIN_SIDE do return 1
+
+    scale := max(window.x, window.y) / (2 * PANEL_MIN_WIDTH)
+    return clamp(math.floor(scale * 8) / 8, 1, UI_SCALE_MAX)
+}
 
 // offsets is a preset's, room for the note's offset under the gauge
 compute_layout :: proc(window: [2]f32, safe: gfx.Rect, offsets: bool) -> (layout: Layout) {

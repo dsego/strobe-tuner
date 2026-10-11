@@ -712,7 +712,11 @@ draw_measurements :: proc(pos: [2]f32, hz, cents: f32, shown: bool, active: bool
     // The labels stay in the background, the values and the note are what's read
     VALUE_Y :: READOUT_VALUE_Y
     label_font := pixel_fonts.label.font
-    hz_str := fmt.ctprintf("%.1f", hz) if shown else "-"
+
+    // Four digits like a meter's: a tenth up to 999.9, whole hertz from 1000 on. A fifth digit would run into
+    // the display button's label on a phone, and a tenth of a hertz up there is under 0.2 cents.
+    hz_str: cstring = "-"
+    if shown do hz_str = fmt.ctprintf("%.1f", hz) if hz < 999.95 else fmt.ctprintf("%.0f", hz)
 
     // A semitone or more off the cents don't fit the column, the gauge shows how many semitones it is
     cents_shown := shown && abs(cents) < 99.95

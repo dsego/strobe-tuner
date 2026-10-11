@@ -205,6 +205,7 @@ gpu: struct {
     clear:            Color,
     acquire_failed:   bool, // the last frame's swapchain, reported once
     dropped:          bool, // the last frame wasn't drawn, the render targets hold what they had before it
+    ui_scale:         f32, // the app's points per window point, see set_ui_scale
 
     // input
     quit:             bool,
@@ -233,6 +234,7 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}) -> bool 
         fmt.eprintln("SDL_Init failed:", sdl.GetError())
         return false
     }
+    gpu.ui_scale = 1
 
     // Without it SDL picks the orientation from the window's aspect ratio, landscape for the
     // desktop sizes, and keeps rotating the phone away from portrait. On iOS it asks for all four and
@@ -658,9 +660,10 @@ end_frame :: proc() {
         sdl.EndGPURenderPass(render_pass)
     }
 
+    // Drawing points to the swapchain's pixels: the display's density and the UI scale
     logical_w: i32
     sdl.GetWindowSize(gpu.window, &logical_w, nil)
-    window_zoom := f32(swapchain_w) / f32(max(logical_w, 1))
+    window_zoom := f32(swapchain_w) / f32(max(logical_w, 1)) * gpu.ui_scale
     window_size := [2]f32{f32(swapchain_w), f32(swapchain_h)}
 
     clear := normalize_color(gpu.clear)
@@ -711,17 +714,37 @@ frame_time :: proc() -> f32 {
     return gpu.frame_time
 }
 
+// Pixels per drawing point, the display's density times the UI scale. Text rasterized at it lands texel for
+// pixel.
 dpi_scale :: proc() -> f32 {
-    return sdl.GetWindowPixelDensity(gpu.window)
+    return sdl.GetWindowPixelDensity(gpu.window) * gpu.ui_scale
 }
 
+// In drawing points, see set_ui_scale
 window_size :: proc() -> [2]f32 {
+    return window_points() / gpu.ui_scale
+}
+
+// The window's own size, in the system's points
+window_points :: proc() -> [2]f32 {
     width, height: i32
     sdl.GetWindowSize(gpu.window, &width, &height)
     return {f32(width), f32(height)}
 }
 
-// The desktop window, in points, the size is seen at the next poll
+// Everything is drawn and measured in points of this many of the window's own: 1 on a phone and in the
+// desktop window, more on a tablet read from further away, where the same layout comes out larger. The
+// window, its safe area and the pointer report in them, and dpi_scale grows by it so text rasterized for it
+// stays sharp.
+set_ui_scale :: proc(scale: f32) {
+    gpu.ui_scale = scale
+}
+
+ui_scale :: proc() -> f32 {
+    return gpu.ui_scale
+}
+
+// The desktop window, in the system's points, the size is seen at the next poll
 set_window_size :: proc(width, height: i32) {
     when !MOBILE do sdl.SetWindowSize(gpu.window, width, height)
 }
@@ -738,7 +761,8 @@ safe_area :: proc() -> Rect {
         size := window_size()
         return {0, 0, size.x, size.y}
     }
-    return {f32(area.x), f32(area.y), f32(area.w), f32(area.h)}
+    scale := gpu.ui_scale
+    return {f32(area.x) / scale, f32(area.y) / scale, f32(area.w) / scale, f32(area.h) / scale}
 }
 
 key_pressed :: proc(key: Key) -> bool {
@@ -752,7 +776,7 @@ key_down :: proc(key: Key) -> bool {
 mouse_position :: proc() -> [2]f32 {
     position: [2]f32
     _ = sdl.GetMouseState(&position.x, &position.y)
-    return position
+    return position / gpu.ui_scale
 }
 
 mouse_pressed :: proc() -> bool {

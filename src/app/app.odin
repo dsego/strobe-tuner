@@ -217,8 +217,11 @@ frame :: proc(app: ^App) {
 
     reading := measure(app)
 
+    // A tablet draws in larger points than its own, see ui_scale
+    when !DEBUG_STATS do gfx.set_ui_scale(ui_scale(gfx.window_points()))
+
     window, safe := gfx.window_size(), gfx.safe_area()
-    when !gfx.MOBILE && !DEBUG_STATS do follow_window_size(config, window)
+    when !gfx.MOBILE && !DEBUG_STATS do follow_window_size(config, gfx.window_points())
 
     // The plots take the rest of the window on the right
     when DEBUG_STATS {
@@ -994,6 +997,7 @@ save_when_settled :: proc(app: ^App) {
 
 // The desktop window opens at the size it was last used at, kept up to date here once a drag is over rather
 // than on every frame of it. A size of 0 is a reset's or Cmd+0's, the window goes back to the strobe's size.
+// window is the window's own size, in the system's points, the same it's opened with.
 follow_window_size :: proc(config: ^Config, window: [2]f32) {
     if config.window_size == {} {
         gfx.set_window_size(STROBE_WIDTH, DESKTOP_HEIGHT)
