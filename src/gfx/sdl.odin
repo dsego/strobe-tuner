@@ -220,7 +220,9 @@ gpu: struct {
     live_resize_frame:   proc(data: rawptr),
     live_resize_data:    rawptr,
     live_resize_context: runtime.Context,
-    resizing:            bool, // in a frame drawn from the drag's own loop
+    resizing:            bool, // in a frame drawn from the OS's own loop
+    polling:             bool, // in should_close, where the main loop is stuck while the OS runs a drag or a zoom
+    drag_tick:           u64, // the last tick of the drag's timer, in milliseconds
 }
 
 // On the desktop the window can be resized down to min_size, none keeps it the size it opened at. A phone's
@@ -356,6 +358,7 @@ should_close :: proc() -> bool {
     gpu.wheel = 0
 
     event: sdl.Event
+    gpu.polling = true
     for sdl.PollEvent(&event) {
         #partial switch event.type {
         case .QUIT, .WINDOW_CLOSE_REQUESTED:
@@ -378,6 +381,7 @@ should_close :: proc() -> bool {
             gpu.wheel += -event.wheel.y if event.wheel.direction == .FLIPPED else event.wheel.y
         }
     }
+    gpu.polling = false
 
     tick_clock()
     return gpu.quit
@@ -444,19 +448,33 @@ watch_app_events :: proc "c" (userdata: rawptr, event: ^sdl.Event) -> bool {
     return true
 }
 
-// The desktop window keeps drawing while it's dragged to another size. The OS runs the drag in a loop of
-// its own that should_close is stuck in, and asks for a frame from there 60 times a second instead: frame
-// draws one with begin_frame and end_frame, as a turn of the main loop does after should_close.
+// The desktop window keeps drawing while it's dragged or zoomed to another size. The OS runs the drag in a
+// loop of its own that should_close is stuck in, and asks for a frame from there 60 times a second instead:
+// frame draws one with begin_frame and end_frame, as a turn of the main loop does after should_close.
 live_resize_frames :: proc(frame: proc(data: rawptr), data: rawptr) {
     gpu.live_resize_frame = frame
     gpu.live_resize_data = data
     gpu.live_resize_context = context
 }
 
-// On the main thread, from inside the drag's loop, see live_resize_frames
+// On the main thread, from inside the OS's loop, see live_resize_frames. The zoom of a double click on the
+// title bar is animated by the OS with the main loop stuck the same way, with no timer but a resize event
+// per step of the animation, and those draw a frame each. A drag sends both, its timer's frames do for it.
+DRAG_TIMER_MS :: 50 // the drag's timer ticks every 16 ms, a resize this soon after a tick is the drag's
+
 watch_live_resize :: proc "c" (userdata: rawptr, event: ^sdl.Event) -> bool {
-    if event.type != .WINDOW_EXPOSED || event.window.data1 != 1 do return true
-    if gpu.live_resize_frame == nil || gpu.resizing do return true
+    if gpu.live_resize_frame == nil || !gpu.polling || gpu.resizing do return true
+
+    #partial switch event.type {
+    case .WINDOW_EXPOSED:
+        if event.window.data1 != 1 do return true
+
+        gpu.drag_tick = sdl.GetTicks()
+    case .WINDOW_RESIZED:
+        if sdl.GetTicks() - gpu.drag_tick < DRAG_TIMER_MS do return true
+    case:
+        return true
+    }
 
     context = gpu.live_resize_context
     gpu.resizing = true

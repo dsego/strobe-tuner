@@ -166,8 +166,8 @@ run_app :: proc(config: ^Config) {
 
     retune(&app)
 
-    // The desktop window keeps drawing while it's dragged to another size, the loop below is stuck in the
-    // drag's own loop meanwhile
+    // The desktop window keeps drawing while it's dragged or zoomed to another size, the loop below is stuck
+    // in the OS's own loop meanwhile
     when !gfx.MOBILE {
         gfx.live_resize_frames(proc(data: rawptr) {
             defer free_all(context.temp_allocator)

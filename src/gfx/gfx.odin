@@ -22,7 +22,7 @@ import "core:math/linalg"
 // shaders in src/shaders/metal/ on macOS and iOS, Vulkan shaders in src/shaders/vulkan/ on Linux and Android.
 //
 //   init(width, height, title, min_size) -> bool, shutdown()   the desktop window resizes down to min_size
-//   live_resize_frames(frame, data)     frame draws a frame while the desktop window is dragged to another size
+//   live_resize_frames(frame, data)     frame draws a frame while the desktop window is dragged or zoomed to another size
 //   should_close() -> bool              polls the window events, call once per frame
 //   begin_frame(clear), end_frame()
 //   frame_time() -> f32, dpi_scale() -> f32
