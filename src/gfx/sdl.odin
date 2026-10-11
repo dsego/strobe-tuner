@@ -22,6 +22,7 @@ package gfx
 // and replays the commands. Every begin/end_render_target splits the frame into another render pass.
 
 import "base:intrinsics"
+import "base:runtime"
 import "core:fmt"
 import "core:math"
 import "core:mem"
@@ -214,6 +215,12 @@ gpu: struct {
     wheel:            f32,
     last_counter:     u64,
     frame_time:       f32,
+
+    // The desktop window dragged to another size, see live_resize_frames
+    live_resize_frame:   proc(data: rawptr),
+    live_resize_data:    rawptr,
+    live_resize_context: runtime.Context,
+    resizing:            bool, // in a frame drawn from the drag's own loop
 }
 
 // On the desktop the window can be resized down to min_size, none keeps it the size it opened at. A phone's
@@ -233,6 +240,9 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}) -> bool 
 
     // The app may be suspended before the queued events are polled
     when MOBILE do _ = sdl.AddEventWatch(watch_app_events, nil)
+
+    // The window keeps drawing while it's dragged to another size, see live_resize_frames
+    when !MOBILE do _ = sdl.AddEventWatch(watch_live_resize, nil)
 
     gpu.window = sdl.CreateWindow(title, width, height, {.HIGH_PIXEL_DENSITY})
     if gpu.window == nil {
@@ -308,6 +318,7 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}) -> bool 
 }
 
 shutdown :: proc() {
+    gpu.live_resize_frame = nil
     _ = sdl.WaitForGPUIdle(gpu.device)
 
     unload_texture(gpu.white)
@@ -368,11 +379,15 @@ should_close :: proc() -> bool {
         }
     }
 
+    tick_clock()
+    return gpu.quit
+}
+
+// The frame's start, frame_time is since the previous one's
+tick_clock :: proc() {
     counter := sdl.GetPerformanceCounter()
     gpu.frame_time = f32(f64(counter - gpu.last_counter) / f64(sdl.GetPerformanceFrequency()))
     gpu.last_counter = counter
-
-    return gpu.quit
 }
 
 in_background :: proc() -> bool {
@@ -426,6 +441,28 @@ watch_app_events :: proc "c" (userdata: rawptr, event: ^sdl.Event) -> bool {
     case .WILL_ENTER_FOREGROUND:
         intrinsics.atomic_store(&gpu.background, false)
     }
+    return true
+}
+
+// The desktop window keeps drawing while it's dragged to another size. The OS runs the drag in a loop of
+// its own that should_close is stuck in, and asks for a frame from there 60 times a second instead: frame
+// draws one with begin_frame and end_frame, as a turn of the main loop does after should_close.
+live_resize_frames :: proc(frame: proc(data: rawptr), data: rawptr) {
+    gpu.live_resize_frame = frame
+    gpu.live_resize_data = data
+    gpu.live_resize_context = context
+}
+
+// On the main thread, from inside the drag's loop, see live_resize_frames
+watch_live_resize :: proc "c" (userdata: rawptr, event: ^sdl.Event) -> bool {
+    if event.type != .WINDOW_EXPOSED || event.window.data1 != 1 do return true
+    if gpu.live_resize_frame == nil || gpu.resizing do return true
+
+    context = gpu.live_resize_context
+    gpu.resizing = true
+    tick_clock()
+    gpu.live_resize_frame(gpu.live_resize_data)
+    gpu.resizing = false
     return true
 }
 
@@ -624,8 +661,9 @@ end_frame :: proc() {
     // The rest of the frame at the limited rate, counted from the start of the frame in should_close.
     // A little short of it, the swapchain waits for the vsync that ends it, a sleep a touch too long
     // would miss that one and hold the frame on screen a refresh longer.
+    // Not from the drag's loop, its timer paces the frames, see live_resize_frames
     VSYNC_MARGIN_S :: 0.002
-    if gpu.max_fps > 0 {
+    if gpu.max_fps > 0 && !gpu.resizing {
         elapsed :=
             f64(sdl.GetPerformanceCounter() - gpu.last_counter) /
             f64(sdl.GetPerformanceFrequency())

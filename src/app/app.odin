@@ -166,6 +166,15 @@ run_app :: proc(config: ^Config) {
 
     retune(&app)
 
+    // The desktop window keeps drawing while it's dragged to another size, the loop below is stuck in the
+    // drag's own loop meanwhile
+    when !gfx.MOBILE {
+        gfx.live_resize_frames(proc(data: rawptr) {
+            defer free_all(context.temp_allocator)
+            frame((^App)(data))
+        }, &app)
+    }
+
     for !gfx.should_close() {
         // The labels and readouts are formatted into the temp allocator, nothing in it outlives a frame
         defer free_all(context.temp_allocator)
@@ -184,67 +193,73 @@ run_app :: proc(config: ^Config) {
             }
         }
 
-        if audio.interruption_ended(audio_capture) do app.restart_audio = true
-
-        config_before := config^
-        handle_keys(&app)
-
-        if app.config_changed do apply_config(&app)
-
-        reading := measure(&app)
-
-        window, safe := gfx.window_size(), gfx.safe_area()
-
-        // The plots take the rest of the window on the right
-        when DEBUG_STATS {
-            window.x = STROBE_WIDTH
-            safe.width = STROBE_WIDTH
-        }
-
-        layout := compute_layout(window, safe, selected_preset(config) >= 0)
-        update_pixel_fonts()
-
-        gfx.begin_frame(gfx.hex(strobe_bg_color))
-        defer gfx.end_frame()
-        gui_press_taken = false
-
-        if app.restart_audio || picked_device(&app) != audio_capture.active_device do switch_input(&app)
-
-        // The sheets slide up over the main screen, which keeps running under them and ignores taps until
-        // they're all the way down again. They're drawn at the end of the frame.
-        // A sheet all the way up covers the panel, the instrument sheet the strobe too when the panel is under
-        // it. A phone's strobe area still shows above that, behind the notch. Not while a sheet is dragged, it
-        // may move down later in the frame.
-        gui_disabled = false
-        panel_covered := false
-        for sheet in ([]^Sheet{&app.settings_sheet, &app.track_sheet, &app.instrument_sheet, &app.input_sheet}) {
-            slide_sheet(sheet)
-            if sheet.open || sheet.slide > 0 do gui_disabled = true
-            if sheet.slide == 1 && !sheet.drag.active do panel_covered = true
-        }
-
-        instrument_sheet := app.instrument_sheet
-        covered := !layout.beside && instrument_sheet.slide == 1 && !instrument_sheet.drag.active
-        strobe_shows := !covered || safe.y > 0
-
-        feed_scope(&app, strobe_shows)
-
-        // The arrows are on the strobe, they show above the sheet
-        if covered {
-            if strobe_shows do draw_strobe_area(&app, layout)
-        } else if panel_covered {
-            draw_strobe_area(&app, layout)
-            draw_tuning_arrows(&app, layout, reading)
-        } else {
-            draw_main_screen(&app, layout, reading)
-        }
-        draw_sheets(&app, layout, reading)
-
-        if config^ != config_before do app.unsaved = true
-
-        save_when_settled(&app)
-        limit_frame_rate(&app)
+        frame(&app)
     }
+}
+
+// A turn of the main loop after its events: the measurements, the layout and the drawing
+frame :: proc(app: ^App) {
+    config, audio_capture := app.config, app.audio_capture
+    if audio.interruption_ended(audio_capture) do app.restart_audio = true
+
+    config_before := config^
+    handle_keys(app)
+
+    if app.config_changed do apply_config(app)
+
+    reading := measure(app)
+
+    window, safe := gfx.window_size(), gfx.safe_area()
+
+    // The plots take the rest of the window on the right
+    when DEBUG_STATS {
+        window.x = STROBE_WIDTH
+        safe.width = STROBE_WIDTH
+    }
+
+    layout := compute_layout(window, safe, selected_preset(config) >= 0)
+    update_pixel_fonts()
+
+    gfx.begin_frame(gfx.hex(strobe_bg_color))
+    defer gfx.end_frame()
+    gui_press_taken = false
+
+    if app.restart_audio || picked_device(app) != audio_capture.active_device do switch_input(app)
+
+    // The sheets slide up over the main screen, which keeps running under them and ignores taps until
+    // they're all the way down again. They're drawn at the end of the frame.
+    // A sheet all the way up covers the panel, the instrument sheet the strobe too when the panel is under
+    // it. A phone's strobe area still shows above that, behind the notch. Not while a sheet is dragged, it
+    // may move down later in the frame.
+    gui_disabled = false
+    panel_covered := false
+    for sheet in ([]^Sheet{&app.settings_sheet, &app.track_sheet, &app.instrument_sheet, &app.input_sheet}) {
+        slide_sheet(sheet)
+        if sheet.open || sheet.slide > 0 do gui_disabled = true
+        if sheet.slide == 1 && !sheet.drag.active do panel_covered = true
+    }
+
+    instrument_sheet := app.instrument_sheet
+    covered := !layout.beside && instrument_sheet.slide == 1 && !instrument_sheet.drag.active
+    strobe_shows := !covered || safe.y > 0
+
+    feed_scope(app, strobe_shows)
+
+    // The arrows are on the strobe, they show above the sheet
+    if covered {
+        if strobe_shows do draw_strobe_area(app, layout)
+    } else if panel_covered {
+        draw_strobe_area(app, layout)
+        draw_tuning_arrows(app, layout, reading)
+    } else {
+        draw_main_screen(app, layout, reading)
+    }
+    draw_sheets(app, layout, reading)
+
+    if config^ != config_before do app.unsaved = true
+
+    save_when_settled(app)
+    limit_frame_rate(app)
 }
 
 // The strobe on the target note with the current tracks, speed and mode
