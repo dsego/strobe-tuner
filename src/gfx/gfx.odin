@@ -23,6 +23,8 @@ import "core:math/linalg"
 //
 //   init(width, height, title, min_size) -> bool, shutdown()   the desktop window resizes down to min_size
 //   live_resize_frames(frame, data)     frame draws a frame while the desktop window is dragged or zoomed to another size
+//   resizing() -> bool                  in a frame drawn during the drag or the zoom
+//   set_window_size(width, height)      the desktop window, in points
 //   should_close() -> bool              polls the window events, call once per frame
 //   begin_frame(clear), end_frame()
 //   frame_time() -> f32, dpi_scale() -> f32
@@ -87,6 +89,7 @@ Key :: enum {
     G,
     I,
     W,
+    NUM_0,
     NUM_1,
     NUM_2,
     NUM_3,

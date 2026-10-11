@@ -160,6 +160,7 @@ scancodes := [Key]sdl.Scancode {
     .G           = .G,
     .I           = .I,
     .W           = .W,
+    .NUM_0       = ._0,
     .NUM_1       = ._1,
     .NUM_2       = ._2,
     .NUM_3       = ._3,
@@ -246,7 +247,16 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}) -> bool 
     // The window keeps drawing while it's dragged to another size, see live_resize_frames
     when !MOBILE do _ = sdl.AddEventWatch(watch_live_resize, nil)
 
-    gpu.window = sdl.CreateWindow(title, width, height, {.HIGH_PIXEL_DENSITY})
+    // A size remembered from a bigger display is cut down to this one's
+    size := [2]i32{width, height}
+    when !MOBILE {
+        bounds: sdl.Rect
+        if sdl.GetDisplayUsableBounds(sdl.GetPrimaryDisplay(), &bounds) {
+            size = {min(size.x, bounds.w), min(size.y, bounds.h)}
+        }
+    }
+
+    gpu.window = sdl.CreateWindow(title, size.x, size.y, {.HIGH_PIXEL_DENSITY})
     if gpu.window == nil {
         fmt.eprintln("SDL_CreateWindow failed:", sdl.GetError())
         return false
@@ -707,6 +717,16 @@ window_size :: proc() -> [2]f32 {
     width, height: i32
     sdl.GetWindowSize(gpu.window, &width, &height)
     return {f32(width), f32(height)}
+}
+
+// The desktop window, in points, the size is seen at the next poll
+set_window_size :: proc(width, height: i32) {
+    when !MOBILE do sdl.SetWindowSize(gpu.window, width, height)
+}
+
+// In a frame drawn from the drag's own loop, see live_resize_frames
+resizing :: proc() -> bool {
+    return gpu.resizing
 }
 
 // Part of the window clear of the notch and the home indicator

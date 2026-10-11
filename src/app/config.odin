@@ -201,6 +201,12 @@ Config :: struct {
     spectrum_labels:              SpectrumLabels,
     // a line across at the loudest peak with its level in dBFS
     spectrum_peak_level:          bool,
+
+    // --- Window ---
+
+    // The desktop window's size as it was last used, in points. 0 opens it at the strobe's size and puts it
+    // back there: what a reset or Cmd+0 leaves. A phone leaves it 0. See follow_window_size.
+    window_size:                  [2]int,
 }
 
 // In the order of Config
@@ -239,6 +245,9 @@ config_defaults :: Config {
     spectrum_scale               = .SNR,
     spectrum_labels              = .BOTH,
     spectrum_peak_level          = true,
+
+    // --- Window ---
+    window_size                  = {},
 }
 
 

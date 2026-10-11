@@ -144,6 +144,10 @@ load_config :: proc() -> Config {
     if !has_track do config.strobe_intervals = defaults.strobe_intervals
     config.strobe_intervals_index = clamp(config.strobe_intervals_index, 0, len(INTERVAL_OPTIONS) - 1)
 
+    // Hand edited smaller than the window goes, it opens at the strobe's size
+    min_size := WINDOW_MIN_SIZE
+    if config.window_size.x < int(min_size.x) || config.window_size.y < int(min_size.y) do config.window_size = {}
+
     return config
 }
 

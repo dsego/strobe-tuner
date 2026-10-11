@@ -111,10 +111,18 @@ run_app :: proc(config: ^Config) {
     // Saved for the next start
     defer config.target_freq_hz = tuner.target_note.frequency
 
-    // The plots take a window of their own size, it stays as it is
+    // The window opens at the size it was last used at, see follow_window_size. The plots take a window of
+    // their own size, it stays as it is.
     min_size := WINDOW_MIN_SIZE
-    when DEBUG_STATS do min_size = {}
-    if !gfx.init(1200 when DEBUG_STATS else STROBE_WIDTH, DESKTOP_HEIGHT, APP_NAME, min_size) do return
+    size := [2]i32{STROBE_WIDTH, DESKTOP_HEIGHT}
+    when DEBUG_STATS {
+        min_size = {}
+        size.x = 1200
+    } else {
+        if config.window_size != {} do size = {i32(config.window_size.x), i32(config.window_size.y)}
+    }
+
+    if !gfx.init(size.x, size.y, APP_NAME, min_size) do return
 
     defer gfx.shutdown()
 
@@ -210,6 +218,7 @@ frame :: proc(app: ^App) {
     reading := measure(app)
 
     window, safe := gfx.window_size(), gfx.safe_area()
+    when !gfx.MOBILE && !DEBUG_STATS do follow_window_size(config, window)
 
     // The plots take the rest of the window on the right
     when DEBUG_STATS {
@@ -390,10 +399,15 @@ handle_keys :: proc(app: ^App) {
         retune(app)
     }
 
-    // Debug builds only, Cmd+Shift+, reloads the config file and Cmd+, opens it in TextEdit. The store builds
-    // edit everything in the settings, and the shell that starts TextEdit wouldn't run in the sandbox anyway.
     command := gfx.key_down(.LEFT_SUPER) || gfx.key_down(.RIGHT_SUPER)
 
+    // Cmd+0 puts the desktop window back to the strobe's size, see follow_window_size
+    when !gfx.MOBILE {
+        if command && gfx.key_pressed(.NUM_0) do config.window_size = {}
+    }
+
+    // Debug builds only, Cmd+Shift+, reloads the config file and Cmd+, opens it in TextEdit. The store builds
+    // edit everything in the settings, and the shell that starts TextEdit wouldn't run in the sandbox anyway.
     if ODIN_DEBUG && command && gfx.key_pressed(.COMMA) {
         if gfx.key_down(.LEFT_SHIFT) || gfx.key_down(.RIGHT_SHIFT) {
             config^ = load_config()
@@ -976,6 +990,17 @@ save_when_settled :: proc(app: ^App) {
 
     save_config(app.config^)
     app.unsaved = false
+}
+
+// The desktop window opens at the size it was last used at, kept up to date here once a drag is over rather
+// than on every frame of it. A size of 0 is a reset's or Cmd+0's, the window goes back to the strobe's size.
+follow_window_size :: proc(config: ^Config, window: [2]f32) {
+    if config.window_size == {} {
+        gfx.set_window_size(STROBE_WIDTH, DESKTOP_HEIGHT)
+        config.window_size = {STROBE_WIDTH, DESKTOP_HEIGHT}
+    } else if !gfx.resizing() {
+        config.window_size = {int(window.x), int(window.y)}
+    }
 }
 
 // Fewer frames with nothing to show. The strobe is dark while no band is above the background noise, and the
