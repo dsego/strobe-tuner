@@ -5,6 +5,7 @@
 # into external/ios-sim. Odin only emits an object file, clang links it into the app bundle.
 #
 #   IOS_SIM=<udid or name>   simulator to use, defaults to the booted one or the first available iPhone
+#   IOS_SIM_FAMILY=iPad      the first available iPad instead, booted or not, see just dev ipad
 #   SDL_VERSION=3.2.x        SDL release to build, defaults to the brew installed version
 
 set -eu
@@ -143,7 +144,7 @@ cp "$ROOT/platform/ios/Info.plist" "$APP/Info.plist"
 
 # The icon, actool makes the sizes from the 1024px one and lists them in a partial Info.plist
 xcrun actool "$ROOT/platform/ios/Assets.xcassets" --compile "$APP" --platform iphonesimulator --minimum-deployment-target $MIN_IOS \
-    --target-device iphone --app-icon AppIcon --output-partial-info-plist "$OUT/icon-info.plist" > /dev/null
+    --target-device iphone --target-device ipad --app-icon AppIcon --output-partial-info-plist "$OUT/icon-info.plist" > /dev/null
 /usr/libexec/PlistBuddy -c "Merge $OUT/icon-info.plist" "$APP/Info.plist"
 
 # The version and acknowledgements show in the app's page in the Settings app, like on the device
@@ -160,12 +161,17 @@ codesign --force --sign - --timestamp=none "$APP"
 # --- simulator ---------------------------------------------------------------------------------
 
 UDID_PATTERN='[0-9A-F]\{8\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{12\}'
-DEVICE=${IOS_SIM:-$(xcrun simctl list devices booted | grep -o "$UDID_PATTERN" | head -1)}
-if [ -z "$DEVICE" ]; then
-    DEVICE=$(xcrun simctl list devices available | grep 'iPhone' | grep -o "$UDID_PATTERN" | head -1)
+FAMILY=${IOS_SIM_FAMILY:-iPhone}
+DEVICE=${IOS_SIM:-}
+# Asked for a family, a booted phone isn't it
+if [ -z "$DEVICE" ] && [ -z "${IOS_SIM_FAMILY:-}" ]; then
+    DEVICE=$(xcrun simctl list devices booted | grep -o "$UDID_PATTERN" | head -1)
 fi
 if [ -z "$DEVICE" ]; then
-    echo "No iPhone simulator found, install one in Xcode > Settings > Components"
+    DEVICE=$(xcrun simctl list devices available | grep "$FAMILY" | grep -o "$UDID_PATTERN" | head -1)
+fi
+if [ -z "$DEVICE" ]; then
+    echo "No $FAMILY simulator found, install one in Xcode > Settings > Components"
     exit 1
 fi
 

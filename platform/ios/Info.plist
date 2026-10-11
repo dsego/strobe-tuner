@@ -24,10 +24,12 @@
     </array>
     <key>MinimumOSVersion</key>
     <string>15.0</string>
-    <!-- iPhone only, iPads run it in the iPhone window. A native iPad app needs a landscape layout. -->
+    <!-- iPhone and iPad. The layout follows the window's size, see compute_layout, an iPad turns and
+         splits the screen with another app, iPadOS 26 dropped the full-screen opt-out. -->
     <key>UIDeviceFamily</key>
     <array>
         <integer>1</integer>
+        <integer>2</integer>
     </array>
     <!-- Without a launch screen iOS runs the app letterboxed at a legacy resolution. The color is the strobe
          background (strobe_bg_color), so launch doesn't flash white. -->
@@ -36,9 +38,18 @@
         <key>UIColorName</key>
         <string>LaunchBackground</string>
     </dict>
+    <!-- A phone stays upright, an iPad turns every way, the panel goes beside the strobe when it's wider than
+         tall. SDL asks for all four (see gfx.init) and iOS keeps the ones listed for the device. -->
     <key>UISupportedInterfaceOrientations</key>
     <array>
         <string>UIInterfaceOrientationPortrait</string>
+    </array>
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>

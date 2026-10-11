@@ -235,8 +235,10 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}) -> bool 
     }
 
     // Without it SDL picks the orientation from the window's aspect ratio, landscape for the
-    // desktop sizes, and keeps rotating the phone away from portrait
-    when MOBILE do sdl.SetHint("SDL_ORIENTATIONS", "Portrait")
+    // desktop sizes, and keeps rotating the phone away from portrait. On iOS it asks for all four and
+    // keeps the ones Info.plist lists for the device: a phone's portrait, an iPad's every way.
+    when IOS do sdl.SetHint("SDL_ORIENTATIONS", "Portrait PortraitUpsideDown LandscapeLeft LandscapeRight")
+    when ANDROID do sdl.SetHint("SDL_ORIENTATIONS", "Portrait")
 
     // The back button closes a sheet first, the app passes it on when there's none, see system_back
     when ANDROID do sdl.SetHint(sdl.HINT_ANDROID_TRAP_BACK_BUTTON, "1")

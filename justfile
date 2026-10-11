@@ -41,13 +41,15 @@ setup:
 #   (none) debug build, needs SDL3 (brew install sdl3)
 #   stats  with the signal stats and NSDF plots
 #   ios    on the iOS simulator, the first run builds the native deps into external/ios-sim
+#   ipad   on an iPad simulator
 dev target="": setup
     #!/usr/bin/env sh
     case "{{target}}" in
         "") odin run src/app -debug -vet ;;
         stats) odin run src/app -debug -vet -define:DEBUG_STATS=true ;;
         ios) sh platform/ios/build-sim.sh ;;
-        *) echo "Unknown target '{{target}}', use stats or ios"; exit 1 ;;
+        ipad) IOS_SIM_FAMILY=iPad sh platform/ios/build-sim.sh ;;
+        *) echo "Unknown target '{{target}}', use stats, ios or ipad"; exit 1 ;;
     esac
 
 # Optimized build for this machine

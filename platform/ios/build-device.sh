@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Build the SDL renderer for iPhone, sign it with the given provisioning profile and package it as an .ipa.
+# Build the SDL renderer for iPhone and iPad, sign it with the given provisioning profile and package it as an .ipa.
 #
 # The native libraries (SDL3, miniaudio, stb, pffft, pa_ringbuffer) are rebuilt for the device once,
 # into external/ios-device. Odin only emits an object file, clang links it into the app bundle.
@@ -8,7 +8,7 @@
 #   IOS_SIGN_IDENTITY=<name>  signing certificate, defaults to the one in the keychain the profile was made for,
 #                             else "Apple Development" for a development profile (e.g. a free Personal Team)
 #                             and "Apple Distribution" for an Ad Hoc one
-#   IOS_DEVICE=<name or udid> installs and launches the app on this iPhone, needs Developer Mode on it
+#   IOS_DEVICE=<name or udid> installs and launches the app on this iPhone or iPad, needs Developer Mode on it
 #   SDL_VERSION=3.2.x         SDL release to build, defaults to the brew installed version
 #
 # An Ad Hoc .ipa also installs without Developer Mode, by dragging it onto the iPhone in Finder.
@@ -153,7 +153,7 @@ esac
 
 # The icon, actool makes the sizes from the 1024px one and lists them in a partial Info.plist
 xcrun actool "$ROOT/platform/ios/Assets.xcassets" --compile "$APP" --platform iphoneos --minimum-deployment-target $MIN_IOS \
-    --target-device iphone --app-icon AppIcon --output-partial-info-plist "$OUT/icon-info.plist" > /dev/null
+    --target-device iphone --target-device ipad --app-icon AppIcon --output-partial-info-plist "$OUT/icon-info.plist" > /dev/null
 /usr/libexec/PlistBuddy -c "Merge $OUT/icon-info.plist" "$APP/Info.plist"
 plutil -replace CFBundleSupportedPlatforms -json '["iPhoneOS"]' "$APP/Info.plist"
 
