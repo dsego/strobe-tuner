@@ -239,9 +239,3 @@ desktop only, iOS and Android only have "Microphone".
   screen clear, but misses the wrong microphone that works, the laptop's instead of the interface's.
 - Or both, always dim and in the warning color on silence.
 - Only where there's room: the panel beside the strobe and a wide desktop window, never a phone's panel.
-
-## Float over other windows
-
-A desktop setting or a View menu item that keeps the window above the others, a tuner beside a DAW.
-SDL has the call (`SDL_SetWindowAlwaysOnTop`). Not the default, a window that won't go behind others
-surprises.
