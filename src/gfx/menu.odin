@@ -33,3 +33,5 @@ menu_command :: proc() -> int {
 }
 
 set_menu_checked :: proc(command: int, checked: bool) {}
+
+start_menu_frames :: proc() {}

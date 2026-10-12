@@ -23,8 +23,9 @@ import "core:math/linalg"
 //
 //   init(width, height, title, min_size, position) -> bool, shutdown()   the desktop window resizes down to
 //                                       min_size and opens at position
-//   live_resize_frames(frame, data)     frame draws a frame while the desktop window is dragged or zoomed to another size
-//   resizing() -> bool                  in a frame drawn during the drag or the zoom
+//   live_resize_frames(frame, data)     frame draws a frame while the desktop window is dragged or zoomed to another size,
+//                                       or a menu of the menu bar is open
+//   resizing() -> bool                  in a frame drawn during the drag, the zoom or the open menu
 //   set_window_size(width, height)      the desktop window, in the system's points
 //   should_close() -> bool              polls the window events, call once per frame
 //   begin_frame(clear), end_frame()

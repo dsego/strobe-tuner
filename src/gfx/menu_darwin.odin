@@ -19,6 +19,7 @@ package gfx
 import "base:intrinsics"
 import "base:runtime"
 import NS "core:sys/darwin/Foundation"
+import sdl "vendor:sdl3"
 
 // The macOS menu bar, nothing on iOS. SDL makes the app menu and the Window menu when it starts, the app
 // adds its own items to them and menus of its own between them. A chosen item's command is picked up once
@@ -150,6 +151,26 @@ set_menu_checked :: proc(command: int, checked: bool) {
     }
 }
 
+// An open menu keeps the main loop stuck in should_close like a drag does, see live_resize_frames. A timer
+// that only runs in the menu's loop draws the frames meanwhile, a drag's frames are left to the drag.
+MENU_FRAME_S :: 0.016
+
+start_menu_frames :: proc() {
+    when !IOS {
+        timer := intrinsics.objc_send(
+            ^NS.Timer,
+            NS.Timer,
+            "timerWithTimeInterval:target:selector:userInfo:repeats:",
+            NS.TimeInterval(MENU_FRAME_S),
+            menu_target(),
+            intrinsics.objc_find_selector("menuFrame:"),
+            NS.id(nil),
+            NS.BOOL(true),
+        )
+        NS.RunLoop_addTimerForMode(NS.RunLoop_mainRunLoop(), timer, NS.EventTrackingRunLoopMode)
+    }
+}
+
 main_menu :: proc() -> ^NS.Menu {
     return NS.Application_mainMenu(NS.Application_sharedApplication())
 }
@@ -180,16 +201,24 @@ attach_item :: proc(item: ^NS.MenuItem, command: int) {
     menu.checked[command] = false
 }
 
-// An object of a class made here at run time, its one method keeps the chosen item's tag
+// An object of a class made here at run time, one method keeps the chosen item's tag, the other is the
+// timer's of start_menu_frames
 menu_target :: proc() -> ^NS.Object {
     if menu.target != nil do return menu.target
 
     chosen :: proc "c" (self: NS.id, selector: NS.SEL, sender: ^NS.MenuItem) {
         menu.chosen = int(NS.MenuItem_tag(sender))
     }
+    frame :: proc "c" (self: NS.id, selector: NS.SEL, timer: ^NS.Timer) {
+        if gpu.live_resize_frame == nil || !gpu.polling || gpu.resizing do return
+        if sdl.GetTicks() - gpu.drag_tick < DRAG_TIMER_MS do return
+
+        draw_from_os_loop()
+    }
 
     class := NS.objc_allocateClassPair(intrinsics.objc_find_class("NSObject"), "StrobieMenuTarget", 0)
     NS.class_addMethod(class, intrinsics.objc_find_selector("menuChosen:"), auto_cast chosen, "v@:@")
+    NS.class_addMethod(class, intrinsics.objc_find_selector("menuFrame:"), auto_cast frame, "v@:@")
     NS.objc_registerClassPair(class)
 
     menu.target = intrinsics.objc_send(^NS.Object, cast(^NS.Object)NS.class_createInstance(class, 0), "init")

@@ -491,11 +491,13 @@ watch_app_events :: proc "c" (userdata: rawptr, event: ^sdl.Event) -> bool {
 
 // The desktop window keeps drawing while it's dragged or zoomed to another size. The OS runs the drag in a
 // loop of its own that should_close is stuck in, and asks for a frame from there 60 times a second instead:
-// frame draws one with begin_frame and end_frame, as a turn of the main loop does after should_close.
+// frame draws one with begin_frame and end_frame, as a turn of the main loop does after should_close. An
+// open menu of the menu bar is the same, see start_menu_frames.
 live_resize_frames :: proc(frame: proc(data: rawptr), data: rawptr) {
     gpu.live_resize_frame = frame
     gpu.live_resize_data = data
     gpu.live_resize_context = context
+    start_menu_frames()
 }
 
 // On the main thread, from inside the OS's loop, see live_resize_frames. The zoom of a double click on the
@@ -517,12 +519,17 @@ watch_live_resize :: proc "c" (userdata: rawptr, event: ^sdl.Event) -> bool {
         return true
     }
 
+    draw_from_os_loop()
+    return true
+}
+
+// A frame from inside the OS's loop, a drag's, a zoom's or an open menu's
+draw_from_os_loop :: proc "c" () {
     context = gpu.live_resize_context
     gpu.resizing = true
     tick_clock()
     gpu.live_resize_frame(gpu.live_resize_data)
     gpu.resizing = false
-    return true
 }
 
 begin_frame :: proc(clear: Color) {
