@@ -630,7 +630,6 @@ handle_keys :: proc(app: ^App) {
     }
 }
 
-// The pitch detection, the strobe and the tuner on the new audio
 // The In-tune tap: once the strobe's readout holds within IN_TUNE_CENTS for IN_TUNE_HOLD_S the phone taps,
 // once. The readout is the strobe's own, in tune there is when its stripes have all but stopped. It taps again
 // only after the readout went further than IN_TUNE_REARM_CENTS or away, another note or the note gone dark,
@@ -642,8 +641,9 @@ IN_TUNE_REARM_CENTS :: 3
 update_in_tune_tap :: proc(app: ^App, reading: Reading) {
     if !app.config.in_tune_tap || !gfx.has_haptics() do return
 
+    // Dark, the readout shown is the held one, see measure
     cents := abs(reading.steady.err_cents)
-    if !reading.strobe_readout || cents > IN_TUNE_REARM_CENTS {
+    if !app.tuner.active || !reading.strobe_readout || cents > IN_TUNE_REARM_CENTS {
         app.in_tune_s, app.in_tune_tapped = 0, false
         return
     }
@@ -659,6 +659,7 @@ update_in_tune_tap :: proc(app: ^App, reading: Reading) {
     }
 }
 
+// The pitch detection, the strobe and the tuner on the new audio
 measure :: proc(app: ^App) -> (reading: Reading) {
     tuner := &app.tuner
     reading.pitch = core.run_pitch_detection(&app.pitch_detector, tuner.pitch)
