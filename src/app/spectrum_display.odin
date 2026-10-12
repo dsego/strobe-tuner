@@ -31,8 +31,9 @@ import "../gfx"
 // As SNR each bin is drawn over the noise around it, the room's rumble and hiss lie flat along the bottom
 // and only what stands out rises, as far as the tuner can tell it from the noise. As dBFS it's the level,
 // sloping down with the room.
-// The power is averaged over the window's length. One frame of noise spikes 10 dB here and there, averaged
-// it evens out while a steady tone stays, a pluck takes as long to come up.
+// The power is averaged over a quarter of the window, see SPECTRUM_AVERAGE_WINDOWS, and the curve smoothed
+// on top, see SPECTRUM_SMOOTHING_S. One frame of noise spikes 10 dB here and there, it evens out while a
+// steady tone stays, and a sound that stops falls away within half a second.
 // The detector's band, after its highpass and lowpass, a bass E1's fundamental or the mains look weaker
 // than they are. Its own samples, not the detector's window: a frame that takes longer than the window,
 // e.g. a debug build's at the longest setting, reads one whole window and skips the rest, and a history
