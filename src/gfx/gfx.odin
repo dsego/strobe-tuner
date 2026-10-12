@@ -89,7 +89,6 @@ Rect :: struct {
 MenuItem :: struct {
     title:   cstring, // nil for a separator
     key:     cstring, // with Command, nil for none
-    shift:   bool, // and Shift
     command: int, // what menu_command returns when it's chosen, from 1 to under MAX_MENU_COMMANDS, 0 greys it out
 }
 

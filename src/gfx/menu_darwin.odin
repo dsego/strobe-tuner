@@ -55,6 +55,8 @@ add_app_menu_items :: proc(settings: int, items: []MenuItem) {
     when !IOS {
         app_menu := NS.MenuItem_submenu(NS.Menu_itemAtIndex(main_menu(), 0))
         comma := ns_string(",")
+        defer NS.release(comma)
+
         index := NS.Integer(-1)
         for position in 0 ..< NS.Menu_numberOfItems(app_menu) {
             key := intrinsics.objc_send(^NS.String, NS.Menu_itemAtIndex(app_menu, position), "keyEquivalent")
@@ -65,13 +67,14 @@ add_app_menu_items :: proc(settings: int, items: []MenuItem) {
         }
         if index < 0 do return
 
+        settings_title := ns_string("Settings…")
+        defer NS.release(settings_title)
+
         settings_item := NS.Menu_itemAtIndex(app_menu, index)
-        NS.MenuItem_setTitle(settings_item, ns_string("Settings…"))
+        NS.MenuItem_setTitle(settings_item, settings_title)
         attach_item(settings_item, settings)
 
-        for item, offset in items {
-            NS.Menu_insertItem(app_menu, make_menu_item(item), index + 1 + NS.Integer(offset))
-        }
+        for item, offset in items do add_menu_item(app_menu, item, index + 1 + NS.Integer(offset))
     }
 }
 
@@ -81,10 +84,18 @@ add_menu :: proc(title: cstring, items: []MenuItem, opening: proc(data: rawptr) 
     when !IOS {
         if menu.count == MAX_MENUS do return -1
 
-        submenu := NS.Menu_initWithTitle(NS.Menu_alloc(), ns_string(title))
-        for item in items do NS.Menu_addItem(submenu, make_menu_item(item))
+        menu_title := ns_string(title)
+        defer NS.release(menu_title)
+
+        // Kept by the bar's item, as long as the app runs
+        submenu := NS.Menu_initWithTitle(NS.Menu_alloc(), menu_title)
+        defer NS.release(submenu)
+
+        for item in items do add_menu_item(submenu, item)
 
         bar_item := NS.MenuItem_init(NS.MenuItem_alloc())
+        defer NS.release(bar_item)
+
         NS.MenuItem_setSubmenu(bar_item, submenu)
 
         bar := main_menu()
@@ -118,7 +129,7 @@ set_menu_items :: proc(which: int, items: []MenuItem) {
         }
         NS.Menu_removeAllItems(submenu)
 
-        for item in items do NS.Menu_addItem(submenu, make_menu_item(item))
+        for item in items do add_menu_item(submenu, item)
     }
 }
 
@@ -128,8 +139,8 @@ add_window_menu_items :: proc(items: []MenuItem) {
         window_menu := NS.Application_windowsMenu(NS.Application_sharedApplication())
         if window_menu == nil do return
 
-        NS.Menu_addItem(window_menu, NS.MenuItem_separatorItem())
-        for item in items do NS.Menu_addItem(window_menu, make_menu_item(item))
+        add_menu_item(window_menu, {})
+        for item in items do add_menu_item(window_menu, item)
     }
 }
 
@@ -175,20 +186,32 @@ main_menu :: proc() -> ^NS.Menu {
     return NS.Application_mainMenu(NS.Application_sharedApplication())
 }
 
+// Made here, released by the caller once what it went into keeps its own
 ns_string :: proc(text: cstring) -> ^NS.String {
     return NS.String_initWithCString(NS.String_alloc(), text, .UTF8)
 }
 
-make_menu_item :: proc(item: MenuItem) -> ^NS.MenuItem {
-    if item.title == nil do return NS.MenuItem_separatorItem()
+// At index, at the end for -1. The menu keeps the item, the Input menu's are made again each time it opens.
+add_menu_item :: proc(to: ^NS.Menu, item: MenuItem, index: NS.Integer = -1) {
+    made: ^NS.MenuItem
+    if item.title == nil {
+        made = NS.MenuItem_separatorItem()
+        NS.retain(made)
+    } else {
+        title, key := ns_string(item.title), ns_string(item.key if item.key != nil else "")
+        defer NS.release(title)
+        defer NS.release(key)
 
-    key: cstring = item.key if item.key != nil else ""
-    made := NS.MenuItem_initWithTitle(NS.MenuItem_alloc(), ns_string(item.title), nil, ns_string(key))
-    if item.shift do NS.MenuItem_setKeyEquivalentModifierMask(made, {.Command, .Shift})
+        made = NS.MenuItem_initWithTitle(NS.MenuItem_alloc(), title, nil, key)
 
-    // Without an action the menu greys it out
-    if item.command > 0 do attach_item(made, item.command)
-    return made
+        // Without an action the menu greys it out
+        if item.command > 0 do attach_item(made, item.command)
+    }
+
+    if index < 0 do NS.Menu_addItem(to, made)
+    else do NS.Menu_insertItem(to, made, index)
+
+    NS.release(made)
 }
 
 attach_item :: proc(item: ^NS.MenuItem, command: int) {
