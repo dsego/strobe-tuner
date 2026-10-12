@@ -169,6 +169,7 @@ run_app :: proc(config: ^Config) {
     // Opened or not, the strobe area says why there's no input, see draw_strobe_area
     audio_capture := audio.init(config.input_device)
     defer audio.destroy(audio_capture)
+
     app.audio_capture = audio_capture
 
     audio.register_node(audio_capture, &app.pitch_detector)
@@ -219,6 +220,7 @@ run_app :: proc(config: ^Config) {
 frame :: proc(app: ^App) {
     config, audio_capture := app.config, app.audio_capture
     if audio.interruption_ended(audio_capture) do app.restart_audio = true
+
     follow_input(app)
 
     config_before := config^
@@ -259,7 +261,7 @@ frame :: proc(app: ^App) {
     // may move down later in the frame.
     gui_disabled = false
     panel_covered := false
-    for sheet in ([]^Sheet{&app.settings_sheet, &app.track_sheet, &app.instrument_sheet, &app.input_sheet}) {
+    for sheet in app_sheets(app) {
         slide_sheet(sheet)
         if sheet.open || sheet.slide > 0 do gui_disabled = true
         if sheet.slide == 1 && !sheet.drag.active do panel_covered = true
@@ -493,24 +495,26 @@ COLORWAY_COMMANDS :: [StrobeColorway]MenuCommand {
 setup_menu_bar :: proc(app: ^App) {
     gfx.add_app_menu_items(int(MenuCommand.SETTINGS), {})
 
-    gfx.add_menu(
-        "View",
-        {
-            {title = "Strobe", key = "1", command = int(MenuCommand.SHOW_STROBE)},
-            {title = "Scope", key = "2", command = int(MenuCommand.SHOW_SCOPE)},
-            {title = "Trace", key = "3", command = int(MenuCommand.SHOW_TRACE)},
-            {title = "Lamp", key = "4", command = int(MenuCommand.SHOW_LAMP)},
-            {title = "Spectrum", key = "5", command = int(MenuCommand.SHOW_SPECTRUM)},
-            {},
-            {title = "Red", command = int(MenuCommand.COLORS_RED)},
-            {title = "Mint", command = int(MenuCommand.COLORS_MINT)},
-            {title = "Amber", command = int(MenuCommand.COLORS_AMBER)},
-            {title = "Mono", command = int(MenuCommand.COLORS_MONO)},
-            {},
-            {title = "Retro Glow", key = "g", command = int(MenuCommand.RETRO_GLOW)},
-            {title = "Lock Note", key = "l", command = int(MenuCommand.LOCK_NOTE)},
-        },
+    // The displays by their number keys, named like on the settings, and the colors
+    view := make([dynamic]gfx.MenuItem, context.temp_allocator)
+    display_names, display_commands := DISPLAY_NAMES, DISPLAY_COMMANDS
+    for type in StrobeDisplayType {
+        key := fmt.ctprintf("%d", int(type) + 1)
+        append(&view, gfx.MenuItem{title = display_names[type], key = key, command = int(display_commands[type])})
+    }
+    append(&view, gfx.MenuItem{})
+
+    colorway_names, colorway_commands := COLORWAY_NAMES, COLORWAY_COMMANDS
+    for colorway in StrobeColorway {
+        append(&view, gfx.MenuItem{title = colorway_names[colorway], command = int(colorway_commands[colorway])})
+    }
+    append(
+        &view,
+        gfx.MenuItem{},
+        gfx.MenuItem{title = "Retro Glow", key = "g", command = int(MenuCommand.RETRO_GLOW)},
+        gfx.MenuItem{title = "Lock Note", key = "l", command = int(MenuCommand.LOCK_NOTE)},
     )
+    gfx.add_menu("View", view[:])
 
     // Filled by list_inputs, and the list made again as it opens for what's connected now. The one opened
     // follows in the next frame, see follow_input.
@@ -542,7 +546,13 @@ update_menu_checks :: proc(app: ^App) {
     }
 }
 
-// Settings… from the menu bar or Ctrl+, over whichever sheet is up
+// Settings… from the menu bar or Ctrl+, closes the settings when they're up, the sheet covers the strobe
+toggle_settings_sheet :: proc(app: ^App) {
+    if app.settings_sheet.open do close_settings_sheet(app)
+    else do open_settings_sheet(app)
+}
+
+// Over whichever sheet is up
 open_settings_sheet :: proc(app: ^App) {
     for sheet in app_sheets(app) do if sheet != &app.settings_sheet do dismiss_sheet(app, sheet)
     reset_note_offsets_editing()
@@ -560,11 +570,9 @@ handle_keys :: proc(app: ^App) {
     command := gfx.key_down(.LEFT_SUPER) || gfx.key_down(.RIGHT_SUPER)
     plain := !command
 
-    // Settings… closes the settings when they're up, the sheet covers the strobe
     #partial switch app.menu {
     case .SETTINGS:
-        if app.settings_sheet.open do close_settings_sheet(app)
-        else do open_settings_sheet(app)
+        toggle_settings_sheet(app)
     case .RETRO_GLOW:
         config.strobe_glow = !config.strobe_glow
     case .DEFAULT_SIZE:
@@ -622,10 +630,8 @@ handle_keys :: proc(app: ^App) {
     // follow_window_size
     when !gfx.MOBILE && ODIN_OS != .Darwin {
         control := gfx.key_down(.LEFT_CONTROL) || gfx.key_down(.RIGHT_CONTROL)
-        if control && gfx.key_pressed(.COMMA) {
-            if app.settings_sheet.open do close_settings_sheet(app)
-            else do open_settings_sheet(app)
-        }
+        if control && gfx.key_pressed(.COMMA) do toggle_settings_sheet(app)
+
         if control && gfx.key_pressed(.NUM_0) do config.window_size = {}
     }
 }
@@ -785,10 +791,7 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
     }
 
     // Opens on the settings, not the display's options it was closed on
-    if gui_settings_button(layout.settings) {
-        app.settings_sheet.open = true
-        app.display_options = false
-    }
+    if gui_settings_button(layout.settings) do open_settings_sheet(app)
 
     if gui_instrument_button(layout.instrument, config) do app.instrument_sheet.open = true
 
@@ -804,13 +807,14 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
         draw_icon(ICON_WARNING, layout.level_meter + {-ICON_SIZE - WARNING_GAP, icon_y}, warning_color)
     }
 
-    meter := layout.level_meter + {20, 0}
-    track := gfx.Rect{meter.x, meter.y, 60, LEVEL_METER_HEIGHT}
+    meter := layout.level_meter + {LEVEL_BAR_OFFSET, 0}
+    track := gfx.Rect{meter.x, meter.y, LEVEL_BAR_WIDTH, LEVEL_METER_HEIGHT}
     gfx.draw_rounded_rect(track, LEVEL_METER_HEIGHT / 2, pill_dark)
 
     // Empty until something was measured, e.g. without an input, a reading that isn't one would be 0 dBFS
     if reading.pitch.measured {
-        gfx.begin_scissor({meter.x, meter.y, 60 + clamp(reading.pitch.rms_dbfs, -60, 0), LEVEL_METER_HEIGHT})
+        level := LEVEL_BAR_WIDTH + clamp(reading.pitch.rms_dbfs, -LEVEL_BAR_WIDTH, 0)
+        gfx.begin_scissor({meter.x, meter.y, level, LEVEL_METER_HEIGHT})
         gfx.draw_rounded_rect(track, LEVEL_METER_HEIGHT / 2, accent_color)
         gfx.end_scissor()
     }
@@ -1062,8 +1066,8 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo, meter
     }
 
     floor_level := core.dbfs(pitch.noise_floor)
-    gfx.draw_rect(meter + {0, LEVEL_METER_HEIGHT}, {60, 3}, gfx.hex(strobe_bg_color))
-    gfx.draw_rect(meter + {0, LEVEL_METER_HEIGHT}, {60 + floor_level, 3}, gfx.PURPLE)
+    gfx.draw_rect(meter + {0, LEVEL_METER_HEIGHT}, {LEVEL_BAR_WIDTH, 3}, gfx.hex(strobe_bg_color))
+    gfx.draw_rect(meter + {0, LEVEL_METER_HEIGHT}, {LEVEL_BAR_WIDTH + floor_level, 3}, gfx.PURPLE)
 
     base_band := app.phase_comparator.bands[0]
     stat(fmt.ctprintf("Band SNR %.1f", base_band.snr_db), layout.stats)

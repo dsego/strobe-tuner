@@ -168,7 +168,7 @@ tuning_strings :: proc(config: ^Config) -> []int {
     return semitones
 }
 
-// For the bottom left corner, in capitals like the FAST label: the instrument's name, or its abbreviation
+// For the bottom left corner, in capitals: the instrument's name, or its abbreviation
 // before a tuning other than the standard one or a transpose's key, the key keeps its flat, and a capo's
 // fret after it. After a preset's number. Lives until the end of the frame.
 setup_label :: proc(setup: Setup) -> string {

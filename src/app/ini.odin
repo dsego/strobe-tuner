@@ -51,6 +51,7 @@ create_app_directory :: proc() -> Maybe(string) {
 config_path :: proc() -> string {
     dir_path := config_directory(APP_NAME)
     defer delete(dir_path)
+
     path, _ := filepath.join({dir_path, CONFIG_NAME})
     return path
 }
@@ -106,6 +107,7 @@ load_config :: proc() -> Config {
                 for {
                     array, is_array := reflect.type_info_base(element_type).variant.(reflect.Type_Info_Array)
                     if !is_array do break
+
                     element_type = array.elem
                 }
                 for index in 0 ..< field.type.size / element_type.size {
@@ -144,7 +146,7 @@ load_config :: proc() -> Config {
     for &cents in config.strobe_offsets_cents do cents = clamp(cents, -TRACK_OFFSET_MAX_CENTS, TRACK_OFFSET_MAX_CENTS)
 
     // 0 is off, a sliver of a period would fade the screen to nothing between two samples. The W key's longest
-    // is about 140 periods.
+    // is about 70 periods.
     if config.persistence_periods != 0 do config.persistence_periods = clamp(config.persistence_periods, 1, 1000)
 
     // A spectrum window of 0 would have nothing to transform
@@ -156,6 +158,7 @@ load_config :: proc() -> Config {
     has_track := false
     for interval in config.strobe_intervals do has_track ||= interval >= 1
     if !has_track do config.strobe_intervals = defaults.strobe_intervals
+
     config.strobe_intervals_index = clamp(config.strobe_intervals_index, 0, len(INTERVAL_OPTIONS) - 1)
 
     // Hand edited smaller than the window goes, it opens at the strobe's size
@@ -289,6 +292,7 @@ config_directory :: proc(app_name: string) -> string {
         // macOS: ~/Library/Application Support
         home := os.get_env("HOME", context.allocator)
         defer delete(home)
+
         path, _ := filepath.join({home, "Library", "Application Support", app_name})
         return path
     } else when gfx.ANDROID {
@@ -298,9 +302,11 @@ config_directory :: proc(app_name: string) -> string {
         // Linux/Unix: ~/.config or XDG_CONFIG_HOME
         config_home := os.get_env("XDG_CONFIG_HOME", context.allocator)
         defer delete(config_home)
+
         if config_home == "" {
             home := os.get_env("HOME", context.allocator)
             defer delete(home)
+
             config_home, _ = filepath.join({home, ".config"})
         }
         path, _ := filepath.join({config_home, app_name})

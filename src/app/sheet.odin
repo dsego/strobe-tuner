@@ -18,9 +18,9 @@ package app
 
 import "../gfx"
 
-// The sheets that slide up over the main screen: the settings, a track's and the instrument's. The main
-// screen keeps running under them and ignores taps until they're all the way down again. What's on them is
-// in settings.odin, instrument.odin and note_offsets.odin.
+// The sheets that slide up over the main screen: the settings, a track's, the instrument's and the input's.
+// The main screen keeps running under them and ignores taps until they're all the way down again. What's on
+// them is in settings.odin, instrument.odin and note_offsets.odin.
 
 // A sheet up from the bottom as tall as its rows, the strobe above or beside it stays in sight to show the
 // changes
@@ -68,6 +68,7 @@ compute_sheet_layout :: proc(
     below := window.y - (safe.y + safe.height) + PANEL_PADDING / 2
     around := SHEET_TOP_PADDING + SHEET_TITLE_HEIGHT + extra + below
     panel_height := window.y - panel.y // to the window's bottom edge
+
     // A sheet without rows, laid out by extra, keeps the smallest
     sheet_layout.row_height = SHEET_ROW_HEIGHT
     if rows > 0 {
@@ -184,6 +185,7 @@ begin_sheet :: proc(
     // The strobe looks set into the window above the sheet like above the panel, and the edge shades the
     // panel on the way up. A sheet beside the strobe doesn't reach it.
     if !layout.beside do draw_strobe_bottom_shadow(strobe_display, layout.strobe, sheet_layout.sheet.y)
+
     return
 }
 

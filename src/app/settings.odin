@@ -18,14 +18,14 @@ package app
 
 import "core:fmt"
 import "core:math"
+import "core:slice"
 import "core:time"
 
 import "../core"
 import "../gfx"
 
 // The settings sheet, opened with the sliders icon on the main screen.
-// Everything that isn't needed while tuning lives here, the main screen keeps the note lock
-// and the strobe speed.
+// Everything that isn't needed while tuning lives here, the main screen keeps the note lock.
 
 SEGMENT_WIDTH :: 60
 
@@ -41,8 +41,20 @@ DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 8, .SCOPE = 3, .TRACE = 
 // For the longer labels of the display's options, three of them as wide as the four colors
 WIDE_SEGMENT_WIDTH :: 80
 
-// In the order of StrobeDisplayType
-DISPLAY_NAMES :: [len(StrobeDisplayType)]cstring{"Strobe", "Scope", "Trace", "Lamp", "Spectrum"}
+// On the settings and in the View menu
+DISPLAY_NAMES :: [StrobeDisplayType]cstring {
+    .STROBE   = "Strobe",
+    .SCOPE    = "Scope",
+    .TRACE    = "Trace",
+    .LAMP     = "Lamp",
+    .SPECTRUM = "Spectrum",
+}
+COLORWAY_NAMES :: [StrobeColorway]cstring {
+    .VIBRANT_RED = "Red",
+    .MINTY       = "Mint",
+    .AMBER       = "Amber",
+    .MONO        = "Mono",
+}
 
 // The same on the main screen's display button, in caps like the other controls' labels
 DISPLAY_LABELS :: [StrobeDisplayType]cstring{.STROBE = "STROBE", .SCOPE = "SCOPE", .TRACE = "TRACE", .LAMP = "LAMP", .SPECTRUM = "SPECTRUM"}
@@ -109,7 +121,7 @@ gui_settings :: proc(
     display_names := DISPLAY_NAMES
     if display_options^ {
         back: bool
-        close, back = draw_back_header(sheet_layout, display_names[int(config.strobe_display_type)])
+        close, back = draw_back_header(sheet_layout, display_names[config.strobe_display_type])
         if back do display_options^ = false
 
         changed = gui_display_options(sheet_layout, config)
@@ -153,7 +165,8 @@ gui_settings :: proc(
     }
 
     // The displays read the colors and the glow from the config as they draw, nothing to retune
-    gui_settings_segmented(sheet_layout, &row, "Colors", {"Red", "Mint", "Amber", "Mono"}, &config.strobe_colorway)
+    colorway_names := COLORWAY_NAMES
+    gui_settings_segmented(sheet_layout, &row, "Colors", slice.enumerated_array(&colorway_names), &config.strobe_colorway)
 
     // Lights the stripes like a lamp behind the disc, in the hue of the colors above
     gui_settings_segmented(sheet_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow)
@@ -179,7 +192,7 @@ gui_settings :: proc(
 
     {
         options: [len(StrobeDisplayType)]GuiOption
-        for name, index in display_names do options[index] = {i32(index), string(name)}
+        for name, type in display_names do options[int(type)] = {i32(type), string(name)}
 
         selected := int(config.strobe_display_type)
         gui_settings_dropdown(menu, .DISPLAY, display_rect, options[:], &selected, down = true)
@@ -218,6 +231,7 @@ gui_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (chan
         if gui_settings_segmented(sheet_layout, &row, "Mode", {"Harmonic", "Vernier"}, &config.strobe_mode, WIDE_SEGMENT_WIDTH) {
             changed = true
         }
+
         // 200% spins twice as fast per cent, for the final adjustment
         if gui_settings_segmented(sheet_layout, &row, "Spin rate", {"100%", "200%"}, &config.strobe_fast, WIDE_SEGMENT_WIDTH) {
             changed = true

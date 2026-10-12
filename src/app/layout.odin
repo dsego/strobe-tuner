@@ -71,6 +71,8 @@ DESKTOP_HEIGHT :: 620 // the window, as wide as the strobe, most of the strobe s
 WINDOW_MIN_SIZE :: [2]i32{STROBE_MIN_WIDTH, DESKTOP_HEIGHT} // the desktop window shrinks to a phone's width and stretches for the panel beside the strobe
 LEVEL_METER_WIDTH :: 80 // the microphone icon and the bar after it
 LEVEL_METER_HEIGHT :: 6 // the bar's
+LEVEL_BAR_WIDTH :: 60 // a point a dB, from -60 dBFS up to full scale
+LEVEL_BAR_OFFSET :: LEVEL_METER_WIDTH - LEVEL_BAR_WIDTH // past the icon
 
 RULER_HEIGHT :: 110
 
