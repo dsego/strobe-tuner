@@ -440,7 +440,7 @@ draw_strobe_display :: proc(
         draw_strobe_tracks(self, &tracks, rect, turned)
     }
 
-    if config.strobe_mode == .HARMONIC && config.partial_labels != .NONE {
+    if config.strobe_mode == .HARMONIC && (config.partial_labels != .NONE || config.show_band_cents) {
         draw_track_labels(rect, turned, upright, bands, geometry, config)
     }
 
@@ -492,6 +492,8 @@ draw_strobe_display :: proc(
                 if turned do position = {label_x + 0.5 * width, pane.y + pane.height - 16 - label_height}
                 draw_text_right(font.font, text, position, font.size, 0, accent_color)
             }
+
+            if config.partial_labels == .NONE do continue
 
             if geometry.shape == .WHEEL {
                 draw_strobe_partial(strobe_pane_point(pane, turned, on_ring), config.partial_labels, band, centered = true)
