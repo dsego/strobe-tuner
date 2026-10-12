@@ -42,6 +42,14 @@ import "../gfx"
 // -define:SPECTRUM_GLOW_ALPHA=n to try another
 SPECTRUM_GLOW_ALPHA :: #config(SPECTRUM_GLOW_ALPHA, 48)
 
+// How long the curve takes to follow, a time constant, up and down alike: the noise high up holds still
+// instead of boiling. -define:SPECTRUM_SMOOTHING_S=n to try another, 0 is off.
+SPECTRUM_SMOOTHING_S :: #config(SPECTRUM_SMOOTHING_S, 0.1)
+
+// The power of each bin averaged over this many of its windows, see update_spectrum_view:
+// -define:SPECTRUM_AVERAGE_WINDOWS=n to try another
+SPECTRUM_AVERAGE_WINDOWS :: #config(SPECTRUM_AVERAGE_WINDOWS, 0.25)
+
 SPECTRUM_LOW_HZ :: 40
 SPECTRUM_FLOOR_DB :: -120 // dBFS, under any input's noise
 
@@ -78,6 +86,7 @@ SpectrumView :: struct {
     power:      []f32, // of each bin, averaged
     levels:     []f32, // the same in dBFS
     over:       []f32, // dB over the noise around each bin
+    columns:    [dynamic]f32, // the curve's height at each of its points as drawn, 0 to 1, see SPECTRUM_SMOOTHING_S
 }
 
 init_spectrum_view :: proc(sample_rate: f32 = core.DEFAULT_SAMPLE_RATE) -> (self: SpectrumView) {
@@ -92,6 +101,7 @@ destroy_spectrum_view :: proc(self: ^SpectrumView) {
     delete(self.power)
     delete(self.levels)
     delete(self.over)
+    delete(self.columns)
 }
 
 // The input opened at another rate, the filters are made for it and everything starts over like for another
@@ -114,6 +124,7 @@ size_spectrum_filters :: proc(self: ^SpectrumView) {
 reset_spectrum_view :: proc(self: ^SpectrumView) {
     slice.zero(self.transform.samples)
     slice.zero(self.power)
+    clear(&self.columns)
     core.reset_biquad(&self.highpass)
     core.reset_biquad(&self.lowpass)
 }
@@ -153,7 +164,10 @@ update_spectrum_view :: proc(self: ^SpectrumView, windows: f32) {
     core.run_windowed_spectrum(transform)
 
     full_scale_db := 20 * math.log10(transform.full_scale)
-    average_s := f32(window) / self.sample_rate
+    // An average of the power falls a fixed number of dB a second, 4.3 over its time constant: over the whole
+    // window a peak 40 dB up took about 2 s to sink after the sound stopped. The curve's own smoothing keeps
+    // the noise calm, see SPECTRUM_SMOOTHING_S.
+    average_s := SPECTRUM_AVERAGE_WINDOWS * f32(window) / self.sample_rate
     alpha := 1 - math.exp(-f32(elapsed) / self.sample_rate / average_s)
 
     // Only up to the plot's top and the noise window past it, the rest up to Nyquist is never shown, e.g.
@@ -246,10 +260,22 @@ draw_spectrum_view :: proc(
     }
 
     // The curve, a point every couple of points across: the loudest bin under it, or between two bins where
-    // the low notes spread a bin over several columns
+    // the low notes spread a bin over several columns. High up a column is the loudest of dozens of bins, of
+    // the noise a different one every frame: each point follows over SPECTRUM_SMOOTHING_S, up and down
+    // alike, the noise settles near its middle. Rising at once and only falling slowly held it at the top of
+    // its peaks, stuck under the plot's ceiling.
     STEP :: 2
+    count := int(plot.width / STEP) + 1
+    if len(self.columns) != count {
+        clear(&self.columns)
+        resize(&self.columns, count)
+    }
+    follow: f32 = 1
+    when SPECTRUM_SMOOTHING_S > 0 do follow = 1 - math.exp(-gfx.frame_time() / SPECTRUM_SMOOTHING_S)
+
     points := make([dynamic][2]f32, context.temp_allocator)
-    for x: f32 = 0; x <= plot.width; x += STEP {
+    for column in 0 ..< count {
+        x := f32(column) * STEP
         from := low_hz * math.pow(high_hz / low_hz, x / plot.width) / bin_hz
         to := low_hz * math.pow(high_hz / low_hz, (x + STEP) / plot.width) / bin_hz
         last := len(shown) - 1
@@ -261,7 +287,11 @@ draw_spectrum_view :: proc(
             below := min(int(from), last - 1)
             db = math.lerp(shown[below], shown[below + 1], from - f32(below))
         }
-        append(&points, [2]f32{plot.x + x, spectrum_y(db, range, plot)})
+
+        height := &self.columns[column]
+        level := clamp((db - range[0]) / (range[1] - range[0]), 0, 1)
+        height^ += (level - height^) * follow
+        append(&points, [2]f32{plot.x + x, plot.y + plot.height * (1 - height^)})
     }
 
     // With the retro glow the curve glows like the scope's beam, the bloom added once: the scope's thin
