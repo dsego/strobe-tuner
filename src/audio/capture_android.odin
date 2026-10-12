@@ -32,7 +32,7 @@ import "../core"
 Capture :: struct {
     stream:             ^AAudioStream,
     device_open:        bool,
-    active_device:      i32, // always 0, the one input
+    active_device:      i32, // always SYSTEM_DEFAULT, the one input
     nodes:              [dynamic]^core.AudioCaptureNode,
 
     // What the nodes get, the device's own rate or a fast one decimated, see set_input_rate
@@ -65,6 +65,13 @@ device_count :: proc(self: ^Capture) -> i32 {
 
 device_name :: proc(self: ^Capture, device_index: i32) -> string {
     return "Microphone"
+}
+
+// The one input is the default, nothing to list again or follow
+refresh_devices :: proc(self: ^Capture) {}
+
+devices_changed :: proc(self: ^Capture) -> bool {
+    return false
 }
 
 open_stream_on_active_device :: proc(self: ^Capture) -> bool {
@@ -116,9 +123,10 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
 }
 
 
-// Asks for the microphone, the input opens once it's allowed
-init :: proc() -> ^Capture {
+// Asks for the microphone, the input opens once it's allowed. There's no other input to pick by name.
+init :: proc(name: string) -> ^Capture {
     self := new(Capture)
+    self.active_device = SYSTEM_DEFAULT
     open_stream_on_active_device(self)
     return self
 }

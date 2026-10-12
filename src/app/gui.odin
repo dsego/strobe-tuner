@@ -21,6 +21,7 @@ import "core:math"
 import "core:slice"
 import "core:strings"
 import "core:time"
+import "core:unicode/utf8"
 
 
 import "../core"
@@ -593,18 +594,15 @@ gui_dropdown :: proc(
     edit_mode := edit_mode
     btn_bounds := gfx.Rect{position.x, position.y, width, height}
 
-    // Characters of a label, a long device name is cut off
-    MAX_LABEL_LENGTH :: 25
-
     // Draw the button
+    CARET_WIDTH :: 22 // from the right edge, the label ends short of it
     gfx.draw_pill(btn_bounds, pill_dark)
-    draw_centered_icon(ICON_CARET_DOWN, {position.x + width - 22, position.y, ICON_SIZE, height}, icon_color)
+    draw_centered_icon(ICON_CARET_DOWN, {position.x + width - CARET_WIDTH, position.y, ICON_SIZE, height}, icon_color)
 
     if selected_idx != nil {
-        label := strings.cut(options[selected_idx^].label, 0, MAX_LABEL_LENGTH)
         draw_label(
             pixel_fonts.label,
-            fmt.ctprintf("%s", label),
+            fit_label(pixel_fonts.label, options[selected_idx^].label, width - left_pad - CARET_WIDTH - 4),
             {position.x + left_pad, position.y + (height - LABEL_SIZE) / 2},
             text_color_light,
             1,
@@ -690,8 +688,8 @@ gui_dropdown :: proc(
             }
 
             text_pos := [2]f32{option_bounds.x + 12, text_y}
-            label := strings.cut(option.label, 0, MAX_LABEL_LENGTH)
-            draw_label(pixel_fonts.label, fmt.ctprintf("%s", label), text_pos, gfx.hex(0xFFFFFFFF) if hover else text_color_light, 1)
+            label := fit_label(pixel_fonts.label, option.label, width - 24)
+            draw_label(pixel_fonts.label, label, text_pos, gfx.hex(0xFFFFFFFF) if hover else text_color_light, 1)
 
             // A line in the sheet's colour, a little in from the edges of the menu
             if divider {
@@ -702,6 +700,22 @@ gui_dropdown :: proc(
     }
 
     return edit_mode
+}
+
+// The label in width at the dropdowns' spacing, a long one cut short with "…", e.g. a device's name
+fit_label :: proc(font: PixelFont, text: string, width: f32) -> cstring {
+    label := fmt.ctprintf("%s", text)
+    if measure_label(font, label, 1).x <= width do return label
+
+    // Whole characters off the end until it fits with the ellipsis
+    end := len(text)
+    for end > 0 {
+        _, size := utf8.decode_last_rune_in_string(text[:end])
+        end -= size
+        label = fmt.ctprintf("%s…", strings.trim_right_space(text[:end]))
+        if measure_label(font, label, 1).x <= width do break
+    }
+    return label
 }
 
 

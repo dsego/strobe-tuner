@@ -52,7 +52,9 @@ App :: struct {
     scope:              core.Scope, // of the scope and the lamp display types, and the tracks the lamp turns
     audio_capture:      ^audio.Capture,
     audio_devices:      [dynamic]GuiOption,
-    audio_device_index: int, // in audio_devices, picked in the settings
+    audio_device_index: int, // in audio_devices, picked on the input's sheet
+    refresh_inputs:     bool, // the list is made again, see follow_input
+    default_label:      string, // the list's first input, see list_inputs
     strobe_display:     StrobeDisplay,
     cents_trace:        Trace,
     spectrum_view:      SpectrumView,
@@ -163,7 +165,7 @@ run_app :: proc(config: ^Config) {
     defer destroy_spectrum_view(&app.spectrum_view)
 
     // Opened or not, the strobe area says why there's no input, see draw_strobe_area
-    audio_capture := audio.init()
+    audio_capture := audio.init(config.input_device)
     defer audio.destroy(audio_capture)
     app.audio_capture = audio_capture
 
@@ -174,11 +176,9 @@ run_app :: proc(config: ^Config) {
     match_input_rate(&app)
     audio.start(audio_capture)
 
-    for index in 0 ..< audio.device_count(audio_capture) {
-        append(&app.audio_devices, GuiOption{index, audio.device_name(audio_capture, index)})
-    }
+    list_inputs(&app)
     defer delete(app.audio_devices)
-    app.audio_device_index = int(audio_capture.active_device)
+    defer delete(app.default_label)
 
     retune(&app)
 
@@ -217,6 +217,7 @@ run_app :: proc(config: ^Config) {
 frame :: proc(app: ^App) {
     config, audio_capture := app.config, app.audio_capture
     if audio.interruption_ended(audio_capture) do app.restart_audio = true
+    follow_input(app)
 
     config_before := config^
     handle_keys(app)
@@ -248,8 +249,6 @@ frame :: proc(app: ^App) {
     gfx.begin_frame(gfx.hex(strobe_bg_color))
     defer gfx.end_frame()
     gui_press_taken = false
-
-    if app.restart_audio || picked_device(app) != audio_capture.active_device do switch_input(app)
 
     // The sheets slide up over the main screen, which keeps running under them and ignores taps until
     // they're all the way down again. They're drawn at the end of the frame.
@@ -340,8 +339,58 @@ wait_in_background :: proc(app: ^App) {
     app.restart_audio = true
 }
 
-// The input picked in the settings, or the same one again, the measurements start afresh on it. Without any
-// there's nothing to open, the list is made at the start.
+// The input as it's picked and as the system has it. A pick on the input's sheet is kept by its name, for the
+// next start too. The list is made again when the system changed it or the sheet opens, a picked input
+// that's gone waits on the system default until it's back. Before the frame copies the config, the name the
+// config had is freed here.
+follow_input :: proc(app: ^App) {
+    capture := app.audio_capture
+
+    // Picked on the sheet in the last frame, the list and the open one match otherwise
+    if picked := picked_device(app); picked != capture.active_device {
+        set_input_device(app.config, "" if picked == audio.SYSTEM_DEFAULT else audio.device_name(capture, picked))
+        app.unsaved = true
+    }
+
+    if audio.devices_changed(capture) {
+        app.refresh_inputs = true
+        app.restart_audio = true
+    }
+    if app.refresh_inputs {
+        app.refresh_inputs = false
+        audio.refresh_devices(capture)
+        list_inputs(app)
+
+        // One may be there now
+        if audio.input_failed(capture) do app.restart_audio = true
+    }
+
+    if app.restart_audio || picked_device(app) != capture.active_device do switch_input(app)
+}
+
+// The list on the input's sheet: the system default with the device it is now, then the devices, none
+// without any. The config's input is picked, the default while it isn't connected.
+list_inputs :: proc(app: ^App) {
+    capture := app.audio_capture
+    clear(&app.audio_devices)
+    app.audio_device_index = 0
+    if audio.device_count(capture) == 0 do return
+
+    delete(app.default_label)
+    default_name := audio.device_name(capture, audio.SYSTEM_DEFAULT)
+    if default_name == "" do app.default_label = fmt.aprint("Default")
+    else do app.default_label = fmt.aprintf("Default (%s)", default_name)
+
+    append(&app.audio_devices, GuiOption{audio.SYSTEM_DEFAULT, app.default_label})
+    wanted := audio.find_device(capture, app.config.input_device)
+    for index in 0 ..< audio.device_count(capture) {
+        append(&app.audio_devices, GuiOption{index, audio.device_name(capture, index)})
+        if index == wanted do app.audio_device_index = len(app.audio_devices) - 1
+    }
+}
+
+// The input picked, or the same one again, the measurements start afresh on it. Without any there's nothing
+// to open.
 switch_input :: proc(app: ^App) {
     app.restart_audio = false
     if len(app.audio_devices) == 0 do return
@@ -697,11 +746,12 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
     }
 
     // The warning, the icon and the level open the input's sheet, a finger tall around the thin meter. Its
-    // levels show right away, not after the first hold.
+    // levels show right away, not after the first hold, and its list has what's connected now.
     left := layout.level_meter.x - ICON_SIZE - WARNING_GAP
     if gui_button({left, meter.y + LEVEL_METER_HEIGHT / 2 - 22, LEVEL_METER_WIDTH + ICON_SIZE + WARNING_GAP, 44}) {
         app.input_sheet.open = true
         app.input_stats_age = INPUT_STATS_HOLD_S
+        app.refresh_inputs = true
     }
 
     when DEBUG_STATS do draw_debug_stats(app, layout, reading.pitch, meter)
@@ -781,7 +831,7 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     if audio.microphone_denied() {
         title, hint = "Microphone access is off", "Tap to allow it in Settings"
     } else if len(app.audio_devices) == 0 {
-        title, hint = "No input found", "Connect one and start the app again"
+        title, hint = "No input found", "Connect one and tap to look again"
     } else if audio.input_failed(app.audio_capture) {
         title, hint = "The input didn't open", "Tap to try again"
     }
@@ -794,9 +844,10 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         draw_label(pixel_fonts.title, title, center - {title_size.x / 2, title_size.y + 4}, text_color_white)
         draw_label(pixel_fonts.label, hint, center - {hint_size.x / 2, -4}, text_color_muted)
 
+        // Tried again on what's connected now
         if gui_button(strobe) {
             if audio.microphone_denied() do audio.allow_microphone()
-            else do app.restart_audio = true
+            else do app.restart_audio, app.refresh_inputs = true, true
         }
     }
 }

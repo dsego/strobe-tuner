@@ -26,6 +26,11 @@ import "../core"
 // A fast input's samples are copied here in pieces this long and decimated in place, see write_to_nodes
 DECIMATE_CHUNK :: 2048
 
+// An active_device that's no device of the list: the system's default input, followed to wherever it moves,
+// or one that went from the list and is still open
+SYSTEM_DEFAULT :: -1
+NOT_LISTED :: -2
+
 register_node :: proc(self: ^Capture, node: ^core.AudioCaptureNode) {
     append(&self.nodes, node)
 }

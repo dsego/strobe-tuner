@@ -40,7 +40,7 @@ Capture :: struct {
     device:             ma.device,
     device_open:        bool,
     capture_infos:      []ma.device_info, // owned by ctx, valid until the next enumeration
-    active_device:      i32, // index into capture_infos
+    active_device:      i32, // index into capture_infos, or SYSTEM_DEFAULT or NOT_LISTED
     nodes:              [dynamic]^core.AudioCaptureNode,
 
     // What the nodes get, the device's own rate or a fast one decimated, see set_input_rate
@@ -52,14 +52,63 @@ Capture :: struct {
     // Set from miniaudio's thread when an iOS audio interruption (a call, Siri, an alarm) is over.
     // miniaudio stops the device when one begins but doesn't start it again.
     interruption_ended: bool,
+
+    // Set from miniaudio's thread when the system default moved to another device, or the open one stopped
+    // without being closed, e.g. unplugged. The list is made again and an input opened again from the main
+    // loop. Not while it's closed here, see close_device.
+    devices_changed:    bool,
+    closing:            bool,
 }
 
 device_count :: proc(self: ^Capture) -> i32 {
     return i32(len(self.capture_infos))
 }
 
+// SYSTEM_DEFAULT is named after the device it is now, "" when none is. Without the spaces some have around.
 device_name :: proc(self: ^Capture, device_index: i32) -> string {
-    return strings.truncate_to_byte(string(self.capture_infos[device_index].name[:]), 0)
+    index := default_device(self) if device_index == SYSTEM_DEFAULT else device_index
+    if index < 0 || index >= device_count(self) do return ""
+
+    return strings.trim_space(strings.truncate_to_byte(string(self.capture_infos[index].name[:]), 0))
+}
+
+// The system's default input in the list, -1 when none is marked
+default_device :: proc(self: ^Capture) -> i32 {
+    for &info, index in self.capture_infos {
+        if info.isDefault do return i32(index)
+    }
+    return -1
+}
+
+// The first device of the name in the list, SYSTEM_DEFAULT for "" or one that isn't there
+find_device :: proc(self: ^Capture, name: string) -> i32 {
+    if name == "" do return SYSTEM_DEFAULT
+
+    for index in 0 ..< device_count(self) {
+        if device_name(self, index) == name do return index
+    }
+    return SYSTEM_DEFAULT
+}
+
+// The system's inputs as they are now. The open one keeps its place by its name, one gone from the list is
+// NOT_LISTED, still open until another one is.
+refresh_devices :: proc(self: ^Capture) {
+    if !self.ctx_ready do return
+
+    // Copied, the names go with the list
+    open_name: [ma.MAX_DEVICE_NAME_LENGTH + 1]u8
+    if self.active_device >= 0 do open_name = self.capture_infos[self.active_device].name
+
+    infos: [^]ma.device_info
+    count: u32
+    if failed(ma.context_get_devices(&self.ctx, nil, nil, &infos, &count)) do count = 0
+    self.capture_infos = infos[:count]
+
+    if self.active_device >= 0 {
+        name := strings.truncate_to_byte(string(open_name[:]), 0)
+        found := find_device(self, name)
+        self.active_device = found if found != SYSTEM_DEFAULT else NOT_LISTED
+    }
 }
 
 open_stream_on_active_device :: proc(self: ^Capture) -> bool {
@@ -89,10 +138,11 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
     // Ask the OS for an unprocessed signal (no AGC / noise suppression)
     config.aaudio.inputPreset = .unprocessed
 
-    // The device by its ID. A nil ID would follow the system default, which may have changed since the list
-    // was made, so picking the input that was the default then could open another one. iOS has just the
-    // default.
-    when !IOS do config.capture.pDeviceID = &self.capture_infos[self.active_device].id
+    // A picked device by its ID. The system default without one, miniaudio follows it to another device and
+    // says so, see notification_callback. iOS has just the default.
+    when !IOS {
+        if self.active_device >= 0 do config.capture.pDeviceID = &self.capture_infos[self.active_device].id
+    }
 
     if failed(ma.device_init(&self.ctx, &config, &self.device)) do return false
 
@@ -105,29 +155,27 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
 }
 
 
-// Opens the default input. Without one, or when it can't be opened, the input stays closed and the app says
-// so, see input_failed.
-init :: proc() -> ^Capture {
+// Opens the input of the name, the system default for "" or one that isn't there. Without any, or when it
+// can't be opened, the input stays closed and the app says so, see input_failed.
+init :: proc(name: string) -> ^Capture {
     self := new(Capture)
+    self.active_device = SYSTEM_DEFAULT
 
     if failed(ma.context_init(nil, 0, nil, &self.ctx)) do return self
 
     self.ctx_ready = true
     fmt.println("Initialized miniaudio, backend:", self.ctx.backend)
 
-    infos: [^]ma.device_info
-    count: u32
-    if failed(ma.context_get_devices(&self.ctx, nil, nil, &infos, &count)) || count == 0 {
+    refresh_devices(self)
+    if device_count(self) == 0 {
         fmt.println("No audio input devices found")
         return self
     }
-    self.capture_infos = infos[:count]
 
-    for &info, index in self.capture_infos {
-        if info.isDefault do self.active_device = i32(index)
-    }
+    self.active_device = find_device(self, name)
+    opened := default_device(self) if self.active_device == SYSTEM_DEFAULT else self.active_device
     for index in 0 ..< device_count(self) {
-        marker := "[‣]" if index == self.active_device else " ‣ "
+        marker := "[‣]" if index == opened else " ‣ "
         fmt.printfln("  %v %s %s", index, marker, device_name(self, index))
     }
 
@@ -156,6 +204,11 @@ interruption_ended :: proc(self: ^Capture) -> bool {
     return intrinsics.atomic_exchange(&self.interruption_ended, false)
 }
 
+// Whether the list has to be made again since the last call, see devices_changed in Capture
+devices_changed :: proc(self: ^Capture) -> bool {
+    return intrinsics.atomic_exchange(&self.devices_changed, false)
+}
+
 // The input couldn't be opened, the strobe would just stand still
 input_failed :: proc(self: ^Capture) -> bool {
     return !self.device_open
@@ -164,8 +217,10 @@ input_failed :: proc(self: ^Capture) -> bool {
 close_device :: proc(self: ^Capture) {
     if !self.device_open do return
 
-    // Stops the device and waits for any in-flight callback to finish
+    // Stops the device and waits for any in-flight callback to finish, its stop isn't one to follow
+    intrinsics.atomic_store(&self.closing, true)
     ma.device_uninit(&self.device)
+    intrinsics.atomic_store(&self.closing, false)
     self.device_open = false
     fmt.println("Closed input stream")
 }
@@ -188,10 +243,18 @@ stream_callback :: proc "c" (device: ^ma.device, output, input: rawptr, frame_co
     write_to_nodes(self, slice.from_ptr(cast([^]f32)input, int(frame_count)))
 }
 
+// Following the system default to another device, miniaudio keeps the rate the input opened at and
+// resamples to it, so the new one is opened again at its own. iOS stops for an interruption and opens again
+// after it, a stop there isn't one to follow.
 notification_callback :: proc "c" (notification: ^ma.device_notification) {
-    if notification.type == .interruption_ended {
-        self := cast(^Capture)notification.pDevice.pUserData
+    self := cast(^Capture)notification.pDevice.pUserData
+    #partial switch notification.type {
+    case .interruption_ended:
         intrinsics.atomic_store(&self.interruption_ended, true)
+    case .rerouted, .stopped:
+        when !IOS {
+            if !intrinsics.atomic_load(&self.closing) do intrinsics.atomic_store(&self.devices_changed, true)
+        }
     }
 }
 

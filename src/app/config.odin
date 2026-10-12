@@ -17,6 +17,8 @@
 package app
 
 
+import "core:strings"
+
 import "../core"
 
 
@@ -205,6 +207,12 @@ Config :: struct {
     // a line across at the loudest peak with its level in dBFS
     spectrum_peak_level:          bool,
 
+    // --- Input ---
+
+    // The input picked by its name, "" follows the system's default. One that isn't connected waits for it
+    // on the default. Owned by the config, see set_input_device.
+    input_device:                 string,
+
     // --- Window ---
 
     // The desktop window's size as it was last used, in points. 0 opens it at the strobe's size and puts it
@@ -253,13 +261,17 @@ config_defaults :: Config {
     spectrum_labels              = .BOTH,
     spectrum_peak_level          = true,
 
+    // --- Input ---
+    input_device                 = "",
+
     // --- Window ---
     window_size                  = {},
     window_position              = {},
 }
 
 
-// Back to the defaults, on chromatic. The presets stay, their note offsets are tuned in by hand.
+// Back to the defaults, on chromatic. The presets stay, their note offsets are tuned in by hand, and the
+// input, it's picked on its own sheet.
 reset_config :: proc(config: ^Config) {
     kept := config^
     config^ = config_defaults
@@ -268,4 +280,14 @@ reset_config :: proc(config: ^Config) {
     config.preset_transposes = kept.preset_transposes
     config.note_offset_counts, config.note_offset_notes = kept.note_offset_counts, kept.note_offset_notes
     config.note_offset_cents = kept.note_offset_cents
+    config.input_device = kept.input_device
+}
+
+// The config's own copy of the name, the one it had is freed. Not while a copy of the config still points
+// at it, see follow_input.
+set_input_device :: proc(config: ^Config, name: string) {
+    if name == config.input_device do return
+
+    if len(config.input_device) > 0 do delete(config.input_device)
+    config.input_device = strings.clone(name) if len(name) > 0 else ""
 }

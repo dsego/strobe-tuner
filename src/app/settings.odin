@@ -479,7 +479,6 @@ gui_input :: proc(
     value_row(sheet_layout, &row, "SNR", decibels(stats.snr_db, "dB"))
 
     when !gfx.MOBILE {
-        // TODO: add refresh button to show newly connected devices
         if len(audio_devices) > 0 {
             gui_settings_dropdown(menu, .INPUT, picker, audio_devices, audio_device_index, left_pad = 36, down = true)
             draw_centered_icon(ICON_MICROPHONE, {picker.x + 12, picker.y, ICON_SIZE, picker.height}, icon_color)

@@ -69,4 +69,5 @@ run :: proc() {
     config := load_config()
     run_app(&config)
     save_config(config)
+    set_input_device(&config, "") // frees the name
 }

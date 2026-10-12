@@ -21,7 +21,7 @@ import "core:math"
 import "../gfx"
 
 // Missing ones draw as the first, the space too. Inter has no ♯, it comes from Noto.
-FONT_CODEPOINTS :: " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#/+-−1234567890.,:π!×½()[]¢·%"
+FONT_CODEPOINTS :: " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#/+-−1234567890.,:π!×½()[]¢·%…'’"
 
 // The numbers that change while they're read, every digit as wide so they don't shift, and a weight lighter
 // than the labels, and the strobe's track labels next to them. Inter Regular from the same 4.1 release

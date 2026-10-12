@@ -58,8 +58,8 @@ config_path :: proc() -> string {
 // From the standard OS path, e.g. ~/Library/Application Support/<APP_NAME>/config.ini on macOS, see
 // config_directory. What's missing or doesn't parse keeps its default, a number that isn't finite too, and
 // an array's missing trailing elements are zero. A few values are then held in range, see the end.
-// A field is an enum, a float, an integer, a bool or a fixed array of f32 or integers, an array of arrays
-// too, e.g. the note offsets per preset. Others keep their default: slices, dynamic and enumerated arrays,
+// A field is an enum, a float, an integer, a bool, a string or a fixed array of f32 or integers, an array of
+// arrays too, e.g. the note offsets per preset. Others keep their default: slices, dynamic and enumerated arrays,
 // arrays of anything else. An array of f64 would be read wrong, as f32.
 load_config :: proc() -> Config {
     config := config_defaults
@@ -91,6 +91,9 @@ load_config :: proc() -> Config {
             if value, ok := strconv.parse_bool(section[field.name]); ok {
                 (^bool)(ptr)^ = value
             }
+        case reflect.Type_Info_String:
+            // A copy of its own, the map goes at the end
+            if value := section[field.name]; len(value) > 0 do (^string)(ptr)^ = strings.clone(value)
         case reflect.Type_Info_Array:
             listed := strings.trim(section[field.name], "[] ")
             if len(listed) > 0 {
