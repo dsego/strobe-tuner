@@ -24,11 +24,14 @@ import "core:math/linalg"
 //   init(width, height, title, min_size) -> bool, shutdown()   the desktop window resizes down to min_size
 //   live_resize_frames(frame, data)     frame draws a frame while the desktop window is dragged or zoomed to another size
 //   resizing() -> bool                  in a frame drawn during the drag or the zoom
-//   set_window_size(width, height)      the desktop window, in points
+//   set_window_size(width, height)      the desktop window, in the system's points
 //   should_close() -> bool              polls the window events, call once per frame
 //   begin_frame(clear), end_frame()
-//   frame_time() -> f32, dpi_scale() -> f32
-//   window_size() -> [2]f32, safe_area() -> Rect   in points
+//   frame_time() -> f32, dpi_scale() -> f32   pixels per drawing point
+//   window_size() -> [2]f32, safe_area() -> Rect   in drawing points, the system's at the UI scale
+//   window_points() -> [2]f32           the window's own size, in the system's points
+//   content_scale() -> f32              the system's points per density-independent one, a phone's or a tablet's
+//   set_ui_scale(scale), ui_scale() -> f32   drawing points per system point, a tablet's are larger
 //   in_background() -> bool, wait_for_foreground()  a phone, nothing may be drawn in the background
 //   system_back()                       what Android does with its back button
 //   limit_fps(fps)                      fewer frames while there's nothing to show, 0 for the display's rate

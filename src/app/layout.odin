@@ -20,12 +20,11 @@ import "core:math"
 
 import "../gfx"
 
-// Where everything goes, worked out every frame from the window size and the safe area, in drawing points,
-// a tablet's larger than its own, see ui_scale. A window
-// taller than wide stacks the panel under the strobe: a phone, a tablet held upright, the desktop window as it
-// opens. One wider than tall puts the panel beside the strobe, on the right, and turns the strobe so the
-// disc's hub hides behind the panel as it does under it: a tablet on a music stand, the desktop window
-// stretched.
+// Where everything goes, worked out every frame from the window size and the safe area, in drawing points, a
+// tablet's larger than its own, see ui_scale. A window taller than wide stacks the panel under the strobe: a
+// phone, a tablet held upright, the desktop window as it opens. One wider than tall puts the panel beside the
+// strobe, on the right, and turns the strobe so the disc's hub hides behind the panel as it does under it: a
+// tablet on a music stand, the desktop window stretched.
 
 Layout :: struct {
     beside:         bool, // the panel is beside the strobe, not under it
@@ -49,8 +48,9 @@ Layout :: struct {
 STROBE_WIDTH :: 488 // the widest a strobe gets at its scale, see compute_layout
 STROBE_HEIGHT :: 306
 
-// The tracks grow with the window up to this many times the desktop's, see compute_layout. A tablet's
-// landscape pane fills with them at about 2.3.
+// The tracks grow with the window up to this many times the desktop's, see compute_layout. A tablet's pane
+// fills with them at about 1.5 in its drawing points, see ui_scale, the desktop window reaches the cap
+// stretched to about 2200 wide.
 STROBE_MAX_SCALE :: 2.4
 
 // A wide window shows more of the disc than the desktop window does, the arcs sweep down to the corners.
@@ -63,8 +63,8 @@ PANEL_MIN_WIDTH :: 424 // the column beside the strobe at its narrowest, the rea
 
 // The controls and a sheet's rows at their widest, PANEL_PADDING inside, centred in a wider panel. A tablet
 // held upright has the panel the whole window across, a label at one edge with its control at the other
-// would be a reach apart. The desktop window is 488 and never reaches it, a tablet's landscape column is
-// about 590 to 680.
+// would be a reach apart. The desktop window is 488 and never reaches it, nor does a tablet's landscape
+// column at 430 to 455 in its drawing points, see ui_scale. A tablet held upright is 595 to 683 across.
 PANEL_MAX_WIDTH :: 600
 STROBE_MIN_WIDTH :: 360 // a phone's, the narrowest the strobe gets
 DESKTOP_HEIGHT :: 620 // the window, as wide as the strobe, most of the strobe shows above the settings
@@ -97,14 +97,21 @@ READOUT_VALUE_Y :: 18
 // a tablet's size reloads the fonts a few times rather than on every frame, and no further than UI_SCALE_MAX.
 // An iPad mini comes out at 1.25, an 11-inch at 1.375, a 13-inch at the cap. A phone stays at 1.
 UI_SCALE_MAX :: #config(UI_SCALE_MAX, 1.5)
-TABLET_MIN_SIDE :: 600 // the window's shorter side, an iPad mini's is 744, a phone's under 450
+UI_SCALE_STEP :: 1.0 / 8
+UI_SCALE_SLACK :: 0.01 // of the scale, 8 points of the longer side either side of a step, see ui_scale
+TABLET_MIN_SIDE :: 600 // the window's shorter side, an iPad mini's is 744, a phone's under 450, Android's tablets start at 600 too
 
-// window is the window's own size, in the system's points
+// window is the window's size in density-independent points, the ones a phone or a tablet is sized in, see
+// gfx.content_scale. The scale drawn at now, gfx.ui_scale, holds until the window is UI_SCALE_SLACK past its
+// step, so the desktop window dragged to a step's edge doesn't reload the fonts on alternating frames.
 ui_scale :: proc(window: [2]f32) -> f32 {
     if min(window.x, window.y) < TABLET_MIN_SIDE do return 1
 
     scale := max(window.x, window.y) / (2 * PANEL_MIN_WIDTH)
-    return clamp(math.floor(scale * 8) / 8, 1, UI_SCALE_MAX)
+    current := gfx.ui_scale()
+    if current - UI_SCALE_SLACK <= scale && scale < current + UI_SCALE_STEP + UI_SCALE_SLACK do return current
+
+    return clamp(math.floor(scale / UI_SCALE_STEP) * UI_SCALE_STEP, 1, UI_SCALE_MAX)
 }
 
 // offsets is a preset's, room for the note's offset under the gauge

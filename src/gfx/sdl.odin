@@ -732,6 +732,14 @@ window_points :: proc() -> [2]f32 {
     return {f32(width), f32(height)}
 }
 
+// The system's points per density-independent one, the points a phone or a tablet is sized in: 1 on macOS
+// and iOS, whose points are, the screen's density on Android, where the window is in pixels, the scale setting
+// on a Linux desktop
+content_scale :: proc() -> f32 {
+    scale := sdl.GetWindowDisplayScale(gpu.window) / sdl.GetWindowPixelDensity(gpu.window)
+    return scale if scale > 0 else 1
+}
+
 // Everything is drawn and measured in points of this many of the window's own: 1 on a phone and in the
 // desktop window, more on a tablet read from further away, where the same layout comes out larger. The
 // window, its safe area and the pointer report in them, and dpi_scale grows by it so text rasterized for it
@@ -740,6 +748,7 @@ set_ui_scale :: proc(scale: f32) {
     gpu.ui_scale = scale
 }
 
+// The scale in effect, see set_ui_scale
 ui_scale :: proc() -> f32 {
     return gpu.ui_scale
 }

@@ -243,7 +243,8 @@ unload_glow_targets :: proc(self: ^StrobeDisplay) {
     self.glow_drawn = {}
 }
 
-// (Re)create the glow render targets, the scene is rendered at the display's DPI scale to stay sharp
+// (Re)create the glow render targets, the scene is rendered at the display's DPI scale to stay sharp, the
+// bloom in the window's own points so the glow spreads the same at any UI scale
 ensure_glow_targets :: proc(self: ^StrobeDisplay, size: [2]f32) {
     scale := gfx.dpi_scale()
     if scale == self.glow_scale && size == self.glow_size do return
@@ -251,8 +252,9 @@ ensure_glow_targets :: proc(self: ^StrobeDisplay, size: [2]f32) {
     unload_glow_targets(self)
 
     self.scene_rt = gfx.load_render_target(i32(size.x * scale), i32(size.y * scale))
+    bloom := size * gfx.ui_scale() / BLOOM_DOWNSCALE
     for &rt in self.bloom_rt {
-        rt = gfx.load_render_target(i32(size.x / BLOOM_DOWNSCALE), i32(size.y / BLOOM_DOWNSCALE))
+        rt = gfx.load_render_target(i32(bloom.x), i32(bloom.y))
     }
     self.glow_scale = scale
     self.glow_size = size

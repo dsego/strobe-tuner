@@ -217,11 +217,14 @@ frame :: proc(app: ^App) {
 
     reading := measure(app)
 
-    // A tablet draws in larger points than its own, see ui_scale
-    when !DEBUG_STATS do gfx.set_ui_scale(ui_scale(gfx.window_points()))
+    when !DEBUG_STATS {
+        // A tablet draws in larger points than its own, see ui_scale
+        points := gfx.window_points()
+        gfx.set_ui_scale(ui_scale(points / gfx.content_scale()))
+        when !gfx.MOBILE do follow_window_size(config, points)
+    }
 
     window, safe := gfx.window_size(), gfx.safe_area()
-    when !gfx.MOBILE && !DEBUG_STATS do follow_window_size(config, gfx.window_points())
 
     // The plots take the rest of the window on the right
     when DEBUG_STATS {
