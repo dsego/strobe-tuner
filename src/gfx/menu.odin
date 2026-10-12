@@ -20,7 +20,11 @@ package gfx
 
 add_app_menu_items :: proc(settings: int, items: []MenuItem) {}
 
-add_menu :: proc(title: cstring, items: []MenuItem) {}
+add_menu :: proc(title: cstring, items: []MenuItem, opening: proc(data: rawptr) = nil, data: rawptr = nil) -> int {
+    return -1
+}
+
+set_menu_items :: proc(which: int, items: []MenuItem) {}
 
 add_window_menu_items :: proc(items: []MenuItem) {}
 

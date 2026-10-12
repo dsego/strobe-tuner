@@ -17,6 +17,7 @@
 package gfx
 
 import "base:intrinsics"
+import "base:runtime"
 import NS "core:sys/darwin/Foundation"
 
 // The macOS menu bar, nothing on iOS. SDL makes the app menu and the Window menu when it starts, the app
@@ -27,10 +28,24 @@ import NS "core:sys/darwin/Foundation"
 // has Command in its key, and the plain keys the app handles skip while Command is down.
 
 menu: struct {
-    target:  ^NS.Object, // gets every item's action, see menu_target
-    chosen:  int, // the last item chosen, 0 none
-    items:   [MAX_MENU_COMMANDS]^NS.MenuItem, // by command, for set_menu_checked
-    checked: [MAX_MENU_COMMANDS]bool,
+    target:   ^NS.Object, // gets every item's action, see menu_target
+    chosen:   int, // the last item chosen, 0 none
+    items:    [MAX_MENU_COMMANDS]^NS.MenuItem, // by command, for set_menu_checked
+    checked:  [MAX_MENU_COMMANDS]bool,
+
+    // The app's own menus by what add_menu returned, and what each calls as it opens, see menu_delegate
+    menus:    [MAX_MENUS]^NS.Menu,
+    openings: [MAX_MENUS]MenuOpening,
+    count:    int,
+    delegate: ^NS.Object,
+    ctx:      runtime.Context, // the app's, its allocator for what opening makes
+}
+
+MAX_MENUS :: 4
+
+MenuOpening :: struct {
+    callback: proc(data: rawptr),
+    data:     rawptr,
 }
 
 // The items go into the app menu after its Settings…, SDL's Preferences… that macOS renames, found by its
@@ -59,9 +74,12 @@ add_app_menu_items :: proc(settings: int, items: []MenuItem) {
     }
 }
 
-// A menu of its own, before the Window menu
-add_menu :: proc(title: cstring, items: []MenuItem) {
+// A menu of its own, before the Window menu. opening is called with data as it opens, from inside the
+// frame's events, and may set its items then, see set_menu_items. Returns the menu for that, -1 for none.
+add_menu :: proc(title: cstring, items: []MenuItem, opening: proc(data: rawptr) = nil, data: rawptr = nil) -> int {
     when !IOS {
+        if menu.count == MAX_MENUS do return -1
+
         submenu := NS.Menu_initWithTitle(NS.Menu_alloc(), ns_string(title))
         for item in items do NS.Menu_addItem(submenu, make_menu_item(item))
 
@@ -73,6 +91,33 @@ add_menu :: proc(title: cstring, items: []MenuItem) {
         if index < 0 do index = NS.Menu_numberOfItems(bar)
 
         NS.Menu_insertItem(bar, bar_item, index)
+
+        if opening != nil {
+            menu.ctx = context
+            NS.Menu_setDelegate(submenu, cast(^NS.MenuDelegate)menu_delegate())
+        }
+        menu.menus[menu.count] = submenu
+        menu.openings[menu.count] = {opening, data}
+        menu.count += 1
+        return menu.count - 1
+    } else {
+        return -1
+    }
+}
+
+// The menu's items replaced, their commands start unchecked
+set_menu_items :: proc(which: int, items: []MenuItem) {
+    when !IOS {
+        if which < 0 || which >= menu.count do return
+
+        submenu := menu.menus[which]
+        for position in 0 ..< NS.Menu_numberOfItems(submenu) {
+            command := int(NS.MenuItem_tag(NS.Menu_itemAtIndex(submenu, position)))
+            if command > 0 && command < MAX_MENU_COMMANDS do menu.items[command] = nil
+        }
+        NS.Menu_removeAllItems(submenu)
+
+        for item in items do NS.Menu_addItem(submenu, make_menu_item(item))
     }
 }
 
@@ -120,7 +165,8 @@ make_menu_item :: proc(item: MenuItem) -> ^NS.MenuItem {
     made := NS.MenuItem_initWithTitle(NS.MenuItem_alloc(), ns_string(item.title), nil, ns_string(key))
     if item.shift do NS.MenuItem_setKeyEquivalentModifierMask(made, {.Command, .Shift})
 
-    attach_item(made, item.command)
+    // Without an action the menu greys it out
+    if item.command > 0 do attach_item(made, item.command)
     return made
 }
 
@@ -131,6 +177,7 @@ attach_item :: proc(item: ^NS.MenuItem, command: int) {
     NS.MenuItem_setAction(item, intrinsics.objc_find_selector("menuChosen:"))
     NS.MenuItem_setTag(item, NS.Integer(command))
     menu.items[command] = item
+    menu.checked[command] = false
 }
 
 // An object of a class made here at run time, its one method keeps the chosen item's tag
@@ -147,4 +194,41 @@ menu_target :: proc() -> ^NS.Object {
 
     menu.target = intrinsics.objc_send(^NS.Object, cast(^NS.Object)NS.class_createInstance(class, 0), "init")
     return menu.target
+}
+
+// The delegate of the menus with an opening, made like menu_target. It calls it as the menu opens. Asked for
+// a key equivalent it says there's none without filling the menu, it would otherwise be filled on keys.
+menu_delegate :: proc() -> ^NS.Object {
+    if menu.delegate != nil do return menu.delegate
+
+    needs_update :: proc "c" (self: NS.id, selector: NS.SEL, opened: ^NS.Menu) {
+        context = menu.ctx
+        for which in 0 ..< menu.count {
+            opening := menu.openings[which]
+            if menu.menus[which] == opened && opening.callback != nil do opening.callback(opening.data)
+        }
+    }
+    has_key_equivalent :: proc "c" (
+        self: NS.id,
+        selector: NS.SEL,
+        opened: ^NS.Menu,
+        event: NS.id,
+        target: ^NS.id,
+        action: ^NS.SEL,
+    ) -> bool {
+        return false
+    }
+
+    class := NS.objc_allocateClassPair(intrinsics.objc_find_class("NSObject"), "StrobieMenuDelegate", 0)
+    NS.class_addMethod(class, intrinsics.objc_find_selector("menuNeedsUpdate:"), auto_cast needs_update, "v@:@")
+    NS.class_addMethod(
+        class,
+        intrinsics.objc_find_selector("menuHasKeyEquivalent:forEvent:target:action:"),
+        auto_cast has_key_equivalent,
+        "B@:@@^@^:",
+    )
+    NS.objc_registerClassPair(class)
+
+    menu.delegate = intrinsics.objc_send(^NS.Object, cast(^NS.Object)NS.class_createInstance(class, 0), "init")
+    return menu.delegate
 }

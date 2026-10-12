@@ -44,7 +44,8 @@ import "core:math/linalg"
 //   touch_input() -> bool               the last press was a finger
 //   has_haptics() -> bool, haptic_tap()  a tap felt in the hand, a phone's, see haptics.odin
 //
-//   MenuItem, add_app_menu_items(settings, items), add_menu(title, items), add_window_menu_items(items)
+//   MenuItem, add_app_menu_items(settings, items), add_window_menu_items(items)
+//   add_menu(title, items, opening, data) -> menu, set_menu_items(menu, items)
 //   menu_command() -> int, set_menu_checked(command, checked)   the macOS menu bar, nothing elsewhere
 //
 //   Texture, load_texture_rgba(width, height, pixels), unload_texture(texture)
@@ -88,10 +89,10 @@ MenuItem :: struct {
     title:   cstring, // nil for a separator
     key:     cstring, // with Command, nil for none
     shift:   bool, // and Shift
-    command: int, // what menu_command returns when it's chosen, from 1 to under MAX_MENU_COMMANDS
+    command: int, // what menu_command returns when it's chosen, from 1 to under MAX_MENU_COMMANDS, 0 greys it out
 }
 
-MAX_MENU_COMMANDS :: 32
+MAX_MENU_COMMANDS :: 64
 
 Color :: [4]u8
 

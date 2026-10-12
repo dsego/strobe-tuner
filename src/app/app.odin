@@ -53,8 +53,10 @@ App :: struct {
     audio_capture:      ^audio.Capture,
     audio_devices:      [dynamic]GuiOption,
     audio_device_index: int, // in audio_devices, picked on the input's sheet
+    input_listed:       int, // audio_device_index as list_inputs picked it, another one is a pick
     refresh_inputs:     bool, // the list is made again, see follow_input
     default_label:      string, // the list's first input, see list_inputs
+    input_menu:         int, // the Input menu, see setup_menu_bar
     strobe_display:     StrobeDisplay,
     cents_trace:        Trace,
     spectrum_view:      SpectrumView,
@@ -134,7 +136,7 @@ run_app :: proc(config: ^Config) {
 
     defer gfx.shutdown()
 
-    setup_menu_bar()
+    setup_menu_bar(&app)
 
     // Loaded each frame for the screen's scale, see update_pixel_fonts
     defer unload_pixel_fonts()
@@ -339,16 +341,18 @@ wait_in_background :: proc(app: ^App) {
     app.restart_audio = true
 }
 
-// The input as it's picked and as the system has it. A pick on the input's sheet is kept by its name, for the
-// next start too. The list is made again when the system changed it or the sheet opens, a picked input
-// that's gone waits on the system default until it's back. Before the frame copies the config, the name the
-// config had is freed here.
+// The input as it's picked and as the system has it. A pick on the input's sheet or in the Input menu is kept
+// by its name, for the next start too. The list is made again when the system changed it, or the sheet or the
+// menu opens, a picked input that's gone waits on the system default until it's back. Before the frame
+// copies the config, the name the config had is freed here.
 follow_input :: proc(app: ^App) {
     capture := app.audio_capture
 
-    // Picked on the sheet in the last frame, the list and the open one match otherwise
-    if picked := picked_device(app); picked != capture.active_device {
+    // Picked since the last frame, the list's own pick is input_listed
+    if app.audio_device_index != app.input_listed {
+        picked := picked_device(app)
         set_input_device(app.config, "" if picked == audio.SYSTEM_DEFAULT else audio.device_name(capture, picked))
+        app.input_listed = app.audio_device_index
         app.unsaved = true
     }
 
@@ -368,24 +372,43 @@ follow_input :: proc(app: ^App) {
     if app.restart_audio || picked_device(app) != capture.active_device do switch_input(app)
 }
 
-// The list on the input's sheet: the system default with the device it is now, then the devices, none
-// without any. The config's input is picked, the default while it isn't connected.
+// The list on the input's sheet and in the Input menu: the system default with the device it is now, then
+// the devices, none without any. The config's input is picked, the default while it isn't connected. The
+// one opened follows in follow_input.
 list_inputs :: proc(app: ^App) {
     capture := app.audio_capture
     clear(&app.audio_devices)
-    app.audio_device_index = 0
-    if audio.device_count(capture) == 0 do return
+    app.audio_device_index, app.input_listed = 0, 0
 
-    delete(app.default_label)
-    default_name := audio.device_name(capture, audio.SYSTEM_DEFAULT)
-    if default_name == "" do app.default_label = fmt.aprint("Default")
-    else do app.default_label = fmt.aprintf("Default (%s)", default_name)
+    if audio.device_count(capture) > 0 {
+        delete(app.default_label)
+        default_name := audio.device_name(capture, audio.SYSTEM_DEFAULT)
+        if default_name == "" do app.default_label = fmt.aprint("Default")
+        else do app.default_label = fmt.aprintf("Default (%s)", default_name)
 
-    append(&app.audio_devices, GuiOption{audio.SYSTEM_DEFAULT, app.default_label})
-    wanted := audio.find_device(capture, app.config.input_device)
-    for index in 0 ..< audio.device_count(capture) {
-        append(&app.audio_devices, GuiOption{index, audio.device_name(capture, index)})
-        if index == wanted do app.audio_device_index = len(app.audio_devices) - 1
+        append(&app.audio_devices, GuiOption{audio.SYSTEM_DEFAULT, app.default_label})
+        wanted := audio.find_device(capture, app.config.input_device)
+        for index in 0 ..< audio.device_count(capture) {
+            append(&app.audio_devices, GuiOption{index, audio.device_name(capture, index)})
+            if index == wanted do app.audio_device_index = len(app.audio_devices) - 1
+        }
+        app.input_listed = app.audio_device_index
+    }
+
+    // The default, a line, the devices. As many as there are commands for, the sheet has them all.
+    items: [dynamic]gfx.MenuItem
+    items.allocator = context.temp_allocator
+    for option, index in app.audio_devices[:min(len(app.audio_devices), MAX_INPUT_COMMANDS)] {
+        if index == 1 do append(&items, gfx.MenuItem{})
+        append(&items, gfx.MenuItem{title = fmt.ctprintf("%s", option.label), command = int(MenuCommand.INPUTS) + index})
+    }
+    if len(items) == 0 do append(&items, gfx.MenuItem{title = "No Input Found"})
+
+    gfx.set_menu_items(app.input_menu, items[:])
+
+    // Checked already, the menu may be opening now and show before the next frame's update_menu_checks
+    if len(app.audio_devices) > 0 && app.audio_device_index < MAX_INPUT_COMMANDS {
+        gfx.set_menu_checked(int(MenuCommand.INPUTS) + app.audio_device_index, true)
     }
 }
 
@@ -438,7 +461,10 @@ MenuCommand :: enum {
     RETRO_GLOW,
     LOCK_NOTE,
     DEFAULT_SIZE,
+    INPUTS, // and the ones after it, the Input menu's by their place in audio_devices, see list_inputs
 }
+
+MAX_INPUT_COMMANDS :: gfx.MAX_MENU_COMMANDS - int(MenuCommand.INPUTS)
 
 // The display each of the View menu's first items shows, in the settings' order
 DISPLAY_COMMANDS :: [StrobeDisplayType]MenuCommand {
@@ -449,9 +475,10 @@ DISPLAY_COMMANDS :: [StrobeDisplayType]MenuCommand {
     .SPECTRUM = .SHOW_SPECTRUM,
 }
 
-// SDL's app menu gets Settings…, the View menu the displays, the glow and the lock, the Window menu the
-// strobe's size back. Resetting stays on the settings sheet, where RESET asks first.
-setup_menu_bar :: proc() {
+// SDL's app menu gets Settings…, the View menu the displays, the glow and the lock, the Input menu the
+// inputs, the Window menu the strobe's size back. Resetting stays on the settings sheet, where RESET asks
+// first.
+setup_menu_bar :: proc(app: ^App) {
     gfx.add_app_menu_items(int(MenuCommand.SETTINGS), {})
 
     gfx.add_menu(
@@ -468,6 +495,17 @@ setup_menu_bar :: proc() {
         },
     )
 
+    // Filled by list_inputs, and the list made again as it opens for what's connected now. The one opened
+    // follows in the next frame, see follow_input.
+    looking :: proc(data: rawptr) {
+        app := (^App)(data)
+        if app.audio_capture == nil do return
+
+        audio.refresh_devices(app.audio_capture)
+        list_inputs(app)
+    }
+    app.input_menu = gfx.add_menu("Input", {}, looking, app)
+
     gfx.add_window_menu_items({{title = "Strobe Size", key = "0", command = int(MenuCommand.DEFAULT_SIZE)}})
 }
 
@@ -478,6 +516,10 @@ update_menu_checks :: proc(app: ^App) {
     }
     gfx.set_menu_checked(int(MenuCommand.RETRO_GLOW), app.config.strobe_glow)
     gfx.set_menu_checked(int(MenuCommand.LOCK_NOTE), app.tuner.locked)
+
+    for index in 0 ..< min(len(app.audio_devices), MAX_INPUT_COMMANDS) {
+        gfx.set_menu_checked(int(MenuCommand.INPUTS) + index, index == app.audio_device_index)
+    }
 }
 
 // Settings… from the menu bar or Ctrl+, over whichever sheet is up
@@ -511,6 +553,10 @@ handle_keys :: proc(app: ^App) {
     for menu_command, type in DISPLAY_COMMANDS {
         if app.menu == menu_command do config.strobe_display_type = type
     }
+
+    // Opened in the next frame like a pick on the input's sheet, see follow_input
+    input := int(app.menu) - int(MenuCommand.INPUTS)
+    if input >= 0 && input < len(app.audio_devices) do app.audio_device_index = input
 
     if plain && gfx.key_pressed(.G) do config.strobe_glow = !config.strobe_glow
 
