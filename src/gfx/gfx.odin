@@ -28,10 +28,10 @@ import "core:math/linalg"
 //   should_close() -> bool              polls the window events, call once per frame
 //   begin_frame(clear), end_frame()
 //   frame_time() -> f32, dpi_scale() -> f32   pixels per drawing point
-//   window_size() -> [2]f32, safe_area() -> Rect   in drawing points, the system's at the UI scale
+//   window_size() -> [2]f32, safe_area() -> Rect   in drawing points, the system's over the UI scale
 //   window_points() -> [2]f32           the window's own size, in the system's points
 //   content_scale() -> f32              the system's points per density-independent one, a phone's or a tablet's
-//   set_ui_scale(scale), ui_scale() -> f32   drawing points per system point, a tablet's are larger
+//   set_ui_scale(scale), ui_scale() -> f32   system points per drawing point, 1.5 on a 13-inch iPad
 //   in_background() -> bool, wait_for_foreground()  a phone, nothing may be drawn in the background
 //   system_back()                       what Android does with its back button
 //   limit_fps(fps)                      fewer frames while there's nothing to show, 0 for the display's rate

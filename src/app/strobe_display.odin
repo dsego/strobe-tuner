@@ -45,6 +45,7 @@ StrobeDisplay :: struct {
     bloom_rt:        [2]gfx.RenderTarget,
     glow_scale:      f32, // DPI scale the render targets were created for
     glow_size:       [2]f32, // and the strobe size in points
+    glow_bloom:      [2]f32, // and the bloom targets' size, see ensure_glow_targets
     glow_drawn:      GlowFrame, // what the render targets hold, see draw_strobe_display
 
     // per band stripe visibility, smoothed so it doesn't flicker, see update_band_visibility
@@ -247,17 +248,18 @@ unload_glow_targets :: proc(self: ^StrobeDisplay) {
 // bloom in the window's own points so the glow spreads the same at any UI scale
 ensure_glow_targets :: proc(self: ^StrobeDisplay, size: [2]f32) {
     scale := gfx.dpi_scale()
-    if scale == self.glow_scale && size == self.glow_size do return
+    bloom := size * gfx.ui_scale() / BLOOM_DOWNSCALE
+    if scale == self.glow_scale && size == self.glow_size && bloom == self.glow_bloom do return
 
     unload_glow_targets(self)
 
     self.scene_rt = gfx.load_render_target(i32(size.x * scale), i32(size.y * scale))
-    bloom := size * gfx.ui_scale() / BLOOM_DOWNSCALE
     for &rt in self.bloom_rt {
         rt = gfx.load_render_target(i32(bloom.x), i32(bloom.y))
     }
     self.glow_scale = scale
     self.glow_size = size
+    self.glow_bloom = bloom
 }
 
 // A view other than the strobe drawn with the glow, between begin_glow and end_glow: offscreen, as large

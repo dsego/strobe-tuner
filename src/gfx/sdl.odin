@@ -205,7 +205,7 @@ gpu: struct {
     clear:            Color,
     acquire_failed:   bool, // the last frame's swapchain, reported once
     dropped:          bool, // the last frame wasn't drawn, the render targets hold what they had before it
-    ui_scale:         f32, // the app's points per window point, see set_ui_scale
+    ui_scale:         f32, // the window's points per drawing point, see set_ui_scale
 
     // input
     quit:             bool,
@@ -736,8 +736,10 @@ window_points :: proc() -> [2]f32 {
 // and iOS, whose points are, the screen's density on Android, where the window is in pixels, the scale setting
 // on a Linux desktop
 content_scale :: proc() -> f32 {
-    scale := sdl.GetWindowDisplayScale(gpu.window) / sdl.GetWindowPixelDensity(gpu.window)
-    return scale if scale > 0 else 1
+    density, display := sdl.GetWindowPixelDensity(gpu.window), sdl.GetWindowDisplayScale(gpu.window)
+    if density <= 0 || display <= 0 do return 1
+
+    return display / density
 }
 
 // Everything is drawn and measured in points of this many of the window's own: 1 on a phone and in the

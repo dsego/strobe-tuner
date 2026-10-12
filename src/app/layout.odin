@@ -98,18 +98,22 @@ READOUT_VALUE_Y :: 18
 // An iPad mini comes out at 1.25, an 11-inch at 1.375, a 13-inch at the cap. A phone stays at 1.
 UI_SCALE_MAX :: #config(UI_SCALE_MAX, 1.5)
 UI_SCALE_STEP :: 1.0 / 8
-UI_SCALE_SLACK :: 0.01 // of the scale, 8 points of the longer side either side of a step, see ui_scale
+UI_SCALE_SLACK :: 8 // points past an edge before the scale changes, see ui_scale
 TABLET_MIN_SIDE :: 600 // the window's shorter side, an iPad mini's is 744, a phone's under 450, Android's tablets start at 600 too
 
 // window is the window's size in density-independent points, the ones a phone or a tablet is sized in, see
-// gfx.content_scale. The scale drawn at now, gfx.ui_scale, holds until the window is UI_SCALE_SLACK past its
-// step, so the desktop window dragged to a step's edge doesn't reload the fonts on alternating frames.
-ui_scale :: proc(window: [2]f32) -> f32 {
-    if min(window.x, window.y) < TABLET_MIN_SIDE do return 1
+// gfx.content_scale, current the scale drawn at now. That holds until the window is UI_SCALE_SLACK past the
+// edge it changes at, so the desktop window dragged to an edge doesn't reload the fonts on alternating
+// frames. Never above the longer side's own step: at a held scale a landscape panel would fall under the
+// strobe, see compute_layout.
+ui_scale :: proc(window: [2]f32, current: f32) -> f32 {
+    short_side, long_side := min(window.x, window.y), max(window.x, window.y)
+    tablet_side: f32 = TABLET_MIN_SIDE - UI_SCALE_SLACK if current > 1 else TABLET_MIN_SIDE + UI_SCALE_SLACK
+    if short_side < tablet_side do return 1
 
-    scale := max(window.x, window.y) / (2 * PANEL_MIN_WIDTH)
-    current := gfx.ui_scale()
-    if current - UI_SCALE_SLACK <= scale && scale < current + UI_SCALE_STEP + UI_SCALE_SLACK do return current
+    step_width :: 2 * PANEL_MIN_WIDTH
+    scale := long_side / step_width
+    if current <= scale && long_side < (current + UI_SCALE_STEP) * step_width + UI_SCALE_SLACK do return current
 
     return clamp(math.floor(scale / UI_SCALE_STEP) * UI_SCALE_STEP, 1, UI_SCALE_MAX)
 }

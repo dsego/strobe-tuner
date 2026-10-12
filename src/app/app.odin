@@ -220,7 +220,7 @@ frame :: proc(app: ^App) {
     when !DEBUG_STATS {
         // A tablet draws in larger points than its own, see ui_scale
         points := gfx.window_points()
-        gfx.set_ui_scale(ui_scale(points / gfx.content_scale()))
+        gfx.set_ui_scale(ui_scale(points / gfx.content_scale(), gfx.ui_scale()))
         when !gfx.MOBILE do follow_window_size(config, points)
     }
 
