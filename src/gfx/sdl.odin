@@ -1034,6 +1034,52 @@ draw_line :: proc(start, end: [2]f32, thickness: f32, color: Color) {
     )
 }
 
+// A wide line through the points in one strip, the pieces meet on a mitred joint without overlapping, a
+// translucent line is as even at the joints as along them. A spike's mitre is cut at twice the width.
+draw_polyline :: proc(points: [][2]f32, thickness: f32, color: Color) {
+    if len(points) < 2 do return
+
+    // The offset either side at each point, along the bisector of its two pieces
+    side :: proc(points: [][2]f32, index: int, half: f32) -> [2]f32 {
+        normal :: proc(from, to: [2]f32) -> [2]f32 {
+            delta := to - from
+            length := math.sqrt(delta.x * delta.x + delta.y * delta.y)
+            return {-delta.y, delta.x} / length if length > 0 else {}
+        }
+        before := normal(points[max(index - 1, 0)], points[index])
+        after := normal(points[index], points[min(index + 1, len(points) - 1)])
+        if index == 0 do before = after
+        if index == len(points) - 1 do after = before
+
+        bisector := before + after
+        length := math.sqrt(bisector.x * bisector.x + bisector.y * bisector.y)
+        if length < 1e-6 do return before * half
+
+        bisector /= length
+        cosine := bisector.x * after.x + bisector.y * after.y
+        return bisector * min(half / max(cosine, 1e-6), 2 * half)
+    }
+
+    half := 0.5 * thickness
+    previous := side(points, 0, half)
+    for index in 1 ..< len(points) {
+        offset := side(points, index, half)
+        start, end := points[index - 1], points[index]
+        push_vertices(
+            gpu.white.handle,
+            {
+                {start + previous, {0, 0}, color},
+                {end + offset, {1, 0}, color},
+                {end - offset, {1, 1}, color},
+                {start + previous, {0, 0}, color},
+                {end - offset, {1, 1}, color},
+                {start - previous, {0, 1}, color},
+            },
+        )
+        previous = offset
+    }
+}
+
 draw_circle :: proc(center: [2]f32, radius: f32, color: Color) {
     SEGMENTS :: 24
     for i in 0 ..< SEGMENTS {

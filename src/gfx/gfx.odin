@@ -53,6 +53,7 @@ import "core:math/linalg"
 //   draw_texture(texture, source, dest, tint), negative source width/height flips the image
 //   draw_rect(position, size, color)
 //   draw_line(start, end, thickness, color), draw_circle(center, radius, color)
+//   draw_polyline(points, thickness, color)   one mitred strip, even where a translucent line bends
 //   draw_text(font, text, position, size, spacing, color), measure_text(font, text, size, spacing)
 //   begin_scissor(rect), end_scissor(), set_blend_mode(mode)
 //   load_shapes(), unload_shapes(), draw_rounded_rect(rect, radius, color), draw_pill(rect, color),
@@ -204,7 +205,7 @@ point_in_rect :: proc(point: [2]f32, rect: Rect) -> bool {
 }
 
 draw_line_strip :: proc(points: [][2]f32, color: Color) {
-    for i in 1 ..< len(points) {
-        draw_line(points[i - 1], points[i], 1, color)
+    for index in 1 ..< len(points) {
+        draw_line(points[index - 1], points[index], 1, color)
     }
 }

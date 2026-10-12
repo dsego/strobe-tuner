@@ -38,6 +38,10 @@ import "../gfx"
 // e.g. a debug build's at the longest setting, reads one whole window and skips the rest, and a history
 // of those showed a comb at the window's spacing, 12 Hz, with the note between its teeth.
 
+// Of each of the glow's two strips, the middle under both about as bright as the dots it replaced, about four of
+// them at 16 overlapped there: -define:SPECTRUM_GLOW_ALPHA=n to try another
+SPECTRUM_GLOW_ALPHA :: #config(SPECTRUM_GLOW_ALPHA, 32)
+
 SPECTRUM_LOW_HZ :: 40
 SPECTRUM_FLOOR_DB :: -120 // dBFS, under any input's noise
 
@@ -342,18 +346,15 @@ draw_spectrum_view :: proc(
             gfx.draw_rect({point.x, point.y}, {points[index + 1].x - point.x, bottom - point.y}, fill)
         }
 
-        // Thinner than the trace's, a spectrum is jagged and the fill under it carries the shape. The glow's
-        // dots are half its radius apart, the thin line is straight pieces, its dots would take thousands.
+        // Thinner than the trace's, a spectrum is jagged and the fill under it carries the shape. The glow is
+        // two strips, the narrow one over the wide one for a softer edge, rather than the trace's dots: a
+        // jagged spectrum's would take thousands.
         GLOW_RADIUS :: 2.5
         LINE_WIDTH :: 1.2
         glow := line_color
-        glow.a = 16
-        pen := Pen {
-            radius = GLOW_RADIUS,
-            color  = glow,
-        }
-        pen_start(&pen, points[0])
-        for point in points[1:] do pen_line_to(&pen, point)
+        glow.a = SPECTRUM_GLOW_ALPHA
+        gfx.draw_polyline(points[:], 2 * GLOW_RADIUS, glow)
+        gfx.draw_polyline(points[:], GLOW_RADIUS, glow)
 
         for index in 1 ..< len(points) {
             gfx.draw_line(points[index - 1], points[index], LINE_WIDTH, line_color)
