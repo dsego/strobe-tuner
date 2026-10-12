@@ -381,7 +381,6 @@ picked_device :: proc(app: ^App) -> i32 {
 MenuCommand :: enum {
     NONE,
     SETTINGS,
-    RESET_SETTINGS,
     SHOW_STROBE,
     SHOW_SCOPE,
     SHOW_TRACE,
@@ -401,13 +400,10 @@ DISPLAY_COMMANDS :: [StrobeDisplayType]MenuCommand {
     .SPECTRUM = .SHOW_SPECTRUM,
 }
 
-// SDL's app menu gets Settings… and Reset Settings…, the View menu the displays, the glow and the lock, the
-// Window menu the strobe's size back
+// SDL's app menu gets Settings…, the View menu the displays, the glow and the lock, the Window menu the
+// strobe's size back. Resetting stays on the settings sheet, where RESET asks first.
 setup_menu_bar :: proc() {
-    gfx.add_app_menu_items(
-        int(MenuCommand.SETTINGS),
-        {{title = "Reset Settings…", key = "r", shift = true, command = int(MenuCommand.RESET_SETTINGS)}},
-    )
+    gfx.add_app_menu_items(int(MenuCommand.SETTINGS), {})
 
     gfx.add_menu(
         "View",
@@ -435,15 +431,14 @@ update_menu_checks :: proc(app: ^App) {
     gfx.set_menu_checked(int(MenuCommand.LOCK_NOTE), app.tuner.locked)
 }
 
-// Settings… and Reset Settings… from the menu bar, over whichever sheet is up. Reset opens the settings with
-// RESET tapped once, it asks before anything is reset.
-open_settings_sheet :: proc(app: ^App, reset: bool) {
+// Settings… from the menu bar or Ctrl+, over whichever sheet is up
+open_settings_sheet :: proc(app: ^App) {
     for sheet in app_sheets(app) do if sheet != &app.settings_sheet do dismiss_sheet(app, sheet)
     reset_note_offsets_editing()
 
     app.settings_sheet.open = true
     app.display_options = false
-    app.reset_confirm = reset
+    app.reset_confirm = false
 }
 
 handle_keys :: proc(app: ^App) {
@@ -458,9 +453,7 @@ handle_keys :: proc(app: ^App) {
     #partial switch app.menu {
     case .SETTINGS:
         if app.settings_sheet.open do close_settings_sheet(app)
-        else do open_settings_sheet(app, reset = false)
-    case .RESET_SETTINGS:
-        open_settings_sheet(app, reset = true)
+        else do open_settings_sheet(app)
     case .RETRO_GLOW:
         config.strobe_glow = !config.strobe_glow
     case .DEFAULT_SIZE:
@@ -513,7 +506,7 @@ handle_keys :: proc(app: ^App) {
         control := gfx.key_down(.LEFT_CONTROL) || gfx.key_down(.RIGHT_CONTROL)
         if control && gfx.key_pressed(.COMMA) {
             if app.settings_sheet.open do close_settings_sheet(app)
-            else do open_settings_sheet(app, reset = false)
+            else do open_settings_sheet(app)
         }
         if control && gfx.key_pressed(.NUM_0) do config.window_size = {}
     }
