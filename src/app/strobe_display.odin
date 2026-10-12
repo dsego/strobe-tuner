@@ -58,6 +58,9 @@ StrobeDisplay :: struct {
     band_phasors:    [core.MAX_BANDS]complex64,
     // when the tracks were last drawn, another display may have shown in between, see strobe_tracks
     tracks_tick:     time.Tick,
+    // what turned them and how, a change starts them over, see strobe_tracks
+    tracks_lamp:     bool,
+    tracks_mode:     core.StrobeMode,
     // the scope beam's visibility, see draw_scope_display
     scope_visibility: f32,
     // the scope's screen for its shader, a byte a cell, see draw_scope_screen
@@ -673,6 +676,12 @@ strobe_tracks :: proc(
     stale := time.duration_seconds(time.tick_since(self.tracks_tick)) > STROBE_STALE_S
     self.tracks_tick = time.tick_now()
 
+    // The lamp's phase isn't the lock-in's, and a vernier track's stripes are packed tighter than a harmonic
+    // one's: the phase drawn before and the average of it don't carry over
+    if lamp != self.tracks_lamp || mode != self.tracks_mode do stale = true
+
+    self.tracks_lamp, self.tracks_mode = lamp, mode
+
     for &band, band_index in bands {
         uniforms := &tracks.uniforms[band_index]
         uniforms^ = shared
@@ -717,8 +726,8 @@ strobe_tracks :: proc(
         wrap := core.STROBE_PHASE_WRAP / density
         drawn_phase^ += wrap * math.round((uniforms.phase - drawn_phase^) / wrap)
 
-        // Coming back to the strobe, the stripes start where they are like after a pluck, not smeared from a
-        // phase seconds old
+        // Coming back to the strobe or turned another way, the stripes start where they are like after a
+        // pluck, not smeared from a phase seconds old or from another one
         if stale {
             self.band_phasors[band_index] = 0
             drawn_phase^ = uniforms.phase
