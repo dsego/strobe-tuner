@@ -128,6 +128,29 @@ audio_capture_read :: proc(
     return int(available), i64(available)
 }
 
+// audio_capture_read with the new samples highpassed and lowpassed, the older ones were on the way in before.
+// Samples went by that the buffer didn't get, the filters start from rest on the new ones.
+audio_capture_read_filtered :: proc(
+    self: ^AudioCaptureNode,
+    audio_buffer: []f32,
+    highpass, lowpass: ^Biquad,
+    min_available: i32 = 0,
+) -> (
+    read: int,
+    elapsed: i64,
+) {
+    read, elapsed = audio_capture_read(self, audio_buffer, min_available)
+    if i64(read) < elapsed {
+        reset_biquad(highpass)
+        reset_biquad(lowpass)
+    }
+
+    new_samples := audio_buffer[len(audio_buffer) - read:]
+    biquad_process(highpass, new_samples, new_samples)
+    biquad_process(lowpass, new_samples, new_samples)
+    return
+}
+
 
 // A stall longer than the ring buffer holds, the stale samples are skipped and the time counted once
 @(test)

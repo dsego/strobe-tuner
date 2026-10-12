@@ -349,6 +349,7 @@ tuner_readout :: proc(self: ^Tuner) -> (steady_pitch: PitchInfo) {
 // instead of the nearest note. Either way from where the note is tuned to, 0 where the strobe stands still.
 tuner_cents :: proc(self: ^Tuner, freq: f32, note: Note) -> f32 {
     if measures_target(self) do return tuner_cents_off(self, freq)
+
     if freq <= 0 || note.frequency <= 0 do return 0
 
     return cents_deviation(freq, note.frequency) - note_offset_cents(self, note)

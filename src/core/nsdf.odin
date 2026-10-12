@@ -70,6 +70,9 @@ destroy_nsdf :: proc(self: ^NSDF) {
 
 // The frequency of the chosen peak, 0 for none, and the peak, its lag and NSDF value
 run_nsdf :: proc(self: ^NSDF, samples: []f32) -> (freq: f32, peak: Vec2) {
+    // A whole window, find_peak looks at every lag
+    assert(len(samples) == len(self.values))
+
     nsdf_autocorrelate(self, samples)
     normalize(self, samples)
     peak = find_peak(self)

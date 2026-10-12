@@ -34,7 +34,7 @@ WindowedSpectrum :: struct {
     pffft_setup: rawptr,
     fft_size:    int, // twice the window
     taper:       []f32, // the Hann window's weights, as long as the samples
-    samples:     []f32, // the latest, the newest at the end, see windowed_spectrum_write or audio_capture_read
+    samples:     []f32, // the latest, the newest at the end, see audio_capture_read
     padded:      []f32, // the tapered samples zero padded to the FFT
     spectrum:    []complex64, // the power of each bin, DC and Nyquist packed into the first, see square_spectrum
     full_scale:  f32, // a full scale sine's bin, its magnitude: a quarter of the window's samples
@@ -64,7 +64,8 @@ destroy_windowed_spectrum :: proc(self: ^WindowedSpectrum) {
     delete(self.spectrum)
 }
 
-// The newest samples after the ones before, of more than the window holds the latest
+// The newest samples after the ones before, of more than the window holds the latest. The tests' way in, the
+// app reads them in with audio_capture_read.
 windowed_spectrum_write :: proc(self: ^WindowedSpectrum, samples: []f32) {
     count := min(len(samples), len(self.samples))
     copy(self.samples, self.samples[count:])

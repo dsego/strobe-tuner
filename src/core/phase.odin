@@ -40,7 +40,7 @@ import "core:time"
 
 MIN_STROBE_FREQ_HZ :: 16.0
 MAX_BANDS :: 5 // the strobe's tracks, the config holds as many
-// The sample buffer, the window for the lowest note at a quarter of a semitone fits in it, 262 144 samples
+// The sample buffer, the window for the lowest note at a quarter of a semitone fits in it, 264 000 samples
 // at 48 kHz
 MAX_WINDOW_S :: 5.5
 
@@ -554,6 +554,12 @@ determine_band_phases :: proc(self: ^PhaseComparator, bands: []^PhaseBand) {
     }
 }
 
+// How far the track's frequency plus diff_hz is from it. An octave flat is as far as it goes: noise on a low
+// track can advance by more than its frequency, and a negative frequency has no cents.
+band_cents_off :: proc(band: ^PhaseBand, diff_hz: f32) -> f32 {
+    return cents_deviation(max(band.freq_hz + diff_hz, 0.5 * band.freq_hz), band.freq_hz)
+}
+
 // The track's onset, rate, drift and the strobe's turn from the frame's phase advance
 advance_band :: proc(self: ^PhaseComparator, band: ^PhaseBand, phase_advance: f64, had_phase: bool) {
     update_onset(self, band)
@@ -569,12 +575,11 @@ advance_band :: proc(self: ^PhaseComparator, band: ^PhaseBand, phase_advance: f6
 
         // How far off the track is lately, the advances averaged with their sign, a waver on the note evens out
         // like it did in a narrow band's window. Noise's random advances even out too, the SNR fades its
-        // stripes. An octave flat is as far as it goes, noise on a low track can advance by more than its
-        // frequency.
+        // stripes.
         drift_hz := f32(phase_advance / step * sample_rate / math.TAU)
         alpha := f32(1 - math.exp(-step / (DRIFT_SMOOTH_S * sample_rate)))
         band.drift_hz += alpha * (drift_hz - band.drift_hz)
-        band.drift_cents = abs(cents_deviation(max(band.freq_hz + band.drift_hz, 0.5 * band.freq_hz), band.freq_hz))
+        band.drift_cents = abs(band_cents_off(band, band.drift_hz))
     }
 
     // The readout fits the rate while the stripes fully show, a fading note keeps the last of it, the dimming
@@ -596,10 +601,8 @@ advance_band :: proc(self: ^PhaseComparator, band: ^PhaseBand, phase_advance: f6
         band.rate = slope if has_slope else phase_advance / step
     }
 
-    // An octave flat is as far as it goes, like the drift: noise on a low track can fit a rate past its own
-    // frequency, and a negative frequency has no cents
-    freq_diff_hz := f32(band.rate * sample_rate / math.TAU)
-    band.err_cents = cents_deviation(max(band.freq_hz + freq_diff_hz, 0.5 * band.freq_hz), band.freq_hz)
+    // Noise on a low track can fit a rate past its own frequency too
+    band.err_cents = band_cents_off(band, f32(band.rate * sample_rate / math.TAU))
 
     // The strobe turns by the phase times the track's speed
     turn_strobe(&band.scaled_phase, band.phase_diff, band.speed)
@@ -831,6 +834,7 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
                 clock += 1
             }
             audio_capture_write(pc, chunk[:])
+
             // A clear pitch like the pitch detection's, the noise floors don't learn the tone
             run_phase_detection(pc, is_tonal = true)
         }
@@ -890,6 +894,7 @@ test_note_away_and_back :: proc(t: ^testing.T) {
                 if voice.freq > 0 do sample += f32(0.1 * math.sin(phase) + 0.03 * math.sin(2 * phase) + 0.01 * math.sin(4 * phase))
             }
             if frame == retune do set_phase_comparator_freq(pc, to, 440, 0.025, 2, .HARMONIC)
+
             audio_capture_write(pc, voice.chunk[:])
             run_phase_detection(pc, is_tonal = voice.freq > 0 && frame >= glide)
         }
@@ -954,7 +959,7 @@ test_strobe_turn_rate :: proc(t: ^testing.T) {
         return start - pc.bands[0].scaled_phase
     }
 
-    // Up to the edge of the note. Further out the string is outside the band's window (25 cents a bin) and
+    // Up to the edge of the note. Further out the string is outside the band's window (100 cents a bin) and
     // its phase has nothing to follow.
     for target_hz in ([]f32{82.41, 329.63}) {
         for speed_scale in ([]f32{0.25, 1}) {

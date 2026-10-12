@@ -148,20 +148,12 @@ update_spectrum_view :: proc(self: ^SpectrumView, windows: f32) {
 
     // The newest samples at the end of the history, all of them however long the frame took
     transform := &self.transform
-    read, elapsed := core.audio_capture_read(self, transform.samples)
+    read, elapsed := core.audio_capture_read_filtered(self, transform.samples, &self.highpass, &self.lowpass)
 
     // The stale skip coming back from another display, the picture and the filters start over on what's next
     if read == 0 && elapsed > 0 do reset_spectrum_view(self)
     if read == 0 do return
 
-    // Samples went by that the history didn't get, the filters start from rest on the new ones
-    if i64(read) < elapsed {
-        core.reset_biquad(&self.highpass)
-        core.reset_biquad(&self.lowpass)
-    }
-    new_samples := transform.samples[len(transform.samples) - read:]
-    core.biquad_process(&self.highpass, new_samples, new_samples)
-    core.biquad_process(&self.lowpass, new_samples, new_samples)
     core.run_windowed_spectrum(transform)
 
     full_scale_db := 20 * math.log10(transform.full_scale)

@@ -83,7 +83,6 @@ PitchInfo :: struct {
     detected_freq:   f32,
     detected_note:   Note,
     clarity:         f32,
-    nsdf_peak:       Vec2,
     shortest_period: bool, // the first NSDF peak, not a guess at a multiple of the period
     rms:             f32,
     rms_dbfs:        f32,
@@ -159,13 +158,8 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info := PitchInfo{}
 
     // Once a display frame's worth of new samples is in, the read wants more than its minimum
-    read, elapsed := audio_capture_read(self, self.samples, i32(self.sample_rate) / DETECTIONS_PER_SECOND - 1)
-
-    // Samples went by that the window didn't get, the filters start from rest on the new ones
-    if i64(read) < elapsed {
-        reset_biquad(&self.highpass)
-        reset_biquad(&self.lowpass)
-    }
+    min_available := i32(self.sample_rate) / DETECTIONS_PER_SECOND - 1
+    read, elapsed := audio_capture_read_filtered(self, self.samples, &self.highpass, &self.lowpass, min_available)
 
     if read == 0 {
         stale := prev_info
@@ -173,17 +167,14 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
         return stale
     }
 
-    // The new samples are at the end, the older ones were filtered on the way in before
-    new_samples := self.samples[len(self.samples) - read:]
-    biquad_process(&self.highpass, new_samples, new_samples)
-    biquad_process(&self.lowpass, new_samples, new_samples)
-
     info.measured = true
     info.fresh = true
-    info.detected_freq, info.nsdf_peak = run_nsdf(&self.nsdf, self.samples)
-    info.clarity = info.nsdf_peak.y
+
+    nsdf_peak: Vec2
+    info.detected_freq, nsdf_peak = run_nsdf(&self.nsdf, self.samples)
+    info.clarity = nsdf_peak.y
     info.shortest_period = self.nsdf.chosen_peak == 0
-    info.rms = max(calculate_rms(self.samples), MIN_RMS_TRACKABLE)
+    info.rms = max(calculate_rms(self.samples), MIN_NOISE_FLOOR)
     info.rms_dbfs = dbfs(info.rms)
 
     dt := f32(elapsed) / self.sample_rate

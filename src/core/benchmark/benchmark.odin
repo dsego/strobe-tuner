@@ -33,7 +33,7 @@ import pffft "../../../external/odin-pffft"
 SAMPLERATE :: core.DEFAULT_SAMPLE_RATE
 PITCH_FFT_SIZE :: 8192 // the pitch detection's at 48 kHz, see core.PITCH_WINDOW_S
 ITERATIONS :: 1000
-TRACKS :: 5 // core.MAX_BANDS, every track on the fundamental's window
+TRACKS :: core.MAX_BANDS // every track on the fundamental's window
 FRAMES_PER_SECOND :: 120
 
 main :: proc() {
@@ -132,7 +132,7 @@ main :: proc() {
         scope := core.init_scope(SCOPE_COLUMNS, SCOPE_ROWS)
         defer core.destroy_scope(&scope)
         core.set_scope_freq(&scope, note.freq_hz)
-        scope.persistence_seconds = 0.04
+        scope.persistence_seconds = 18 / note.freq_hz // the app's default 18 periods
 
         played_hz := note.freq_hz * math.pow(2, note.cents / 1200)
         chunk: [SCOPE_FRAME]f32

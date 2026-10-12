@@ -19,8 +19,6 @@ package core
 import "core:math"
 import "core:testing"
 
-MIN_RMS_TRACKABLE :: 1e-6
-
 // Louder than this over the floor counts as something playing, the floor doesn't learn it
 NOISE_FLOOR_SNR_DB_THRESHOLD :: 10
 NOISE_FLOOR_TIME_S :: 0.5
