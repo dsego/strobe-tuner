@@ -164,6 +164,7 @@ RULER_EDGE :: 36 // half a letter and a sharp, the outermost ones stay inside th
 RULER_MAX_PER_SIDE :: 2
 RULER_SLIDE_SPEED :: 14 // per second, how quickly the slide closes the distance
 RULER_SWIPE_START :: 10 // points sideways before a press on the ruler is a swipe and not a tap
+RULER_VELOCITY_S :: 0.024 // the finger's speed smoothed over about this long, half of it each frame at 60 FPS
 RULER_COAST_MAX :: 20 // notes per second
 RULER_COAST_MIN :: 2 // notes per second, let go slower than this it settles on the nearest note
 RULER_COAST_FRICTION :: 4 // how far a flick coasts, 1/4 of a second at the finger's speed, in about 1/2 a second
@@ -302,7 +303,9 @@ ruler_follow_finger :: proc(ruler: ^NoteRuler, rect: gfx.Rect, spacing, highest:
         }
     case gfx.mouse_down():
         // Smoothed, a finger stops for a frame or two before it lets go
-        if dt > 0 do swipe.velocity += ((mouse.x - swipe.last_x) / dt - swipe.velocity) * 0.5
+        if dt > 0 {
+            swipe.velocity += ((mouse.x - swipe.last_x) / dt - swipe.velocity) * (1 - math.exp(-dt / RULER_VELOCITY_S))
+        }
 
         swipe.last_x = mouse.x
         if swipe.gesture != .SWIPING && abs(mouse.x - swipe.press_x) > RULER_SWIPE_START {
