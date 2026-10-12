@@ -44,7 +44,7 @@ load_shapes :: proc() {
         }
     }
 
-    shape_texture = load_texture_rgba(SHAPE_SIZE, SHAPE_SIZE, pixels[:])
+    shape_texture = create_texture(SHAPE_SIZE, SHAPE_SIZE, pixels[:])
 }
 
 unload_shapes :: proc() {
@@ -85,7 +85,7 @@ draw_pill :: proc(rect: Rect, color: Color) {
     draw_rounded_rect(rect, rect.height / 2, color)
 }
 
-// The whole circle stretched over rect, e.g. a dot of the scope's beam
+// The whole circle stretched over rect, e.g. a dot of the trace's pen
 draw_disc :: proc(rect: Rect, color: Color) {
     draw_texture(shape_texture, {0, 0, SHAPE_SIZE, SHAPE_SIZE}, rect, color)
 }

@@ -38,7 +38,7 @@ draw_nsdf :: proc(rect: gfx.Rect, nsdf: ^core.NSDF, font: gfx.Font) {
     }
 
     draw_time_plot(rect, LAGS, 1000, font)
-    gfx.draw_line_strip(points[:shown], gfx.GOLD)
+    gfx.draw_polyline(points[:shown], 1, gfx.GOLD)
 
     for peak, index in nsdf.peaks {
         cross := [2]f32{rect.x + peak.x * lag_width, middle - peak.y * (rect.height / 2)}
@@ -145,7 +145,7 @@ draw_freq_plot :: proc(rect: gfx.Rect, nsdf: ^core.NSDF, font: gfx.Font) {
         candidate_count += 1
     }
 
-    gfx.draw_line_strip(points[:], gfx.PINK)
+    gfx.draw_polyline(points[:], 1, gfx.PINK)
 
     MIN_PROMINENCE :: 1.9953 // 3 dB of power
     for index in 1 ..< max(candidate_count - 1, 1) {

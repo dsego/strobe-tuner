@@ -49,7 +49,7 @@ import "core:math/linalg"
 //   add_menu(title, items, opening, data) -> menu, set_menu_items(menu, items)
 //   menu_command() -> int, set_menu_checked(command, checked)   the macOS menu bar, nothing elsewhere
 //
-//   Texture, load_texture_rgba(width, height, pixels), unload_texture(texture)
+//   Texture, create_texture(width, height, pixels), unload_texture(texture)
 //   create_gray_texture(width, height), update_texture(texture, pixels)
 //   Font, load_font(ttf, size, codepoints), unload_font(font)
 //   draw_texture(texture, source, dest, tint), negative source width/height flips the image
@@ -119,8 +119,6 @@ Key :: enum {
     NUM_3,
     NUM_4,
     NUM_5,
-    LEFT_SHIFT,
-    RIGHT_SHIFT,
     LEFT_SUPER,
     RIGHT_SUPER,
     LEFT_CONTROL,
@@ -203,10 +201,4 @@ point_in_rect :: proc(point: [2]f32, rect: Rect) -> bool {
         point.y >= rect.y &&
         point.y < rect.y + rect.height \
     )
-}
-
-draw_line_strip :: proc(points: [][2]f32, color: Color) {
-    for index in 1 ..< len(points) {
-        draw_line(points[index - 1], points[index], 1, color)
-    }
 }

@@ -102,6 +102,7 @@ refresh_devices :: proc(self: ^Capture) {
     infos: [^]ma.device_info
     count: u32
     if failed(ma.context_get_devices(&self.ctx, nil, nil, &infos, &count)) do count = 0
+
     self.capture_infos = infos[:count]
 
     if self.active_device >= 0 {
@@ -135,9 +136,6 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
     when IOS {
         if !activate_audio_session() do return false
     }
-
-    // Ask the OS for an unprocessed signal (no AGC / noise suppression)
-    config.aaudio.inputPreset = .unprocessed
 
     // A picked device by its ID. The system default without one, miniaudio follows it to another device and
     // says so, see notification_callback. iOS has just the default.

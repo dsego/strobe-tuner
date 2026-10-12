@@ -25,6 +25,7 @@ import "base:intrinsics"
 import "base:runtime"
 import "core:fmt"
 import "core:math"
+import "core:math/linalg"
 import "core:mem"
 import sdl "vendor:sdl3"
 import stbtt "vendor:stb/truetype"
@@ -160,8 +161,6 @@ scancodes := [Key]sdl.Scancode {
     .NUM_3       = ._3,
     .NUM_4       = ._4,
     .NUM_5       = ._5,
-    .LEFT_SHIFT  = .LSHIFT,
-    .RIGHT_SHIFT = .RSHIFT,
     .LEFT_SUPER  = .LGUI,
     .RIGHT_SUPER = .RGUI,
     .LEFT_CONTROL = .LCTRL,
@@ -655,6 +654,7 @@ end_frame :: proc() {
         &swapchain_w,
         &swapchain_h,
     )
+
     // Once, it can fail every frame while Android tears the surface down
     if !acquired && !gpu.acquire_failed {
         fmt.eprintln("SDL_WaitAndAcquireGPUSwapchainTexture failed:", sdl.GetError())
@@ -866,11 +866,6 @@ mouse_wheel :: proc() -> f32 {
     return gpu.wheel
 }
 
-// Straight alpha RGBA, the sampler is linear already
-load_texture_rgba :: proc(width, height: i32, pixels: []u8) -> Texture {
-    return create_texture(width, height, pixels)
-}
-
 // One byte a texel, read as the red channel, for pixels the CPU redraws every frame with update_texture.
 // Starts out undefined, an empty texture when it fails.
 create_gray_texture :: proc(width, height: i32) -> Texture {
@@ -907,6 +902,7 @@ update_texture :: proc(texture: Texture, pixels: []u8) {
     append(&gpu.texture_uploads, TextureUpload{texture, offset})
 }
 
+// At once, not after the frame: a texture drawn earlier in the frame is still to be drawn in end_frame
 unload_texture :: proc(texture: Texture) {
     if texture.handle != nil do sdl.ReleaseGPUTexture(gpu.device, texture.handle)
 }
@@ -1028,11 +1024,9 @@ draw_rect :: proc(position: [2]f32, size: [2]f32, color: Color) {
 }
 
 draw_line :: proc(start, end: [2]f32, thickness: f32, color: Color) {
-    delta := end - start
-    length := math.sqrt(delta.x * delta.x + delta.y * delta.y)
-    if length == 0 do return
+    if start == end do return
 
-    normal := [2]f32{-delta.y, delta.x} * (0.5 * thickness / length)
+    normal := line_normal(start, end) * 0.5 * thickness
 
     push_vertices(
         gpu.white.handle,
@@ -1047,6 +1041,12 @@ draw_line :: proc(start, end: [2]f32, thickness: f32, color: Color) {
     )
 }
 
+// The unit normal of the line from start to end, to its left on the screen, none for a point
+line_normal :: proc(start, end: [2]f32) -> [2]f32 {
+    direction := linalg.normalize0(end - start)
+    return {-direction.y, direction.x}
+}
+
 // A wide line through the points in one strip, the pieces meet on a mitred joint without overlapping, a
 // translucent line is as even at the joints as along them. A spike's mitre is cut at twice the width.
 draw_polyline :: proc(points: [][2]f32, thickness: f32, color: Color) {
@@ -1054,22 +1054,16 @@ draw_polyline :: proc(points: [][2]f32, thickness: f32, color: Color) {
 
     // The offset either side at each point, along the bisector of its two pieces
     side :: proc(points: [][2]f32, index: int, half: f32) -> [2]f32 {
-        normal :: proc(from, to: [2]f32) -> [2]f32 {
-            delta := to - from
-            length := math.sqrt(delta.x * delta.x + delta.y * delta.y)
-            return {-delta.y, delta.x} / length if length > 0 else {}
-        }
-        before := normal(points[max(index - 1, 0)], points[index])
-        after := normal(points[index], points[min(index + 1, len(points) - 1)])
+        before := line_normal(points[max(index - 1, 0)], points[index])
+        after := line_normal(points[index], points[min(index + 1, len(points) - 1)])
         if index == 0 do before = after
         if index == len(points) - 1 do after = before
 
         bisector := before + after
-        length := math.sqrt(bisector.x * bisector.x + bisector.y * bisector.y)
-        if length < 1e-6 do return before * half
+        if linalg.length(bisector) < 1e-6 do return before * half
 
-        bisector /= length
-        cosine := bisector.x * after.x + bisector.y * after.y
+        bisector = linalg.normalize(bisector)
+        cosine := linalg.dot(bisector, after)
         return bisector * min(half / max(cosine, 1e-6), 2 * half)
     }
 
@@ -1397,7 +1391,8 @@ upload_vertices :: proc(command_buffer: ^sdl.GPUCommandBuffer) -> bool {
     return true
 }
 
-// An empty texture when it fails, the draws with it are skipped
+// Straight alpha RGBA, the sampler is linear already. An empty texture when it fails, the draws with it are
+// skipped.
 create_texture :: proc(width, height: i32, pixels: []u8) -> Texture {
     handle := sdl.CreateGPUTexture(
         gpu.device,
@@ -1432,6 +1427,12 @@ create_texture :: proc(width, height: i32, pixels: []u8) -> Texture {
     sdl.UnmapGPUTransferBuffer(gpu.device, transfer)
 
     command_buffer := sdl.AcquireGPUCommandBuffer(gpu.device)
+    if command_buffer == nil {
+        fmt.eprintln("SDL_AcquireGPUCommandBuffer failed:", sdl.GetError())
+        sdl.ReleaseGPUTexture(gpu.device, handle)
+        return {}
+    }
+
     copy_pass := sdl.BeginGPUCopyPass(command_buffer)
     sdl.UploadToGPUTexture(
         copy_pass,

@@ -87,6 +87,7 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
         return false
     case .UNKNOWN:
         intrinsics.atomic_store(&microphone_permission, MicrophonePermission.ASKED)
+
         // Not asked after all, the next try asks again, see input_failed
         if !sdl.RequestAndroidPermission("android.permission.RECORD_AUDIO", permission_answered, nil) {
             fmt.println("Couldn't ask for the microphone:", sdl.GetError())
@@ -158,7 +159,6 @@ interruption_ended :: proc(self: ^Capture) -> bool {
     return intrinsics.atomic_exchange(&self.interruption_ended, false) || granted
 }
 
-// The input couldn't be opened though it's allowed, the strobe would just stand still
 // Opened with the permission, or tried and couldn't even ask for it, the strobe area offers to try again.
 // While the system asks nothing has failed yet.
 input_failed :: proc(self: ^Capture) -> bool {
@@ -280,7 +280,6 @@ foreign aaudio {
     AAudioStreamBuilder_setDirection :: proc(builder: ^AAudioStreamBuilder, direction: AAudioDirection) ---
     AAudioStreamBuilder_setFormat :: proc(builder: ^AAudioStreamBuilder, format: AAudioFormat) ---
     AAudioStreamBuilder_setChannelCount :: proc(builder: ^AAudioStreamBuilder, channel_count: i32) ---
-    AAudioStreamBuilder_setSampleRate :: proc(builder: ^AAudioStreamBuilder, sample_rate: i32) ---
     AAudioStreamBuilder_setPerformanceMode :: proc(builder: ^AAudioStreamBuilder, mode: AAudioPerformanceMode) ---
     AAudioStreamBuilder_setInputPreset :: proc(builder: ^AAudioStreamBuilder, preset: AAudioInputPreset) ---
     AAudioStreamBuilder_setDataCallback :: proc(builder: ^AAudioStreamBuilder, callback: AAudioDataCallback, userdata: rawptr) ---
