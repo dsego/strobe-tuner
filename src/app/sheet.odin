@@ -45,7 +45,7 @@ SHEET_TOP_PADDING :: 16 // above the title, the first row's own margin spaces th
 SHEET_TITLE_HEIGHT :: 34 // from the top of the title to the first row
 
 // open is how far the sheet has slid up, 0 is hidden below the window and 1 is all the way. The settings
-// have SETTINGS_ROWS, a track's sheet fewer. Either covers the whole panel at least, a short sheet would
+// have settings_rows, a track's sheet fewer. Either covers the whole panel at least, a short sheet would
 // leave half the panel peeking out above it. A panel beside the strobe is covered to the top, the sheet is
 // as wide as the panel's column. extra is more room under the rows for what isn't a row, the instrument's
 // with its note offsets asks for the whole window.

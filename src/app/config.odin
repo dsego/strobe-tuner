@@ -164,6 +164,9 @@ Config :: struct {
     // The Readout speed setting, how long the readout's fit through the phase averages, see READOUT_FIT_STEPS_S
     readout_fit_s:                f32,
 
+    // The In-tune tap setting, a phone taps once as the readout holds in tune, see update_in_tune_tap
+    in_tune_tap:                  bool,
+
     // --- Display ---
 
     strobe_display_type:          StrobeDisplayType,
@@ -230,6 +233,7 @@ config_defaults :: Config {
     strobe_speeds                = {1, 1, 1, 1, 1},
     strobe_fast                  = false,
     readout_fit_s                = core.READOUT_FIT_S,
+    in_tune_tap                  = true,
 
     // --- Display ---
     strobe_display_type          = .STROBE,

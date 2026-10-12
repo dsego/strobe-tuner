@@ -74,6 +74,8 @@ App :: struct {
     sharp_arrow:        bool,
 
     readout_track:      int, // the strobe track the readout follows, see core.strobe_readout_track
+    in_tune_s:          f32, // how long the readout has held in tune, see update_in_tune_tap
+    in_tune_tapped:     bool, // and it tapped, not again until the readout moves away
     held_readout:       HeldReadout, // the last one shown while the note was lit, see measure
     traced_track:      int, // the track the readout followed, the trace stays on it while its stripes show
     config_changed:     bool, // the tuner and the strobe need the new config, see apply_config
@@ -222,6 +224,7 @@ frame :: proc(app: ^App) {
     if app.config_changed do apply_config(app)
 
     reading := measure(app)
+    update_in_tune_tap(app, reading)
 
     when !DEBUG_STATS {
         // A tablet draws in larger points than its own, see ui_scale
@@ -517,6 +520,34 @@ handle_keys :: proc(app: ^App) {
 }
 
 // The pitch detection, the strobe and the tuner on the new audio
+// The In-tune tap: once the strobe's readout holds within IN_TUNE_CENTS for IN_TUNE_HOLD_S the phone taps,
+// once. The readout is the strobe's own, in tune there is when its stripes have all but stopped. It taps again
+// only after the readout went further than IN_TUNE_REARM_CENTS or away, another note or the note gone dark,
+// a readout wavering at the edge doesn't tap over and over.
+IN_TUNE_CENTS :: 1
+IN_TUNE_HOLD_S :: 0.3
+IN_TUNE_REARM_CENTS :: 3
+
+update_in_tune_tap :: proc(app: ^App, reading: Reading) {
+    if !app.config.in_tune_tap || !gfx.has_haptics() do return
+
+    cents := abs(reading.steady.err_cents)
+    if !reading.strobe_readout || cents > IN_TUNE_REARM_CENTS {
+        app.in_tune_s, app.in_tune_tapped = 0, false
+        return
+    }
+    if cents > IN_TUNE_CENTS {
+        app.in_tune_s = 0
+        return
+    }
+
+    app.in_tune_s += gfx.frame_time()
+    if app.in_tune_s >= IN_TUNE_HOLD_S && !app.in_tune_tapped {
+        gfx.haptic_tap()
+        app.in_tune_tapped = true
+    }
+}
+
 measure :: proc(app: ^App) -> (reading: Reading) {
     tuner := &app.tuner
     reading.pitch = core.run_pitch_detection(&app.pitch_detector, tuner.pitch)
@@ -957,7 +988,7 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
     if sheet.slide == 0 do return
 
     // The display's options page has rows of its own, the strobe's more than the settings
-    rows := SETTINGS_ROWS
+    rows := settings_rows()
     if app.display_options {
         option_rows := DISPLAY_OPTION_ROWS
         rows = max(rows, option_rows[app.config.strobe_display_type])

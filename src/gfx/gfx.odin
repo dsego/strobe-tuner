@@ -42,6 +42,7 @@ import "core:math/linalg"
 //
 //   key_pressed(key), key_down(key), mouse_position(), mouse_pressed(), mouse_down(), mouse_wheel()
 //   touch_input() -> bool               the last press was a finger
+//   has_haptics() -> bool, haptic_tap()  a tap felt in the hand, a phone's, see haptics.odin
 //
 //   MenuItem, add_app_menu_items(settings, items), add_menu(title, items), add_window_menu_items(items)
 //   menu_command() -> int, set_menu_checked(command, checked)   the macOS menu bar, nothing elsewhere

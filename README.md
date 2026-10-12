@@ -21,6 +21,7 @@ Strobie is coming to the App Store for Mac and iPhone. The source is here to rea
 - Vernier mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity.
 - Spin rate setting: 200% spins the strobe twice as fast per cent of detuning, for the final adjustment.
 - Readout speed setting: how long the cents readout averages, 0.4 s evens a vibrato into its mean pitch, 0.15 s follows a turned peg sooner.
+- In-tune tap on a phone: one haptic tap once the readout holds within a cent, again only after it moved away.
 - Five displays, a button under the strobe cycles through them, see [Displays](#displays):
   - Strobe: curved tracks, a wheel or flat tracks, turned by a lock-in on each partial or by the lamp.
   - Lamp: the mechanical strobe, stripes lit by the wave.

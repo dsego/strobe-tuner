@@ -4,6 +4,8 @@
     package="app.strobie">
 
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- The In-tune tap, granted with the install, nothing is asked -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
     <!-- SDL GPU draws with Vulkan, 1.0.3 -->

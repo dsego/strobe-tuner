@@ -29,8 +29,11 @@ import "../gfx"
 
 SEGMENT_WIDTH :: 60
 
-// The rows in gui_settings. The display's options page is at least as tall, see DISPLAY_OPTION_ROWS
-SETTINGS_ROWS :: 5
+// The rows in gui_settings, one more with the In-tune tap on a phone. The display's options page is at least
+// as tall, see DISPLAY_OPTION_ROWS.
+settings_rows :: proc() -> int {
+    return 6 if gfx.has_haptics() else 5
+}
 
 // The rows of each display's options page, see gui_display_options
 DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 8, .SCOPE = 3, .TRACE = 2, .LAMP = 3, .SPECTRUM = 4}
@@ -154,6 +157,9 @@ gui_settings :: proc(
 
     // Lights the stripes like a lamp behind the disc, in the hue of the colors above
     gui_settings_segmented(sheet_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow)
+
+    // A tap in the hand as the readout holds in tune, only where there's something to tap with
+    if gfx.has_haptics() do gui_settings_segmented(sheet_layout, &row, "In-tune tap", {"Off", "On"}, &config.in_tune_tap)
 
     {
         // Everything back to the defaults, the presets stay. The first tap asks, the second resets, a tap
@@ -446,6 +452,8 @@ gui_input :: proc(
 
     // The picker's row, its menu opens down over the rows under it and is drawn after them
     picker: gfx.Rect
+    when gfx.MOBILE do _ = picker // a phone has the one microphone
+
     when !gfx.MOBILE {
         picker = settings_row(sheet_layout, row, "Device", 240)
         row += 1
