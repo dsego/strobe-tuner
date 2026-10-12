@@ -34,6 +34,11 @@ exclusive_control_mode := false
 // The controls being drawn don't take input, e.g. the main screen under the settings sheet
 gui_disabled := false
 
+// A control takes a press, nothing above it has the input
+gui_takes_input :: proc() -> bool {
+    return !exclusive_control_mode && !gui_disabled
+}
+
 // A control took this frame's press, one that nothing took drags a sheet down
 gui_press_taken := false
 
@@ -112,6 +117,7 @@ gui_lock_toggle :: proc(center: [2]f32, locked: bool) -> bool {
 // A partial without the ×, the fifth as 1½ like the 1 1½ 2 preset
 partial_text :: proc(partial: f32) -> cstring {
     if partial == 1.5 do return "1½"
+
     return fmt.ctprintf("%v", partial)
 }
 
@@ -199,6 +205,9 @@ RulerGesture :: enum {
     COASTING, // let go, it slows down to a stop on a note
 }
 
+// The row moved off its note or about to, it lands on one when it's over
+RULER_MOVING :: bit_set[RulerGesture]{.CAUGHT, .SWIPING, .COASTING}
+
 RulerSwipe :: struct {
     gesture:  RulerGesture,
     press_x:  f32, // where the finger was when the row started following it
@@ -238,7 +247,7 @@ gui_note_ruler :: proc(
     layout := ruler_layout(rect)
     settle, land, tapped := ruler_follow_finger(ruler, rect, layout.spacing, f32(len(notes) - 1))
     gesture := ruler.swipe.gesture
-    swiping = gesture == .SWIPING || gesture == .COASTING || gesture == .CAUGHT
+    swiping = gesture in RULER_MOVING
 
     // The note in the middle is the target, already while the row follows the finger or coasts. Settled, the
     // ruler eases onto it from where it is.
@@ -273,7 +282,7 @@ ruler_follow_finger :: proc(ruler: ^NoteRuler, rect: gfx.Rect, spacing, highest:
     switch {
     case gui_disabled:
         // A sheet opened over it, a swipe on the way lands
-        land = swipe.gesture == .SWIPING || swipe.gesture == .COASTING || swipe.gesture == .CAUGHT
+        land = swipe.gesture in RULER_MOVING
         if !land do swipe^ = {}
     case swipe.gesture == .COASTING && gfx.mouse_pressed():
         // Caught on the ruler it stops there and can be swiped on, a press anywhere else settles it
@@ -423,6 +432,7 @@ ruler_tap :: proc(layout: RulerLayout, notes: []core.Note, position: f32, target
 // large letters scaled down, settled at the fonts' own sizes, texel for pixel.
 draw_ruler_note :: proc(note: core.Note, pos: [2]f32, large, octave: f32, color: gfx.Color) {
     SIGNS :: [core.Accidental]cstring{.NATURAL = "", .SHARP = "♯", .FLAT = "♭"}
+
     // From the letter's top right, of its size, the tops of both signs level with the letter's and their left
     // edges in the octave's column. Noto's monospace flat sits lower and further in in its larger font.
     SIGN_OFFSETS :: [core.Accidental][2]f32{.NATURAL = {0, 0}, .SHARP = {0, 0.1}, .FLAT = {-0.05, -0.05}}
@@ -430,6 +440,7 @@ draw_ruler_note :: proc(note: core.Note, pos: [2]f32, large, octave: f32, color:
     name_font := lerp_font(pixel_fonts.neighbour, pixel_fonts.note, large)
     sign_font := lerp_font(pixel_fonts.neighbour_sharp, pixel_fonts.note_sharp, large)
     if note.accidental == .FLAT do sign_font = lerp_font(pixel_fonts.neighbour_flat, pixel_fonts.note_flat, large)
+
     size := name_font.size
 
     name := fmt.ctprintf("%v", note.name)
@@ -546,7 +557,7 @@ gui_button :: proc(bounds: gfx.Rect) -> bool {
 
 // A press on the background, it doesn't take the press like a button so it can still drag the sheet
 gui_background_pressed :: proc(bounds: gfx.Rect) -> bool {
-    return gfx.mouse_pressed() && gfx.point_in_rect(gfx.mouse_position(), bounds) && !exclusive_control_mode && !gui_disabled
+    return gfx.mouse_pressed() && gfx.point_in_rect(gfx.mouse_position(), bounds) && gui_takes_input()
 }
 
 // Like gui_button, and held down it goes on firing, after a pause and then steadily, like a key repeat.
@@ -574,7 +585,7 @@ repeat_next: time.Tick
 
 // Whether the button is being held down, to draw it in its pressed shade
 gui_button_held :: proc(bounds: gfx.Rect) -> bool {
-    return gfx.mouse_down() && gfx.point_in_rect(gfx.mouse_position(), bounds) && !exclusive_control_mode && !gui_disabled
+    return gfx.mouse_down() && gfx.point_in_rect(gfx.mouse_position(), bounds) && gui_takes_input()
 }
 
 
@@ -602,15 +613,13 @@ gui_dropdown :: proc(
     gfx.draw_pill(btn_bounds, pill_dark)
     draw_centered_icon(ICON_CARET_DOWN, {position.x + width - CARET_WIDTH, position.y, ICON_SIZE, height}, icon_color)
 
-    if selected_idx != nil {
-        draw_label(
-            pixel_fonts.label,
-            fit_label(pixel_fonts.label, options[selected_idx^].label, width - left_pad - CARET_WIDTH - 4),
-            {position.x + left_pad, position.y + (height - LABEL_SIZE) / 2},
-            text_color_light,
-            1,
-        )
-    }
+    draw_label(
+        pixel_fonts.label,
+        fit_label(pixel_fonts.label, options[selected_idx^].label, width - left_pad - CARET_WIDTH - 4),
+        {position.x + left_pad, position.y + (height - LABEL_SIZE) / 2},
+        text_color_light,
+        1,
+    )
 
     // The menu sits 6pt above the button, or below it, the gap counts as part of it for the clicks
     MENU_RADIUS :: 12
@@ -637,7 +646,7 @@ gui_dropdown :: proc(
                 exclusive_control_mode = false
             }
         } else {
-            if !exclusive_control_mode && !gui_disabled && gfx.point_in_rect(mouse_point, btn_bounds) {
+            if gui_takes_input() && gfx.point_in_rect(mouse_point, btn_bounds) {
                 edit_mode = true
                 exclusive_control_mode = true
                 gui_press_taken = true

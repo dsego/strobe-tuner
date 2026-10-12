@@ -169,7 +169,8 @@ panel_layout :: proc(layout: ^Layout, offsets: bool) {
     bottom := panel.y + panel.height - PANEL_PADDING
 
     // The display button picks what the strobe area shows, it sits at the top of the panel on the left, the
-    // level meter opposite it on the right. The bar lines up with the button's icon.
+    // level meter opposite it on the right. The bar lines up with the button's icon. Both stay under the
+    // strobe like the bottom row in its corners, level with the readout's labels until the readout sinks.
     layout.display = {left, panel.y + 20}
     layout.level_meter = {right - LEVEL_METER_WIDTH, layout.display.y - LEVEL_METER_HEIGHT / 2}
 
@@ -218,8 +219,6 @@ panel_layout :: proc(layout: ^Layout, offsets: bool) {
     layout.ruler = {left, middle - height / 2, right - left, height}
     layout.measurements = {center, readout_top + sink}
 
-    // The display button and the level meter stay under the strobe like the bottom row in its corners, level
-    // with the readout's labels until it sinks
     layout.gauge = {center, middle + gauge_y}
     layout.lock = {center, middle + lock_y}
     layout.note_offset = {center, middle + caption_y}

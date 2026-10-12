@@ -769,7 +769,7 @@ gui_stepper_buttons :: proc(
 
     // Scrolling over the stepper steps too, trackpads scroll in fractions so add them up to whole steps.
     // Only the stepper under the mouse keeps the fraction, with a few on a sheet.
-    if gfx.point_in_rect(gfx.mouse_position(), touch_area(rect)) && !exclusive_control_mode && !gui_disabled {
+    if gfx.point_in_rect(gfx.mouse_position(), touch_area(rect)) && gui_takes_input() {
         if stepper_scroll_rect != rect do stepper_scroll = 0
 
         stepper_scroll_rect = rect

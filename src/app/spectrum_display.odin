@@ -78,6 +78,11 @@ SpectrumPeak :: struct {
     shown: f32, // its height on the plot
 }
 
+// The one further over the noise first
+louder_peak :: proc(first, second: SpectrumPeak) -> bool {
+    return first.db > second.db
+}
+
 SpectrumView :: struct {
     using node: core.AudioCaptureNode, // its own samples, read whole however long a frame takes
     // The detector's, so it's what the detection hears, see core.PitchDetector
@@ -405,7 +410,7 @@ draw_spectrum_view :: proc(
             offset, value := core.parabolic(over[bin - 1], db, over[bin + 1])
             append(&peaks, SpectrumPeak{(f32(bin) + offset) * bin_hz, value, self.levels[bin], shown[bin]})
         }
-        slice.sort_by(peaks[:], proc(a, b: SpectrumPeak) -> bool {return a.db > b.db})
+        slice.sort_by(peaks[:], louder_peak)
         return peaks[:]
     }
 
@@ -450,10 +455,12 @@ draw_spectrum_view :: proc(
                 }
             }
             if covers do continue
+
             append(&placed, bounds)
 
             draw_label_pill(bounds, background)
             if name != nil do draw_label(name_font, name, {bounds.x + (width - name_size.x) / 2, bounds.y}, text_color_light)
+
             if hz != nil {
                 hz_y := bounds.y + bounds.height - hz_size.y
                 draw_label(hz_font, hz, {bounds.x + (width - hz_size.x) / 2, hz_y}, text_color_muted)

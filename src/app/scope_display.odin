@@ -196,8 +196,6 @@ lamp_bands :: proc(
 // one. heights is the beam's height in every column, 1 is the peak level, dwell is 0 where the beam
 // hasn't been. A smeared beam is gray, its height is the middle of the smear.
 draw_lamp :: proc(rect: gfx.Rect, heights, dwell: []f32, shape: core.ScopeShape, bright_color, dark_color: gfx.Color) {
-    bright := gfx.normalize_color(bright_color)
-    dark := gfx.normalize_color(dark_color)
     column_width := rect.width / f32(len(heights))
 
     for height, column in heights {
@@ -208,7 +206,7 @@ draw_lamp :: proc(rect: gfx.Rect, heights, dwell: []f32, shape: core.ScopeShape,
         brightness := height
         if shape == .RAW_WAVEFORM do brightness = 0.5 + 0.5 * height
 
-        color := gfx.color_from_normalized(math.lerp(dark, bright, clamp(brightness, 0, 1)))
+        color := lerp_color(dark_color, bright_color, clamp(brightness, 0, 1))
 
         x := rect.x + rect.width - f32(column + 1) * column_width
         gfx.draw_rect({x, rect.y}, {column_width, rect.height}, color)

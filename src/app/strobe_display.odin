@@ -102,8 +102,8 @@ StrobeGeometry :: struct {
     shape:            StrobeShape, // flat tracks are straightened, stacked from y down
 }
 
-// The strobe shader draws a curved track or a wheel's ring this far below the top of its quad, a flat one
-// at the top
+// A curved track's or a wheel's ring's quad is placed this far down from the track's slot, the shader draws
+// the arc from the top of its quad. A flat one is at the top of its slot.
 CURVED_TRACK_DROP :: 10
 
 // Between the tracks, a track is this much thinner than band_height, as in the strobe shader
@@ -344,6 +344,7 @@ glow_background :: proc(background: gfx.Color, glow: GlowParams) -> gfx.Color {
 render_bloom :: proc(self: ^StrobeDisplay) {
     gfx.set_blend_mode(.REPLACE)
     defer gfx.set_blend_mode(.ALPHA)
+
     gfx.begin_shader(.BLOOM)
     defer gfx.end_shader()
 
@@ -490,6 +491,7 @@ draw_strobe_display :: proc(
                 text := fmt.ctprintf("%+.1f", band.err_cents)
                 position := [2]f32{rect.x + 16 + width, label_y}
                 if turned do position = {label_x + 0.5 * width, pane.y + pane.height - 16 - label_height}
+
                 draw_text_right(font.font, text, position, font.size, 0, accent_color)
             }
 
