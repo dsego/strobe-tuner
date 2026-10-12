@@ -105,7 +105,8 @@ refresh_devices :: proc(self: ^Capture) {
     self.capture_infos = infos[:count]
 
     if self.active_device >= 0 {
-        name := strings.truncate_to_byte(string(open_name[:]), 0)
+        // Trimmed like device_name
+        name := strings.trim_space(strings.truncate_to_byte(string(open_name[:]), 0))
         found := find_device(self, name)
         self.active_device = found if found != SYSTEM_DEFAULT else NOT_LISTED
     }
