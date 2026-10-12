@@ -215,12 +215,12 @@ gpu: struct {
     last_counter:     u64,
     frame_time:       f32,
 
-    // The desktop window dragged to another size, see live_resize_frames
+    // The desktop window dragged to another size or a menu open, see live_resize_frames
     live_resize_frame:   proc(data: rawptr),
     live_resize_data:    rawptr,
     live_resize_context: runtime.Context,
     resizing:            bool, // in a frame drawn from the OS's own loop
-    polling:             bool, // in should_close, where the main loop is stuck while the OS runs a drag or a zoom
+    polling:             bool, // in should_close, where the main loop is stuck while the OS runs a drag, a zoom or a menu
     drag_tick:           u64, // the last tick of the drag's timer, in milliseconds
 }
 
@@ -246,8 +246,9 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}, position
     // The app may be suspended before the queued events are polled
     when MOBILE do _ = sdl.AddEventWatch(watch_app_events, nil)
 
-    // The window keeps drawing while it's dragged to another size, see live_resize_frames
-    when !MOBILE do _ = sdl.AddEventWatch(watch_live_resize, nil)
+    // The window keeps drawing while it's dragged to another size, see live_resize_frames. Elsewhere the
+    // main loop goes on during a drag.
+    when ODIN_OS == .Darwin && !MOBILE do _ = sdl.AddEventWatch(watch_live_resize, nil)
 
     // A size remembered from a bigger display is cut down to the one it opens on
     size := [2]i32{width, height}
@@ -523,13 +524,18 @@ watch_live_resize :: proc "c" (userdata: rawptr, event: ^sdl.Event) -> bool {
     return true
 }
 
-// A frame from inside the OS's loop, a drag's, a zoom's or an open menu's
+// A frame from inside the OS's loop, a drag's, a zoom's or an open menu's. The keys and clicks polled before
+// it are its own, the main loop's next frame would take them again.
 draw_from_os_loop :: proc "c" () {
     context = gpu.live_resize_context
     gpu.resizing = true
     tick_clock()
     gpu.live_resize_frame(gpu.live_resize_data)
     gpu.resizing = false
+
+    gpu.keys_pressed = {}
+    gpu.mouse_clicked = false
+    gpu.wheel = 0
 }
 
 begin_frame :: proc(clear: Color) {
@@ -813,7 +819,7 @@ set_window_size :: proc(width, height: i32) {
     when !MOBILE do sdl.SetWindowSize(gpu.window, width, height)
 }
 
-// In a frame drawn from the drag's own loop, see live_resize_frames
+// In a frame drawn from the OS's own loop, a drag's, a zoom's or an open menu's, see live_resize_frames
 resizing :: proc() -> bool {
     return gpu.resizing
 }
