@@ -170,6 +170,8 @@ scancodes := [Key]sdl.Scancode {
     .RIGHT_SHIFT = .RSHIFT,
     .LEFT_SUPER  = .LGUI,
     .RIGHT_SUPER = .RGUI,
+    .LEFT_CONTROL = .LCTRL,
+    .RIGHT_CONTROL = .RCTRL,
 }
 
 gpu: struct {
@@ -227,9 +229,10 @@ gpu: struct {
     drag_tick:           u64, // the last tick of the drag's timer, in milliseconds
 }
 
-// On the desktop the window can be resized down to min_size, none keeps it the size it opened at. A phone's
+// On the desktop the window can be resized down to min_size, none keeps it the size it opened at, and opens
+// with its top left corner at position, none or off every display in the middle of the main one. A phone's
 // is the screen.
-init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}) -> bool {
+init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}, position: Maybe([2]i32) = nil) -> bool {
     if !sdl.Init({.VIDEO}) {
         fmt.eprintln("SDL_Init failed:", sdl.GetError())
         return false
@@ -251,20 +254,48 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}) -> bool 
     // The window keeps drawing while it's dragged to another size, see live_resize_frames
     when !MOBILE do _ = sdl.AddEventWatch(watch_live_resize, nil)
 
-    // A size remembered from a bigger display is cut down to this one's
+    // A size remembered from a bigger display is cut down to the one it opens on
     size := [2]i32{width, height}
+    corner, placed := position.?
+    when MOBILE do _, _ = corner, placed // a phone's window is the screen
+
     when !MOBILE {
+        // Placed where its title bar shows on a display, the one it was on may be gone
+        TITLE_BAR :: 28
+        display := sdl.GetPrimaryDisplay()
+        if placed {
+            title_bar := sdl.Rect{corner.x, corner.y, size.x, TITLE_BAR}
+            placed = false
+            count: i32
+            displays := sdl.GetDisplays(&count)
+            for index in 0 ..< count {
+                bounds: sdl.Rect
+                if !sdl.GetDisplayUsableBounds(displays[index], &bounds) do continue
+
+                if sdl.HasRectIntersection(title_bar, bounds) {
+                    display, placed = displays[index], true
+                    break
+                }
+            }
+            sdl.free(displays)
+        }
+
         bounds: sdl.Rect
-        if sdl.GetDisplayUsableBounds(sdl.GetPrimaryDisplay(), &bounds) {
+        if sdl.GetDisplayUsableBounds(display, &bounds) {
             size = {min(size.x, bounds.w), min(size.y, bounds.h)}
         }
     }
 
-    gpu.window = sdl.CreateWindow(title, size.x, size.y, {.HIGH_PIXEL_DENSITY})
+    // Hidden until it's where it goes
+    gpu.window = sdl.CreateWindow(title, size.x, size.y, {.HIGH_PIXEL_DENSITY, .HIDDEN})
     if gpu.window == nil {
         fmt.eprintln("SDL_CreateWindow failed:", sdl.GetError())
         return false
     }
+    when !MOBILE {
+        if placed do sdl.SetWindowPosition(gpu.window, corner.x, corner.y)
+    }
+    sdl.ShowWindow(gpu.window)
 
     when !MOBILE {
         if min_size.x > 0 || min_size.y > 0 {
@@ -753,6 +784,13 @@ set_ui_scale :: proc(scale: f32) {
 // The scale in effect, see set_ui_scale
 ui_scale :: proc() -> f32 {
     return gpu.ui_scale
+}
+
+// The window's top left corner, in the system's points across the displays
+window_position :: proc() -> [2]i32 {
+    position: [2]i32
+    sdl.GetWindowPosition(gpu.window, &position.x, &position.y)
+    return position
 }
 
 // The desktop window, in the system's points, the size is seen at the next poll

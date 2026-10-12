@@ -21,7 +21,8 @@ import "core:math/linalg"
 // Rendering and input go through a small immediate mode API, sdl.odin implements it with SDL3 GPU: Metal
 // shaders in src/shaders/metal/ on macOS and iOS, Vulkan shaders in src/shaders/vulkan/ on Linux and Android.
 //
-//   init(width, height, title, min_size) -> bool, shutdown()   the desktop window resizes down to min_size
+//   init(width, height, title, min_size, position) -> bool, shutdown()   the desktop window resizes down to
+//                                       min_size and opens at position
 //   live_resize_frames(frame, data)     frame draws a frame while the desktop window is dragged or zoomed to another size
 //   resizing() -> bool                  in a frame drawn during the drag or the zoom
 //   set_window_size(width, height)      the desktop window, in the system's points
@@ -30,6 +31,7 @@ import "core:math/linalg"
 //   frame_time() -> f32, dpi_scale() -> f32   pixels per drawing point
 //   window_size() -> [2]f32, safe_area() -> Rect   in drawing points, the system's over the UI scale
 //   window_points() -> [2]f32           the window's own size, in the system's points
+//   window_position() -> [2]i32         its top left corner, in the system's points across the displays
 //   content_scale() -> f32              the system's points per density-independent one, a phone's or a tablet's
 //   set_ui_scale(scale), ui_scale() -> f32   system points per drawing point, 1.5 on a 13-inch iPad
 //   in_background() -> bool, wait_for_foreground()  a phone, nothing may be drawn in the background
@@ -37,6 +39,9 @@ import "core:math/linalg"
 //   limit_fps(fps)                      fewer frames while there's nothing to show, 0 for the display's rate
 //
 //   key_pressed(key), key_down(key), mouse_position(), mouse_pressed(), mouse_down(), mouse_wheel()
+//
+//   MenuItem, add_app_menu_items(settings, items), add_menu(title, items), add_window_menu_items(items)
+//   menu_command() -> int, set_menu_checked(command, checked)   the macOS menu bar, nothing elsewhere
 //
 //   Texture, load_texture_rgba(width, height, pixels), unload_texture(texture)
 //   create_gray_texture(width, height), update_texture(texture, pixels)
@@ -73,6 +78,16 @@ Rect :: struct {
     x, y, width, height: f32,
 }
 
+// An item of the macOS menu bar, see menu_darwin.odin
+MenuItem :: struct {
+    title:   cstring, // nil for a separator
+    key:     cstring, // with Command, nil for none
+    shift:   bool, // and Shift
+    command: int, // what menu_command returns when it's chosen, from 1 to under MAX_MENU_COMMANDS
+}
+
+MAX_MENU_COMMANDS :: 32
+
 Color :: [4]u8
 
 WHITE :: Color{255, 255, 255, 255}
@@ -102,6 +117,8 @@ Key :: enum {
     RIGHT_SHIFT,
     LEFT_SUPER,
     RIGHT_SUPER,
+    LEFT_CONTROL,
+    RIGHT_CONTROL,
 }
 
 BlendMode :: enum {

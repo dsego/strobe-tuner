@@ -207,6 +207,9 @@ Config :: struct {
     // The desktop window's size as it was last used, in points. 0 opens it at the strobe's size and puts it
     // back there: what a reset or Cmd+0 leaves. A phone leaves it 0. See follow_window_size.
     window_size:                  [2]int,
+    // and where its top left corner was, in the system's points across the displays. Only with a size, a
+    // window not on any display any more opens in the middle of the main one.
+    window_position:              [2]int,
 }
 
 // In the order of Config
@@ -248,6 +251,7 @@ config_defaults :: Config {
 
     // --- Window ---
     window_size                  = {},
+    window_position              = {},
 }
 
 

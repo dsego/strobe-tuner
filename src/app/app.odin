@@ -16,7 +16,6 @@
 
 package app
 
-import "core:c/libc"
 import "core:fmt"
 import "core:math"
 
@@ -62,6 +61,7 @@ App :: struct {
     settings_sheet:     Sheet,
     display_options:    bool, // the settings sheet shows the display's options, see gui_settings
     reset_confirm:      bool, // RESET on the settings sheet was tapped once and asks
+    menu:               MenuCommand, // the menu bar's item chosen this frame, see handle_keys
     track_sheet:        Sheet, // a track's own, opened by tapping the track
     selected_track:     int,
     instrument_sheet:   Sheet, // the instruments and the presets, opened from the bottom left corner
@@ -111,20 +111,26 @@ run_app :: proc(config: ^Config) {
     // Saved for the next start
     defer config.target_freq_hz = tuner.target_note.frequency
 
-    // The window opens at the size it was last used at, see follow_window_size. The plots take a window of
-    // their own size, it stays as it is.
+    // The window opens where it was last used and at its size, see follow_window_size. The plots take a window
+    // of their own size, it stays as it is.
     min_size := WINDOW_MIN_SIZE
     size := [2]i32{STROBE_WIDTH, DESKTOP_HEIGHT}
+    position: Maybe([2]i32)
     when DEBUG_STATS {
         min_size = {}
         size.x = 1200
     } else {
-        if config.window_size != {} do size = {i32(config.window_size.x), i32(config.window_size.y)}
+        if config.window_size != {} {
+            size = {i32(config.window_size.x), i32(config.window_size.y)}
+            position = [2]i32{i32(config.window_position.x), i32(config.window_position.y)}
+        }
     }
 
-    if !gfx.init(size.x, size.y, APP_NAME, min_size) do return
+    if !gfx.init(size.x, size.y, APP_NAME, min_size, position) do return
 
     defer gfx.shutdown()
+
+    setup_menu_bar()
 
     // Loaded each frame for the screen's scale, see update_pixel_fonts
     defer unload_pixel_fonts()
@@ -234,6 +240,7 @@ frame :: proc(app: ^App) {
 
     layout := compute_layout(window, safe, selected_preset(config) >= 0)
     update_pixel_fonts()
+    update_menu_checks(app)
 
     gfx.begin_frame(gfx.hex(strobe_bg_color))
     defer gfx.end_frame()
@@ -363,12 +370,102 @@ picked_device :: proc(app: ^App) -> i32 {
     return app.audio_devices[app.audio_device_index].id
 }
 
+// The macOS menu bar's commands, see setup_menu_bar. Each key has Command in it, see handle_keys.
+MenuCommand :: enum {
+    NONE,
+    SETTINGS,
+    RESET_SETTINGS,
+    SHOW_STROBE,
+    SHOW_SCOPE,
+    SHOW_TRACE,
+    SHOW_LAMP,
+    SHOW_SPECTRUM,
+    RETRO_GLOW,
+    LOCK_NOTE,
+    DEFAULT_SIZE,
+}
+
+// The display each of the View menu's first items shows, in the settings' order
+DISPLAY_COMMANDS :: [StrobeDisplayType]MenuCommand {
+    .STROBE   = .SHOW_STROBE,
+    .SCOPE    = .SHOW_SCOPE,
+    .TRACE    = .SHOW_TRACE,
+    .LAMP     = .SHOW_LAMP,
+    .SPECTRUM = .SHOW_SPECTRUM,
+}
+
+// SDL's app menu gets Settings… and Reset Settings…, the View menu the displays, the glow and the lock, the
+// Window menu the strobe's size back
+setup_menu_bar :: proc() {
+    gfx.add_app_menu_items(
+        int(MenuCommand.SETTINGS),
+        {{title = "Reset Settings…", key = "r", shift = true, command = int(MenuCommand.RESET_SETTINGS)}},
+    )
+
+    gfx.add_menu(
+        "View",
+        {
+            {title = "Strobe", key = "1", command = int(MenuCommand.SHOW_STROBE)},
+            {title = "Scope", key = "2", command = int(MenuCommand.SHOW_SCOPE)},
+            {title = "Trace", key = "3", command = int(MenuCommand.SHOW_TRACE)},
+            {title = "Lamp", key = "4", command = int(MenuCommand.SHOW_LAMP)},
+            {title = "Spectrum", key = "5", command = int(MenuCommand.SHOW_SPECTRUM)},
+            {},
+            {title = "Retro Glow", key = "g", command = int(MenuCommand.RETRO_GLOW)},
+            {title = "Lock Note", key = "l", command = int(MenuCommand.LOCK_NOTE)},
+        },
+    )
+
+    gfx.add_window_menu_items({{title = "Strobe Size", key = "0", command = int(MenuCommand.DEFAULT_SIZE)}})
+}
+
+// The check marks in the View menu follow the app however it was changed
+update_menu_checks :: proc(app: ^App) {
+    for command, type in DISPLAY_COMMANDS {
+        gfx.set_menu_checked(int(command), app.config.strobe_display_type == type)
+    }
+    gfx.set_menu_checked(int(MenuCommand.RETRO_GLOW), app.config.strobe_glow)
+    gfx.set_menu_checked(int(MenuCommand.LOCK_NOTE), app.tuner.locked)
+}
+
+// Settings… and Reset Settings… from the menu bar, over whichever sheet is up. Reset opens the settings with
+// RESET tapped once, it asks before anything is reset.
+open_settings_sheet :: proc(app: ^App, reset: bool) {
+    for sheet in ([]^Sheet{&app.track_sheet, &app.instrument_sheet, &app.input_sheet}) do close_sheet(sheet)
+    reset_note_offsets_editing()
+    app.settings_menu = .NONE
+    exclusive_control_mode = false
+
+    app.settings_sheet.open = true
+    app.display_options = false
+    app.reset_confirm = reset
+}
+
 handle_keys :: proc(app: ^App) {
     config := app.config
 
-    if gfx.key_pressed(.G) do config.strobe_glow = !config.strobe_glow
+    // A menu item's key reaches the keys here too, the plain ones skip while Command is down
+    app.menu = MenuCommand(gfx.menu_command())
+    command := gfx.key_down(.LEFT_SUPER) || gfx.key_down(.RIGHT_SUPER)
+    plain := !command
 
-    if gfx.key_pressed(.TAB) {
+    #partial switch app.menu {
+    case .SETTINGS:
+        open_settings_sheet(app, reset = false)
+    case .RESET_SETTINGS:
+        open_settings_sheet(app, reset = true)
+    case .RETRO_GLOW:
+        config.strobe_glow = !config.strobe_glow
+    case .DEFAULT_SIZE:
+        config.window_size = {}
+    }
+    for menu_command, type in DISPLAY_COMMANDS {
+        if app.menu == menu_command do config.strobe_display_type = type
+    }
+
+    if plain && gfx.key_pressed(.G) do config.strobe_glow = !config.strobe_glow
+
+    if plain && gfx.key_pressed(.TAB) {
         config.strobe_display_type = StrobeDisplayType((int(config.strobe_display_type) + 1) % len(StrobeDisplayType))
     }
 
@@ -381,11 +478,11 @@ handle_keys :: proc(app: ^App) {
         .SPECTRUM = .NUM_5,
     }
     for key, type in DISPLAY_KEYS {
-        if gfx.key_pressed(key) do config.strobe_display_type = type
+        if plain && gfx.key_pressed(key) do config.strobe_display_type = type
     }
 
     // The next preset of the tracks, it replaces the partials and clears what was set on each track
-    if gfx.key_pressed(.I) && config.strobe_mode == .HARMONIC {
+    if plain && gfx.key_pressed(.I) && config.strobe_mode == .HARMONIC {
         options, defaults := INTERVAL_OPTIONS, config_defaults
         config.strobe_intervals_index = (config.strobe_intervals_index + 1) % len(options)
         config.strobe_intervals = options[config.strobe_intervals_index]
@@ -397,7 +494,7 @@ handle_keys :: proc(app: ^App) {
     // Hidden, the tracks' band a semitone, a half or a quarter wide: each half has half the noise and twice the lag.
     // The screens' persistence follows, as many periods as the band's window, so the lamp's tracks narrow along
     // with the lock-in's and the two can be compared like for like.
-    if gfx.key_pressed(.W) {
+    if plain && gfx.key_pressed(.W) {
         comparator := app.phase_comparator
         comparator.band_cents = comparator.band_cents / 2 if comparator.band_cents > 25 else core.DFT_RESOLUTION_CENTS
         config.persistence_periods = 1 / (math.pow(f32(2), f32(comparator.band_cents) / 1200) - 1)
@@ -405,26 +502,12 @@ handle_keys :: proc(app: ^App) {
         retune(app)
     }
 
-    command := gfx.key_down(.LEFT_SUPER) || gfx.key_down(.RIGHT_SUPER)
-
-    // Cmd+0 puts the desktop window back to the strobe's size, see follow_window_size
-    when !gfx.MOBILE {
-        if command && gfx.key_pressed(.NUM_0) do config.window_size = {}
-    }
-
-    // Debug builds only, Cmd+Shift+, reloads the config file and Cmd+, opens it in TextEdit. The store builds
-    // edit everything in the settings, and the shell that starts TextEdit wouldn't run in the sandbox anyway.
-    if ODIN_DEBUG && command && gfx.key_pressed(.COMMA) {
-        if gfx.key_down(.LEFT_SHIFT) || gfx.key_down(.RIGHT_SHIFT) {
-            config^ = load_config()
-            app.config_changed = true
-        } else {
-            when ODIN_OS == .Darwin && !gfx.IOS {
-                path := config_path()
-                defer delete(path)
-                libc.system(fmt.ctprintf("open -a TextEdit \"%s\"", path))
-            }
-        }
+    // Without a menu bar Ctrl+, opens the settings and Ctrl+0 puts the window back to the strobe's size, see
+    // follow_window_size
+    when !gfx.MOBILE && ODIN_OS != .Darwin {
+        control := gfx.key_down(.LEFT_CONTROL) || gfx.key_down(.RIGHT_CONTROL)
+        if control && gfx.key_pressed(.COMMA) do open_settings_sheet(app, reset = false)
+        if control && gfx.key_pressed(.NUM_0) do config.window_size = {}
     }
 }
 
@@ -798,7 +881,7 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
 
     lock_toggled := gui_lock_toggle(layout.lock, tuner.locked) || note_tapped
     if !gui_disabled {
-        if gfx.key_pressed(.SPACE) do lock_toggled = true
+        if gfx.key_pressed(.SPACE) || app.menu == .LOCK_NOTE do lock_toggled = true
         if gfx.key_pressed(.LEFT) do step = -1
         if gfx.key_pressed(.RIGHT) do step = 1
     }
@@ -998,15 +1081,17 @@ save_when_settled :: proc(app: ^App) {
     app.unsaved = false
 }
 
-// The desktop window opens at the size it was last used at, kept up to date here once a drag is over rather
-// than on every frame of it. A size of 0 is a reset's or Cmd+0's, the window goes back to the strobe's size.
-// window is the window's own size, in the system's points, the same it's opened with.
+// The desktop window opens where it was last used and at its size, kept up to date here once a drag is over
+// rather than on every frame of it. A size of 0 is a reset's or Cmd+0's, the window goes back to the strobe's
+// size where it is. window is the window's own size, in the system's points, the same it's opened with.
 follow_window_size :: proc(config: ^Config, window: [2]f32) {
     if config.window_size == {} {
         gfx.set_window_size(STROBE_WIDTH, DESKTOP_HEIGHT)
         config.window_size = {STROBE_WIDTH, DESKTOP_HEIGHT}
     } else if !gfx.resizing() {
         config.window_size = {int(window.x), int(window.y)}
+        position := gfx.window_position()
+        config.window_position = {int(position.x), int(position.y)}
     }
 }
 
