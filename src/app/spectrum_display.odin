@@ -38,9 +38,9 @@ import "../gfx"
 // e.g. a debug build's at the longest setting, reads one whole window and skips the rest, and a history
 // of those showed a comb at the window's spacing, 12 Hz, with the note between its teeth.
 
-// Of each of the glow's two strips, the middle under both about as bright as the dots it replaced, about four of
-// them at 16 overlapped there: -define:SPECTRUM_GLOW_ALPHA=n to try another
-SPECTRUM_GLOW_ALPHA :: #config(SPECTRUM_GLOW_ALPHA, 32)
+// Of each of the glow's two strips, picked in the app a little brighter than the dots they replaced:
+// -define:SPECTRUM_GLOW_ALPHA=n to try another
+SPECTRUM_GLOW_ALPHA :: #config(SPECTRUM_GLOW_ALPHA, 48)
 
 SPECTRUM_LOW_HZ :: 40
 SPECTRUM_FLOOR_DB :: -120 // dBFS, under any input's noise
