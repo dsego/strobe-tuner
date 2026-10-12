@@ -458,6 +458,10 @@ MenuCommand :: enum {
     SHOW_TRACE,
     SHOW_LAMP,
     SHOW_SPECTRUM,
+    COLORS_RED,
+    COLORS_MINT,
+    COLORS_AMBER,
+    COLORS_MONO,
     RETRO_GLOW,
     LOCK_NOTE,
     DEFAULT_SIZE,
@@ -475,9 +479,17 @@ DISPLAY_COMMANDS :: [StrobeDisplayType]MenuCommand {
     .SPECTRUM = .SHOW_SPECTRUM,
 }
 
-// SDL's app menu gets Settings…, the View menu the displays, the glow and the lock, the Input menu the
-// inputs, the Window menu the strobe's size back. Resetting stays on the settings sheet, where RESET asks
-// first.
+// The colors the View menu's second group picks, named like the settings' Colors
+COLORWAY_COMMANDS :: [StrobeColorway]MenuCommand {
+    .VIBRANT_RED = .COLORS_RED,
+    .MINTY       = .COLORS_MINT,
+    .AMBER       = .COLORS_AMBER,
+    .MONO        = .COLORS_MONO,
+}
+
+// SDL's app menu gets Settings…, the View menu the displays, the colors, the glow and the lock, the Input
+// menu the inputs, the Window menu the strobe's size back. Resetting stays on the settings sheet, where
+// RESET asks first.
 setup_menu_bar :: proc(app: ^App) {
     gfx.add_app_menu_items(int(MenuCommand.SETTINGS), {})
 
@@ -489,6 +501,11 @@ setup_menu_bar :: proc(app: ^App) {
             {title = "Trace", key = "3", command = int(MenuCommand.SHOW_TRACE)},
             {title = "Lamp", key = "4", command = int(MenuCommand.SHOW_LAMP)},
             {title = "Spectrum", key = "5", command = int(MenuCommand.SHOW_SPECTRUM)},
+            {},
+            {title = "Red", command = int(MenuCommand.COLORS_RED)},
+            {title = "Mint", command = int(MenuCommand.COLORS_MINT)},
+            {title = "Amber", command = int(MenuCommand.COLORS_AMBER)},
+            {title = "Mono", command = int(MenuCommand.COLORS_MONO)},
             {},
             {title = "Retro Glow", key = "g", command = int(MenuCommand.RETRO_GLOW)},
             {title = "Lock Note", key = "l", command = int(MenuCommand.LOCK_NOTE)},
@@ -513,6 +530,9 @@ setup_menu_bar :: proc(app: ^App) {
 update_menu_checks :: proc(app: ^App) {
     for command, type in DISPLAY_COMMANDS {
         gfx.set_menu_checked(int(command), app.config.strobe_display_type == type)
+    }
+    for command, colorway in COLORWAY_COMMANDS {
+        gfx.set_menu_checked(int(command), app.config.strobe_colorway == colorway)
     }
     gfx.set_menu_checked(int(MenuCommand.RETRO_GLOW), app.config.strobe_glow)
     gfx.set_menu_checked(int(MenuCommand.LOCK_NOTE), app.tuner.locked)
@@ -552,6 +572,9 @@ handle_keys :: proc(app: ^App) {
     }
     for menu_command, type in DISPLAY_COMMANDS {
         if app.menu == menu_command do config.strobe_display_type = type
+    }
+    for menu_command, colorway in COLORWAY_COMMANDS {
+        if app.menu == menu_command do config.strobe_colorway = colorway
     }
 
     // Opened in the next frame like a pick on the input's sheet, see follow_input
