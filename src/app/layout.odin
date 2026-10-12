@@ -59,7 +59,7 @@ STROBE_MAX_SCALE :: 2.4
 STROBE_CUTOUT :: 0.0
 
 PANEL_PADDING :: 16
-PANEL_MIN_WIDTH :: 424 // the column beside the strobe at its narrowest, the readout still clears the display button and the level meter
+PANEL_MIN_WIDTH :: 424 // the column beside the strobe at its narrowest, the readout's labels clear the display button and the level meter
 
 // The controls and a sheet's rows at their widest, PANEL_PADDING inside, centred in a wider panel. A tablet
 // held upright has the panel the whole window across, a label at one edge with its control at the other
@@ -176,19 +176,18 @@ panel_layout :: proc(layout: ^Layout, offsets: bool) {
     layout.settings = {right - SETTINGS_ICON_SIZE, corners - SETTINGS_ICON_SIZE / 2}
     layout.instrument = {left, corners}
 
-    // The readout in the top row, the display button and the level meter centred on its values, the labels
-    // sit above. The note with the gauge and the lock under it between the readout values and the bottom row.
+    // The readout's labels in the top row, level with the display button and the level meter, its values under
+    // them. The note with the gauge and the lock under it between the readout values and the bottom row.
     // Offsets from the middle of the ruler.
     readout_top := layout.display.y - LABEL_SIZE / 2
     readout_bottom := readout_top + READOUT_VALUE_Y + BASELINE * RULER_SCALE * READOUT_SIZE
-    layout.display.y = readout_bottom - CAP_HALF * RULER_SCALE * READOUT_SIZE
-    layout.level_meter.y = layout.display.y - LEVEL_METER_HEIGHT / 2
     rows_bottom := corners - BOTTOM_ROW_CLEARANCE
 
     // The readout, the letter with its octave, the gauge, the lock and the bottom row evenly apart, the gaps
     // growing with the panel up to MAX_GAP. Past that the room is spare and the group of them, the readout
-    // down to the lock, sinks to the middle of the panel instead of spreading out, the rows staying in the
-    // corners. A preset's note offset is a caption under the gauge, the gap to the lock is under the caption.
+    // down to the lock, sinks to the middle of the panel instead of spreading out, the top and the bottom row
+    // staying at the panel's edges. A preset's note offset is a caption under the gauge, the gap to the lock is
+    // under the caption.
     OCTAVE_BELOW :: 4 // past the letter's baseline
     MIN_GAP :: 12
     MAX_GAP :: 32 // a phone's, the desktop window opens with 16
@@ -217,9 +216,8 @@ panel_layout :: proc(layout: ^Layout, offsets: bool) {
     layout.ruler = {left, middle - height / 2, right - left, height}
     layout.measurements = {center, readout_top + sink}
 
-    // The display button and the level meter stay level with the readout's values
-    layout.display.y += sink
-    layout.level_meter.y += sink
+    // The display button and the level meter stay under the strobe like the bottom row in its corners, level
+    // with the readout's labels until it sinks
     layout.gauge = {center, middle + gauge_y}
     layout.lock = {center, middle + lock_y}
     layout.note_offset = {center, middle + caption_y}

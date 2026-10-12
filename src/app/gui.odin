@@ -731,8 +731,8 @@ draw_measurements :: proc(pos: [2]f32, hz, cents: f32, shown: bool, active: bool
     VALUE_Y :: READOUT_VALUE_Y
     label_font := pixel_fonts.label.font
 
-    // Four digits like a meter's: a tenth up to 999.9, whole hertz from 1000 on. A fifth digit would run into
-    // the display button's label on a phone, and a tenth of a hertz up there is under 0.2 cents.
+    // Four digits like a meter's: a tenth up to 999.9, whole hertz from 1000 on. A tenth of a hertz up there is
+    // under 0.2 cents.
     hz_str: cstring = "-"
     if shown do hz_str = fmt.ctprintf("%.1f", hz) if hz < 999.95 else fmt.ctprintf("%.0f", hz)
 
