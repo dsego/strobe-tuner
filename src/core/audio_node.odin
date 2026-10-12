@@ -29,7 +29,6 @@ DEFAULT_SAMPLE_RATE :: 48_000
 // The input of one consumer, the pitch detection, the strobe or the scope. The audio thread writes into its
 // ring buffer, the consumer reads from it every frame.
 AudioCaptureNode :: struct {
-    name:            string, // debugging info
     // The input's, each consumer sizes its buffers and filters for it. Only the consumer's thread reads it, a
     // new rate comes with a reset, see set_pitch_detector_sample_rate and the others.
     sample_rate:     f32,
@@ -45,11 +44,11 @@ AudioCaptureNode :: struct {
     newest_tick:     time.Tick,
 }
 
-init_audio_capture_node :: proc(self: ^AudioCaptureNode, name: string, sample_rate: f32) {
+init_audio_capture_node :: proc(self: ^AudioCaptureNode, sample_rate: f32) {
+    self.sample_rate = sample_rate
+
     // A power of 2 for the PortAudio ring buffer. In samples whatever the rate, the audio thread may be
     // writing while the rate changes.
-    self.name = name
-    self.sample_rate = sample_rate
     self.ringbuffer, self.ringbuffer_data = init_ringbuffer(65536)
 }
 
@@ -134,7 +133,7 @@ audio_capture_read :: proc(
 @(test)
 test_audio_capture_stall :: proc(t: ^testing.T) {
     node: AudioCaptureNode
-    init_audio_capture_node(&node, "test", DEFAULT_SAMPLE_RATE)
+    init_audio_capture_node(&node, DEFAULT_SAMPLE_RATE)
     defer destroy_audio_capture_node(&node)
 
     SAMPLES :: 70_000

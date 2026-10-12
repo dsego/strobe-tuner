@@ -343,10 +343,14 @@ switch_input :: proc(app: ^App) {
     app.restart_audio = false
     if len(app.audio_devices) == 0 do return
 
+    // Nothing of the previous input's carries over, the readout it held included
     audio.switch_device(app.audio_capture, picked_device(app))
     core.reset_pitch_detector(&app.pitch_detector)
     core.reset_phase_comparator(app.phase_comparator)
+    core.reset_scope(&app.scope)
     reset_spectrum_view(&app.spectrum_view)
+    app.readout_track, app.traced_track = -1, -1
+    app.held_readout = {}
     match_input_rate(app)
 }
 
@@ -431,10 +435,8 @@ update_menu_checks :: proc(app: ^App) {
 // Settings… and Reset Settings… from the menu bar, over whichever sheet is up. Reset opens the settings with
 // RESET tapped once, it asks before anything is reset.
 open_settings_sheet :: proc(app: ^App, reset: bool) {
-    for sheet in ([]^Sheet{&app.track_sheet, &app.instrument_sheet, &app.input_sheet}) do close_sheet(sheet)
+    for sheet in app_sheets(app) do if sheet != &app.settings_sheet do dismiss_sheet(app, sheet)
     reset_note_offsets_editing()
-    app.settings_menu = .NONE
-    exclusive_control_mode = false
 
     app.settings_sheet.open = true
     app.display_options = false
@@ -449,9 +451,11 @@ handle_keys :: proc(app: ^App) {
     command := gfx.key_down(.LEFT_SUPER) || gfx.key_down(.RIGHT_SUPER)
     plain := !command
 
+    // Settings… closes the settings when they're up, the sheet covers the strobe
     #partial switch app.menu {
     case .SETTINGS:
-        open_settings_sheet(app, reset = false)
+        if app.settings_sheet.open do close_settings_sheet(app)
+        else do open_settings_sheet(app, reset = false)
     case .RESET_SETTINGS:
         open_settings_sheet(app, reset = true)
     case .RETRO_GLOW:
@@ -465,9 +469,7 @@ handle_keys :: proc(app: ^App) {
 
     if plain && gfx.key_pressed(.G) do config.strobe_glow = !config.strobe_glow
 
-    if plain && gfx.key_pressed(.TAB) {
-        config.strobe_display_type = StrobeDisplayType((int(config.strobe_display_type) + 1) % len(StrobeDisplayType))
-    }
+    if plain && gfx.key_pressed(.TAB) do config.strobe_display_type = next_display(config.strobe_display_type)
 
     // Or straight to one, in the settings' order
     DISPLAY_KEYS :: [StrobeDisplayType]gfx.Key {
@@ -506,7 +508,10 @@ handle_keys :: proc(app: ^App) {
     // follow_window_size
     when !gfx.MOBILE && ODIN_OS != .Darwin {
         control := gfx.key_down(.LEFT_CONTROL) || gfx.key_down(.RIGHT_CONTROL)
-        if control && gfx.key_pressed(.COMMA) do open_settings_sheet(app, reset = false)
+        if control && gfx.key_pressed(.COMMA) {
+            if app.settings_sheet.open do close_settings_sheet(app)
+            else do open_settings_sheet(app, reset = false)
+        }
         if control && gfx.key_pressed(.NUM_0) do config.window_size = {}
     }
 }
@@ -633,7 +638,7 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
 
     // The displays in a cycle, the number keys go straight to one
     if gui_display_button(layout.display, config.strobe_display_type) {
-        config.strobe_display_type = StrobeDisplayType((int(config.strobe_display_type) + 1) % len(StrobeDisplayType))
+        config.strobe_display_type = next_display(config.strobe_display_type)
     }
 
     // Opens on the settings, not the display's options it was closed on
@@ -838,15 +843,11 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     shown_cents := tuner.target_note.cents
     shown_note := core.cents_to_note(f32(shown_cents + 100 * transpose), tuner.target_note.pitch_standard)
 
-    // No pitch yet, nothing to show
-    if tuner.target_note.frequency == 0 do shown_note.frequency = 0
-
-    // The strings, or every note of a piano with the target among them
+    // The strings, or every note of a piano with the target among them. There's always a target, load_config
+    // holds the start note in A0 to C8.
     ruler_notes: []core.Note
     target: int
-    if shown_note.frequency == 0 {
-        // Nothing on the ruler
-    } else if string_mode {
+    if string_mode {
         ruler_notes = make([]core.Note, tuner.string_count, context.temp_allocator)
         for &note, index in ruler_notes {
             note = core.cents_to_note(f32(100 * (tuner.strings[index] + transpose)), shown_note.pitch_standard)
@@ -898,8 +899,8 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
 
     // A note that's tuned off pitch says so between the letter and the lock, the strobe and the readout are on
     // the offset note, see gui_note_offsets.
-    if offset := core.note_offset_cents(tuner, tuner.target_note); offset != 0 && shown_note.frequency != 0 {
-        text := fmt.ctprintf("%+.1f¢", offset)
+    if offset := core.note_offset_cents(tuner, tuner.target_note); offset != 0 {
+        text := offset_cents_text(offset)
         width := measure_label(pixel_fonts.label, text, 1).x
 
         // Like the note, white while there's a pitch
@@ -940,8 +941,8 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo, meter
 draw_sheets :: proc(app: ^App, layout: Layout, reading: Reading) {
     // Android's back button is Escape. It closes a sheet, with none up it leaves the app as anywhere else.
     when gfx.ANDROID {
-        sheets_down := app.settings_sheet.slide == 0 && app.track_sheet.slide == 0 && app.instrument_sheet.slide == 0
-        sheets_down &&= app.input_sheet.slide == 0
+        sheets_down := true
+        for sheet in app_sheets(app) do sheets_down &&= sheet.slide == 0
         if gfx.key_pressed(.ESCAPE) && sheets_down do gfx.system_back()
     }
 
@@ -972,11 +973,30 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
     if app.display_options && gfx.key_pressed(.ESCAPE) {
         app.display_options = false
     } else if close || sheet_dismissed(sheet_layout, swiped) {
-        close_sheet(sheet)
-        app.settings_menu = .NONE
-        exclusive_control_mode = false
-        app.reset_confirm = false
+        close_settings_sheet(app)
     }
+}
+
+close_settings_sheet :: proc(app: ^App) {
+    dismiss_sheet(app, &app.settings_sheet)
+    app.reset_confirm = false
+}
+
+// Every sheet, one is up at a time
+app_sheets :: proc(app: ^App) -> [4]^Sheet {
+    return {&app.settings_sheet, &app.track_sheet, &app.instrument_sheet, &app.input_sheet}
+}
+
+// Closed with the dropdown menu that may be open on it
+dismiss_sheet :: proc(app: ^App, sheet: ^Sheet) {
+    close_sheet(sheet)
+    app.settings_menu = .NONE
+    exclusive_control_mode = false
+}
+
+// The display after this one, the button and Tab go round them in the settings' order
+next_display :: proc(type: StrobeDisplayType) -> StrobeDisplayType {
+    return StrobeDisplayType((int(type) + 1) % len(StrobeDisplayType))
 }
 
 draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
@@ -987,6 +1007,7 @@ draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
     app.input_stats_age += gfx.frame_time()
     if app.input_stats_age >= INPUT_STATS_HOLD_S {
         pitch := reading.pitch
+
         // The floor is the level's average, quiet wobbles under it, the SNR of the background is 0. None
         // until something was measured, e.g. without an input, a reading that isn't one would be 0 dBFS.
         none := math.nan_f32()
@@ -1013,9 +1034,7 @@ draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
     grab_sheet(sheet, sheet_layout)
 
     if close || sheet_dismissed(sheet_layout, swiped) {
-        close_sheet(sheet)
-        app.settings_menu = .NONE
-        exclusive_control_mode = false
+        dismiss_sheet(app, sheet)
     }
 }
 
@@ -1051,7 +1070,7 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
 
     // A new offset starts on the note the tuner is on
     target := -1
-    if index, in_range := core.note_index(app.tuner.target_note); in_range && app.tuner.target_note.frequency != 0 {
+    if index, in_range := core.note_index(app.tuner.target_note); in_range {
         target = index
     }
     close, changed := gui_instrument(sheet_layout, app.config, &app.settings_menu, target)
@@ -1064,9 +1083,7 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
     grab_sheet(sheet, sheet_layout)
 
     if close || sheet_dismissed(sheet_layout, swiped) {
-        close_sheet(sheet)
-        app.settings_menu = .NONE
-        exclusive_control_mode = false
+        dismiss_sheet(app, sheet)
         reset_note_offsets_editing()
     }
 }
@@ -1074,9 +1091,12 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
 // Written once the sheets are down, a quit that skips the save at the end keeps what was changed: the stop
 // button of a debugger, Ctrl+C in the terminal, a crash
 save_when_settled :: proc(app: ^App) {
-    sheets_open := app.settings_sheet.open || app.track_sheet.open || app.instrument_sheet.open || app.input_sheet.open
+    sheets_open := false
+    for sheet in app_sheets(app) do sheets_open ||= sheet.open
     if !app.unsaved || sheets_open do return
 
+    // With the note the strobe is on, a crash or a stop from the debugger starts on it too
+    app.config.target_freq_hz = app.tuner.target_note.frequency
     save_config(app.config^)
     app.unsaved = false
 }
@@ -1104,7 +1124,7 @@ limit_frame_rate :: proc(app: ^App) {
     }
     touched := gfx.mouse_down() || gfx.mouse_pressed() || gfx.mouse_wheel() != 0
     sliding := note_ruler.swipe.gesture == .COASTING
-    for sheet in ([]Sheet{app.settings_sheet, app.track_sheet, app.instrument_sheet, app.input_sheet}) {
+    for sheet in app_sheets(app) {
         if sheet.slide != f32(int(sheet.open)) do sliding = true
     }
 

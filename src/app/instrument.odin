@@ -161,9 +161,9 @@ tuning_strings :: proc(config: ^Config) -> []int {
     if len(tuning.strings) == 0 do return nil
 
     semitones := make([]int, len(tuning.strings), context.temp_allocator)
-    for name, i in tuning.strings {
+    for name, index in tuning.strings {
         note, _ := core.parse_note(name)
-        semitones[i] = note.cents / 100 + capo_fret(setup)
+        semitones[index] = note.cents / 100 + capo_fret(setup)
     }
     return semitones
 }
@@ -290,7 +290,7 @@ gui_instrument :: proc(
     if tunable {
         tunings := TUNINGS[setup.instrument]
         options := make([]GuiOption, len(tunings), context.temp_allocator)
-        for listed, i in tunings do options[i] = {i32(i), listed.name}
+        for listed, index in tunings do options[index] = {i32(index), listed.name}
 
         rect := settings_row(sheet_layout, tuning_row, "Tuning", 176)
         selected := tuning_index

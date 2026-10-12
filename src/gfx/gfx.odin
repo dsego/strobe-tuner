@@ -35,10 +35,13 @@ import "core:math/linalg"
 //   content_scale() -> f32              the system's points per density-independent one, a phone's or a tablet's
 //   set_ui_scale(scale), ui_scale() -> f32   system points per drawing point, 1.5 on a 13-inch iPad
 //   in_background() -> bool, wait_for_foreground()  a phone, nothing may be drawn in the background
+//   window_hidden() -> bool, wait_while_hidden()    the desktop window minimized or covered, after should_close
+//   last_frame_dropped() -> bool        nothing was drawn, the render targets hold what they had before it
 //   system_back()                       what Android does with its back button
 //   limit_fps(fps)                      fewer frames while there's nothing to show, 0 for the display's rate
 //
 //   key_pressed(key), key_down(key), mouse_position(), mouse_pressed(), mouse_down(), mouse_wheel()
+//   touch_input() -> bool               the last press was a finger
 //
 //   MenuItem, add_app_menu_items(settings, items), add_menu(title, items), add_window_menu_items(items)
 //   menu_command() -> int, set_menu_checked(command, checked)   the macOS menu bar, nothing elsewhere
@@ -51,10 +54,10 @@ import "core:math/linalg"
 //   draw_line(start, end, thickness, color), draw_circle(center, radius, color)
 //   draw_text(font, text, position, size, spacing, color), measure_text(font, text, size, spacing)
 //   begin_scissor(rect), end_scissor(), set_blend_mode(mode)
-//   load_shapes(), draw_rounded_rect(rect, radius, color), draw_pill(rect, color), draw_disc(rect, color),
-//   see shapes.odin
+//   load_shapes(), unload_shapes(), draw_rounded_rect(rect, radius, color), draw_pill(rect, color),
+//   draw_disc(rect, color), see shapes.odin
 //
-//   Shader, load_shader(kind), unload_shader(shader)
+//   Shader, .STROBE, .BLOOM, .SHADOW or .SCOPE, each written for Metal and for Vulkan
 //   begin_shader(shader), end_shader(), set_shader_uniforms(shader, &uniforms)
 //   draw_shader_quad(rect)              runs the active shader over rect, texcoords 0..1
 //   draw_shader_quad_turned(rect)       the same a quarter turn anticlockwise, the shader's top edge on the left
@@ -125,13 +128,6 @@ BlendMode :: enum {
     ALPHA,
     REPLACE, // overwrite the destination, render targets carry no meaningful alpha
     ADD,
-}
-
-ShaderKind :: enum {
-    STROBE,
-    BLOOM,
-    SHADOW,
-    SCOPE,
 }
 
 // Shader uniforms are plain structs, pushed as a uniform buffer. The layout has to match the MSL struct and

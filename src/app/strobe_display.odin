@@ -19,6 +19,7 @@ package app
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
+import "core:time"
 
 import "../core"
 import "../gfx"
@@ -29,15 +30,16 @@ BLOOM_TAP_SPACING :: 1.5 // blur taps spaced apart for a wider glow at the same 
 BLOOM_ITERATIONS :: 2
 BLOOM_STRENGTH :: 0.2
 
+// Tracks not drawn for longer, another display showed or the app was in the background, start their
+// persistence and motion blur over: what they held is from before
+STROBE_STALE_S :: 0.25
+
 // The stripes shaped from the sine, off a hard square wave. Motion blur averages the pattern over its
 // movement since the previous frame, it reduces shimmer when it spins fast.
 STROBE_BLUR :: true
 MOTION_BLUR :: true
 
 StrobeDisplay :: struct {
-    strobe_shader:   gfx.Shader,
-    bloom_shader:    gfx.Shader,
-    shadow_shader:   gfx.Shader,
     background:      gfx.Color,
 
     // bloom for the strobe glow, the strobe is rendered into scene_rt and blurred through bloom_rt
@@ -54,10 +56,11 @@ StrobeDisplay :: struct {
     band_drawn_phases: [core.MAX_BANDS]f32,
     // per band average of the stripes' phasor over the persistence, 0 while dark, see strobe_persistence
     band_phasors:    [core.MAX_BANDS]complex64,
-    // and of the scope's beam, see draw_scope_display
+    // when the tracks were last drawn, another display may have shown in between, see strobe_tracks
+    tracks_tick:     time.Tick,
+    // the scope beam's visibility, see draw_scope_display
     scope_visibility: f32,
     // the scope's screen for its shader, a byte a cell, see draw_scope_screen
-    scope_shader:     gfx.Shader,
     scope_texture:    gfx.Texture,
     scope_pixels:     []u8,
     // the tracks turned by the lamp, see lamp_bands: each one's phase on the screen at the previous
@@ -156,6 +159,13 @@ strobe_upright_point :: proc(pane: gfx.Rect, turned: bool, point: [2]f32) -> [2]
 // The tracks are laid out for the desktop size and scaled by scale, then aligned to the bottom of rect,
 // a taller rect only extends the background upwards (e.g. behind the notch). rect is the upright frame.
 // Flat tracks fill the strobe, each is the top of a curved track's arc, with the stripes as wide.
+// The centre of the circles in rect upright, the same as strobe_tracks gives the strobe shader, the tap
+// targets and the labels go round it
+strobe_center :: proc(geometry: StrobeGeometry, rect: gfx.Rect, band_count: int) -> [2]f32 {
+    outer_radius := geometry.curvature_radius + geometry.band_height * f32(band_count - 1)
+    return {rect.x + 0.5 * rect.width, geometry.y + CURVED_TRACK_DROP + outer_radius}
+}
+
 strobe_geometry :: proc(shape: StrobeShape, rect: gfx.Rect, scale: f32, band_count: int) -> (geometry: StrobeGeometry) {
     geometry.shape = shape
     geometry.y = rect.y + rect.height - scale * STROBE_HEIGHT
@@ -200,10 +210,7 @@ strobe_track_at :: proc(shape: StrobeShape, pane: gfx.Rect, scale: f32, turned: 
         return band_count - 1 - order
     }
 
-    // The centre of the circles, see strobe_tracks and the strobe shader
-    outer_radius := geometry.curvature_radius + geometry.band_height * f32(band_count - 1)
-    center := [2]f32{rect.x + rect.width / 2, geometry.y + CURVED_TRACK_DROP + outer_radius}
-    distance := linalg.length(upright_point - center)
+    distance := linalg.length(upright_point - strobe_center(geometry, rect, band_count))
 
     track := int(math.ceil((distance - geometry.curvature_radius) / geometry.band_height))
     if track < 0 || track >= band_count do return -1
@@ -214,20 +221,10 @@ strobe_track_at :: proc(shape: StrobeShape, pane: gfx.Rect, scale: f32, turned: 
 
 init_strobe_display :: proc(background: u32) -> (self: StrobeDisplay) {
     self.background = gfx.hex(background)
-
-    self.strobe_shader = gfx.load_shader(.STROBE)
-    self.bloom_shader = gfx.load_shader(.BLOOM)
-    self.shadow_shader = gfx.load_shader(.SHADOW)
-    self.scope_shader = gfx.load_shader(.SCOPE)
-
     return
 }
 
 destroy_strobe_display :: proc(self: ^StrobeDisplay) {
-    gfx.unload_shader(self.strobe_shader)
-    gfx.unload_shader(self.bloom_shader)
-    gfx.unload_shader(self.shadow_shader)
-    gfx.unload_shader(self.scope_shader)
     gfx.unload_texture(self.scope_texture)
     delete(self.scope_pixels)
     unload_glow_targets(self)
@@ -300,13 +297,13 @@ blur_render_targets :: proc(
     }
     for _ in 0 ..< iterations {
         uniforms.texel_step = {tap_spacing / size.x, 0}
-        gfx.set_shader_uniforms(self.bloom_shader, &uniforms)
+        gfx.set_shader_uniforms(.BLOOM, &uniforms)
         gfx.begin_render_target(rts[1], nil)
         gfx.draw_render_target(rts[0], dest)
         gfx.end_render_target()
 
         uniforms.texel_step = {0, tap_spacing / size.y}
-        gfx.set_shader_uniforms(self.bloom_shader, &uniforms)
+        gfx.set_shader_uniforms(.BLOOM, &uniforms)
         gfx.begin_render_target(rts[0], nil)
         gfx.draw_render_target(rts[1], dest)
         gfx.end_render_target()
@@ -332,8 +329,8 @@ glow_background :: proc(background: gfx.Color, glow: GlowParams) -> gfx.Color {
     filter := glow_filter(glow.dark_color) * glow.dark_level
 
     darkest: [3]f32
-    for channel, i in filter {
-        darkest[i] = 1 - math.exp(-DARK_TRANSMISSION * MIN_LAMP * glow.exposure * channel)
+    for channel, index in filter {
+        darkest[index] = 1 - math.exp(-DARK_TRANSMISSION * MIN_LAMP * glow.exposure * channel)
     }
 
     luma := darkest.r * 0.299 + darkest.g * 0.587 + darkest.b * 0.114
@@ -347,7 +344,7 @@ glow_background :: proc(background: gfx.Color, glow: GlowParams) -> gfx.Color {
 render_bloom :: proc(self: ^StrobeDisplay) {
     gfx.set_blend_mode(.REPLACE)
     defer gfx.set_blend_mode(.ALPHA)
-    gfx.begin_shader(self.bloom_shader)
+    gfx.begin_shader(.BLOOM)
     defer gfx.end_shader()
 
     // Downsample and keep the bright parts
@@ -356,7 +353,7 @@ render_bloom :: proc(self: ^StrobeDisplay) {
         mode       = 0,
         texel_step = 1.0 / scene_size,
     }
-    gfx.set_shader_uniforms(self.bloom_shader, &uniforms)
+    gfx.set_shader_uniforms(.BLOOM, &uniforms)
     bloom_size := gfx.render_target_size(self.bloom_rt[0])
 
     // Each pass replaces every pixel of its target, nothing to clear
@@ -458,11 +455,7 @@ draw_strobe_display :: proc(
         // The middle of a track down from its top, see STROBE_TRACK_GAP
         track_middle := 0.5 * (band_height - STROBE_TRACK_GAP)
 
-        // The wheel's centre, see strobe_tracks and the strobe shader
-        center := [2]f32 {
-            rect.x + 0.5 * rect.width,
-            geometry.y + CURVED_TRACK_DROP + geometry.curvature_radius + band_height * f32(len(bands) - 1),
-        }
+        center := strobe_center(geometry, rect, len(bands))
 
         // The outer edge of each track, from the innermost one's
         radius := geometry.curvature_radius - band_height
@@ -475,7 +468,8 @@ draw_strobe_display :: proc(
             switch geometry.shape {
             case .CURVED:
                 // From the centre of the circles across to the label, and up to the track there
-                across := 0.5 * rect.width - 28
+                // A pane wider than the outer track, past STROBE_MAX_SCALE, has the label at the track's end
+                across := min(0.5 * rect.width - 28, radius)
                 up := math.sqrt(radius * radius - across * across)
                 label_y = geometry.y + band_height * (f32(order) + 0.6) + radius - up
             case .FLAT:
@@ -538,9 +532,9 @@ draw_inner_shadow :: proc(self: ^StrobeDisplay, area: gfx.Rect, shape: gfx.Rect)
         shape = {shape.x - area.x, shape.y - area.y, shape.x + shape.width - area.x, shape.y + shape.height - area.y},
         size  = {area.width, area.height},
     }
-    gfx.begin_shader(self.shadow_shader)
+    gfx.begin_shader(.SHADOW)
     defer gfx.end_shader()
-    gfx.set_shader_uniforms(self.shadow_shader, &uniforms)
+    gfx.set_shader_uniforms(.SHADOW, &uniforms)
     gfx.draw_shader_quad(area)
 }
 
@@ -672,6 +666,9 @@ strobe_tracks :: proc(
     density := geometry.density
     tracks.count = len(bands)
 
+    stale := time.duration_seconds(time.tick_since(self.tracks_tick)) > STROBE_STALE_S
+    self.tracks_tick = time.tick_now()
+
     for &band, band_index in bands {
         uniforms := &tracks.uniforms[band_index]
         uniforms^ = shared
@@ -710,6 +707,14 @@ strobe_tracks :: proc(
         // where they are instead of through dark, as the lamp's loud attack outweighs its faded picture.
         frame_time := min(gfx.frame_time(), STROBE_MAX_FRAME_TIME_S)
         drawn_phase := &self.band_drawn_phases[band_index]
+
+        // Coming back to the strobe, the stripes start where they are like after a pluck, not smeared from a
+        // phase seconds old
+        if stale {
+            self.band_phasors[band_index] = 0
+            drawn_phase^ = uniforms.phase
+        }
+
         smear: f32 = 1
         if !lamp && persistence_periods > 0 {
             if band.onset do self.band_phasors[band_index] = 0
@@ -770,14 +775,14 @@ strobe_tracks :: proc(
 
 // pane and turned are the strobe's, see strobe_upright
 draw_strobe_tracks :: proc(self: ^StrobeDisplay, tracks: ^StrobeTracks, pane: gfx.Rect, turned: bool) {
-    gfx.begin_shader(self.strobe_shader)
+    gfx.begin_shader(.STROBE)
     defer gfx.end_shader()
 
     for &uniforms in tracks.uniforms[:tracks.count] {
         // A curved track drops below the top of its quad, see CURVED_TRACK_DROP
         rect := uniforms.bounding_rect
         offset: f32 = 0 if uniforms.flat_track != 0 else CURVED_TRACK_DROP
-        gfx.set_shader_uniforms(self.strobe_shader, &uniforms)
+        gfx.set_shader_uniforms(.STROBE, &uniforms)
 
         // The quad is laid out in the upright frame, it lands in the pane turned with it
         quad := strobe_pane_rect(pane, turned, {rect.x, rect.y + offset, rect.z, rect.w})

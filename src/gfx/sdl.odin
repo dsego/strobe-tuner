@@ -16,7 +16,7 @@
 
 package gfx
 
-// SDL3 GPU backend with Metal shaders, see gfx.odin
+// SDL3 GPU backend, Metal shaders on macOS and iOS and Vulkan SPIR-V elsewhere, see gfx.odin
 //
 // Drawing only records vertices and draw commands, end_frame uploads the vertices in one go
 // and replays the commands. Every begin/end_render_target splits the frame into another render pass.
@@ -44,7 +44,7 @@ RenderTarget :: struct {
     texture: Texture,
 }
 
-// The program a load_shader kind draws with
+// What the draws between begin_shader and end_shader run, the sprite's otherwise
 Shader :: Program
 
 Glyph :: struct {
@@ -77,13 +77,6 @@ PROGRAM_SAMPLERS :: [Program]u32 {
     .SCOPE  = 1,
 }
 
-SHADER_PROGRAMS :: [ShaderKind]Program {
-    .STROBE = .STROBE,
-    .BLOOM  = .BLOOM,
-    .SHADOW = .SHADOW,
-    .SCOPE  = .SCOPE,
-}
-
 Vertex :: struct {
     position: [2]f32,
     uv:       [2]f32,
@@ -105,7 +98,8 @@ DrawCommand :: struct {
 }
 
 Pass :: struct {
-    target:        ^sdl.GPUTexture, // nil for the window
+    offscreen:     bool, // into a render target, not the window
+    target:        ^sdl.GPUTexture, // the render target's, nil for one that couldn't be made: its draws are dropped
     target_size:   [2]f32, // in pixels
     clear:         Maybe(Color), // a target's, or the draws cover all of it, the window clears to gpu.clear
     offset:        [2]f32,
@@ -203,6 +197,7 @@ gpu: struct {
     program:          Program,
     blend:            BlendMode,
     scissor:          Maybe(Rect),
+    window_scissor:   Maybe(Rect), // the window's while a render target is drawn, see begin_render_target
     uniforms:         [Program]UniformRange,
     clear:            Color,
     acquire_failed:   bool, // the last frame's swapchain, reported once
@@ -330,18 +325,15 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}, position
         gpu.fragment_shaders[program] = shader
     }
 
+    // Like a shader, one that couldn't be made would leave its draws to whatever was bound before
     for program in Program {
         for blend in BlendMode {
-            gpu.pipelines[program][blend][PASS_WINDOW] = create_pipeline(
-                program,
-                blend,
-                gpu.window_format,
-            )
-            gpu.pipelines[program][blend][PASS_TARGET] = create_pipeline(
-                program,
-                blend,
-                TARGET_FORMAT,
-            )
+            window := create_pipeline(program, blend, gpu.window_format)
+            target := create_pipeline(program, blend, TARGET_FORMAT)
+            if window == nil || target == nil do return false
+
+            gpu.pipelines[program][blend][PASS_WINDOW] = window
+            gpu.pipelines[program][blend][PASS_TARGET] = target
         }
     }
 
@@ -356,6 +348,10 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}, position
             address_mode_w = .CLAMP_TO_EDGE,
         },
     )
+    if gpu.sampler == nil {
+        fmt.eprintln("SDL_CreateGPUSampler failed:", sdl.GetError())
+        return false
+    }
 
     white := [4]u8{255, 255, 255, 255}
     gpu.white = create_texture(1, 1, white[:])
@@ -628,9 +624,12 @@ end_frame :: proc() {
         }
     }
 
+    // Without one nothing is drawn, the render targets hold what they had, see last_frame_dropped
     command_buffer := sdl.AcquireGPUCommandBuffer(gpu.device)
     if command_buffer == nil {
         fmt.eprintln("SDL_AcquireGPUCommandBuffer failed:", sdl.GetError())
+        gpu.dropped = true
+        sdl.Delay(16)
         return
     }
 
@@ -649,9 +648,10 @@ end_frame :: proc() {
     }
     gpu.acquire_failed = !acquired
 
-    // Minimized or hidden, nothing to draw into. Or no vertex buffer, nothing to draw with. The textures'
-    // new pixels go up first, before the passes that draw them.
-    gpu.dropped = swapchain == nil || !upload_textures(command_buffer) || !upload_vertices(command_buffer)
+    // The textures' new pixels go up first, before the passes that draw them. No vertex buffer, nothing to
+    // draw with.
+    upload_textures(command_buffer)
+    gpu.dropped = !upload_vertices(command_buffer)
     if gpu.dropped {
         _ = sdl.SubmitGPUCommandBuffer(command_buffer)
         sdl.Delay(16)
@@ -663,7 +663,7 @@ end_frame :: proc() {
     // between each render target would move the full screen through memory every time. The window is
     // never sampled, and each target is finished before the window draws it, the order stays right.
     for pass, pass_index in gpu.passes {
-        if pass.target == nil do continue
+        if !pass.offscreen || pass.target == nil do continue
 
         commands := pass_commands(pass_index)
         if len(commands) == 0 && pass.clear == nil do continue
@@ -691,6 +691,14 @@ end_frame :: proc() {
         sdl.EndGPURenderPass(render_pass)
     }
 
+    // Minimized or hidden, the window has nothing to draw into. The render targets are drawn all the same,
+    // they're up to date when it shows again.
+    if swapchain == nil {
+        _ = sdl.SubmitGPUCommandBuffer(command_buffer)
+        sdl.Delay(16)
+        return
+    }
+
     // Drawing points to the swapchain's pixels: the display's density and the UI scale
     logical_w: i32
     sdl.GetWindowSize(gpu.window, &logical_w, nil)
@@ -706,7 +714,7 @@ end_frame :: proc() {
     }
     render_pass := begin_render_pass(command_buffer, &color_target, window_size)
     for pass, pass_index in gpu.passes {
-        if pass.target != nil do continue
+        if pass.offscreen do continue
 
         draw_commands(
             command_buffer,
@@ -1095,13 +1103,6 @@ set_blend_mode :: proc(mode: BlendMode) {
     gpu.blend = mode
 }
 
-load_shader :: proc(kind: ShaderKind) -> Shader {
-    programs := SHADER_PROGRAMS
-    return programs[kind]
-}
-
-unload_shader :: proc(shader: Shader) {}
-
 begin_shader :: proc(shader: Shader) {
     gpu.program = shader
 }
@@ -1153,6 +1154,8 @@ load_render_target :: proc(width, height: i32) -> RenderTarget {
             num_levels = 1,
         },
     )
+    if handle == nil do fmt.eprintln("Could not create a render target", width, "x", height, ":", sdl.GetError())
+
     return {{handle, width, height}}
 }
 
@@ -1165,16 +1168,20 @@ render_target_size :: proc(target: RenderTarget) -> [2]f32 {
 }
 
 // offset is the top left corner of the target in the drawing coordinates, zoom scales them to target pixels.
-// No clear when the draws cover the whole target, its contents aren't loaded then.
+// No clear when the draws cover the whole target, its contents aren't loaded then. The window's scissor
+// doesn't apply in the target, it's back after end_render_target.
 begin_render_target :: proc(
     target: RenderTarget,
     clear: Maybe(Color),
     offset: [2]f32 = {},
     zoom: f32 = 1,
 ) {
+    gpu.window_scissor = gpu.scissor
+    gpu.scissor = nil
     append(
         &gpu.passes,
         Pass {
+            offscreen = true,
             target = target.texture.handle,
             target_size = render_target_size(target),
             clear = clear,
@@ -1187,6 +1194,8 @@ begin_render_target :: proc(
 
 // Back to drawing into the window, over what's there already
 end_render_target :: proc() {
+    gpu.scissor = gpu.window_scissor
+    gpu.window_scissor = nil
     begin_window_pass()
 }
 
@@ -1245,8 +1254,8 @@ push_vertices :: proc(texture: ^sdl.GPUTexture, vertices: []Vertex) {
 
 // The pixels update_texture queued this frame, in one copy pass. A texture that can't be uploaded keeps the
 // pixels it had, the frame is still drawn.
-upload_textures :: proc(command_buffer: ^sdl.GPUCommandBuffer) -> bool {
-    if len(gpu.texture_uploads) == 0 do return true
+upload_textures :: proc(command_buffer: ^sdl.GPUCommandBuffer) {
+    if len(gpu.texture_uploads) == 0 do return
 
     size := len(gpu.texture_pixels)
     if size > gpu.texture_capacity {
@@ -1257,14 +1266,14 @@ upload_textures :: proc(command_buffer: ^sdl.GPUCommandBuffer) -> bool {
         if gpu.texture_transfer == nil {
             fmt.eprintln("Could not create the texture transfer buffer:", sdl.GetError())
             gpu.texture_capacity = 0 // tried again next frame
-            return true
+            return
         }
     }
 
     mapped := sdl.MapGPUTransferBuffer(gpu.device, gpu.texture_transfer, true)
     if mapped == nil {
         fmt.eprintln("SDL_MapGPUTransferBuffer failed:", sdl.GetError())
-        return true
+        return
     }
     mem.copy(mapped, raw_data(gpu.texture_pixels), size)
     sdl.UnmapGPUTransferBuffer(gpu.device, gpu.texture_transfer)
@@ -1282,7 +1291,6 @@ upload_textures :: proc(command_buffer: ^sdl.GPUCommandBuffer) -> bool {
         )
     }
     sdl.EndGPUCopyPass(copy_pass)
-    return true
 }
 
 // False when the buffers couldn't be made, nothing can be drawn then
@@ -1360,6 +1368,7 @@ create_texture :: proc(width, height: i32, pixels: []u8) -> Texture {
         return {}
     }
     defer sdl.ReleaseGPUTransferBuffer(gpu.device, transfer)
+
     mem.copy(mapped, raw_data(pixels), len(pixels))
     sdl.UnmapGPUTransferBuffer(gpu.device, transfer)
 

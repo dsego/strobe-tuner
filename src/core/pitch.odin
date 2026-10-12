@@ -100,7 +100,7 @@ init_pitch_detector :: proc(pitch_standard: f32 = 440.0, sample_rate: f32 = DEFA
     self.noise_floor = init_noise_floor()
     self.pitch_standard = pitch_standard
 
-    init_audio_capture_node(&self, "pitch", sample_rate)
+    init_audio_capture_node(&self, sample_rate)
     size_pitch_detector(&self)
     return
 }

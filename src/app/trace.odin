@@ -58,9 +58,9 @@ destroy_trace :: proc(self: ^Trace) {
     delete(self.samples)
 }
 
-trace_sample :: proc(self: ^Trace, i: int) -> TraceSample {
+trace_sample :: proc(self: ^Trace, index: int) -> TraceSample {
     capacity := len(self.samples)
-    return self.samples[(self.head - self.count + i + capacity) % capacity]
+    return self.samples[(self.head - self.count + index + capacity) % capacity]
 }
 
 push_sample :: proc(self: ^Trace, sample: TraceSample) {
@@ -139,8 +139,8 @@ draw_trace_line :: proc(self: ^Trace, plot: gfx.Rect, middle: f32, scale: [2]f32
         limit := plot.height / 2
         return {x, middle - clamp(sample.cents * scale.y, -limit, limit)}
     }
-    usable :: proc(self: ^Trace, i: int) -> bool {
-        return i >= 0 && i < self.count && !math.is_nan(trace_sample(self, i).cents)
+    usable :: proc(self: ^Trace, index: int) -> bool {
+        return index >= 0 && index < self.count && !math.is_nan(trace_sample(self, index).cents)
     }
 
     pen := Pen {
@@ -149,24 +149,29 @@ draw_trace_line :: proc(self: ^Trace, plot: gfx.Rect, middle: f32, scale: [2]f32
     }
     alpha := f32(color.a)
 
-    for i in 0 ..< self.count {
-        if !usable(self, i) do continue
+    // From the last reading left of the plot on, the older ones are past its left edge
+    shown_from := self.clock - f64(plot.width / scale.x)
+    first := 0
+    for first + 1 < self.count && trace_sample(self, first + 1).time < shown_from do first += 1
 
-        p1 := point(trace_sample(self, i), self.clock, plot, middle, scale)
-        if !usable(self, i - 1) {
-            // the start of a run
-            pen.color.a = u8(alpha * trace_sample(self, i).light)
-            pen_start(&pen, p1)
+    for index in first ..< self.count {
+        if !usable(self, index) do continue
+
+        from := point(trace_sample(self, index), self.clock, plot, middle, scale)
+        if index == first || !usable(self, index - 1) {
+            // the start of a run, or of what's shown
+            pen.color.a = u8(alpha * trace_sample(self, index).light)
+            pen_start(&pen, from)
         }
-        if !usable(self, i + 1) do continue
+        if !usable(self, index + 1) do continue
 
-        p2 := point(trace_sample(self, i + 1), self.clock, plot, middle, scale)
+        to := point(trace_sample(self, index + 1), self.clock, plot, middle, scale)
 
         // The neighbours on either side set the curve's direction
-        p0 := point(trace_sample(self, i - 1), self.clock, plot, middle, scale) if usable(self, i - 1) else p1
-        p3 := point(trace_sample(self, i + 2), self.clock, plot, middle, scale) if usable(self, i + 2) else p2
-        light1, light2 := trace_sample(self, i).light, trace_sample(self, i + 1).light
-        pen_curve_to(&pen, p0, p1, p2, p3, alpha * light1, alpha * light2)
+        before := point(trace_sample(self, index - 1), self.clock, plot, middle, scale) if usable(self, index - 1) else from
+        after := point(trace_sample(self, index + 2), self.clock, plot, middle, scale) if usable(self, index + 2) else to
+        light_from, light_to := trace_sample(self, index).light, trace_sample(self, index + 1).light
+        pen_curve_to(&pen, before, from, to, after, alpha * light_from, alpha * light_to)
     }
 }
 

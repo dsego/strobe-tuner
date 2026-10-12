@@ -216,6 +216,10 @@ panel_layout :: proc(layout: ^Layout, offsets: bool) {
     height := min(RULER_SCALE * RULER_HEIGHT, 2 * gauge_y)
     layout.ruler = {left, middle - height / 2, right - left, height}
     layout.measurements = {center, readout_top + sink}
+
+    // The display button and the level meter stay level with the readout's values
+    layout.display.y += sink
+    layout.level_meter.y += sink
     layout.gauge = {center, middle + gauge_y}
     layout.lock = {center, middle + lock_y}
     layout.note_offset = {center, middle + caption_y}

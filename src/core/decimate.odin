@@ -57,16 +57,16 @@ init_decimator :: proc(input_rate: f32) -> (self: Decimator, sample_rate: f32) {
     }
 
     // A windowed sinc at a quarter of the rate, its even taps fall on the sinc's zeros
-    sum: f64 = 0.5
+    pairs_sum: f64 = 0
     for &tap, index in self.pairs {
         offset := f64(2 * index + 1)
         sinc := math.sin(math.PI * offset / 2) / (math.PI * offset)
         tap = f32(sinc * kaiser(offset, HALFBAND_TAPS / 2, HALFBAND_KAISER_BETA))
-        sum += 2 * f64(tap)
+        pairs_sum += f64(tap)
     }
 
-    // A level that stays the same at 0 Hz
-    for &tap in self.pairs do tap = f32(f64(tap) / sum)
+    // A level that stays the same at 0 Hz: the middle tap's 0.5 and both sides' pairs add up to 1
+    for &tap in self.pairs do tap = f32(f64(tap) * 0.25 / pairs_sum)
     return
 
     // The Kaiser window at offset from the middle of one reaching half_width either way

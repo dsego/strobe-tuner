@@ -39,10 +39,10 @@ struct View {
 
 vertex VertexOut vertex_main(VertexIn in [[stage_in]], constant View &view [[buffer(0)]])
 {
-    float2 p = (in.position - view.transform.zw) * view.transform.xy;
+    float2 clip = (in.position - view.transform.zw) * view.transform.xy;
 
     VertexOut out;
-    out.position = float4(p.x - 1.0, 1.0 - p.y, 0.0, 1.0);
+    out.position = float4(clip.x - 1.0, 1.0 - clip.y, 0.0, 1.0);
     out.uv = in.uv;
     out.color = in.color;
     return out;

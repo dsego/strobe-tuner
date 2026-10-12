@@ -228,16 +228,17 @@ test_nsdf_accuracy :: proc(t: ^testing.T) {
     FFT_SIZE :: 8192
     SAMPLE_RATE :: DEFAULT_SAMPLE_RATE
 
-    // Cents from the fundamental, partial n is at n * fundamental stretched by stretch_cents * (n² - 1)
+    // Cents from the fundamental, harmonic h is at h * fundamental stretched by stretch_cents * (h² - 1)
     run :: proc(fundamental: f64, amplitudes: []f64, stretch_cents: f64) -> f32 {
         self := init_nsdf(FFT_SIZE, SAMPLE_RATE)
         defer destroy_nsdf(&self)
+
         samples: [FFT_SIZE / 2]f32
-        for &sample, i in samples {
+        for &sample, index in samples {
             for amplitude, partial in amplitudes {
-                n := f64(partial + 1)
-                freq := n * fundamental * math.pow(2, stretch_cents * (n * n - 1) / 1200)
-                sample += f32(amplitude * math.sin(math.TAU * freq * f64(i) / SAMPLE_RATE + n))
+                harmonic := f64(partial + 1)
+                freq := harmonic * fundamental * math.pow(2, stretch_cents * (harmonic * harmonic - 1) / 1200)
+                sample += f32(amplitude * math.sin(math.TAU * freq * f64(index) / SAMPLE_RATE + harmonic))
             }
         }
         freq, _ := run_nsdf(&self, samples[:])

@@ -29,14 +29,16 @@ draw_nsdf :: proc(rect: gfx.Rect, nsdf: ^core.NSDF, font: gfx.Font) {
     LAGS :: 1500
     points: [LAGS][2]f32
 
+    // A slow input's window has fewer lags, 1024 at 8 kHz
+    shown := min(LAGS, len(nsdf.values))
     lag_width := rect.width / f32(LAGS - 1)
     middle := rect.y + rect.height / 2
-    for &point, lag in points {
+    for &point, lag in points[:shown] {
         point = {rect.x + f32(lag) * lag_width, middle - nsdf.values[lag] * (rect.height / 2)}
     }
 
     draw_time_plot(rect, LAGS, 1000, font)
-    gfx.draw_line_strip(points[:], gfx.GOLD)
+    gfx.draw_line_strip(points[:shown], gfx.GOLD)
 
     for peak, index in nsdf.peaks {
         cross := [2]f32{rect.x + peak.x * lag_width, middle - peak.y * (rect.height / 2)}
@@ -124,8 +126,9 @@ draw_freq_plot :: proc(rect: gfx.Rect, nsdf: ^core.NSDF, font: gfx.Font) {
 
     magnitudes: [BINS]f32
     for &point, bin in points {
+        // A power, the magnitude squared, see core.square_spectrum: 10 log10 of it over the size squared
         magnitudes[bin] = abs(nsdf.spectrum[bin])
-        db := 20 * math.log10(magnitudes[bin] / f32(nsdf.fft_size))
+        db := 10 * math.log10(magnitudes[bin] / f32(nsdf.fft_size * nsdf.fft_size))
         scaled := clamp((db - DB_MIN) / (DB_MAX - DB_MIN), 0, 1)
         point = {rect.x + f32(bin) * bin_width, rect.y + rect.height - scaled * rect.height}
     }
@@ -144,7 +147,7 @@ draw_freq_plot :: proc(rect: gfx.Rect, nsdf: ^core.NSDF, font: gfx.Font) {
 
     gfx.draw_line_strip(points[:], gfx.PINK)
 
-    MIN_PROMINENCE :: 1.4125 // 3 dB
+    MIN_PROMINENCE :: 1.9953 // 3 dB of power
     for index in 1 ..< max(candidate_count - 1, 1) {
         peak := candidates[index]
         prominent :=

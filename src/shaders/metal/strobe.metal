@@ -121,18 +121,18 @@ static float generate_blurred_signal(
 
     // ~24 samples per period is enough to keep the average smooth even for the hard edged square wave
     const int MAX_SAMPLES = 24;
-    int n = int(clamp(ceil(sweep * float(MAX_SAMPLES) / TAU), 2.0, float(MAX_SAMPLES)));
+    int sample_count = int(clamp(ceil(sweep * float(MAX_SAMPLES) / TAU), 2.0, float(MAX_SAMPLES)));
 
     float sum = 0.0;
-    for (int i = 0; i < MAX_SAMPLES; i++) {
-        if (i >= n) break;
+    for (int index = 0; index < MAX_SAMPLES; index++) {
+        if (index >= sample_count) break;
 
-        float t = (float(i) + 0.5) / float(n);
+        float progress = (float(index) + 0.5) / float(sample_count);
         sum += generate_signal(
-            freq, phase - t * phase_step, amplitude, visibility, time, time_stretch, period_count, strobe_blur
+            freq, phase - progress * phase_step, amplitude, visibility, time, time_stretch, period_count, strobe_blur
         );
     }
-    float value = sum / float(n);
+    float value = sum / float(sample_count);
 
     // Ease the last bit of contrast out, so the pattern doesn't pop when the sweep crosses a full period
     float fade = 1.0 - smoothstep(0.75 * TAU, TAU, sweep);

@@ -71,14 +71,6 @@ ScopeShape :: enum {
     RAW_WAVEFORM,
 }
 
-half_rectify :: proc(value: f32) -> f32 {
-    return max(value, 0)
-}
-
-raw_waveform :: proc(value: f32) -> f32 {
-    return value
-}
-
 // What moves the beam across the screen
 ScopeSweep :: enum {
     TIME, // two reference periods across, the wave over time
@@ -112,6 +104,7 @@ Scope :: struct {
     columns:             int,
     rows:                int,
     recent:              [3]f32, // the samples before the newest, the beam is drawn through them
+    beam_restart:        bool, // recent is from before a gap, the beam starts over on the next sample
     level:               f32, // peak level of the input
     // The RMS of the background noise, the room's hiss stays low on the screen instead of filling it
     noise_floor:         f32,
@@ -130,7 +123,7 @@ Scope :: struct {
 
 
 init_scope :: proc(columns, rows: int, sample_rate: f32 = DEFAULT_SAMPLE_RATE) -> (self: Scope) {
-    init_audio_capture_node(&self, "scope", sample_rate)
+    init_audio_capture_node(&self, sample_rate)
     self.columns = columns
     self.rows = rows
     self.screen = make([]f32, columns * rows)
@@ -174,7 +167,16 @@ set_scope_sample_rate :: proc(self: ^Scope, sample_rate: f32) {
 
     self.sample_rate = sample_rate
     self.coupling = {}
+    self.beam_restart = true
     set_scope_freq(self, self.freq_hz)
+}
+
+// Another input, nothing of the previous one's stays: its picture, its level and the AC coupling's state
+reset_scope :: proc(self: ^Scope) {
+    clear_scope(self)
+    self.coupling = {}
+    self.level = 0
+    self.beam_restart = true
 }
 
 clear_scope :: proc(self: ^Scope) {
@@ -200,6 +202,7 @@ update_scope :: proc(self: ^Scope) {
         // A stall, the beam starts over on the audio after it
         self.sample_clock += lost
         self.coupling = {}
+        self.beam_restart = true
         clear_scope(self)
         return
     }
@@ -233,8 +236,11 @@ skip_scope :: proc(self: ^Scope) {
     available := ringbuffer_available(&self.ringbuffer)
     skip_ringbuffer(&self.ringbuffer, available)
     self.sample_clock += i64(available)
-    if !self.skipping do clear_scope(self)
-
+    if !self.skipping {
+        clear_scope(self)
+        self.coupling = {}
+        self.beam_restart = true
+    }
     self.skipping = true
 }
 
@@ -255,16 +261,18 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
     clock := self.sample_clock - i64(len(samples))
     min_level := max(self.noise_floor * SCOPE_NOISE_HEADROOM, SCOPE_MIN_LEVEL)
 
-    for sample, i in samples {
+    for sample, index in samples {
         self.level = max(abs(sample), self.level * release, min_level)
         self.fade_gain /= decay
-        move_beam(self, f64(clock + i64(i)) * self.step, sample, self.fade_gain)
-    }
 
-    if self.fade_gain > SCOPE_MAX_FADE_GAIN {
-        scale := f32(1 / self.fade_gain)
-        for &cell in self.screen do cell *= scale
-        self.fade_gain = 1
+        // Divided back in as soon as it's too large, a chunk long against a short persistence would outgrow
+        // the cells before its end
+        if self.fade_gain > SCOPE_MAX_FADE_GAIN {
+            scale := f32(1 / self.fade_gain)
+            for &cell in self.screen do cell *= scale
+            self.fade_gain = 1
+        }
+        move_beam(self, f64(clock + i64(index)) * self.step, sample, self.fade_gain)
     }
 }
 
@@ -281,6 +289,12 @@ catmull_rom :: proc(before, from, to, after: $T, progress: f32) -> T {
 // needs the newest one too. It leaves a dot in every cell on the way, all as long a time apart, so it's
 // dimmer where it moves fast. position is the newest sample's.
 move_beam :: proc(self: ^Scope, position: f64, sample: f32, brightness: f64) {
+    // After a gap the beam starts where the wave is, not with a streak from where it was
+    if self.beam_restart {
+        self.recent = sample
+        self.beam_restart = false
+    }
+
     before, from, to, after := self.recent[0], self.recent[1], self.recent[2], sample
     self.recent = {from, to, after}
 
@@ -344,16 +358,17 @@ scope_from_above :: proc(self: ^Scope, shape: ScopeShape) -> (heights: []f32, dw
     slice.zero(self.heights)
     slice.zero(self.dwell)
 
-    for cell, i in self.screen {
-        if cell == 0 do continue
+    // Row by row, the row's value once for all of its cells
+    for row in 0 ..< self.rows {
+        value := row_value(self, row)
+        if shape == .HALF_RECTIFIED do value = max(value, 0)
 
-        value := row_value(self, i / self.columns)
-        if shape == .HALF_RECTIFIED do value = half_rectify(value)
-        else do value = raw_waveform(value)
+        for cell, column in self.screen[row * self.columns:][:self.columns] {
+            if cell == 0 do continue
 
-        column := i % self.columns
-        self.heights[column] += cell * value
-        self.dwell[column] += cell
+            self.heights[column] += cell * value
+            self.dwell[column] += cell
+        }
     }
 
     for &height, column in self.heights {

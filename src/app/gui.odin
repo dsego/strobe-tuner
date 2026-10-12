@@ -137,12 +137,16 @@ draw_strobe_partial :: proc(position: [2]f32, type: PartialLabelType, band: core
 
     draw_label(font, text, {bounds.x, bounds.y}, accent_color)
 
+    // Left of the label, or under a centred one: the turned strobe's labels sit side by side a track apart
     if band.offset_cents != 0 {
         offset_font := pixel_fonts.band_label_small
-        offset := fmt.ctprintf("%+.1f¢", band.offset_cents)
+        offset := offset_cents_text(band.offset_cents)
         offset_size := measure_label(offset_font, offset)
         center_y := bounds.y + text_size.y / 2
-        draw_label(offset_font, offset, {bounds.x - 6 - offset_size.x, center_y - offset_size.y / 2}, accent_color)
+        offset_position := [2]f32{bounds.x - 6 - offset_size.x, center_y - offset_size.y / 2}
+        if centered do offset_position = {position.x - offset_size.x / 2, bounds.y + text_size.y + 2}
+
+        draw_label(offset_font, offset, offset_position, accent_color)
     }
 }
 

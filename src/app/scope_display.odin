@@ -114,9 +114,9 @@ draw_scope_screen :: proc(display: ^StrobeDisplay, rect: gfx.Rect, scope: ^core.
     // the column's dwell is full brightness.
     EXPOSURE :: 3
     DARK :: 0.02
-    for dwell, i in scope.screen {
+    for dwell, cell in scope.screen {
         intensity := min(EXPOSURE * dwell / full, 1)
-        display.scope_pixels[i] = u8(255 * intensity + 0.5) if intensity >= DARK else 0
+        display.scope_pixels[cell] = u8(255 * intensity + 0.5) if intensity >= DARK else 0
     }
     gfx.update_texture(display.scope_texture, display.scope_pixels)
 
@@ -128,10 +128,10 @@ draw_scope_screen :: proc(display: ^StrobeDisplay, rect: gfx.Rect, scope: ^core.
         cell_size = {rect.width / f32(width), rect.height / f32(rows)},
         radius    = SCOPE_BEAM_RADIUS,
     }
-    gfx.begin_shader(display.scope_shader)
+    gfx.begin_shader(.SCOPE)
     defer gfx.end_shader()
 
-    gfx.set_shader_uniforms(display.scope_shader, &uniforms)
+    gfx.set_shader_uniforms(.SCOPE, &uniforms)
     gfx.draw_texture(display.scope_texture, {0, 0, f32(width), f32(rows)}, rect)
 }
 
@@ -161,9 +161,10 @@ lamp_bands :: proc(
     partials := make([]core.ScopePartial, len(bands), context.temp_allocator)
     noise := max(core.scope_partials(scope, periods, partials), 1e-9)
 
-    // A new reference starts with a dark screen, the phases before it are arbitrary
-    has_phase := display.lamp_freq_hz == scope.freq_hz
+    // A new reference starts with a dark screen, the phases before it are arbitrary. So are they after a while
+    // without the lamp's tracks, another display showed and the screen went dark, see skip_scope.
     elapsed := f64(scope.sample_clock - display.lamp_clock) / f64(scope.sample_rate)
+    has_phase := display.lamp_freq_hz == scope.freq_hz && elapsed <= STROBE_STALE_S
     display.lamp_freq_hz = scope.freq_hz
     display.lamp_clock = scope.sample_clock
 
@@ -199,9 +200,9 @@ draw_lamp :: proc(rect: gfx.Rect, heights, dwell: []f32, shape: core.ScopeShape,
     dark := gfx.normalize_color(dark_color)
     column_width := rect.width / f32(len(heights))
 
-    for height, i in heights {
+    for height, column in heights {
         // The beam wasn't here, a frame is shorter than the sweep of a low note
-        if dwell[i] == 0 do continue
+        if dwell[column] == 0 do continue
 
         // The wave as it is goes below zero, zero is halfway
         brightness := height
@@ -209,7 +210,7 @@ draw_lamp :: proc(rect: gfx.Rect, heights, dwell: []f32, shape: core.ScopeShape,
 
         color := gfx.color_from_normalized(math.lerp(dark, bright, clamp(brightness, 0, 1)))
 
-        x := rect.x + rect.width - f32(i + 1) * column_width
+        x := rect.x + rect.width - f32(column + 1) * column_width
         gfx.draw_rect({x, rect.y}, {column_width, rect.height}, color)
     }
 }

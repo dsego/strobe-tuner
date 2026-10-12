@@ -34,9 +34,9 @@ layout(set = 1, binding = 0) uniform View {
 
 void main()
 {
-    vec2 p = (position - view.transform.zw) * view.transform.xy;
+    vec2 clip = (position - view.transform.zw) * view.transform.xy;
 
-    gl_Position = vec4(p.x - 1.0, 1.0 - p.y, 0.0, 1.0);
+    gl_Position = vec4(clip.x - 1.0, 1.0 - clip.y, 0.0, 1.0);
     frag_uv = uv;
     frag_color = color;
 }

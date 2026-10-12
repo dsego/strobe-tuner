@@ -240,10 +240,14 @@ set_tuner_strings :: proc(self: ^Tuner, strings: []int) -> (retune: bool) {
     self.detected_note = nil
     if count == 0 do return false
 
-    // The string nearest to the target from the first one, the previous string may be past the new count
+    // The string nearest to the target, plainly: nearest_string's hysteresis and octave rule hold on to a
+    // string being tuned, there's none yet
     prev := self.target_note
+    semitone := self.target_note.cents / 100
     self.string_index = 0
-    self.string_index = nearest_string(self, self.target_note)
+    for string_semitone, index in self.strings[:count] {
+        if abs(semitone - string_semitone) < abs(semitone - self.strings[self.string_index]) do self.string_index = index
+    }
     self.target_note = string_note(self, self.string_index)
     return self.target_note.cents != prev.cents
 }
@@ -271,8 +275,10 @@ nearest_string :: proc(self: ^Tuner, note: Note) -> int {
 }
 
 // Cents from what the strobe is tuned to. A string that rings an octave off reads from that octave, see
-// nearest_string.
+// nearest_string. 0 before anything was detected, active is set before the first detection is followed.
 tuner_cents_off :: proc(self: ^Tuner, freq: f32) -> f32 {
+    if freq <= 0 do return 0
+
     cents := cents_deviation(freq, tuner_target_freq(self))
     if self.string_count > 0 && self.prevent_octave_jumps && abs(abs(cents) - 1200) < 100 {
         cents -= 1200 if cents > 0 else -1200
@@ -343,6 +349,7 @@ tuner_readout :: proc(self: ^Tuner) -> (steady_pitch: PitchInfo) {
 // instead of the nearest note. Either way from where the note is tuned to, 0 where the strobe stands still.
 tuner_cents :: proc(self: ^Tuner, freq: f32, note: Note) -> f32 {
     if measures_target(self) do return tuner_cents_off(self, freq)
+    if freq <= 0 || note.frequency <= 0 do return 0
 
     return cents_deviation(freq, note.frequency) - note_offset_cents(self, note)
 }
@@ -523,6 +530,13 @@ test_tuner_strings :: proc(t: ^testing.T) {
     testing.expect(t, set_tuner_strings(&tuner, guitar[:]))
     testing.expect_value(t, tuner.string_index, 3)
     testing.expect_value(t, tuner.target_note.name, 'G')
+
+    // From every note the nearest string, not the low E an octave below or the nearer one by a semitone
+    for start in ([][2]int{{-17, 2}, {-26, 1}}) {
+        chromatic := init_tuner(cents_to_note(f32(100 * start.x), 440).frequency, 440, true, 0)
+        set_tuner_strings(&chromatic, guitar[:])
+        testing.expect_value(t, chromatic.string_index, start.y)
+    }
 
     // From the low E up past halfway to A it stays on E, until A is more than a semitone closer
     update_tuner(&tuner, test_detection(E2_HZ))

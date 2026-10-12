@@ -147,7 +147,7 @@ init_phase_comparator :: proc(
     sample_rate: f32 = DEFAULT_SAMPLE_RATE,
 ) -> ^PhaseComparator {
     self := new(PhaseComparator)
-    init_audio_capture_node(self, "phase-tracker", sample_rate)
+    init_audio_capture_node(self, sample_rate)
     self.sample_buffer = make([]f32, sample_buffer_size(sample_rate))
     self.mode = mode
     self.base_freq_hz = base_freq_hz
@@ -345,6 +345,11 @@ restart_band :: proc(band: ^PhaseBand) {
     band.drift_cents = 0
     band.envelope = 0
     band.onset = false
+
+    // Nothing heard yet, like a track out of range, the previous note's level isn't this one's
+    band.amp = 0
+    band.snr_db = 0
+    band.phase_diff = 0
 }
 
 // Another input's signal is unrelated to the previous one's, everything starts over like at launch: the
@@ -537,6 +542,7 @@ determine_band_phases :: proc(self: ^PhaseComparator, bands: []^PhaseBand) {
         for band, index in bands {
             hop_phase := lock_in_phase(band, window_start)
             if had_phase[index] do phase_advances[index] += wrap_phase(f64(hop_phase - band.phase))
+
             band.phase = hop_phase
         }
     }
@@ -589,6 +595,7 @@ advance_band :: proc(self: ^PhaseComparator, band: ^PhaseBand, phase_advance: f6
         slope, has_slope := fit_slope(band.fit)
         band.rate = slope if has_slope else phase_advance / step
     }
+
     // An octave flat is as far as it goes, like the drift: noise on a low track can fit a rate past its own
     // frequency, and a negative frequency has no cents
     freq_diff_hz := f32(band.rate * sample_rate / math.TAU)
@@ -679,14 +686,12 @@ strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: in
         return band.rate_time_s >= READOUT_SETTLE_S
     }
 
-    // Vernier mode measures the first track, the others show it at other speeds
-    count := 1 if self.mode == .VERNIER else len(self.bands)
-
+    // A pluck lifts the loudest partial, a faint one's level wobbling isn't one
     loudest, fundamental := readout_candidates(self)
-    plucked := strobe_plucked(self)
+    plucked := loudest >= 0 && self.bands[loudest].onset
 
     // Held, unless a pluck brings another track to pick or the held one fades under a ringing partial
-    held := current >= 0 && current < count && settled(self.bands[current])
+    held := current >= 0 && current < len(self.bands) && measures_band(self, current) && settled(self.bands[current])
     if held && !plucked {
         faded := loudest >= 0 && self.bands[loudest].snr_db - self.bands[current].snr_db >= READOUT_WEAK_FUNDAMENTAL_DB
         if !faded do return current, true
@@ -706,21 +711,14 @@ strobe_readout_track :: proc(self: ^PhaseComparator, current: int) -> (track: in
 // The loudest track the readout can follow and the fundamental's, -1 for none
 readout_candidates :: proc(self: ^PhaseComparator) -> (loudest, fundamental: int) {
     loudest, fundamental = -1, -1
+    for band, index in self.bands {
+        if !measures_band(self, index) || !is_octave_track(band) do continue
+        if !hears_note(band, self.band_cents) || band.snr_db < READOUT_MIN_SNR_DB do continue
 
-    // Vernier mode measures the first track, the others show it at other speeds
-    count := 1 if self.mode == .VERNIER else len(self.bands)
-    for band, index in self.bands[:count] {
-        if !is_octave_track(band) || !hears_note(band) || band.snr_db < READOUT_MIN_SNR_DB do continue
         if loudest < 0 || band.snr_db > self.bands[loudest].snr_db do loudest = index
         if band.interval == 1 do fundamental = index
     }
     return
-}
-
-// A pluck lifts the loudest partial, a faint one's level wobbling isn't one
-strobe_plucked :: proc(self: ^PhaseComparator) -> bool {
-    loudest, _ := readout_candidates(self)
-    return loudest >= 0 && self.bands[loudest].onset
 }
 
 // The fundamental's or an octave's track, the others' partials are another note, e.g. a fifth
@@ -777,10 +775,10 @@ test_readout_track :: proc(t: ^testing.T) {
     testing.expect_value(t, track, 0)
 }
 
-// A track hears its note while it drifts less than a semitone, as wide as its window by default. Further
-// out it's another note leaking in.
-hears_note :: proc(band: PhaseBand) -> bool {
-    return band.in_range && band.drift_cents <= DFT_RESOLUTION_CENTS
+// A track hears its note while it drifts less than its window is wide, band_cents, a semitone unless the W
+// key narrowed it. Further out it's another note leaking in.
+hears_note :: proc(band: PhaseBand, band_cents: int) -> bool {
+    return band.in_range && band.drift_cents <= f32(band_cents)
 }
 
 // Whether any track's stripes are at least half faded in, the note is still ringing. The background noise
@@ -788,7 +786,7 @@ hears_note :: proc(band: PhaseBand) -> bool {
 strobe_shows_note :: proc(self: ^PhaseComparator) -> bool {
     fade := STROBE_FADE_SNR_DB
     for band in self.bands {
-        if hears_note(band) && band.snr_db >= 0.5 * (fade[0] + fade[1]) do return true
+        if hears_note(band, self.band_cents) && band.snr_db >= 0.5 * (fade[0] + fade[1]) do return true
     }
     return false
 }

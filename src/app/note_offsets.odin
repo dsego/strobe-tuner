@@ -322,8 +322,8 @@ gui_offset_row :: proc(rows: OffsetRows, grid: OffsetGrid, row: int, editing: ^N
 }
 
 // The note for a new row: the one the tuner is on, or after the last row, or middle C in an empty preset
-// when the tuner has no note. From there up to C8 the first one without a row, then down from where it
-// started.
+// when the tuner's note is out of the rows' range, target -1. From there up to C8 the first one without a
+// row, then down from where it started.
 offset_new_row_note :: proc(rows: OffsetRows, target: int) -> int {
     count := offset_row_count(rows)
     start := OFFSET_MIDDLE_C

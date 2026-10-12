@@ -345,8 +345,7 @@ gui_track_settings :: proc(
         offset := config.strobe_offsets_cents[slot]
 
         // No sign on the exact partial
-        label := fmt.ctprintf("%+.1f¢", offset) if offset != 0 else "0¢"
-        steps, reset := gui_stepper_buttons(rect, label)
+        steps, reset := gui_stepper_buttons(rect, offset_cents_text(offset))
         if reset do offset = 0
 
         offset = clamp(offset + steps * TRACK_OFFSET_STEP_CENTS, -TRACK_OFFSET_MAX_CENTS, TRACK_OFFSET_MAX_CENTS)
@@ -389,6 +388,7 @@ gui_track_settings :: proc(
         remove_width := icon_button_width("Remove")
         width := remove_width + GAP + icon_button_width("Add")
         pos := [2]f32{sheet_layout.rows.x + math.round((sheet_layout.width - width) / 2), sheet_layout.bottom - height}
+
         // Not above the highest partial, a track added there would be the top one again
         partials := TRACK_PARTIALS
         highest := partials[len(partials) - 1]
@@ -455,13 +455,14 @@ gui_input :: proc(
     {
         text := khz(sample_rate)
         color := text_color_white
-        if device_rate != sample_rate {
+        if sample_rate == 0 {
+            text = "-"
+        } else if device_rate != sample_rate {
             text = fmt.ctprintf("%s, measured at %s", khz(device_rate), khz(sample_rate))
         } else if sample_rate < core.LOW_SAMPLE_RATE {
             text = fmt.ctprintf("%s, nothing over %s", khz(sample_rate), khz(core.MAX_BAND_NORM_FREQ * sample_rate))
             color = warning_color
         }
-        if sample_rate == 0 do text = "-"
         value_row(sheet_layout, &row, "Sample rate", text, color)
     }
 

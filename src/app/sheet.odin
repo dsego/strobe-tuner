@@ -68,7 +68,11 @@ compute_sheet_layout :: proc(
     below := window.y - (safe.y + safe.height) + PANEL_PADDING / 2
     around := SHEET_TOP_PADDING + SHEET_TITLE_HEIGHT + extra + below
     panel_height := window.y - panel.y // to the window's bottom edge
-    sheet_layout.row_height = clamp((panel_height - around) / f32(rows), SHEET_ROW_HEIGHT, SHEET_ROW_MAX_HEIGHT)
+    // A sheet without rows, laid out by extra, keeps the smallest
+    sheet_layout.row_height = SHEET_ROW_HEIGHT
+    if rows > 0 {
+        sheet_layout.row_height = clamp((panel_height - around) / f32(rows), SHEET_ROW_HEIGHT, SHEET_ROW_MAX_HEIGHT)
+    }
     height := max(around + f32(rows) * sheet_layout.row_height, panel_height)
     height = min(height, window.y - safe.y)
     sheet_x: f32 = panel.x if layout.beside else 0

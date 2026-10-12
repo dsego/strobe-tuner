@@ -80,8 +80,10 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
         return false
     case .UNKNOWN:
         intrinsics.atomic_store(&microphone_permission, MicrophonePermission.ASKED)
+        // Not asked after all, the next try asks again, see input_failed
         if !sdl.RequestAndroidPermission("android.permission.RECORD_AUDIO", permission_answered, nil) {
             fmt.println("Couldn't ask for the microphone:", sdl.GetError())
+            intrinsics.atomic_store(&microphone_permission, MicrophonePermission.UNKNOWN)
         }
         return false
     }
@@ -149,8 +151,11 @@ interruption_ended :: proc(self: ^Capture) -> bool {
 }
 
 // The input couldn't be opened though it's allowed, the strobe would just stand still
+// Opened with the permission, or tried and couldn't even ask for it, the strobe area offers to try again.
+// While the system asks nothing has failed yet.
 input_failed :: proc(self: ^Capture) -> bool {
-    return !self.device_open && intrinsics.atomic_load(&microphone_permission) == .GRANTED
+    permission := intrinsics.atomic_load(&microphone_permission)
+    return !self.device_open && (permission == .GRANTED || permission == .UNKNOWN)
 }
 
 close_device :: proc(self: ^Capture) {

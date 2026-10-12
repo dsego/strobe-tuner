@@ -46,25 +46,25 @@ fragment float4 bloom_fragment(
 ) {
     if (u.mode == 0) {
         // 4 bilinear taps cover a 4x4 block of source texels, avoids shimmer from skipping pixels
-        float3 c = texture0.sample(sampler0, in.uv + u.texel_step * float2(-1.0, -1.0)).rgb;
-        c += texture0.sample(sampler0, in.uv + u.texel_step * float2(1.0, -1.0)).rgb;
-        c += texture0.sample(sampler0, in.uv + u.texel_step * float2(-1.0, 1.0)).rgb;
-        c += texture0.sample(sampler0, in.uv + u.texel_step * float2(1.0, 1.0)).rgb;
-        c *= 0.25;
+        float3 color = texture0.sample(sampler0, in.uv + u.texel_step * float2(-1.0, -1.0)).rgb;
+        color += texture0.sample(sampler0, in.uv + u.texel_step * float2(1.0, -1.0)).rgb;
+        color += texture0.sample(sampler0, in.uv + u.texel_step * float2(-1.0, 1.0)).rgb;
+        color += texture0.sample(sampler0, in.uv + u.texel_step * float2(1.0, 1.0)).rgb;
+        color *= 0.25;
 
         // Soft threshold on the brightest channel, only the lit stripes bloom (a pure red counts as bright)
-        float peak = max(c.r, max(c.g, c.b));
-        c *= smoothstep(0.35, 0.9, peak);
+        float peak = max(color.r, max(color.g, color.b));
+        color *= smoothstep(0.35, 0.9, peak);
 
-        return float4(c, 1.0);
+        return float4(color, 1.0);
     }
 
     float3 sum = float3(0.0);
     float weight_sum = 0.0;
-    for (int i = -BLUR_RADIUS; i <= BLUR_RADIUS; i++) {
-        float w = exp(-float(i * i) / (2.0 * BLUR_SIGMA * BLUR_SIGMA));
-        sum += texture0.sample(sampler0, in.uv + u.texel_step * float(i)).rgb * w;
-        weight_sum += w;
+    for (int tap = -BLUR_RADIUS; tap <= BLUR_RADIUS; tap++) {
+        float weight = exp(-float(tap * tap) / (2.0 * BLUR_SIGMA * BLUR_SIGMA));
+        sum += texture0.sample(sampler0, in.uv + u.texel_step * float(tap)).rgb * weight;
+        weight_sum += weight;
     }
     return float4(sum / weight_sum, 1.0);
 }

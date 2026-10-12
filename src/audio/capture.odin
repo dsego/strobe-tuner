@@ -79,8 +79,12 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
     config.pUserData = self
 
     // The system deactivates the session for an interruption, miniaudio only activates it once in
-    // context_init. It also leaves the mode at the default, with the system's input processing.
-    when IOS do activate_audio_session()
+    // context_init. It also leaves the mode at the default, with the system's input processing. A session
+    // that can't be activated, a call or another app holds the microphone, would open a silent input: it
+    // fails instead and the strobe area offers to try again.
+    when IOS {
+        if !activate_audio_session() do return false
+    }
 
     // Ask the OS for an unprocessed signal (no AGC / noise suppression)
     config.aaudio.inputPreset = .unprocessed
@@ -230,14 +234,17 @@ when IOS {
         _ = intrinsics.objc_find_class("AVAudioSession")
     }
 
-    activate_audio_session :: proc() {
+    // Whether it's active, the measurement mode is only nicer to have
+    activate_audio_session :: proc() -> bool {
         session := intrinsics.objc_send(^AVAudioSession, AVAudioSession, "sharedInstance")
         if !intrinsics.objc_send(bool, session, "setMode:error:", AVAudioSessionModeMeasurement, rawptr(nil)) {
             fmt.println("Couldn't set the audio session to the measurement mode")
         }
         if !intrinsics.objc_send(bool, session, "setActive:error:", bool(true), rawptr(nil)) {
             fmt.println("Couldn't activate the audio session")
+            return false
         }
+        return true
     }
 }
 

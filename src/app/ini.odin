@@ -105,14 +105,15 @@ load_config :: proc() -> Config {
                     if !is_array do break
                     element_type = array.elem
                 }
-                for i in 0 ..< field.type.size / element_type.size {
-                    element := rawptr(uintptr(ptr) + uintptr(i * element_type.size))
+                for index in 0 ..< field.type.size / element_type.size {
+                    element := rawptr(uintptr(ptr) + uintptr(index * element_type.size))
+
                     // Fill in the rest, one that doesn't parse keeps its default
-                    if i >= len(split) {
+                    if index >= len(split) {
                         runtime.mem_zero(element, element_type.size)
                         continue
                     }
-                    trimmed := strings.trim(split[i], "[] ")
+                    trimmed := strings.trim(split[index], "[] ")
                     if reflect.is_float(element_type) {
                         if value, ok := parse_finite_f32(trimmed); ok do (^f32)(element)^ = value
                     } else if reflect.is_integer(element_type) {
@@ -132,6 +133,16 @@ load_config :: proc() -> Config {
     // A readout time of 0 would fit the newest chunk alone and a negative one blow the fit up
     fit_steps := READOUT_FIT_STEPS_S
     config.readout_fit_s = clamp(config.readout_fit_s, fit_steps[0], fit_steps[len(fit_steps) - 1])
+
+    // An offset past the settings' own moves the strobe's target to another note, it stands still there
+    for &preset in config.note_offset_cents {
+        for &cents in preset do cents = clamp(cents, -NOTE_OFFSET_MAX_CENTS, NOTE_OFFSET_MAX_CENTS)
+    }
+    for &cents in config.strobe_offsets_cents do cents = clamp(cents, -TRACK_OFFSET_MAX_CENTS, TRACK_OFFSET_MAX_CENTS)
+
+    // 0 is off, a sliver of a period would fade the screen to nothing between two samples. The W key's longest
+    // is about 140 periods.
+    if config.persistence_periods != 0 do config.persistence_periods = clamp(config.persistence_periods, 1, 1000)
 
     // A spectrum window of 0 would have nothing to transform
     window_steps := SPECTRUM_WINDOW_STEPS
@@ -193,14 +204,8 @@ save_config :: proc(config: Config) {
 }
 
 load_ini :: proc() -> (ini.Map, bool) {
-    // Load or create config directory in a standard location based on the OS
-    dir_path, dir_ok := create_app_directory().?
-    defer delete(dir_path)
-
-    if !dir_ok do return nil, false
-
-    // Load or create an ini file
-    ini_path, _ := filepath.join({dir_path, CONFIG_NAME})
+    // In a standard location based on the OS, see config_directory
+    ini_path := config_path()
     defer delete(ini_path)
 
     if os.exists(ini_path) {
@@ -257,7 +262,7 @@ save_ini :: proc(ini_map: ini.Map) {
         return
     }
 
-    ini_path, _ := filepath.join({dir_path, CONFIG_NAME})
+    ini_path := config_path()
     defer delete(ini_path)
 
     // Written next to it and renamed over it, a rename is all or nothing: the app ended halfway, by iOS or

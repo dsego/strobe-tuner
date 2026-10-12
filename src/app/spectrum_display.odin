@@ -77,7 +77,7 @@ SpectrumView :: struct {
 }
 
 init_spectrum_view :: proc(sample_rate: f32 = core.DEFAULT_SAMPLE_RATE) -> (self: SpectrumView) {
-    core.init_audio_capture_node(&self, "spectrum", sample_rate)
+    core.init_audio_capture_node(&self, sample_rate)
     size_spectrum_filters(&self)
     return
 }
@@ -133,6 +133,9 @@ update_spectrum_view :: proc(self: ^SpectrumView, windows: f32) {
     // The newest samples at the end of the history, all of them however long the frame took
     transform := &self.transform
     read, elapsed := core.audio_capture_read(self, transform.samples)
+
+    // The stale skip coming back from another display, the picture and the filters start over on what's next
+    if read == 0 && elapsed > 0 do reset_spectrum_view(self)
     if read == 0 do return
 
     // Samples went by that the history didn't get, the filters start from rest on the new ones
@@ -217,6 +220,7 @@ draw_spectrum_view :: proc(
     PADDING_BOTTOM :: 28
     plot := gfx.Rect{rect.x, rect.y + PADDING_TOP, rect.width, rect.height - PADDING_TOP - PADDING_BOTTOM}
     if len(self.levels) == 0 || plot.width <= 0 || plot.height <= 0 do return
+
     low_hz: f32 = SPECTRUM_LOW_HZ
     high_hz := core.pitch_lowpass_hz(self.sample_rate)
     bin_hz := self.sample_rate / f32(self.transform.fft_size)
