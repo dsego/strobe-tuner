@@ -186,7 +186,7 @@ lamp_bands :: proc(
 
         rescale := core.strobe_rescale(band.freq_hz)
         band.phase_diff = f32(advance * rescale)
-        display.lamp_scaled_phases[index] -= band.phase_diff * band.speed
+        core.turn_strobe(&display.lamp_scaled_phases[index], band.phase_diff, band.speed)
         band.scaled_phase = display.lamp_scaled_phases[index]
     }
     return

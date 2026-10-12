@@ -91,7 +91,7 @@ PhaseBand :: struct {
     err_cents:    f32, // of the averaged rate
     drift_hz:     f32, // the chunks' phase advances as a frequency off the track's, smoothed, see DRIFT_SMOOTH_S
     drift_cents:  f32, // and how far off that is, unsigned
-    scaled_phase: f32, // the strobe's phase, phase_diff times the speed added up
+    scaled_phase: f32, // the strobe's phase, phase_diff times the speed added up, see turn_strobe
     speed:        f32, // under 1 the strobe turns slower, over 1 faster
     snr_db:       f32,
     noise_floor:  NoiseFloor,
@@ -411,7 +411,7 @@ run_phase_detection :: proc(self: ^PhaseComparator, is_tonal := false) {
             band.phase_diff, band.rate, band.err_cents = base_band.phase_diff, base_band.rate, base_band.err_cents
             band.drift_hz, band.drift_cents = base_band.drift_hz, base_band.drift_cents
             band.noise_floor, band.snr_db = base_band.noise_floor, base_band.snr_db
-            band.scaled_phase -= band.phase_diff * band.speed
+            turn_strobe(&band.scaled_phase, band.phase_diff, band.speed)
         } else if !band.in_range {
             // Nothing to measure up there, quiet so the track stays dark
             band.amp = 0
@@ -602,7 +602,7 @@ advance_band :: proc(self: ^PhaseComparator, band: ^PhaseBand, phase_advance: f6
     band.err_cents = cents_deviation(max(band.freq_hz + freq_diff_hz, 0.5 * band.freq_hz), band.freq_hz)
 
     // The strobe turns by the phase times the track's speed
-    band.scaled_phase -= band.phase_diff * band.speed
+    turn_strobe(&band.scaled_phase, band.phase_diff, band.speed)
 
     // The fit's measurements move back by step samples and down by the phase advance, so the new one
     // comes in at 0, and the older ones weigh less by decay
@@ -626,6 +626,15 @@ advance_band :: proc(self: ^PhaseComparator, band: ^PhaseBand, phase_advance: f6
 // A phase advance at freq_hz times this turns the strobe as fast per cent as every other note
 strobe_rescale :: proc(freq_hz: f32) -> f64 {
     return STROBE_REFERENCE_HZ / f64(freq_hz)
+}
+
+// The strobe's phase is kept within this of 0, an f32 far from it loses the phase's fine steps over a long
+// session. Whole turns, a whole number of stripes on every track, the stripes don't move when it wraps.
+STROBE_PHASE_WRAP :: 64 * math.TAU
+
+// The strobe's phase turned back by phase_diff times the speed, see scaled_phase
+turn_strobe :: proc(scaled_phase: ^f32, phase_diff, speed: f32) {
+    scaled_phase^ = math.mod(scaled_phase^ - phase_diff * speed, f32(STROBE_PHASE_WRAP))
 }
 
 // Without audio the strobe stops going on after this long

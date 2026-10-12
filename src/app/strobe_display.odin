@@ -708,6 +708,11 @@ strobe_tracks :: proc(
         frame_time := min(gfx.frame_time(), STROBE_MAX_FRAME_TIME_S)
         drawn_phase := &self.band_drawn_phases[band_index]
 
+        // The phase wrapped by whole turns, see core.STROBE_PHASE_WRAP, the drawn one goes with it and the
+        // step stays what the stripes moved
+        wrap := core.STROBE_PHASE_WRAP / density
+        drawn_phase^ += wrap * math.round((uniforms.phase - drawn_phase^) / wrap)
+
         // Coming back to the strobe, the stripes start where they are like after a pluck, not smeared from a
         // phase seconds old
         if stale {
