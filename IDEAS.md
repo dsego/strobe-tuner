@@ -239,3 +239,17 @@ desktop only, iOS and Android only have "Microphone".
   screen clear, but misses the wrong microphone that works, the laptop's instead of the interface's.
 - Or both, always dim and in the warning color on silence.
 - Only where there's room: the panel beside the strobe and a wide desktop window, never a phone's panel.
+
+## Piano keys under the spectrum
+
+Tapping the spectrum flips it to a bar per piano key, A0 to C8, like the scope's X-Y and the lamp's
+split. A bar is the spectrum's level over its semitone, the note named by where it stands.
+
+- A bar per key, not the 12 note names folded over the octaves. Folded, an A's partials land on A, E
+  and C♯, a chord finder's view. Unfolded E2 and E4 stay apart and a string's partials climb the keys.
+- What it shows at a glance: which strings of a strummed chord ring, and what a hum is, the kitchen
+  fridge's 300 Hz a D4 bar without reading a label.
+- Below about 100 Hz a semitone is narrower than the 170 ms window's 6 Hz bins, the low keys share
+  bins and blur. The 340 ms window helps, or the bottom octave stays soft.
+- Not a way to tune, like the spectrum it shows what's there. After the reference tones and the
+  temperaments, which buyers ask for.

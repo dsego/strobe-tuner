@@ -260,8 +260,9 @@ gui_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (chan
         gui_steps(sheet_layout, &row, "Span", STEP_LABELS, &config.trace_seconds, TRACE_SPAN_STEPS_S)
         gui_steps(sheet_layout, &row, "Range", {"Narrow", "Wide"}, &config.trace_range_cents, TRACE_RANGE_STEPS_CENTS)
     case .LAMP:
-        // The positive half of the wave like a mechanical strobe's lamp, or the wave as it is
-        gui_settings_segmented(sheet_layout, &row, "Rectifier", {"Half", "None"}, &config.lamp_shape)
+        // The positive half of the wave like a mechanical strobe's lamp, the wave as it is, or both halves
+        // split. Tapping the lamp flips it too.
+        gui_settings_segmented(sheet_layout, &row, "Rectifier", {"Half", "None", "Split"}, &config.lamp_shape)
         gui_screen_options(sheet_layout, &row, config)
     case .SPECTRUM:
         gui_steps(sheet_layout, &row, "Window", {"85 ms", "170 ms", "340 ms"}, &config.spectrum_windows, SPECTRUM_WINDOW_STEPS)

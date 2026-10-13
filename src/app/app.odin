@@ -894,6 +894,11 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         if config.strobe_display_type == .SCOPE && !input_missing(app) && gui_button(strobe) {
             config.scope_sweep = .XY if config.scope_sweep == .TIME else .TIME
         }
+
+        // Between the one lamp and the split one, its two halves
+        if config.strobe_display_type == .LAMP && !input_missing(app) && gui_button(strobe) {
+            config.lamp_shape = .HALF_RECTIFIED if config.lamp_shape == .SPLIT else .SPLIT
+        }
     }
 
     // Over the whole strobe area, the part behind the notch included

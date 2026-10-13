@@ -69,6 +69,7 @@ SCOPE_AC_COUPLING_HZ :: 2
 ScopeShape :: enum {
     HALF_RECTIFIED, // the lamp of a strobe, lit by the positive half of the wave
     RAW_WAVEFORM,
+    SPLIT, // two lamps, the positive half's over the negative half's, alike on a symmetric wave
 }
 
 // What moves the beam across the screen
@@ -114,6 +115,7 @@ Scope :: struct {
 
     // The screen from above, see scope_from_above
     heights:             []f32,
+    depths:              []f32,
     dwell:               []f32,
 
     // Its bins, see scope_partials
@@ -128,6 +130,7 @@ init_scope :: proc(columns, rows: int, sample_rate: f32 = DEFAULT_SAMPLE_RATE) -
     self.rows = rows
     self.screen = make([]f32, columns * rows)
     self.heights = make([]f32, columns)
+    self.depths = make([]f32, columns)
     self.dwell = make([]f32, columns)
     self.chunk = make([]f32, SCOPE_CHUNK_SIZE)
     self.level = SCOPE_MIN_LEVEL
@@ -143,6 +146,7 @@ destroy_scope :: proc(self: ^Scope) {
     destroy_audio_capture_node(self)
     delete(self.screen)
     delete(self.heights)
+    delete(self.depths)
     delete(self.dwell)
     delete(self.chunk)
 
@@ -349,6 +353,7 @@ beam_dot :: proc(self: ^Scope, position: f64, value: f32, brightness: f64) {
 // The screen from above: for every column the height of the beam, averaged over how long it stayed at
 // each height, 1 is the peak level. A steady beam gives its height, a smeared one the middle of the smear.
 // dwell is how long the beam stayed in the column at all, 0 for a dark one, which has no height.
+// depths are the negative half's the same way, 1 is the trough, for the split lamp.
 scope_from_above :: proc(self: ^Scope, shape: ScopeShape) -> (heights: []f32, dwell: []f32) {
     // The wave's value at the middle of a row, 1 is the peak level
     row_value :: proc(self: ^Scope, row: int) -> f32 {
@@ -356,23 +361,29 @@ scope_from_above :: proc(self: ^Scope, shape: ScopeShape) -> (heights: []f32, dw
     }
 
     slice.zero(self.heights)
+    slice.zero(self.depths)
     slice.zero(self.dwell)
 
     // Row by row, the row's value once for all of its cells
     for row in 0 ..< self.rows {
         value := row_value(self, row)
-        if shape == .HALF_RECTIFIED do value = max(value, 0)
+        depth := max(-value, 0)
+        if shape != .RAW_WAVEFORM do value = max(value, 0)
 
         for cell, column in self.screen[row * self.columns:][:self.columns] {
             if cell == 0 do continue
 
             self.heights[column] += cell * value
+            self.depths[column] += cell * depth
             self.dwell[column] += cell
         }
     }
 
-    for &height, column in self.heights {
-        if self.dwell[column] > 0 do height /= self.dwell[column]
+    for column in 0 ..< self.columns {
+        if self.dwell[column] == 0 do continue
+
+        self.heights[column] /= self.dwell[column]
+        self.depths[column] /= self.dwell[column]
     }
     return self.heights, self.dwell
 }

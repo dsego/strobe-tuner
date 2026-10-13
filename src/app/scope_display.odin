@@ -70,7 +70,7 @@ draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: gf
 
     if config.strobe_display_type == .LAMP {
         heights, dwell := core.scope_from_above(scope, config.lamp_shape)
-        draw_lamp(rect, heights, dwell, config.lamp_shape, beam_color, dark_color)
+        draw_lamp(rect, heights, scope.depths, dwell, config.lamp_shape, beam_color, dark_color)
     } else {
         draw_scope_screen(display, rect, scope, beam_color, dark_color)
     }
@@ -194,9 +194,16 @@ lamp_bands :: proc(
 
 // Stripes as bright as the beam is high, the lamp of a mechanical strobe and the first version of this
 // one. heights is the beam's height in every column, 1 is the peak level, dwell is 0 where the beam
-// hasn't been. A smeared beam is gray, its height is the middle of the smear.
-draw_lamp :: proc(rect: gfx.Rect, heights, dwell: []f32, shape: core.ScopeShape, bright_color, dark_color: gfx.Color) {
+// hasn't been. A smeared beam is gray, its height is the middle of the smear. Split, the top half is lit
+// by the heights and the bottom half by the depths, the negative half of the wave.
+draw_lamp :: proc(
+    rect: gfx.Rect,
+    heights, depths, dwell: []f32,
+    shape: core.ScopeShape,
+    bright_color, dark_color: gfx.Color,
+) {
     column_width := rect.width / f32(len(heights))
+    lamp_height := rect.height / 2 if shape == .SPLIT else rect.height
 
     for height, column in heights {
         // The beam wasn't here, a frame is shorter than the sweep of a low note
@@ -209,6 +216,11 @@ draw_lamp :: proc(rect: gfx.Rect, heights, dwell: []f32, shape: core.ScopeShape,
         color := lerp_color(dark_color, bright_color, clamp(brightness, 0, 1))
 
         x := rect.x + rect.width - f32(column + 1) * column_width
-        gfx.draw_rect({x, rect.y}, {column_width, rect.height}, color)
+        gfx.draw_rect({x, rect.y}, {column_width, lamp_height}, color)
+
+        if shape == .SPLIT {
+            color = lerp_color(dark_color, bright_color, clamp(depths[column], 0, 1))
+            gfx.draw_rect({x, rect.y + lamp_height}, {column_width, lamp_height}, color)
+        }
     }
 }
