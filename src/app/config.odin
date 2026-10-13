@@ -190,7 +190,7 @@ Config :: struct {
     persistence_periods:          f32,
     // what the lamp shows, the positive half of the wave like a lamp, the wave as it is, or the two halves
     // split, tapping it flips between the first and the split
-    lamp_shape:                  core.ScopeShape,
+    lamp_shape:                   core.ScopeShape,
     // the scope over time or as a Lissajous figure against the strobe's frequency, tapping it flips them
     scope_sweep:                  core.ScopeSweep,
     // the screen's height follows the level, or holds the note's loudest to show its decay

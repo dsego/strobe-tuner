@@ -72,6 +72,8 @@ StrobeDisplay :: struct {
     lamp_freq_hz:       f64,
     lamp_clock:         i64,
     lamp_scaled_phases: [core.MAX_BANDS]f32,
+    // each column's brightness on the lamp as last lit, its top and its split bottom, see draw_lamp
+    lamp_held:          [SCOPE_COLUMNS][2]f32,
 
     // The track whose sheet is open, outlined while the others dim. selection fades it in and out with
     // the sheet, 0 is no selection.

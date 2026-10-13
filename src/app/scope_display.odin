@@ -16,6 +16,7 @@
 package app
 
 import "core:math"
+import "core:slice"
 
 import "../core"
 import "../gfx"
@@ -70,7 +71,7 @@ draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: gf
 
     if config.strobe_display_type == .LAMP {
         heights, dwell := core.scope_from_above(scope, config.lamp_shape)
-        draw_lamp(rect, heights, scope.depths, dwell, config.lamp_shape, beam_color, dark_color)
+        draw_lamp(display, rect, heights, scope.depths, dwell, config.lamp_shape, beam_color, dark_color)
     } else {
         draw_scope_screen(display, rect, scope, beam_color, dark_color)
     }
@@ -196,30 +197,35 @@ lamp_bands :: proc(
 // one. heights is the beam's height in every column, 1 is the peak level, dwell is 0 where the beam
 // hasn't been. A smeared beam is gray, its height is the middle of the smear. Split, the top half is lit
 // by the heights and the bottom half by the depths, the negative half of the wave.
+// A column the beam wasn't in keeps its brightness as last lit, like the eye holds a lamp's flash. Without
+// persistence the screen is only the frame's samples, rarely a whole number of sweeps and a third of one
+// on a low note, the rest would show a dark gap walking across. A screen dark all over stays dark.
 draw_lamp :: proc(
+    display: ^StrobeDisplay,
     rect: gfx.Rect,
     heights, depths, dwell: []f32,
     shape: core.ScopeShape,
     bright_color, dark_color: gfx.Color,
 ) {
+    if !slice.any_of_proc(dwell, proc(time: f32) -> bool { return time > 0 }) do return
+
     column_width := rect.width / f32(len(heights))
     lamp_height := rect.height / 2 if shape == .SPLIT else rect.height
 
     for height, column in heights {
-        // The beam wasn't here, a frame is shorter than the sweep of a low note
-        if dwell[column] == 0 do continue
-
-        // The wave as it is goes below zero, zero is halfway
-        brightness := height
-        if shape == .RAW_WAVEFORM do brightness = 0.5 + 0.5 * height
-
-        color := lerp_color(dark_color, bright_color, clamp(brightness, 0, 1))
+        held := &display.lamp_held[column]
+        if dwell[column] > 0 {
+            // The wave as it is goes below zero, zero is halfway
+            held[0] = 0.5 + 0.5 * height if shape == .RAW_WAVEFORM else height
+            held[1] = depths[column]
+        }
 
         x := rect.x + rect.width - f32(column + 1) * column_width
+        color := lerp_color(dark_color, bright_color, clamp(held[0], 0, 1))
         gfx.draw_rect({x, rect.y}, {column_width, lamp_height}, color)
 
         if shape == .SPLIT {
-            color = lerp_color(dark_color, bright_color, clamp(depths[column], 0, 1))
+            color = lerp_color(dark_color, bright_color, clamp(held[1], 0, 1))
             gfx.draw_rect({x, rect.y + lamp_height}, {column_width, lamp_height}, color)
         }
     }
