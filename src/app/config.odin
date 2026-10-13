@@ -205,7 +205,7 @@ Config :: struct {
     spectrum_windows:             f32,
     spectrum_scale:               SpectrumScale,
     spectrum_labels:              SpectrumLabels,
-    // a line across at the loudest peak with its level in dBFS
+    // a line across at the loudest peak with how high it is, its SNR or its level in dBFS as the scale says
     spectrum_peak_level:          bool,
 
     // --- Input ---

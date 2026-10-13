@@ -47,6 +47,11 @@ SPECTRUM_GLOW_ALPHA :: #config(SPECTRUM_GLOW_ALPHA, 48)
 // instead of boiling. -define:SPECTRUM_SMOOTHING_S=n to try another, 0 is off.
 SPECTRUM_SMOOTHING_S :: #config(SPECTRUM_SMOOTHING_S, 0.1)
 
+// A point of the curve holds its height while its level moves less than this either way and follows only
+// past it, a note's peaks stand still through the 1 or 2 dB a frame wobbles by and a decay slides down
+// smoothly, this far behind. Down on the noise they go all the way, the spectrum still disappears.
+SPECTRUM_HOLD_DB :: 2
+
 // The power of each bin averaged over this many of its windows, see update_spectrum_view:
 // -define:SPECTRUM_AVERAGE_WINDOWS=n to try another
 SPECTRUM_AVERAGE_WINDOWS :: #config(SPECTRUM_AVERAGE_WINDOWS, 0.25)
@@ -71,6 +76,12 @@ SPECTRUM_MAX_LABELS :: 5
 SPECTRUM_PROMINENCE_DB :: 15
 SPECTRUM_LABEL_RANGE_DB :: 40
 
+// A peak named in the frame before keeps its name this far under the prominence and ranks this far louder,
+// a new one has to beat it clearly. Picked afresh every frame the names came and went with the peaks near
+// the prominence and swapped between near-equal ones. Its Hz holds within SPECTRUM_LABEL_HOLD_HZ.
+SPECTRUM_LABEL_HOLD_DB :: 6
+SPECTRUM_LABEL_HOLD_HZ :: 1
+
 SpectrumPeak :: struct {
     freq:  f32,
     db:    f32, // over the noise
@@ -93,6 +104,13 @@ SpectrumView :: struct {
     levels:     []f32, // the same in dBFS
     over:       []f32, // dB over the noise around each bin
     columns:    [dynamic]f32, // the curve's height at each of its points as drawn, 0 to 1, see SPECTRUM_SMOOTHING_S
+    peak_line:  f32, // the line at the loudest peak as drawn, its dB as shown, see SPECTRUM_HOLD_DB
+    named:      [dynamic][2]f32, // the peaks named in the frame before, their Hz and the Hz shown, see SPECTRUM_LABEL_HOLD_DB
+}
+
+// Where it is while value stays within hold of it either way, only as far as value moves past that
+held_within :: proc(held, value, hold: f32) -> f32 {
+    return clamp(held, value - hold, value + hold)
 }
 
 init_spectrum_view :: proc(sample_rate: f32 = core.DEFAULT_SAMPLE_RATE) -> (self: SpectrumView) {
@@ -108,6 +126,7 @@ destroy_spectrum_view :: proc(self: ^SpectrumView) {
     delete(self.levels)
     delete(self.over)
     delete(self.columns)
+    delete(self.named)
 }
 
 // The input opened at another rate, the filters are made for it and everything starts over like for another
@@ -131,6 +150,7 @@ reset_spectrum_view :: proc(self: ^SpectrumView) {
     slice.zero(self.transform.samples)
     slice.zero(self.power)
     clear(&self.columns)
+    clear(&self.named)
     core.reset_biquad(&self.highpass)
     core.reset_biquad(&self.lowpass)
 }
@@ -261,7 +281,7 @@ draw_spectrum_view :: proc(
     // the low notes spread a bin over several columns. High up a column is the loudest of dozens of bins, of
     // the noise a different one every frame: each point follows over SPECTRUM_SMOOTHING_S, up and down
     // alike, the noise settles near its middle. Rising at once and only falling slowly held it at the top of
-    // its peaks, stuck under the plot's ceiling.
+    // its peaks, stuck under the plot's ceiling. Within SPECTRUM_HOLD_DB of where it is a point holds.
     STEP :: 2
     count := int(plot.width / STEP) + 1
     if len(self.columns) != count {
@@ -288,7 +308,9 @@ draw_spectrum_view :: proc(
 
         height := &self.columns[column]
         level := clamp((db - range[0]) / (range[1] - range[0]), 0, 1)
-        height^ += (level - height^) * follow
+        hold := SPECTRUM_HOLD_DB / (range[1] - range[0])
+        target := held_within(height^, level, hold) if level > 0 else 0
+        height^ += (target - height^) * follow
         append(&points, [2]f32{plot.x + x, plot.y + plot.height * (1 - height^)})
     }
 
@@ -315,9 +337,11 @@ draw_spectrum_view :: proc(
     }
 
     peaks := find_peaks(self, shown, low_hz, high_hz, bin_hz)
-    if config.spectrum_peak_level do draw_peak_level(peaks, plot, range, background)
+    if config.spectrum_peak_level do draw_peak_level(&self.peak_line, peaks, plot, range, config.spectrum_scale, background)
     if config.spectrum_labels != .OFF {
-        draw_peak_labels(peaks, plot, range, low_hz, high_hz, pitch_standard, config.spectrum_labels, background)
+        draw_peak_labels(self, peaks, plot, low_hz, high_hz, pitch_standard, config.spectrum_labels, background)
+    } else {
+        clear(&self.named)
     }
 
     // On a pill of the background, the lines and the curve don't run through the text
@@ -328,20 +352,31 @@ draw_spectrum_view :: proc(
         gfx.draw_pill({bounds.x - PADDING.x, bounds.y - PADDING.y, bounds.width + 2 * PADDING.x, bounds.height + 2 * PADDING.y}, pill)
     }
 
-    // A line across at the loudest peak, its level in dBFS at the right end over it
-    draw_peak_level :: proc(peaks: []SpectrumPeak, plot: gfx.Rect, range: [2]f32, background: gfx.Color) {
+    // A line across at the loudest peak, at the right end over it how high, as the scale says: its SNR or
+    // its level in dBFS. The reading was its level on both, on SNR the line stood still while it fell with
+    // the recording's own noise. It holds within SPECTRUM_HOLD_DB like the curve, the reading jumped every
+    // frame and with it the line.
+    draw_peak_level :: proc(
+        held: ^f32,
+        peaks: []SpectrumPeak,
+        plot: gfx.Rect,
+        range: [2]f32,
+        scale: SpectrumScale,
+        background: gfx.Color,
+    ) {
         if len(peaks) == 0 do return
 
         loudest := peaks[0]
         for peak in peaks do if peak.level > loudest.level do loudest = peak
 
-        y := spectrum_y(loudest.shown, range, plot)
+        held^ = held_within(held^, loudest.shown, SPECTRUM_HOLD_DB)
+        y := spectrum_y(held^, range, plot)
         line := text_color_muted
         line.a = 140
         gfx.draw_rect({plot.x, y - 0.5}, {plot.width, 1}, line)
 
         font := pixel_fonts.label_small
-        text := fmt.ctprintf("%.0f dBFS", loudest.level)
+        text := fmt.ctprintf("%.0f dB SNR" if scale == .SNR else "%.0f dBFS", held^)
         size := measure_label(font, text)
         position := [2]f32{plot.x + plot.width - size.x - 12, y - size.y - 6}
         draw_label_pill({position.x, position.y, size.x, size.y}, background)
@@ -399,7 +434,8 @@ draw_spectrum_view :: proc(
         last := min(int(high_hz / bin_hz), len(over) - 1 - SIDE_BINS)
         for bin in first ..= last {
             db := over[bin]
-            if db < SPECTRUM_PROMINENCE_DB do continue
+            // As low as a named peak keeps its name, the labels pick from these
+            if db < SPECTRUM_PROMINENCE_DB - SPECTRUM_LABEL_HOLD_DB do continue
 
             highest := true
             for other in bin - SIDE_BINS ..= bin + SIDE_BINS {
@@ -414,28 +450,56 @@ draw_spectrum_view :: proc(
         return peaks[:]
     }
 
-    // The loudest peaks named by their note and Hz, over the curve as it's shown. The loudest first, one
-    // that would cover a louder one's label is left out.
+    // The loudest peaks named by their note and Hz, over the curve as it's drawn. The loudest first, the
+    // ones named in the frame before kept and ranked higher, see SPECTRUM_LABEL_HOLD_DB, one that would cover
+    // a louder one's label is left out.
     draw_peak_labels :: proc(
+        self: ^SpectrumView,
         peaks: []SpectrumPeak,
         plot: gfx.Rect,
-        range: [2]f32,
         low_hz, high_hz, pitch_standard: f32,
         labels: SpectrumLabels,
         background: gfx.Color,
     ) {
+        Candidate :: struct {
+            peak: SpectrumPeak,
+            rank: f32, // its dB over the noise, higher if it was named
+            hz:   f32, // as shown
+        }
+
+        named_before := slice.clone(self.named[:], context.temp_allocator)
+        clear(&self.named)
         if len(peaks) == 0 do return
         loudest := peaks[0].db
 
+        // Named in the frame before if one was within half a semitone, its Hz held from there
+        candidates := make([dynamic]Candidate, context.temp_allocator)
+        for peak in peaks {
+            candidate := Candidate{peak, peak.db, peak.freq}
+            was_named := false
+            for before in named_before {
+                if abs(math.log2(peak.freq / before[0])) > 1.0 / 24 do continue
+
+                was_named = true
+                candidate.rank += SPECTRUM_LABEL_HOLD_DB
+                candidate.hz = held_within(before[1], peak.freq, SPECTRUM_LABEL_HOLD_HZ)
+                break
+            }
+            if was_named || peak.db >= SPECTRUM_PROMINENCE_DB do append(&candidates, candidate)
+        }
+        slice.sort_by(candidates[:], proc(first, second: Candidate) -> bool { return first.rank > second.rank })
+
         name_font, hz_font := pixel_fonts.band_label, pixel_fonts.band_label_small
         placed := make([dynamic]gfx.Rect, context.temp_allocator)
-        for peak in peaks {
-            if len(placed) == SPECTRUM_MAX_LABELS || peak.db < loudest - SPECTRUM_LABEL_RANGE_DB do break
+        for candidate in candidates {
+            peak := candidate.peak
+            if len(placed) == SPECTRUM_MAX_LABELS do break
+            if peak.db < loudest - SPECTRUM_LABEL_RANGE_DB do continue
 
             // The note, its Hz under it, or either alone
             name, hz: cstring
-            if labels != .HZ do name = fmt.ctprintf("%s", core.note_name(core.freq_to_note(peak.freq, pitch_standard)))
-            if labels != .NOTE do hz = fmt.ctprintf("%.0fHz", peak.freq)
+            if labels != .HZ do name = fmt.ctprintf("%s", core.note_name(core.freq_to_note(candidate.hz, pitch_standard)))
+            if labels != .NOTE do hz = fmt.ctprintf("%.0fHz", candidate.hz)
             name_size := measure_label(name_font, name) if name != nil else {}
             hz_size := measure_label(hz_font, hz) if hz != nil else {}
 
@@ -444,7 +508,10 @@ draw_spectrum_view :: proc(
             width := max(name_size.x, hz_size.x)
             height := name_size.y + hz_size.y + (GAP if labels == .BOTH else 0)
             x := spectrum_x(peak.freq, low_hz, high_hz, plot)
-            top := max(spectrum_y(peak.shown, range, plot) - height - 6, plot.y - height)
+            // On the curve's point there as drawn, it holds still, the peak's level a frame wobbles
+            point := clamp(int((x - plot.x) / STEP + 0.5), 0, len(self.columns) - 1)
+            curve := plot.y + plot.height * (1 - self.columns[point])
+            top := max(curve - height - 6, plot.y - height)
             bounds := gfx.Rect{clamp(x - width / 2, plot.x + 4, plot.x + plot.width - width - 4), top, width, height}
 
             covers := false
@@ -457,6 +524,7 @@ draw_spectrum_view :: proc(
             if covers do continue
 
             append(&placed, bounds)
+            append(&self.named, [2]f32{peak.freq, candidate.hz})
 
             draw_label_pill(bounds, background)
             if name != nil do draw_label(name_font, name, {bounds.x + (width - name_size.x) / 2, bounds.y}, text_color_light)
