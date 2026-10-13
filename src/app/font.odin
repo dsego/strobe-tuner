@@ -24,12 +24,14 @@ import "../gfx"
 FONT_CODEPOINTS :: " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#/+-−1234567890.,:π!×½()[]¢·%…'’"
 
 // The numbers that change while they're read, every digit as wide so they don't shift, and a weight lighter
-// than the labels, and the strobe's track labels next to them. Inter Regular from the same 4.1 release
+// than the labels. Inter Regular from the same 4.1 release
 // (extras/ttf in the zip of github.com/rsms/inter/releases), its tabular figures frozen in as the default
 // ones, the rest of the characters as they are, and cut down to these:
 //   uvx --from opentype-feature-freezer pyftfeatfreeze -f tnum Inter-Regular.ttf Inter-Regular-tnum.ttf
 //   uvx --from fonttools pyftsubset Inter-Regular-tnum.ttf --text="0123456789.+-×½#ABCDEFGHbz¢" \
 //       --layout-features='' --no-hinting --output-file=assets/fonts/inter/Inter-Regular-Tabular.ttf
+// The strobe's track labels are in the accent's cyan, too thin in Regular, so they're Medium: cut the same
+// way from Inter-Medium.ttf to Inter-Medium-Tabular.ttf.
 TABULAR_CODEPOINTS :: "0123456789.+-×½#ABCDEFGHbz¢"
 
 // Phosphor Regular (phosphoricons.com), the font is cut down to these, to add one:
@@ -143,6 +145,7 @@ update_pixel_fonts :: proc() {
     inter_medium := #load("../../assets/fonts/inter/Inter-Medium.ttf")
     inter_bold := #load("../../assets/fonts/inter/Inter-Bold.ttf")
     inter_tabular := #load("../../assets/fonts/inter/Inter-Regular-Tabular.ttf")
+    inter_medium_tabular := #load("../../assets/fonts/inter/Inter-Medium-Tabular.ttf")
     noto_sans_mono := #load("../../assets/fonts/noto/NotoSansMono-Medium.ttf")
     phosphor := #load("../../assets/fonts/phosphor/Phosphor-Icons.ttf")
     phosphor_bold := #load("../../assets/fonts/phosphor/Phosphor-Bold-Icons.ttf")
@@ -172,8 +175,8 @@ update_pixel_fonts :: proc() {
         readout          = load(inter_tabular, RULER_SCALE * READOUT_SIZE, scale, TABULAR_CODEPOINTS),
         strobe_arrow     = load(inter_medium, STROBE_ARROW_SIZE, scale, "◀▶▲▼"),
         offset_value     = load(inter_medium, OFFSET_VALUE_SIZE, scale, "ABCDEFG#b0123456789.+-¢"),
-        band_label       = load(inter_tabular, LABEL_LARGE_SIZE, scale, TABULAR_CODEPOINTS),
-        band_label_small = load(inter_tabular, LABEL_SIZE, scale, TABULAR_CODEPOINTS),
+        band_label       = load(inter_medium_tabular, LABEL_LARGE_SIZE, scale, TABULAR_CODEPOINTS),
+        band_label_small = load(inter_medium_tabular, LABEL_SIZE, scale, TABULAR_CODEPOINTS),
     }
 }
 
