@@ -253,3 +253,28 @@ split. A bar is the spectrum's level over its semitone, the note named by where 
   bins and blur. The 340 ms window helps, or the bottom octave stays soft.
 - Not a way to tune, like the spectrum it shows what's there. After the reference tones and the
   temperaments, which buyers ask for.
+
+## Level per string
+
+For a luthier balancing a pickup string to string, a piezo under the saddle most of all. Asked for in
+a review of Peterson's app. With a stringed preset, a row of bars, one per string, each the level of
+its last pluck, in dB from the loudest.
+
+- A pluck varies more than the pickup does. Take the level at a fixed time after the onset, about
+  100 to 200 ms, past the attack, and average the last 3 to 5 plucks of each string.
+- The string is the one the tuner names, a pluck of another string or a chord doesn't count.
+- From the string's own track, at its fundamental, or broadband? The track leaves out hum and the
+  other strings ringing, broadband is what an amp hears. The pitch detection's band is filtered,
+  60 Hz to 5 kHz, a bass E1 reads weaker than it is.
+- A reset, and the spread shown, e.g. "B −4.5 dB".
+
+## Spectrogram
+
+The spectrum over time, scrolling, its level as brightness. Another display type, or a tap on the
+spectrum flips it, like the scope's X-Y. Asked for in the same review, as a waterfall.
+
+- What it shows: partials dying away at their own rates, a wolf note or a dead spot as a partial
+  that drops out fast, two partials beating.
+- The spectrum's own transform already runs, the spectrogram keeps its frames in a texture, a column
+  a frame, on the same log axis. SNR or dBFS as the spectrum's scale says.
+- The 170 ms window blurs fast changes, the 340 ms one more so. Fine for decays, not attacks.
