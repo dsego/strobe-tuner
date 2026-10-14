@@ -259,7 +259,7 @@ gui_note_ruler :: proc(
         shown := f32(target + step)
         if abs(shown - ruler.position) > 1 && step == 0 do ruler.position = shown
 
-        ruler.position += (shown - ruler.position) * min(1, RULER_SLIDE_SPEED * gfx.frame_time())
+        ruler.position += (shown - ruler.position) * (1 - math.exp(-RULER_SLIDE_SPEED * gfx.frame_time()))
         if abs(shown - ruler.position) < 0.002 do ruler.position = shown
     }
 
@@ -524,7 +524,7 @@ draw_cents_gauge :: proc(top: [2]f32, cents: f32, lit: bool, semitones: bool, co
     }
 
     gauge_target = clamp(gauge_target, -f32(per_side), f32(per_side))
-    gauge_position += (gauge_target - gauge_position) * min(1, GAUGE_SLIDE_SPEED * gfx.frame_time())
+    gauge_position += (gauge_target - gauge_position) * (1 - math.exp(-GAUGE_SLIDE_SPEED * gfx.frame_time()))
 
     // The ticks either side of the red one, as far as the room reaches from under the note, every few long
     // like a ruler's. Not snapped to the pixels, they glide.

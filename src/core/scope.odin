@@ -211,7 +211,7 @@ update_scope :: proc(self: ^Scope) {
         return
     }
 
-    available := int(ringbuffer_available(&self.ringbuffer))
+    available := ringbuffer_available(&self.ringbuffer)
     if available == 0 do return
 
     if self.persistence_seconds <= 0 do clear_scope(self)

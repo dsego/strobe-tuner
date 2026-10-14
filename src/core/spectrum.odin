@@ -42,7 +42,7 @@ WindowedSpectrum :: struct {
 
 init_windowed_spectrum :: proc(window: int) -> (self: WindowedSpectrum) {
     self.fft_size = 2 * window
-    self.pffft_setup = pffft.new_setup(self.fft_size, pffft.Transform.REAL)
+    self.pffft_setup = pffft.new_setup(i32(self.fft_size), pffft.Transform.REAL)
     self.taper = make([]f32, window)
     self.samples = make([]f32, window)
     self.padded = runtime.make_aligned([]f32, self.fft_size, 16)

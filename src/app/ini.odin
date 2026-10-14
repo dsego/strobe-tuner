@@ -24,6 +24,7 @@ import "core:reflect"
 import "core:slice"
 import "core:strconv"
 import "core:strings"
+import "core:testing"
 
 import "../core"
 
@@ -57,11 +58,8 @@ config_path :: proc() -> string {
 }
 
 // From the standard OS path, e.g. ~/Library/Application Support/<APP_NAME>/config.ini on macOS, see
-// config_directory. What's missing or doesn't parse keeps its default, a number that isn't finite too, and
-// an array's missing trailing elements are zero. A few values are then held in range, see the end.
-// A field is an enum, a float, an integer, a bool, a string or a fixed array of f32 or integers, an array of
-// arrays too, e.g. the note offsets per preset. Others keep their default: slices, dynamic and enumerated arrays,
-// arrays of anything else. An array of f64 would be read wrong, as f32.
+// config_directory. Each field as save_config writes it, see read_value. A few values are then held in
+// range, see the end.
 load_config :: proc() -> Config {
     config := config_defaults
 
@@ -73,60 +71,7 @@ load_config :: proc() -> Config {
     fields := reflect.struct_fields_zipped(Config)
 
     for field in fields {
-        ptr := rawptr(uintptr(&config) + field.offset)
-
-        #partial switch _ in field.type.variant {
-        case reflect.Type_Info_Named:
-            if value, ok := reflect.enum_from_name_any(field.type.id, section[field.name]); ok {
-                write_int_field(ptr, field.type.size, int(value))
-            }
-        case reflect.Type_Info_Float:
-            if value, ok := parse_finite_f32(section[field.name]); ok {
-                (^f32)(ptr)^ = value
-            }
-        case reflect.Type_Info_Integer:
-            if value, ok := strconv.parse_int(section[field.name]); ok {
-                write_int_field(ptr, field.type.size, value)
-            }
-        case reflect.Type_Info_Boolean:
-            if value, ok := strconv.parse_bool(section[field.name]); ok {
-                (^bool)(ptr)^ = value
-            }
-        case reflect.Type_Info_String:
-            // A copy of its own, the map goes at the end
-            if value := section[field.name]; len(value) > 0 do (^string)(ptr)^ = strings.clone(value)
-        case reflect.Type_Info_Array:
-            listed := strings.trim(section[field.name], "[] ")
-            if len(listed) > 0 {
-                split := strings.split(listed, ",")
-                defer delete(split)
-
-                // Of f32 or int, an array of arrays is read in the order it's written out
-                // Unwraps the arrays one level a pass down to the f32 or int, [3][8]int ends on int
-                element_type := field.type
-                for {
-                    array, is_array := reflect.type_info_base(element_type).variant.(reflect.Type_Info_Array)
-                    if !is_array do break
-
-                    element_type = array.elem
-                }
-                for index in 0 ..< field.type.size / element_type.size {
-                    element := rawptr(uintptr(ptr) + uintptr(index * element_type.size))
-
-                    // Fill in the rest, one that doesn't parse keeps its default
-                    if index >= len(split) {
-                        runtime.mem_zero(element, element_type.size)
-                        continue
-                    }
-                    trimmed := strings.trim(split[index], "[] ")
-                    if reflect.is_float(element_type) {
-                        if value, ok := parse_finite_f32(trimmed); ok do (^f32)(element)^ = value
-                    } else if reflect.is_integer(element_type) {
-                        if value, ok := strconv.parse_int(trimmed); ok do write_int_field(element, element_type.size, value)
-                    }
-                }
-            }
-        }
+        read_value(rawptr(uintptr(&config) + field.offset), field.type, section[field.name])
     }
 
     // Hand edited out of range, the tuner would have no note to start on
@@ -166,6 +111,95 @@ load_config :: proc() -> Config {
     if config.window_size.x < int(min_size.x) || config.window_size.y < int(min_size.y) do config.window_size = {}
 
     return config
+}
+
+// A value as %v writes it into the field or element at ptr: an enum by its name, a float, an integer, a bool,
+// a string, a fixed array [a, b, c] of any of these, an array of arrays nested the same way, e.g. the note
+// offsets per preset, and an enumerated array [.NAME = value, ...] by its names, e.g. a tuning per
+// instrument. Arrays nested and enums named, a new instrument or longer rows don't shift what's saved onto
+// another. Missing or doesn't parse keeps its default, a number that isn't finite too, and an array's
+// missing trailing elements are zero, an enumerated array's missing names keep theirs. An enum of a number
+// is a config from before they were named. Others keep their default: slices, dynamic arrays, structs.
+read_value :: proc(ptr: rawptr, type: ^runtime.Type_Info, written: string) {
+    text := strings.trim_space(written)
+    if len(text) == 0 do return
+
+    #partial switch info in reflect.type_info_base(type).variant {
+    case reflect.Type_Info_Enum:
+        if value, ok := reflect.enum_from_name_any(type.id, strings.trim(text, "\".")); ok {
+            write_int_field(ptr, type.size, int(value))
+        } else if number, is_number := strconv.parse_int(text); is_number {
+            if slice.contains(info.values, reflect.Type_Info_Enum_Value(number)) do write_int_field(ptr, type.size, number)
+        }
+    case reflect.Type_Info_Float:
+        if value, ok := parse_finite_f32(text); ok {
+            if type.size == 8 do (^f64)(ptr)^ = f64(value)
+            else do (^f32)(ptr)^ = value
+        }
+    case reflect.Type_Info_Integer:
+        if value, ok := strconv.parse_int(text); ok do write_int_field(ptr, type.size, value)
+    case reflect.Type_Info_Boolean:
+        if value, ok := strconv.parse_bool(text); ok do (^bool)(ptr)^ = value
+    case reflect.Type_Info_String:
+        // A copy of its own, the map goes at the end
+        (^string)(ptr)^ = strings.clone(text)
+    case reflect.Type_Info_Array:
+        items := split_list(text)
+        defer delete(items)
+
+        if len(items) == 0 do return
+
+        for index in 0 ..< info.count {
+            element := rawptr(uintptr(ptr) + uintptr(index * info.elem_size))
+            if index < len(items) do read_value(element, info.elem, items[index])
+            else do runtime.mem_zero(element, info.elem_size)
+        }
+    case reflect.Type_Info_Enumerated_Array:
+        items := split_list(text)
+        defer delete(items)
+
+        for item, position in items {
+            index := position
+            value := item
+
+            // By its name, a config from before them only has the values in order
+            name, equals, rest := strings.partition(item, "=")
+            if len(equals) > 0 {
+                key, named := reflect.enum_from_name_any(info.index.id, strings.trim(name, " ."))
+                if !named do continue
+
+                index, value = int(key - info.min_value), rest
+            }
+            if index >= 0 && index < info.count {
+                read_value(rawptr(uintptr(ptr) + uintptr(index * info.elem_size)), info.elem, value)
+            }
+        }
+    }
+}
+
+// The items of a list as %v writes it, the outer brackets off, split at the commas outside any nested ones
+split_list :: proc(text: string) -> [dynamic]string {
+    items: [dynamic]string
+    inner := strings.trim_space(text)
+    if strings.has_prefix(inner, "[") && strings.has_suffix(inner, "]") do inner = inner[1:len(inner) - 1]
+    if len(strings.trim_space(inner)) == 0 do return items
+
+    depth, start := 0, 0
+    for char, index in inner {
+        switch char {
+        case '[':
+            depth += 1
+        case ']':
+            depth -= 1
+        case ',':
+            if depth == 0 {
+                append(&items, inner[start:index])
+                start = index + 1
+            }
+        }
+    }
+    append(&items, inner[start:])
+    return items
 }
 
 // A hand edited "nan" or "inf" would spread through the measurements, it keeps the default like a typo
@@ -312,4 +346,42 @@ config_directory :: proc(app_name: string) -> string {
         path, _ := filepath.join({config_home, app_name})
         return path
     }
+}
+
+
+// What save_config writes reads back the same, and a config from before the names still loads
+@(test)
+test_read_value :: proc(t: ^testing.T) {
+    read :: proc(field: ^$T, text: string) {
+        read_value(field, type_info_of(T), text)
+    }
+
+    // The values the names stand for, the rows of the offsets each in its own row however long they are
+    config := config_defaults
+    read(&config.preset_instruments, "[3, 1, 0, 9]")
+    testing.expect_value(t, config.preset_instruments, [PRESET_SLOTS]Instrument{.BASS, .GUITAR, .CHROMATIC, .CHROMATIC})
+    read(&config.instrument_capos, "[0, 2, 0, 1]")
+    testing.expect_value(t, config.instrument_capos[.GUITAR], 2)
+    testing.expect_value(t, config.instrument_capos[.BASS], 1)
+    read(&config.note_offset_notes, "[[1, 2], [3]]")
+    testing.expect_value(t, config.note_offset_notes[0][1], 2)
+    testing.expect_value(t, config.note_offset_notes[0][2], 0)
+    testing.expect_value(t, config.note_offset_notes[1][0], 3)
+
+    // Written as save_config does and read back
+    saved := config_defaults
+    saved.preset_instruments = {.UKULELE, .BASS, .SEVEN_STRING, .GUITAR}
+    saved.instrument_tunings[.BARITONE_UKULELE] = 3
+    saved.note_offset_cents[2] = {-1.5, 2.25, 0, 0, 0, 0, 0, 0, 0, 7}
+    saved.strobe_mode = .VERNIER
+
+    loaded := config_defaults
+    read(&loaded.preset_instruments, fmt.tprintf("%v", saved.preset_instruments))
+    read(&loaded.instrument_tunings, fmt.tprintf("%v", saved.instrument_tunings))
+    read(&loaded.note_offset_cents, fmt.tprintf("%v", saved.note_offset_cents))
+    read(&loaded.strobe_mode, fmt.tprintf("%v", saved.strobe_mode))
+    testing.expect_value(t, loaded.preset_instruments, saved.preset_instruments)
+    testing.expect_value(t, loaded.instrument_tunings, saved.instrument_tunings)
+    testing.expect_value(t, loaded.note_offset_cents, saved.note_offset_cents)
+    testing.expect_value(t, loaded.strobe_mode, saved.strobe_mode)
 }

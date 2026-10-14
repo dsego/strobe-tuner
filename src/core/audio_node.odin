@@ -93,7 +93,7 @@ audio_capture_skip_stale :: proc(self: ^AudioCaptureNode) -> (lost: i64) {
 audio_capture_read :: proc(
     self: ^AudioCaptureNode,
     audio_buffer: []f32,
-    min_available: i32 = 0,
+    min_available := 0,
 ) -> (
     read: int,
     elapsed: i64,
@@ -112,8 +112,8 @@ audio_capture_read :: proc(
 
     size := len(audio_buffer)
 
-    if int(available) >= size {
-        skip_ringbuffer(&self.ringbuffer, available - i32(size))
+    if available >= size {
+        skip_ringbuffer(&self.ringbuffer, available - size)
         read_ringbuffer(&self.ringbuffer, audio_buffer)
         return size, i64(available)
     }
@@ -122,10 +122,10 @@ audio_capture_read :: proc(
     copy(audio_buffer, audio_buffer[available:size])
 
     // copy over new samples into the freed space
-    offset := size - int(available)
+    offset := size - available
     read_ringbuffer(&self.ringbuffer, audio_buffer[offset:])
 
-    return int(available), i64(available)
+    return available, i64(available)
 }
 
 // audio_capture_read with the new samples highpassed and lowpassed, the older ones were on the way in before.
@@ -134,7 +134,7 @@ audio_capture_read_filtered :: proc(
     self: ^AudioCaptureNode,
     audio_buffer: []f32,
     highpass, lowpass: ^Biquad,
-    min_available: i32 = 0,
+    min_available := 0,
 ) -> (
     read: int,
     elapsed: i64,

@@ -32,17 +32,17 @@ RingBuffer :: pa_rb.RingBuffer
 init_ringbuffer :: proc(size: int) -> (RingBuffer, []u8) {
     ringbuffer := RingBuffer{}
     data := make([]u8, size * size_of(f32))
-    pa_rb.InitializeRingBuffer(&ringbuffer, i32(size_of(f32)), i32(size), raw_data(data))
+    pa_rb.InitializeRingBuffer(&ringbuffer, pa_rb.rb_size_t(size_of(f32)), pa_rb.rb_size_t(size), raw_data(data))
     return ringbuffer, data
 }
 
 
-skip_ringbuffer :: proc(self: ^RingBuffer, frame_count: i32) {
-    pa_rb.AdvanceRingBufferReadIndex(self, frame_count)
+skip_ringbuffer :: proc(self: ^RingBuffer, frame_count: int) {
+    pa_rb.AdvanceRingBufferReadIndex(self, pa_rb.rb_size_t(frame_count))
 }
 
-ringbuffer_available :: proc(self: ^RingBuffer) -> i32 {
-    return pa_rb.GetRingBufferReadAvailable(self)
+ringbuffer_available :: proc(self: ^RingBuffer) -> int {
+    return int(pa_rb.GetRingBufferReadAvailable(self))
 }
 
 flush_ringbuffer :: proc(self: ^RingBuffer) {
@@ -51,10 +51,10 @@ flush_ringbuffer :: proc(self: ^RingBuffer) {
 
 // Writes as much as fits, returns how many frames were written
 write_ringbuffer :: proc(self: ^RingBuffer, input: []f32) -> int {
-    return int(pa_rb.WriteRingBuffer(self, raw_data(input), i32(len(input))))
+    return int(pa_rb.WriteRingBuffer(self, raw_data(input), pa_rb.rb_size_t(len(input))))
 }
 
 // Fills the buffer, or as much of it as there is, returns how many frames were read
 read_ringbuffer :: proc(self: ^RingBuffer, buffer: []f32) -> int {
-    return int(pa_rb.ReadRingBuffer(self, raw_data(buffer), i32(len(buffer))))
+    return int(pa_rb.ReadRingBuffer(self, raw_data(buffer), pa_rb.rb_size_t(len(buffer))))
 }

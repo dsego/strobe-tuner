@@ -162,6 +162,10 @@ size_spectrum_filters :: proc(self: ^SpectrumView) {
 reset_spectrum_view :: proc(self: ^SpectrumView) {
     slice.zero(self.transform.samples)
     slice.zero(self.power)
+
+    // The floor, 0 dB is the bottom of the SNR scale but the top of the dBFS one
+    slice.fill(self.levels, SPECTRUM_FLOOR_DB)
+    slice.zero(self.over)
     clear(&self.columns)
     clear(&self.named)
     core.reset_biquad(&self.highpass)
@@ -182,6 +186,7 @@ update_spectrum_view :: proc(self: ^SpectrumView, windows: f32) {
         self.power = make([]f32, len(self.transform.spectrum))
         self.levels = make([]f32, len(self.transform.spectrum))
         self.over = make([]f32, len(self.transform.spectrum))
+        slice.fill(self.levels, SPECTRUM_FLOOR_DB)
     }
 
     // The newest samples at the end of the history, all of them however long the frame took

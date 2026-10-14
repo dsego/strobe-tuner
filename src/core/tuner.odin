@@ -292,6 +292,14 @@ set_tuner_pitch_standard :: proc(self: ^Tuner, pitch_standard: f32) {
     if detected, has_detected := self.detected_note.?; has_detected {
         self.detected_note = cents_to_note(f32(detected.cents), pitch_standard)
     }
+
+    // The readout falls back on the latest strong detection until the strobe settles, its note as the pitch
+    // detection names it at the new standard
+    last := &self.last_good_pitch
+    if last.detected_freq > 0 {
+        last.detected_note = freq_to_note(last.detected_freq, pitch_standard)
+        last.err_cents = cents_deviation(last.detected_freq, last.detected_note.frequency)
+    }
 }
 
 // How far the note is tuned off equal temperament, one offset per exact note: E2 and E4 are tuned apart
@@ -434,6 +442,21 @@ test_tuner_steady_run :: proc(t: ^testing.T) {
         testing.expect(t, !update_tuner(&tuner, guess))
     }
     testing.expect(t, !tuner.active)
+}
+
+// Concert A raised while a note sounds, the readout reads it against the new A at once
+@(test)
+test_tuner_pitch_standard :: proc(t: ^testing.T) {
+    tuner := init_tuner(A2_HZ, 440, true, 0)
+    update_tuner(&tuner, test_detection(A2_HZ))
+    testing.expect(t, abs(tuner_readout(&tuner).err_cents) < 0.01)
+
+    set_tuner_pitch_standard(&tuner, 442)
+    expected := cents_deviation(A2_HZ, A2_HZ * 442 / 440)
+    readout := tuner_readout(&tuner)
+    testing.expectf(t, abs(readout.err_cents - expected) < 0.01, "got %v cents, want %v", readout.err_cents, expected)
+    testing.expect_value(t, readout.detected_note.name, 'A')
+    testing.expect(t, abs(tuner.target_note.frequency - A2_HZ * 442 / 440) < 0.001)
 }
 
 // The strobe follows an octave either way while a note is followed, e.g. a slur down to the note whose

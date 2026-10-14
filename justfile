@@ -70,7 +70,8 @@ pkg: setup
 
 # Runs the unit tests in core
 test:
-    odin test src/core -vet
+    mkdir -p build
+    odin test src/core -vet -out:build/core_tests
 
 # Generated tones through the tuner, checks the note and the readout: just accuracy [full]
 accuracy mode="": setup

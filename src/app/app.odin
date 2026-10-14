@@ -39,6 +39,13 @@ IDLE_FPS :: 30
 // Otherwise the display's rate up to ProMotion's, a faster monitor would only redraw the strobe more often
 MAX_FPS :: 120
 
+// A picked input that's gone is looked for this often, the system says nothing when one is plugged in that
+// isn't its default
+MISSING_INPUT_POLL_S :: 2
+
+// The config is written once it stopped changing this long, see save_when_settled
+SAVE_SETTLE_S :: 0.5
+
 // Vernier mode, each track turns this much faster than the one under it
 VERNIER_SPEED_MULTIPLIER :: 2
 
@@ -84,7 +91,9 @@ App :: struct {
     traced_track:      int, // the track the readout followed, the trace stays on it while its stripes show
     config_changed:     bool, // the tuner and the strobe need the new config, see apply_config
     unsaved:            bool, // the config changed since it was saved, see save_when_settled
+    unsaved_s:          f32, // since it last changed
     restart_audio:      bool, // opens the input again, after the background or an interruption
+    missing_input_s:    f32, // since the picked input was last looked for, see MISSING_INPUT_POLL_S
     quiet_time:         f32, // seconds with no signal and nobody touching anything, see IDLE_AFTER_S
 }
 
@@ -284,7 +293,7 @@ frame :: proc(app: ^App) {
     }
     draw_sheets(app, layout, reading)
 
-    if config^ != config_before do app.unsaved = true
+    if config^ != config_before do app.unsaved, app.unsaved_s = true, 0
 
     save_when_settled(app)
     limit_frame_rate(app)
@@ -345,8 +354,8 @@ wait_in_background :: proc(app: ^App) {
 
 // The input as it's picked and as the system has it. A pick on the input's sheet or in the Input menu is kept
 // by its name, for the next start too. The list is made again when the system changed it, or the sheet or the
-// menu opens, a picked input that's gone waits on the system default until it's back. Before the frame
-// copies the config, the name the config had is freed here.
+// menu opens, and every MISSING_INPUT_POLL_S while a picked input is gone, it waits on the system default
+// until it's back. Before the frame copies the config, the name the config had is freed here.
 follow_input :: proc(app: ^App) {
     capture := app.audio_capture
 
@@ -361,6 +370,13 @@ follow_input :: proc(app: ^App) {
     if audio.devices_changed(capture) {
         app.refresh_inputs = true
         app.restart_audio = true
+    }
+
+    missing := app.config.input_device != "" && audio.find_device(capture, app.config.input_device) == audio.SYSTEM_DEFAULT
+    app.missing_input_s = app.missing_input_s + gfx.frame_time() if missing else 0
+    if app.missing_input_s >= MISSING_INPUT_POLL_S {
+        app.missing_input_s = 0
+        app.refresh_inputs = true
     }
     if app.refresh_inputs {
         app.refresh_inputs = false
@@ -1243,20 +1259,25 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
 }
 
 // Written once the sheets are down, a quit that skips the save at the end keeps what was changed: the stop
-// button of a debugger, Ctrl+C in the terminal, a crash
+// button of a debugger, Ctrl+C in the terminal, a crash. And once it stopped changing for SAVE_SETTLE_S, a
+// window dragged bigger where the system's loop doesn't hold the frames, e.g. Linux, isn't written every frame.
 save_when_settled :: proc(app: ^App) {
     sheets_open := false
     for sheet in app_sheets(app) do sheets_open ||= sheet.open
     if !app.unsaved || sheets_open do return
 
+    app.unsaved_s += gfx.frame_time()
+    if app.unsaved_s < SAVE_SETTLE_S do return
+
     // With the note the strobe is on, a crash or a stop from the debugger starts on it too
     app.config.target_freq_hz = app.tuner.target_note.frequency
     save_config(app.config^)
-    app.unsaved = false
+    app.unsaved, app.unsaved_s = false, 0
 }
 
 // The desktop window opens where it was last used and at its size, kept up to date here once a drag is over
-// rather than on every frame of it. A size of 0 is a reset's or Cmd+0's, the window goes back to the strobe's
+// rather than on every frame of it, where the system's loop draws the drag's frames, macOS. Elsewhere every
+// frame, the save waits for it to settle. A size of 0 is a reset's or Cmd+0's, the window goes back to the strobe's
 // size where it is. window is the window's own size, in the system's points, the same it's opened with.
 follow_window_size :: proc(config: ^Config, window: [2]f32) {
     if config.window_size == {} {

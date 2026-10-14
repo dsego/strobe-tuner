@@ -158,7 +158,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info := PitchInfo{}
 
     // Once a display frame's worth of new samples is in, the read wants more than its minimum
-    min_available := i32(self.sample_rate) / DETECTIONS_PER_SECOND - 1
+    min_available := int(self.sample_rate) / DETECTIONS_PER_SECOND - 1
     read, elapsed := audio_capture_read_filtered(self, self.samples, &self.highpass, &self.lowpass, min_available)
 
     if read == 0 {
@@ -253,14 +253,17 @@ detect_test_note :: proc(fundamental: f32, partials := 5, sample_rate: f32 = DEF
     return info
 }
 
-// Hum with its harmonics doesn't name a note at either mains frequency, the notes either side of it do
+// With MAINS_HUM, hum with its harmonics doesn't name a note at either mains frequency, the notes either side
+// of it do. Without it hum is a note like any other pitch.
 @(test)
 test_mains_hum :: proc(t: ^testing.T) {
-    when !MAINS_HUM do return
-
     for mains_hz in MAINS_HZ {
         hum := detect_test_note(mains_hz)
-        testing.expectf(t, hum.is_weak_pitch && !hum.is_strong_pitch && !hum.is_tonal, "%v Hz hum: %v", mains_hz, hum)
+        when MAINS_HUM {
+            testing.expectf(t, hum.is_weak_pitch && !hum.is_strong_pitch && !hum.is_tonal, "%v Hz hum: %v", mains_hz, hum)
+        } else {
+            testing.expectf(t, hum.is_strong_pitch && hum.is_tonal, "%v Hz hum: %v", mains_hz, hum)
+        }
     }
     for note_hz in ([]f32{49.0, 61.74}) {
         note := detect_test_note(note_hz)

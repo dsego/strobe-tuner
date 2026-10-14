@@ -67,6 +67,11 @@ device_name :: proc(self: ^Capture, device_index: i32) -> string {
     return "Microphone"
 }
 
+// The one input is the default whatever the config names
+find_device :: proc(self: ^Capture, name: string) -> i32 {
+    return SYSTEM_DEFAULT
+}
+
 // The one input is the default, nothing to list again or follow
 refresh_devices :: proc(self: ^Capture) {}
 

@@ -115,8 +115,7 @@ selected_preset :: proc(config: ^Config) -> int {
 }
 
 preset_setup :: proc(config: ^Config, preset: int) -> Setup {
-    value := config.preset_instruments[preset]
-    instrument := Instrument(value) if value >= 0 && value < len(Instrument) else .CHROMATIC
+    instrument := config.preset_instruments[preset]
     return {instrument, config.preset_tunings[preset], config.preset_capos[preset], config.preset_transposes[preset], preset}
 }
 
@@ -124,8 +123,8 @@ preset_setup :: proc(config: ^Config, preset: int) -> Setup {
 current_setup :: proc(config: ^Config) -> Setup {
     if preset := selected_preset(config); preset >= 0 do return preset_setup(config, preset)
 
-    index := int(config.instrument)
-    return {config.instrument, config.instrument_tunings[index], config.instrument_capos[index], config.transpose, -1}
+    instrument := config.instrument
+    return {instrument, config.instrument_tunings[instrument], config.instrument_capos[instrument], config.transpose, -1}
 }
 
 // With its index in the instrument's TUNINGS, none on chromatic
@@ -233,8 +232,8 @@ gui_instrument :: proc(
     stringed := len(tuning.strings) > 0
 
     // What the rows change, the built-in instrument's options or the preset's
-    tuning_value := &config.instrument_tunings[int(setup.instrument)]
-    capo_value := &config.instrument_capos[int(setup.instrument)]
+    tuning_value := &config.instrument_tunings[setup.instrument]
+    capo_value := &config.instrument_capos[setup.instrument]
     transpose_value := &config.transpose
     if preset >= 0 {
         tuning_value = &config.preset_tunings[preset]
@@ -309,7 +308,7 @@ gui_instrument :: proc(
         gui_settings_dropdown(menu, .INSTRUMENT, rect, options, &selected, down = true)
         if selected != int(setup.instrument) {
             // Offsets and a capo are on one instrument, not the next
-            config.preset_instruments[preset] = selected
+            config.preset_instruments[preset] = Instrument(selected)
             config.preset_tunings[preset] = 0
             config.preset_capos[preset] = 0
             config.preset_transposes[preset] = 0

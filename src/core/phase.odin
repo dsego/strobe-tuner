@@ -379,7 +379,7 @@ run_phase_detection :: proc(self: ^PhaseComparator, is_tonal := false) {
     read, elapsed := audio_capture_read(self, self.sample_buffer[:self.buffer_len])
     if read == 0 && elapsed > 0 {
         // A stall, the buffer is silent and the tracks start over on the audio after it. The clock too, the
-        // noise floors don't learn the silence while the window fills again.
+        // noise floors don't learn the silence while the window fills again, see update_band_noise_floor.
         self.sample_clock = 0
         for &band in self.bands do restart_band(&band)
 
@@ -532,6 +532,11 @@ determine_band_phases :: proc(self: ^PhaseComparator, bands: []^PhaseBand) {
     // The tracks start over together, after a reset there's nothing to hop from
     hops := max(int(math.ceil(f32(span) / hop_size)), 1) if bands[0].has_phase else 1
 
+    // A main loop hitch brought in more than the buffer holds past the window. The first hop steps over the
+    // skipped samples too, more than half a turn for a track a few Hz off, so it goes the way the track's
+    // rate turns over that long instead of the shortest way.
+    first_hop := f64(self.available - span + span / hops)
+
     phase_advances: [MAX_BANDS]f64
     for hop in 1 ..= hops {
         // Up to the newest samples, i.e. the end of the buffer
@@ -541,7 +546,10 @@ determine_band_phases :: proc(self: ^PhaseComparator, bands: []^PhaseBand) {
         window_start := self.sample_clock - i64(self.buffer_len - window_end) - i64(window_size)
         for band, index in bands {
             hop_phase := lock_in_phase(band, window_start)
-            if had_phase[index] do phase_advances[index] += wrap_phase(f64(hop_phase - band.phase))
+            if had_phase[index] {
+                expected := band.rate * first_hop if hop == 1 && self.available > span else 0
+                phase_advances[index] += expected + wrap_phase(f64(hop_phase - band.phase) - expected)
+            }
 
             band.phase = hop_phase
         }
@@ -807,9 +815,16 @@ strobe_shows_note :: proc(self: ^PhaseComparator) -> bool {
 update_band_noise_floor :: proc(self: ^PhaseComparator, band: ^PhaseBand, is_tonal: bool) {
     dt := f32(self.available) / self.sample_rate
 
-    // The window starts out on the silence the sample buffer is filled with
+    // The window starts out on the silence the sample buffer is filled with. Once warmed up, after a stall,
+    // the floor doesn't learn it, a long window refilling reads the room too low and a note starting then
+    // would hold the floor down.
+    noise_floor := &band.noise_floor
     window_full := self.sample_clock >= i64(band.dft.window_size)
-    band.snr_db = update_noise_floor(&band.noise_floor, band.amp, dt, window_full, is_tonal)
+    if !window_full && noise_floor.warmup == 0 && noise_floor.level > 0 {
+        band.snr_db = 20 * math.log10(max(band.amp, MIN_NOISE_FLOOR) / noise_floor.level)
+        return
+    }
+    band.snr_db = update_noise_floor(noise_floor, band.amp, dt, window_full, is_tonal)
 }
 
 
@@ -857,6 +872,41 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
         err, diff = run(target_hz, -7, sample_rate)
         testing.expectf(t, abs(err[0] + 7) < 0.1 && abs(err[1] + 7) < 0.1, "-7 cents at %v Hz, got %v cents", sample_rate, err)
         testing.expect(t, diff < 0)
+    }
+}
+
+// A main loop hitch, a frame's samples more than the buffer holds past the window. The 4× track of a sharp E4
+// is 7.6 Hz off, over the skipped samples the shortest way would lose it a turn.
+@(test)
+test_phase_over_a_hitch :: proc(t: ^testing.T) {
+    FRAME :: 400
+    HITCH :: 9600 // 200 ms
+    e4: f32 = 329.63
+    freq := f64(freq_at_cents(e4, 10))
+
+    pc := init_phase_comparator(e4, {1, 4}, .HARMONIC)
+    defer destroy_phase_comparator(pc)
+    set_phase_comparator_freq(pc, e4, 440, 0.025, 2, .HARMONIC)
+
+    chunk: [HITCH]f32
+    clock := 0
+    play :: proc(pc: ^PhaseComparator, samples: []f32, freq: f64, clock: ^int) {
+        for &sample in samples {
+            phase := math.TAU * freq * f64(clock^) / DEFAULT_SAMPLE_RATE
+            sample = f32(0.1 * math.sin(phase) + 0.05 * math.sin(4 * phase))
+            clock^ += 1
+        }
+        audio_capture_write(pc, samples)
+        run_phase_detection(pc, is_tonal = true)
+    }
+
+    for _ in 0 ..< 2 * int(DEFAULT_SAMPLE_RATE) / FRAME do play(pc, chunk[:FRAME], freq, &clock)
+    play(pc, chunk[:], freq, &clock)
+    testing.expect(t, pc.available > HITCH / 2)
+
+    for _ in 0 ..< 3 do play(pc, chunk[:FRAME], freq, &clock)
+    for band, index in pc.bands {
+        testing.expectf(t, abs(band.err_cents - 10) < 0.2, "track %v after the hitch, got %v cents", index, band.err_cents)
     }
 }
 

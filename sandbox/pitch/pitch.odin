@@ -19,7 +19,7 @@ PitchConfig :: struct {
 }
 
 pitch_init :: proc (fft_size: int, samplerate: int) -> (config: PitchConfig = {}) {
-    config.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
+    config.pffft_setup = pffft.new_setup(i32(fft_size), pffft.Transform.REAL)
     config.fft = make([]complex64, fft_size)
     config.fft_conj_product = make([]complex64, fft_size)
     config.autocorrelation = make([]f32, fft_size)

@@ -55,7 +55,8 @@ Capture :: struct {
 
     // Set from miniaudio's thread when the system default moved to another device, or the open one stopped
     // without being closed, e.g. unplugged. The list is made again and an input opened again from the main
-    // loop. Not while it's closed here, see close_device.
+    // loop. Not while it's closed here, see close_device. On iOS any route change, the input is opened again
+    // only when the hardware's rate moved, see devices_changed.
     devices_changed:    bool,
     closing:            bool,
 }
@@ -205,7 +206,17 @@ interruption_ended :: proc(self: ^Capture) -> bool {
 
 // Whether the list has to be made again since the last call, see devices_changed in Capture
 devices_changed :: proc(self: ^Capture) -> bool {
-    return intrinsics.atomic_exchange(&self.devices_changed, false)
+    changed := intrinsics.atomic_exchange(&self.devices_changed, false)
+
+    // A headset or an interface plugged in keeps the input at the rate it opened at, the system converts to
+    // it like miniaudio would. Not every route change, opening the input changes the route too.
+    when IOS {
+        if changed && self.device_open {
+            session := intrinsics.objc_send(^AVAudioSession, AVAudioSession, "sharedInstance")
+            changed = f32(intrinsics.objc_send(f64, session, "sampleRate")) != self.device_rate
+        }
+    }
+    return changed
 }
 
 // The input couldn't be opened, the strobe would just stand still
@@ -250,7 +261,9 @@ notification_callback :: proc "c" (notification: ^ma.device_notification) {
     #partial switch notification.type {
     case .interruption_ended:
         intrinsics.atomic_store(&self.interruption_ended, true)
-    case .rerouted, .stopped:
+    case .rerouted:
+        if !intrinsics.atomic_load(&self.closing) do intrinsics.atomic_store(&self.devices_changed, true)
+    case .stopped:
         when !IOS {
             if !intrinsics.atomic_load(&self.closing) do intrinsics.atomic_store(&self.devices_changed, true)
         }

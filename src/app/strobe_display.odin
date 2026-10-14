@@ -255,9 +255,10 @@ ensure_glow_targets :: proc(self: ^StrobeDisplay, size: [2]f32) {
 
     unload_glow_targets(self)
 
-    self.scene_rt = gfx.load_render_target(i32(size.x * scale), i32(size.y * scale))
+    // Rounded, a tablet's UI scale can leave 1365.9999 pixels
+    self.scene_rt = gfx.load_render_target(i32(math.round(size.x * scale)), i32(math.round(size.y * scale)))
     for &rt in self.bloom_rt {
-        rt = gfx.load_render_target(i32(bloom.x), i32(bloom.y))
+        rt = gfx.load_render_target(i32(math.round(bloom.x)), i32(math.round(bloom.y)))
     }
     self.glow_scale = scale
     self.glow_size = size
@@ -750,6 +751,11 @@ strobe_tracks :: proc(
         // How far the strobe moved since the previous frame as drawn
         uniforms.phase_step = uniforms.phase - drawn_phase^
         drawn_phase^ = uniforms.phase
+
+        // The shader's sine of the phase times the period count, up to 64 turns times it is tens of thousands
+        // of radians on the outer vernier tracks. Within a stripe the same, the GPU's fast sine is accurate
+        // near 0.
+        uniforms.phase = math.mod(uniforms.phase, math.TAU / period_count)
 
         // Vernier tracks show the first one's measurement. The lamp's tracks are as far off as the comparator's.
         response: f32

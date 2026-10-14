@@ -127,15 +127,15 @@ Config :: struct {
     // Every note, or only an instrument's strings in one of its TUNINGS.
     instrument:                   Instrument,
     preset:                       int,
-    // per built-in instrument, by its value: the tuning counted from 0 in its TUNINGS, and the fret a capo
-    // is on, the strings sound that many semitones up, 0 is none
-    instrument_tunings:           [len(Instrument)]int,
-    instrument_capos:             [len(Instrument)]int,
+    // per built-in instrument: the tuning counted from 0 in its TUNINGS, and the fret a capo is on, the
+    // strings sound that many semitones up, 0 is none
+    instrument_tunings:           [Instrument]int,
+    instrument_capos:             [Instrument]int,
     // chromatic, semitones the note is shown above the sounding pitch, 0 to 11, a Bb instrument reads 2
     transpose:                    int,
 
     // Per preset slot like the built-ins: its Instrument, tuning, capo and transpose
-    preset_instruments:           [PRESET_SLOTS]int,
+    preset_instruments:           [PRESET_SLOTS]Instrument,
     preset_tunings:               [PRESET_SLOTS]int,
     preset_capos:                 [PRESET_SLOTS]int,
     preset_transposes:            [PRESET_SLOTS]int,

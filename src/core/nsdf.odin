@@ -49,7 +49,7 @@ NSDF :: struct {
 init_nsdf :: proc(fft_size: int, sample_rate: f32) -> (self: NSDF) {
     self.fft_size = fft_size
     self.sample_rate = sample_rate
-    self.pffft_setup = pffft.new_setup(fft_size, pffft.Transform.REAL)
+    self.pffft_setup = pffft.new_setup(i32(fft_size), pffft.Transform.REAL)
 
     // A real transform of fft_size samples has fft_size / 2 complex bins, see nsdf_autocorrelate
     self.spectrum = runtime.make_aligned([]complex64, fft_size / 2, 16)
@@ -81,14 +81,17 @@ run_nsdf :: proc(self: ^NSDF, samples: []f32) -> (freq: f32, peak: Vec2) {
     return
 
     // The NSDF through the autocorrelation, the left-hand sum of the squares runs down as the lag grows.
-    // The sum is kept in f64, in f32 thousands of subtractions drift it at the far lags.
+    // The sum is kept in f64, in f32 thousands of subtractions drift it at the far lags. Past half the window
+    // it's only the energy outside the middle, a click in digital silence leaves it at the FFT's rounding,
+    // about a millionth of the whole, and rounding over rounding isn't bounded by 1.
     normalize :: proc(self: ^NSDF, samples: []f32) {
         count := len(samples)
         copy(self.values, self.autocorr[:count])
 
         squares := 2.0 * f64(self.values[0])
+        least := 1e-5 * squares
         for lag in 0 ..< count {
-            if squares > 0.0 {
+            if squares > least {
                 self.values[lag] *= f32(2.0 / squares)
                 mirrored := samples[count - lag - 1]
                 squares -= f64(samples[lag] * samples[lag]) + f64(mirrored * mirrored)
