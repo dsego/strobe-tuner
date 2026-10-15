@@ -23,7 +23,7 @@ import "../core"
 import "../gfx"
 
 // The sheets over the main screen, one is up at a time, see draw_sheets
-Sheets :: struct {
+AppSheets :: struct {
     settings:        Sheet,
     display_options: bool, // the settings sheet shows the display's options, see gui_settings
     reset_confirm:   bool, // RESET on the settings sheet was tapped once and asks
@@ -34,18 +34,18 @@ Sheets :: struct {
     open_dropdown:   Dropdown, // the dropdown whose menu is open, on the settings, the instrument or the input sheet
 }
 
-all_sheets :: proc(sheets: ^Sheets) -> [4]^Sheet {
+all_sheets :: proc(sheets: ^AppSheets) -> [4]^Sheet {
     return {&sheets.settings, &sheets.track, &sheets.instrument, &sheets.input}
 }
 
 // Settings… from the menu bar or Ctrl+, closes the settings when they're up, the sheet covers the strobe
-toggle_settings_sheet :: proc(sheets: ^Sheets) {
+toggle_settings_sheet :: proc(sheets: ^AppSheets) {
     if sheets.settings.open do close_settings_sheet(sheets)
     else do open_settings_sheet(sheets)
 }
 
 // Over whichever sheet is up
-open_settings_sheet :: proc(sheets: ^Sheets) {
+open_settings_sheet :: proc(sheets: ^AppSheets) {
     for sheet in all_sheets(sheets) do if sheet != &sheets.settings do dismiss_sheet(sheets, sheet)
     reset_note_offsets_editing()
 
@@ -54,13 +54,13 @@ open_settings_sheet :: proc(sheets: ^Sheets) {
     sheets.reset_confirm = false
 }
 
-close_settings_sheet :: proc(sheets: ^Sheets) {
+close_settings_sheet :: proc(sheets: ^AppSheets) {
     dismiss_sheet(sheets, &sheets.settings)
     sheets.reset_confirm = false
 }
 
 // Closed with the dropdown menu that may be open on it
-dismiss_sheet :: proc(sheets: ^Sheets, sheet: ^Sheet) {
+dismiss_sheet :: proc(sheets: ^AppSheets, sheet: ^Sheet) {
     close_sheet(sheet)
     sheets.open_dropdown = .NONE
     gui.menu_open = false

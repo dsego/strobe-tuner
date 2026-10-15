@@ -52,7 +52,7 @@ App :: struct {
     measurement:    Measurement,
     input:          AudioInput,
     displays:       Displays,
-    sheets:         Sheets,
+    sheets:         AppSheets,
 
     in_tune_s:      f32, // how long the readout has held in tune, see update_in_tune_tap
     in_tune_tapped: bool, // and it tapped, not again until the readout moves away

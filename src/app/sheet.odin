@@ -21,7 +21,7 @@ import "../gfx"
 // The sheets that slide up over the main screen: the settings, a track's, the instrument's and the input's.
 // The main screen keeps running under them and ignores taps until they're all the way down again. What's on
 // them is in settings.odin, instrument.odin and note_offsets.odin, the app's four and which one is up in
-// sheets.odin.
+// app_sheets.odin.
 
 // A sheet up from the bottom as tall as its rows, the strobe above or beside it stays in sight to show the
 // changes
