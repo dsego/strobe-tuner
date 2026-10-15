@@ -156,58 +156,76 @@ draw_trace_display :: proc(
 // A curve through the readings, dimmed along the line as the readings' light, with a gap where the pitch
 // was lost
 draw_trace_line :: proc(self: ^TraceDisplay, plot: gfx.Rect, middle: f32, scale: [2]f32, thickness, feather: f32, color: gfx.Color) {
-    // Placed by time, the newest reading is at the right edge now and scrolls left
-    point :: proc(sample: TraceSample, clock: f64, plot: gfx.Rect, middle: f32, scale: [2]f32) -> [2]f32 {
-        x := plot.x + plot.width - f32(clock - sample.time) * scale.x
-        limit := plot.height / 2
-        return {x, middle - clamp(sample.cents * scale.y, -limit, limit)}
-    }
-    usable :: proc(self: ^TraceDisplay, index: int) -> bool {
-        return index >= 0 && index < self.count && !math.is_nan(trace_sample(self, index).cents)
-    }
+    axes := TraceAxes{plot, middle, scale}
 
-    faded :: proc(color: gfx.Color, alpha: f32) -> gfx.Color {
-        return {color.r, color.g, color.b, u8(alpha)}
-    }
-
-    // One run of readings at a time, drawn where the pitch is lost or at the newest
-    points := make([dynamic][2]f32, context.temp_allocator)
-    colors := make([dynamic]gfx.Color, context.temp_allocator)
-    alpha := f32(color.a)
-
-    // From the last reading left of the plot on, the older ones are past its left edge
-    shown_from := self.clock - f64(plot.width / scale.x)
-    first := 0
-    for first + 1 < self.count && trace_sample(self, first + 1).time < shown_from do first += 1
-
-    for index in first ..< self.count {
-        if !usable(self, index) do continue
-
-        from := point(trace_sample(self, index), self.clock, plot, middle, scale)
-        if index == first || !usable(self, index - 1) {
-            // the start of a run, or of what's shown
-            clear(&points)
-            clear(&colors)
-            append(&points, from)
-            append(&colors, faded(color, alpha * trace_sample(self, index).light))
-        }
-        if !usable(self, index + 1) {
-            gfx.draw_soft_polyline(points[:], colors[:], thickness, feather)
+    // Each run of readings between the gaps, its own curve. One that starts left of the plot is cut there.
+    start := first_shown_trace_sample(self, axes)
+    for start < self.count {
+        if !usable_trace_sample(self, start) {
+            start += 1
             continue
         }
 
-        to := point(trace_sample(self, index + 1), self.clock, plot, middle, scale)
+        end := start
+        for usable_trace_sample(self, end + 1) do end += 1
 
-        // The neighbours on either side set the curve's direction
-        before := point(trace_sample(self, index - 1), self.clock, plot, middle, scale) if usable(self, index - 1) else from
-        after := point(trace_sample(self, index + 2), self.clock, plot, middle, scale) if usable(self, index + 2) else to
+        draw_trace_run(self, start, end, axes, thickness, feather, color)
+        start = end + 1
+    }
+}
+
+// Where the readings go on the plot
+TraceAxes :: struct {
+    plot:   gfx.Rect,
+    middle: f32, // in tune
+    scale:  [2]f32, // seconds and cents to points
+}
+
+// Placed by time, the newest reading is at the right edge now and scrolls left
+trace_point :: proc(self: ^TraceDisplay, index: int, axes: TraceAxes) -> [2]f32 {
+    sample := trace_sample(self, index)
+    x := axes.plot.x + axes.plot.width - f32(self.clock - sample.time) * axes.scale.x
+    limit := axes.plot.height / 2
+    return {x, axes.middle - clamp(sample.cents * axes.scale.y, -limit, limit)}
+}
+
+// A reading with a pitch, not past either end
+usable_trace_sample :: proc(self: ^TraceDisplay, index: int) -> bool {
+    return index >= 0 && index < self.count && !math.is_nan(trace_sample(self, index).cents)
+}
+
+// The last reading left of the plot, the older ones are past its left edge
+first_shown_trace_sample :: proc(self: ^TraceDisplay, axes: TraceAxes) -> int {
+    shown_from := self.clock - f64(axes.plot.width / axes.scale.x)
+    first := 0
+    for first + 1 < self.count && trace_sample(self, first + 1).time < shown_from do first += 1
+    return first
+}
+
+// A Catmull-Rom curve through the readings from start to end, fading from each one's light to the next
+// one's. The usable neighbours either side set the curve's direction, at its ends too.
+draw_trace_run :: proc(self: ^TraceDisplay, start, end: int, axes: TraceAxes, thickness, feather: f32, color: gfx.Color) {
+    faded :: proc(color: gfx.Color, light: f32) -> gfx.Color {
+        return {color.r, color.g, color.b, u8(f32(color.a) * light)}
+    }
+
+    points := make([dynamic][2]f32, context.temp_allocator)
+    colors := make([dynamic]gfx.Color, context.temp_allocator)
+    append(&points, trace_point(self, start, axes))
+    append(&colors, faded(color, trace_sample(self, start).light))
+
+    for index in start ..< end {
+        from := trace_point(self, index, axes)
+        to := trace_point(self, index + 1, axes)
+        before := trace_point(self, index - 1, axes) if usable_trace_sample(self, index - 1) else from
+        after := trace_point(self, index + 2, axes) if usable_trace_sample(self, index + 2) else to
         light_from, light_to := trace_sample(self, index).light, trace_sample(self, index + 1).light
 
-        // A Catmull-Rom curve to the next reading, fading from this one's light to the next one's
         for step in 1 ..= TRACE_CURVE_STEPS {
             progress := f32(step) / TRACE_CURVE_STEPS
             append(&points, core.catmull_rom(before, from, to, after, progress))
-            append(&colors, faded(color, math.lerp(alpha * light_from, alpha * light_to, progress)))
+            append(&colors, faded(color, math.lerp(light_from, light_to, progress)))
         }
     }
+    gfx.draw_soft_polyline(points[:], colors[:], thickness, feather)
 }
