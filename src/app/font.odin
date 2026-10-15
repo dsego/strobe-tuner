@@ -135,10 +135,14 @@ FONT_COUNT :: size_of(PixelFonts{}.fonts) / size_of(PixelFont)
 
 pixel_fonts: PixelFonts
 
-// Called before the frame starts, reloads when the window moves to a screen with another scale
+// Called before the frame starts, reloads when the window moves to a screen with another scale or a tablet's
+// size changes the UI scale, see ui_scale. Not during a drag, where the fonts at the old scale draw a little
+// scaled until it's over, macOS.
 update_pixel_fonts :: proc() {
     scale := gfx.dpi_scale()
     if scale == pixel_fonts.scale do return
+
+    if pixel_fonts.scale != 0 && gfx.resizing() do return
 
     unload_pixel_fonts()
 
