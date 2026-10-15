@@ -9,6 +9,7 @@ Kept up with the app, the justfile runs them:
 
 Still build against the app's core, run with `odin run sandbox/<folder>`:
 
+- `benchmark`: what the strobe's and the pitch detection's transforms cost a frame, run it with `-o:speed -microarch:native`.
 - `replay`: a recording through the pitch detection, what it makes of it over time.
 - `hmm`: a hidden Markov model over the NSDF peaks next to the tuner's rules, scored on a recording.
 - `lamp_jitter`: the tracks turned by the lock-in against the ones turned by the lamp, on a recording.

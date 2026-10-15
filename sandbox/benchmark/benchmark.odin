@@ -16,7 +16,7 @@
 
 // What the strobe's and the pitch detection's transforms cost a frame, with the window sizes the app uses:
 //
-//   odin run src/core/benchmark -o:speed -microarch:native
+//   odin run sandbox/benchmark -o:speed -microarch:native
 //
 // Every result is added into a sum that's printed at the end, an unused one would be optimised away along
 // with the loop that made it.
@@ -27,8 +27,8 @@ import "core:math"
 import "core:math/rand"
 import "core:time"
 
-import ".."
-import pffft "../../../external/odin-pffft"
+import "../../src/core"
+import pffft "../../external/odin-pffft"
 
 SAMPLERATE :: core.DEFAULT_SAMPLE_RATE
 PITCH_FFT_SIZE :: 8192 // the pitch detection's at 48 kHz, see core.PITCH_WINDOW_S
