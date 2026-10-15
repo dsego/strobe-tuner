@@ -19,6 +19,7 @@ package app
 import "core:fmt"
 import "core:math"
 import "core:slice"
+import "core:testing"
 
 import "../core"
 import "../gfx"
@@ -72,11 +73,20 @@ NoteOffsetPopup :: enum {
     CENTS,
 }
 
+// A finger or the mouse on a row's bar, the cents follow it from where they were, see gui_offset_slide
+OffsetSlide :: struct {
+    row:     int,
+    press_x: f32,
+    from:    f32, // the cents when it started
+    moving:  bool, // past OFFSET_SLIDE_START, a press that stays put is a tap
+}
+
 // The editing on the instrument's sheet, kept from one frame to the next
 NoteOffsetsEditing :: struct {
     selected: int, // the row, -1 for none
     popup:    NoteOffsetPopup,
     clearing: bool, // CLEAR was tapped once, it asks
+    slide:    Maybe(OffsetSlide), // while it's held down
 }
 
 note_offsets_editing := NoteOffsetsEditing {
@@ -110,6 +120,10 @@ OFFSET_CENTS_COLUMN :: 96
 OFFSET_BUTTONS_HEIGHT :: 26 // as tall as the small buttons
 OFFSET_ROW_HEIGHT_MIN :: 32
 OFFSET_ROW_HEIGHT_MAX :: 60
+
+// Sliding on a row's bar the fill follows the finger
+OFFSET_SLIDE_START :: 10 // points sideways before a press on the bar slides and isn't a tap
+OFFSET_SLIDE_CATCH :: #config(OFFSET_SLIDE_CATCH, 12.0) // points the finger crosses at 0¢ before it goes on
 
 // The popup, one line like the row
 OFFSET_POPUP_HEIGHT :: 64
@@ -192,8 +206,9 @@ offset_step_cents :: proc(cents: f32, step: int) -> f32 {
 }
 
 // A value with a button either side that steps it, down on the left. No pill, the icons and the value on
-// the sheet. The touch areas are halves of reach from its left to its right, split at the middle of rect,
-// wider than the icons for a finger. Large in the popup.
+// the sheet. Large in the popup the touch areas are halves of reach from its left to its right, split at the
+// middle of rect, wider than the icons for a finger. In a row, with a mouse, from the edges of reach to the
+// inner edges of the icons, the value between them steps nothing.
 gui_offset_spin :: proc(rect: gfx.Rect, reach: [2]f32, label: cstring, down_icon, up_icon: cstring, large := false) -> (step: int) {
     font := pixel_fonts.offset_value if large else pixel_fonts.label
     spacing: f32 = 0 if large else 1
@@ -205,9 +220,11 @@ gui_offset_spin :: proc(rect: gfx.Rect, reach: [2]f32, label: cstring, down_icon
     draw_centered_icon(down_icon, {rect.x, rect.y, button_width, rect.height}, icon_color, style)
     draw_centered_icon(up_icon, {rect.x + rect.width - button_width, rect.y, button_width, rect.height}, icon_color, style)
 
-    middle := rect.x + rect.width / 2
-    if gui_button_repeat({reach[0], rect.y, middle - reach[0], rect.height}) do step = -1
-    if gui_button_repeat({middle, rect.y, reach[1] - middle, rect.height}) do step = 1
+    down_right, up_left := rect.x + button_width, rect.x + rect.width - button_width
+    if large do down_right, up_left = rect.x + rect.width / 2, rect.x + rect.width / 2
+
+    if gui_button_repeat({reach[0], rect.y, down_right - reach[0], rect.height}) do step = -1
+    if gui_button_repeat({up_left, rect.y, reach[1] - up_left, rect.height}) do step = 1
 
     return
 }
@@ -258,7 +275,7 @@ offset_popup_rect :: proc(grid: OffsetGrid, popup: NoteOffsetPopup, row: int) ->
 }
 
 // A row's note, octave, bar and cents. Tapped it's selected for REMOVE, and with a finger the note or the
-// cents open their popup, a string's note stays.
+// cents open their popup, a string's note stays. Slid on the bar the cents follow, see gui_offset_slide.
 gui_offset_row :: proc(rows: OffsetRows, grid: OffsetGrid, row: int, editing: ^NoteOffsetsEditing, touch: bool) -> (changed: bool) {
     stringed := len(rows.strings) > 0
     selected := row == editing.selected
@@ -272,6 +289,11 @@ gui_offset_row :: proc(rows: OffsetRows, grid: OffsetGrid, row: int, editing: ^N
     background := note_offset_selected_color if selected else gfx.hex(sheet_bg_color)
     if selected do gfx.draw_rect({sheet.x, y}, {sheet.width, grid.row_height}, background)
 
+    // Halfway into the gaps beside the bar like the steppers, before the row takes the press
+    bar_left, bar_right := bar.x - OFFSET_BAR_GAP / 2, grid.cents_x - OFFSET_BAR_GAP / 2
+    bar_reach := gfx.Rect{bar_left, y, bar_right - bar_left, grid.row_height}
+    if gui_offset_slide(&editing.slide, row, bar_reach, bar.width, cents) do changed = true
+
     if !selected || touch {
         draw_centered_label(offset_row_name(rows, row), name_rect, text_color_white)
         draw_offset_bar(bar, cents^, background)
@@ -283,8 +305,8 @@ gui_offset_row :: proc(rows: OffsetRows, grid: OffsetGrid, row: int, editing: ^N
             editing.popup = .NONE
             if touch {
                 x := gfx.mouse_position().x
-                if !stringed && x < bar.x - OFFSET_BAR_GAP / 2 do editing.popup = .NOTE
-                if x >= grid.cents_x - OFFSET_BAR_GAP / 2 do editing.popup = .CENTS
+                if !stringed && x < bar_left do editing.popup = .NOTE
+                if x >= bar_right do editing.popup = .CENTS
             }
         }
         return
@@ -295,30 +317,123 @@ gui_offset_row :: proc(rows: OffsetRows, grid: OffsetGrid, row: int, editing: ^N
     if stringed {
         draw_centered_label(offset_row_name(rows, row), name_rect, text_color_white)
     } else {
-        names, shown := OFFSET_NAMES, offset_shown_semitone(rows, row)
         note_rect := gfx.Rect{grid.left, y, OFFSET_NOTE_COLUMN, grid.row_height}
-        note_reach := [2]f32{sheet.x, note_rect.x + OFFSET_NOTE_COLUMN + OFFSET_GAP / 2}
-        if step := gui_offset_spin(note_rect, note_reach, names[shown %% 12], ICON_CARET_DOWN, ICON_CARET_UP); step != 0 {
-            rows.notes[row] = offset_step_note(rows, row, step)
-            changed = true
-        }
-
         octave_rect := gfx.Rect{note_rect.x + OFFSET_NOTE_COLUMN + OFFSET_GAP, y, OFFSET_OCTAVE_COLUMN, grid.row_height}
-        octave_reach := [2]f32{octave_rect.x - OFFSET_GAP / 2, octave_rect.x + OFFSET_OCTAVE_COLUMN + OFFSET_BAR_GAP / 2}
-        octave := fmt.ctprintf("%d", shown / 12)
-        if step := gui_offset_spin(octave_rect, octave_reach, octave, ICON_CARET_DOWN, ICON_CARET_UP); step != 0 {
-            rows.notes[row] = offset_step_octave(rows, row, step)
-            changed = true
-        }
+        note_reach := [2]f32{sheet.x, octave_rect.x - OFFSET_GAP / 2}
+        octave_reach := [2]f32{octave_rect.x - OFFSET_GAP / 2, bar_left}
+        if gui_offset_note_spins(rows, row, note_rect, octave_rect, note_reach, octave_reach) do changed = true
     }
 
     draw_offset_bar(bar, cents^, background)
-    cents_reach := [2]f32{grid.cents_x - OFFSET_BAR_GAP / 2, sheet.x + sheet.width}
-    if step := gui_offset_spin(cents_rect, cents_reach, offset_cents_text(cents^), ICON_MINUS, ICON_PLUS); step != 0 {
-        cents^ = offset_step_cents(cents^, step)
+    if gui_offset_cents_spin(cents, cents_rect, {bar_right, sheet.x + sheet.width}) do changed = true
+
+    return
+}
+
+// Pressed on the bar it waits, moved past OFFSET_SLIDE_START it slides: the cents from where they were by
+// how far it's moved along the bar of bar_width, see offset_slide_cents. It takes the press, it isn't the
+// sheet's drag. Ended where gui_note_offsets sees it let go. Returns true when the cents changed.
+gui_offset_slide :: proc(slide: ^Maybe(OffsetSlide), row: int, reach: gfx.Rect, bar_width: f32, cents: ^f32) -> (changed: bool) {
+    mouse_x := gfx.mouse_position().x
+    if gui_background_pressed(reach) {
+        gui.press_taken = true
+        slide^ = OffsetSlide {
+            row     = row,
+            press_x = mouse_x,
+            from    = cents^,
+        }
+        return
+    }
+
+    held, ok := &slide.?
+    if !ok || held.row != row do return
+
+    if !held.moving {
+        if abs(mouse_x - held.press_x) <= OFFSET_SLIDE_START do return
+
+        // From here, the few points it took don't make the cents jump
+        held.moving = true
+        held.press_x = mouse_x
+    }
+
+    // The bar's own scale, half of it is NOTE_OFFSET_MAX_CENTS
+    points_per_step := bar_width / 2 / NOTE_OFFSET_MAX_CENTS * NOTE_OFFSET_STEP_CENTS
+    slid := offset_slide_cents(held.from, mouse_x - held.press_x, points_per_step)
+    if slid == cents^ do return
+
+    cents^ = slid
+    return true
+}
+
+// The cents from where they were after the finger moved by points, in steps. At 0¢ the finger crosses
+// OFFSET_SLIDE_CATCH points before they go on, on pitch is easy to land on.
+offset_slide_cents :: proc(from, points, points_per_step: f32) -> f32 {
+    HALF_CATCH :: OFFSET_SLIDE_CATCH / 2
+
+    // Along the finger's way, the catch in the middle
+    from_point := from / NOTE_OFFSET_STEP_CENTS * points_per_step + math.sign(from) * HALF_CATCH
+    point := from_point + points
+    if abs(point) <= HALF_CATCH do return 0
+
+    steps := math.round((point - math.sign(point) * HALF_CATCH) / points_per_step)
+    return clamp(steps * NOTE_OFFSET_STEP_CENTS, -NOTE_OFFSET_MAX_CENTS, NOTE_OFFSET_MAX_CENTS)
+}
+
+// A step every few points, the catch at 0¢ from either side, held at the ends
+@(test)
+test_offset_slide_cents :: proc(t: ^testing.T) {
+    STEP :: 4
+    HALF_CATCH :: OFFSET_SLIDE_CATCH / 2
+    slide :: proc(from, points: f32) -> f32 {
+        return offset_slide_cents(from, points, STEP)
+    }
+
+    testing.expect_value(t, slide(3, 0), 3)
+    testing.expect_value(t, slide(3, 2 * STEP), 4)
+    testing.expect_value(t, slide(3, -2 * STEP), 2)
+
+    // Out of the catch a step past it, and back into it from either side
+    testing.expect_value(t, slide(0, HALF_CATCH - 1), 0)
+    testing.expect_value(t, slide(0, HALF_CATCH + STEP), NOTE_OFFSET_STEP_CENTS)
+    testing.expect_value(t, slide(0, -HALF_CATCH - STEP), -NOTE_OFFSET_STEP_CENTS)
+    testing.expect_value(t, slide(1, -2 * STEP - 1), 0)
+    testing.expect_value(t, slide(-1, 2 * STEP + 1), 0)
+
+    testing.expect_value(t, slide(20, 1000), NOTE_OFFSET_MAX_CENTS)
+    testing.expect_value(t, slide(-20, -1000), -NOTE_OFFSET_MAX_CENTS)
+}
+
+// The note and its octave as steppers, in the selected row with a mouse or large in the popup
+gui_offset_note_spins :: proc(
+    rows: OffsetRows,
+    row: int,
+    note_rect, octave_rect: gfx.Rect,
+    note_reach, octave_reach: [2]f32,
+    large := false,
+) -> (
+    changed: bool,
+) {
+    names, shown := OFFSET_NAMES, offset_shown_semitone(rows, row)
+    if step := gui_offset_spin(note_rect, note_reach, names[shown %% 12], ICON_CARET_DOWN, ICON_CARET_UP, large); step != 0 {
+        rows.notes[row] = offset_step_note(rows, row, step)
+        changed = true
+    }
+
+    octave := fmt.ctprintf("%d", shown / 12)
+    if step := gui_offset_spin(octave_rect, octave_reach, octave, ICON_CARET_DOWN, ICON_CARET_UP, large); step != 0 {
+        rows.notes[row] = offset_step_octave(rows, row, step)
         changed = true
     }
     return
+}
+
+// The cents as a stepper, in the selected row with a mouse or large in the popup
+gui_offset_cents_spin :: proc(cents: ^f32, rect: gfx.Rect, reach: [2]f32, large := false) -> bool {
+    step := gui_offset_spin(rect, reach, offset_cents_text(cents^), ICON_MINUS, ICON_PLUS, large)
+    if step == 0 do return false
+
+    cents^ = offset_step_cents(cents^, step)
+    return true
 }
 
 // The note for a new row: the one the tuner is on, or after the last row, or middle C in an empty preset
@@ -414,31 +529,15 @@ gui_offset_popup :: proc(rows: OffsetRows, grid: OffsetGrid, editing: NoteOffset
     x := rect.x + OFFSET_POPUP_PAD
     switch editing.popup {
     case .NOTE:
-        names, shown := OFFSET_NAMES, offset_shown_semitone(rows, row)
         note_rect := gfx.Rect{x, rect.y, OFFSET_POPUP_NOTE_WIDTH, rect.height}
-        note_reach := [2]f32{rect.x, x + OFFSET_POPUP_NOTE_WIDTH + OFFSET_POPUP_GAP / 2}
-        if step := gui_offset_spin(note_rect, note_reach, names[shown %% 12], ICON_CARET_DOWN, ICON_CARET_UP, large = true);
-           step != 0 {
-            rows.notes[row] = offset_step_note(rows, row, step)
-            changed = true
-        }
-
-        x += OFFSET_POPUP_NOTE_WIDTH + OFFSET_POPUP_GAP
-        octave_rect := gfx.Rect{x, rect.y, OFFSET_POPUP_OCTAVE_WIDTH, rect.height}
-        octave_reach := [2]f32{x - OFFSET_POPUP_GAP / 2, rect.x + rect.width}
-        octave := fmt.ctprintf("%d", shown / 12)
-        if step := gui_offset_spin(octave_rect, octave_reach, octave, ICON_CARET_DOWN, ICON_CARET_UP, large = true); step != 0 {
-            rows.notes[row] = offset_step_octave(rows, row, step)
-            changed = true
-        }
+        octave_x := x + OFFSET_POPUP_NOTE_WIDTH + OFFSET_POPUP_GAP
+        octave_rect := gfx.Rect{octave_x, rect.y, OFFSET_POPUP_OCTAVE_WIDTH, rect.height}
+        note_reach := [2]f32{rect.x, octave_x - OFFSET_POPUP_GAP / 2}
+        octave_reach := [2]f32{octave_x - OFFSET_POPUP_GAP / 2, rect.x + rect.width}
+        changed = gui_offset_note_spins(rows, row, note_rect, octave_rect, note_reach, octave_reach, large = true)
     case .CENTS:
-        cents := &rows.cents[row]
         cents_rect := gfx.Rect{x, rect.y, OFFSET_POPUP_CENTS_WIDTH, rect.height}
-        reach := [2]f32{rect.x, rect.x + rect.width}
-        if step := gui_offset_spin(cents_rect, reach, offset_cents_text(cents^), ICON_MINUS, ICON_PLUS, large = true); step != 0 {
-            cents^ = offset_step_cents(cents^, step)
-            changed = true
-        }
+        changed = gui_offset_cents_spin(&rows.cents[row], cents_rect, {rect.x, rect.x + rect.width}, large = true)
     case .NONE:
     }
     return
@@ -487,6 +586,9 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
     touch := gfx.touch_input()
     if editing.selected >= count do editing.selected = -1
     if editing.selected < 0 || !touch do editing.popup = .NONE
+
+    // Let go, or the row it was on is gone
+    if !gfx.mouse_down() do editing.slide = nil
 
     // A tap on the popup is its own, the controls under it don't see it. A tap anywhere else puts it away and
     // goes on to what's there, on the other value it opens that one's popup.
