@@ -88,104 +88,116 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu: Menu
 // The strobe, or the trace or the scope's view in its place. Tapping a track opens its sheet, tapping the scope
 // flips its sweep.
 draw_strobe_area :: proc(app: ^App, layout: Layout) {
-    displays := &app.displays
-    config, display, targets := app.config, &displays.strobe, &displays.glow_targets
-    measurement := &app.measurement
     strobe, view := layout.strobe, layout.strobe_view
 
     // The selected track stands out as its sheet comes up
-    display.selected_track = app.sheets.selected_track
-    display.selection = app.sheets.track.slide
+    app.displays.strobe.selected_track = app.sheets.selected_track
+    app.displays.strobe.selection = app.sheets.track.slide
 
     // The background behind the notch. The strobe's tracks reach up behind it too, the trace and the scope's
     // views start under it.
     gfx.draw_rect({strobe.x, strobe.y}, {strobe.width, view.y - strobe.y}, gfx.hex(strobe_bg_color))
 
-    switch config.strobe_display_type {
+    switch app.config.strobe_display_type {
     case .STROBE:
-        // Turned by the lock-in or by the lamp's screen
-        lock_in := measurement.strobe_lock_in
-        bands := lock_in.bands[:]
-        if config.strobe_source == .LAMP {
-            bands = core.strobe_lamp_bands(&measurement.strobe_lamp, &measurement.scope, bands, measurement.pitch_detector.snr_db)
-        }
-        draw_strobe_display(display, targets, strobe, layout.strobe_scale, layout.strobe_turned, bands, lock_in, config)
-
-        // Vernier mode shows the same pitch on every track, there's nothing to set on one
-        if config.strobe_mode == .HARMONIC && !input_missing(app) && gui_button(strobe) {
-            track := strobe_track_at(config.strobe_shape, strobe, layout.strobe_scale, layout.strobe_turned, len(bands), gfx.mouse_position())
-            if track >= 0 {
-                app.sheets.selected_track = track
-                app.sheets.track.open = true
-            }
-        }
-
+        draw_strobe_with_tracks(app, layout)
     case .TRACE:
-        colors := strobe_colors(config)
-        seconds, range := config.trace_seconds, config.trace_range_cents
-        line_color, band_color, background := gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color)
-        draw_trace_display(&displays.trace, targets, view, seconds, range, line_color, band_color, background, config.strobe_glow)
-
+        draw_trace_area(app, view)
     case .SPECTRUM:
-        lock_in := measurement.strobe_lock_in
-        track_hz := make([]f32, len(lock_in.bands), context.temp_allocator)
-        for band, index in lock_in.bands do track_hz[index] = band.freq_hz
-
-        colors := strobe_colors(config)
-        draw_spectrum_display(
-            &displays.spectrum,
-            targets,
-            view,
-            track_hz,
-            measurement.note_target.active,
-            config,
-            gfx.hex(colors.x),
-            gfx.hex(colors.y),
-            gfx.hex(strobe_bg_color),
-        )
-
+        draw_spectrum_area(app, view)
     case .SCOPE, .LAMP:
-        draw_scope_display(&displays.scope, targets, &measurement.scope, view, config, measurement.pitch_detector.snr_db)
-
-        // Between the wave over time and the Lissajous figure
-        if config.strobe_display_type == .SCOPE && !input_missing(app) && gui_button(strobe) {
-            config.scope_sweep = .XY if config.scope_sweep == .TIME else .TIME
-        }
-
-        // Between the one lamp and the split one, its two halves
-        if config.strobe_display_type == .LAMP && !input_missing(app) && gui_button(strobe) {
-            config.lamp_shape = .HALF_RECTIFIED if config.lamp_shape == .SPLIT else .SPLIT
-        }
+        draw_scope_area(app, strobe, view)
     }
 
     // Over the whole strobe area, the part behind the notch included
     draw_strobe_shadow(strobe)
 
-    // A denied microphone only gives silence, an input that didn't open gives nothing. The strobe would just
-    // stand still, say why instead.
-    title, hint: cstring
-    if audio.microphone_denied() {
-        title, hint = "Microphone access is off", "Tap to allow it in Settings"
-    } else if len(app.input.devices) == 0 {
-        title, hint = "No input found", "Connect one and tap to look again"
-    } else if audio.input_failed(app.input.capture) {
-        title, hint = "The input didn't open", "Tap to try again"
+    if title, hint, missing := no_input_reason(app); missing do gui_no_input_message(app, strobe, title, hint)
+}
+
+// Turned by the lock-in or by the lamp's screen. Tapping a track opens its sheet, in vernier mode every track
+// shows the same pitch and there's nothing to set on one.
+draw_strobe_with_tracks :: proc(app: ^App, layout: Layout) {
+    config, measurement, strobe := app.config, &app.measurement, layout.strobe
+    lock_in := measurement.strobe_lock_in
+    bands := lock_in.bands[:]
+    if config.strobe_source == .LAMP {
+        bands = core.strobe_lamp_bands(&measurement.strobe_lamp, &measurement.scope, bands, measurement.pitch_detector.snr_db)
     }
 
-    if title != nil {
-        gfx.draw_rect({strobe.x, strobe.y}, {strobe.width, strobe.height}, gfx.hex(strobe_bg_color))
-        center := [2]f32{strobe.x + strobe.width / 2, strobe.y + strobe.height / 2}
-        title_size := measure_label(pixel_fonts.title, title)
-        hint_size := measure_label(pixel_fonts.label, hint)
-        draw_label(pixel_fonts.title, title, center - {title_size.x / 2, title_size.y + 4}, text_color_white)
-        draw_label(pixel_fonts.label, hint, center - {hint_size.x / 2, -4}, text_color_muted)
+    displays := &app.displays
+    draw_strobe_display(&displays.strobe, &displays.glow_targets, strobe, layout.strobe_scale, layout.strobe_turned, bands, lock_in, config)
 
-        // Tried again on what's connected now
-        if gui_button(strobe) {
-            if audio.microphone_denied() do audio.allow_microphone()
-            else do app.input.restart, app.input.refresh = true, true
+    if config.strobe_mode == .HARMONIC && !input_missing(app) && gui_button(strobe) {
+        track := strobe_track_at(config.strobe_shape, strobe, layout.strobe_scale, layout.strobe_turned, len(bands), gfx.mouse_position())
+        if track >= 0 {
+            app.sheets.selected_track = track
+            app.sheets.track.open = true
         }
     }
+}
+
+draw_trace_area :: proc(app: ^App, view: gfx.Rect) {
+    config, displays := app.config, &app.displays
+    colors := strobe_colors(config)
+    seconds, range := config.trace_seconds, config.trace_range_cents
+    line_color, band_color, background := gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color)
+    draw_trace_display(&displays.trace, &displays.glow_targets, view, seconds, range, line_color, band_color, background, config.strobe_glow)
+}
+
+draw_spectrum_area :: proc(app: ^App, view: gfx.Rect) {
+    config, displays := app.config, &app.displays
+    track_hz := strobe_track_hz(app.measurement.strobe_lock_in)
+    active := app.measurement.note_target.active
+    colors := strobe_colors(config)
+    line_color, band_color, background := gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color)
+    draw_spectrum_display(&displays.spectrum, &displays.glow_targets, view, track_hz, active, config, line_color, band_color, background)
+}
+
+// The partials the strobe's tracks follow, until the end of the frame
+strobe_track_hz :: proc(lock_in: ^core.StrobeLockIn) -> []f32 {
+    track_hz := make([]f32, len(lock_in.bands), context.temp_allocator)
+    for band, index in lock_in.bands do track_hz[index] = band.freq_hz
+    return track_hz
+}
+
+// The scope or the lamp. Tapped, the scope flips between the wave over time and the Lissajous figure, the
+// lamp between the one lamp and the split one, its two halves.
+draw_scope_area :: proc(app: ^App, strobe, view: gfx.Rect) {
+    config, measurement := app.config, &app.measurement
+    draw_scope_display(&app.displays.scope, &app.displays.glow_targets, &measurement.scope, view, config, measurement.pitch_detector.snr_db)
+    if input_missing(app) || !gui_button(strobe) do return
+
+    if config.strobe_display_type == .SCOPE {
+        config.scope_sweep = .XY if config.scope_sweep == .TIME else .TIME
+    } else {
+        config.lamp_shape = .HALF_RECTIFIED if config.lamp_shape == .SPLIT else .SPLIT
+    }
+}
+
+// A denied microphone only gives silence, an input that didn't open gives nothing. The strobe would just
+// stand still, it says why instead.
+no_input_reason :: proc(app: ^App) -> (title, hint: cstring, missing: bool) {
+    if audio.microphone_denied() do return "Microphone access is off", "Tap to allow it in Settings", true
+    if len(app.input.devices) == 0 do return "No input found", "Connect one and tap to look again", true
+    if audio.input_failed(app.input.capture) do return "The input didn't open", "Tap to try again", true
+
+    return
+}
+
+// Over the strobe area. Tapped it tries again on what's connected now, or asks for the microphone.
+gui_no_input_message :: proc(app: ^App, strobe: gfx.Rect, title, hint: cstring) {
+    gfx.draw_rect({strobe.x, strobe.y}, {strobe.width, strobe.height}, gfx.hex(strobe_bg_color))
+    center := [2]f32{strobe.x + strobe.width / 2, strobe.y + strobe.height / 2}
+    title_size := measure_label(pixel_fonts.title, title)
+    hint_size := measure_label(pixel_fonts.label, hint)
+    draw_label(pixel_fonts.title, title, center - {title_size.x / 2, title_size.y + 4}, text_color_white)
+    draw_label(pixel_fonts.label, hint, center - {hint_size.x / 2, -4}, text_color_muted)
+
+    if !gui_button(strobe) do return
+
+    if audio.microphone_denied() do audio.allow_microphone()
+    else do app.input.restart, app.input.refresh = true, true
 }
 
 // The strobe area says why there's no input instead, see draw_strobe_area
