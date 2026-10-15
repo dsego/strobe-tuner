@@ -56,17 +56,19 @@ init_decimator :: proc(input_rate: f32) -> (self: Decimator, sample_rate: f32) {
         self.halvings += 1
     }
 
-    // A windowed sinc at a quarter of the rate, its even taps fall on the sinc's zeros
-    pairs_sum: f64 = 0
-    for &tap, index in self.pairs {
+    self.pairs = windowed_sinc()
+    unity_gain_at_dc(&self.pairs)
+    return
+}
+
+// A windowed sinc at a quarter of the rate, its even taps fall on the sinc's zeros: the taps 1, 3, 5... from
+// the middle one
+windowed_sinc :: proc() -> (pairs: [HALFBAND_PAIRS]f32) {
+    for &tap, index in pairs {
         offset := f64(2 * index + 1)
         sinc := math.sin(math.PI * offset / 2) / (math.PI * offset)
         tap = f32(sinc * kaiser(offset, HALFBAND_TAPS / 2, HALFBAND_KAISER_BETA))
-        pairs_sum += f64(tap)
     }
-
-    // A level that stays the same at 0 Hz: the middle tap's 0.5 and both sides' pairs add up to 1
-    for &tap in self.pairs do tap = f32(f64(tap) * 0.25 / pairs_sum)
     return
 
     // The Kaiser window at offset from the middle of one reaching half_width either way
@@ -86,36 +88,50 @@ init_decimator :: proc(input_rate: f32) -> (self: Decimator, sample_rate: f32) {
     }
 }
 
+// A level that stays the same at 0 Hz: the middle tap's 0.5 and both sides' pairs add up to 1
+unity_gain_at_dc :: proc(pairs: ^[HALFBAND_PAIRS]f32) {
+    pairs_sum: f64 = 0
+    for tap in pairs do pairs_sum += f64(tap)
+    for &tap in pairs do tap = f32(f64(tap) * 0.25 / pairs_sum)
+}
+
 // Decimates the samples in place, returns how many came out. From the audio thread, the filters run on from
 // the previous call.
 decimate :: proc(self: ^Decimator, samples: []f32) -> int {
     count := len(samples)
     for &stage in self.stages[:self.halvings] {
-        out := 0
-        for index in 0 ..< count {
-            sample := samples[index]
-            stage.history[stage.position] = sample
-            stage.history[stage.position + HALFBAND_TAPS] = sample
-            stage.position = (stage.position + 1) % HALFBAND_TAPS
-
-            stage.odd = !stage.odd
-            if !stage.odd do continue
-
-            // The window's middle, the taps on either side of it in pairs. Written behind the input, out never
-            // passes index.
-            window := stage.history[stage.position:][:HALFBAND_TAPS]
-            middle := HALFBAND_TAPS / 2
-            value := 0.5 * window[middle]
-            for tap, pair in self.pairs {
-                offset := 2 * pair + 1
-                value += tap * (window[middle - offset] + window[middle + offset])
-            }
-            samples[out] = value
-            out += 1
-        }
-        count = out
+        count = decimate_stage(&stage, &self.pairs, samples[:count])
     }
     return count
+}
+
+// One halving in place, returns how many came out. Written behind the input, out never passes index.
+decimate_stage :: proc(stage: ^HalfbandStage, pairs: ^[HALFBAND_PAIRS]f32, samples: []f32) -> int {
+    out := 0
+    for index in 0 ..< len(samples) {
+        sample := samples[index]
+        stage.history[stage.position] = sample
+        stage.history[stage.position + HALFBAND_TAPS] = sample
+        stage.position = (stage.position + 1) % HALFBAND_TAPS
+
+        stage.odd = !stage.odd
+        if !stage.odd do continue
+
+        samples[out] = halfband_filter(stage.history[stage.position:][:HALFBAND_TAPS], pairs)
+        out += 1
+    }
+    return out
+}
+
+// The window's middle through the halfband, the taps on either side of it in pairs
+halfband_filter :: proc(window: []f32, pairs: ^[HALFBAND_PAIRS]f32) -> f32 {
+    middle := HALFBAND_TAPS / 2
+    value := 0.5 * window[middle]
+    for tap, pair in pairs {
+        offset := 2 * pair + 1
+        value += tap * (window[middle - offset] + window[middle + offset])
+    }
+    return value
 }
 
 

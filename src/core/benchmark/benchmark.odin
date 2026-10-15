@@ -60,7 +60,7 @@ main :: proc() {
         fmt.printfln("pffft, %v points (pitch detection): %.1f µs", PITCH_FFT_SIZE, microseconds)
     }
 
-    // A track's window as set_phase_comparator_freq sizes it, the comb's box of one period included
+    // A track's window as set_strobe_lock_in_freq sizes it, the comb's box of one period included
     notes := []struct {
         name:    string,
         freq_hz: f32,

@@ -260,7 +260,7 @@ spectrum_y :: proc(db: f32, range: [2]f32, plot: gfx.Rect) -> f32 {
 // and lit while the tuner has the note.
 draw_spectrum_display :: proc(
     self: ^SpectrumDisplay,
-    display: ^StrobeDisplay,
+    targets: ^GlowTargets,
     rect: gfx.Rect,
     track_hz: []f32,
     active: bool,
@@ -335,9 +335,9 @@ draw_spectrum_display :: proc(
     // With the retro glow the curve glows like the scope's beam, the bloom added once: the scope's thin
     // beam takes it a few times over, the curve's thicker and busier
     if config.strobe_glow {
-        begin_glow(display, rect, background)
+        begin_glow(targets, rect, background)
         draw_plot(plot, points[:], octave_x[:], track_x[:], active, line_color, band_color, background)
-        end_glow(display, rect, 1)
+        end_glow(targets, rect, 1)
     }
 
     gfx.begin_scissor(rect)

@@ -118,16 +118,16 @@ main :: proc() {
 
     intervals := INTERVALS
     widths := BAND_WIDTHS_CENTS
-    strobes: [len(widths)]^core.PhaseComparator
-    retune :: proc(strobe: ^core.PhaseComparator, freq_hz: f32) {
-        core.set_phase_comparator_freq(strobe, freq_hz, 440, STROBE_SPEED, 2, .HARMONIC)
+    strobes: [len(widths)]^core.StrobeLockIn
+    retune :: proc(strobe: ^core.StrobeLockIn, freq_hz: f32) {
+        core.set_strobe_lock_in_freq(strobe, freq_hz, 440, STROBE_SPEED, 2, .HARMONIC)
     }
     for &strobe, index in strobes {
-        strobe = core.init_phase_comparator(110, intervals[:], .HARMONIC)
+        strobe = core.init_strobe_lock_in(110, intervals[:], .HARMONIC)
         strobe.band_cents = widths[index]
         retune(strobe, 110)
     }
-    defer for strobe in strobes do core.destroy_phase_comparator(strobe)
+    defer for strobe in strobes do core.destroy_strobe_lock_in(strobe)
 
     // The app's, the tuner follows it and its SNR places the frames
     strobe := strobes[0]

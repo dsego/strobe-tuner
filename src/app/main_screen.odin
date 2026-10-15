@@ -88,7 +88,7 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
 // The strobe, or the trace or the scope's view in its place. Tapping a track opens its sheet, tapping the scope
 // flips its sweep.
 draw_strobe_area :: proc(app: ^App, layout: Layout) {
-    config, display := app.config, &app.strobe_display
+    config, display, targets := app.config, &app.strobe_display, &app.glow_targets
     strobe, view := layout.strobe, layout.strobe_view
 
     // The selected track stands out as its sheet comes up
@@ -102,12 +102,12 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     switch config.strobe_display_type {
     case .STROBE:
         // Turned by the lock-in or by the lamp's screen
-        comparator := app.phase_comparator
-        bands := comparator.bands[:]
+        lock_in := app.strobe_lock_in
+        bands := lock_in.bands[:]
         if config.strobe_source == .LAMP {
-            bands = lamp_bands(display, &app.scope, bands, app.pitch_detector.snr_db)
+            bands = core.strobe_lamp_bands(&app.strobe_lamp, &app.scope, bands, app.pitch_detector.snr_db)
         }
-        draw_strobe_display(display, strobe, layout.strobe_scale, layout.strobe_turned, bands, comparator, config)
+        draw_strobe_display(display, targets, strobe, layout.strobe_scale, layout.strobe_turned, bands, lock_in, config)
 
         // Vernier mode shows the same pitch on every track, there's nothing to set on one
         if config.strobe_mode == .HARMONIC && !input_missing(app) && gui_button(strobe) {
@@ -121,17 +121,17 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     case .TRACE:
         colors := strobe_colors(config)
         seconds, range := config.trace_seconds, config.trace_range_cents
-        draw_trace_display(&app.trace_display,view, seconds, range, gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color))
+        draw_trace_display(&app.trace_display, view, seconds, range, gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color))
 
     case .SPECTRUM:
-        comparator := app.phase_comparator
-        track_hz := make([]f32, len(comparator.bands), context.temp_allocator)
-        for band, index in comparator.bands do track_hz[index] = band.freq_hz
+        lock_in := app.strobe_lock_in
+        track_hz := make([]f32, len(lock_in.bands), context.temp_allocator)
+        for band, index in lock_in.bands do track_hz[index] = band.freq_hz
 
         colors := strobe_colors(config)
         draw_spectrum_display(
             &app.spectrum_display,
-            display,
+            targets,
             view,
             track_hz,
             app.tuner.active,
@@ -142,7 +142,7 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         )
 
     case .SCOPE, .LAMP:
-        draw_scope_display(display, &app.scope, view, config, app.pitch_detector.snr_db)
+        draw_scope_display(&app.scope_display, targets, &app.scope, view, config, app.pitch_detector.snr_db)
 
         // Between the wave over time and the Lissajous figure
         if config.strobe_display_type == .SCOPE && !input_missing(app) && gui_button(strobe) {
@@ -156,7 +156,7 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     }
 
     // Over the whole strobe area, the part behind the notch included
-    draw_strobe_shadow(display, strobe)
+    draw_strobe_shadow(strobe)
 
     // A denied microphone only gives silence, an input that didn't open gives nothing. The strobe would just
     // stand still, say why instead.
@@ -328,7 +328,7 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo, meter
     gfx.draw_rect(meter + {0, LEVEL_METER_HEIGHT}, {LEVEL_BAR_WIDTH, 3}, gfx.hex(strobe_bg_color))
     gfx.draw_rect(meter + {0, LEVEL_METER_HEIGHT}, {LEVEL_BAR_WIDTH + floor_level, 3}, gfx.PURPLE)
 
-    base_band := app.phase_comparator.bands[0]
+    base_band := app.strobe_lock_in.bands[0]
     stat(fmt.ctprintf("Band SNR %.1f", base_band.snr_db), layout.stats)
     stat(fmt.ctprintf("Band NF %.1f", core.dbfs(base_band.noise_floor.level)), layout.stats + {0, 15})
     stat(fmt.ctprintf("Band drift %.1f", base_band.drift_cents), layout.stats + {0, 30})

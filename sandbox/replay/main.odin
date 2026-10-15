@@ -57,10 +57,10 @@ main :: proc() {
 
     // The strobe tracks, following the tuner's note like in the app
     intervals := INTERVALS
-    strobe := core.init_phase_comparator(110, intervals[:], .HARMONIC, sample_rate)
-    defer core.destroy_phase_comparator(strobe)
-    retune :: proc(strobe: ^core.PhaseComparator, freq_hz: f32) {
-        core.set_phase_comparator_freq(strobe, freq_hz, PITCH_STANDARD, STROBE_SPEED, 2, .HARMONIC)
+    strobe := core.init_strobe_lock_in(110, intervals[:], .HARMONIC, sample_rate)
+    defer core.destroy_strobe_lock_in(strobe)
+    retune :: proc(strobe: ^core.StrobeLockIn, freq_hz: f32) {
+        core.set_strobe_lock_in_freq(strobe, freq_hz, PITCH_STANDARD, STROBE_SPEED, 2, .HARMONIC)
     }
     retune(strobe, tuner.target_note.frequency)
 

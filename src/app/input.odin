@@ -113,7 +113,7 @@ switch_input :: proc(app: ^App) {
     // Nothing of the previous input's carries over, the readout it held included
     audio.switch_device(app.audio_capture, picked_device(app))
     core.reset_pitch_detector(&app.pitch_detector)
-    core.reset_phase_comparator(app.phase_comparator)
+    core.reset_strobe_lock_in(app.strobe_lock_in)
     core.reset_scope(&app.scope)
     reset_spectrum_display(&app.spectrum_display)
     app.readout_track, app.traced_track = -1, -1
@@ -125,10 +125,10 @@ switch_input :: proc(app: ^App) {
 // changes anything, the strobe's windows are retuned to it. Nothing without an input.
 match_input_rate :: proc(app: ^App) {
     sample_rate := app.audio_capture.sample_rate
-    if sample_rate == 0 || sample_rate == app.phase_comparator.sample_rate do return
+    if sample_rate == 0 || sample_rate == app.strobe_lock_in.sample_rate do return
 
     core.set_pitch_detector_sample_rate(&app.pitch_detector, sample_rate)
-    core.set_phase_comparator_sample_rate(app.phase_comparator, sample_rate)
+    core.set_strobe_lock_in_sample_rate(app.strobe_lock_in, sample_rate)
     core.set_scope_sample_rate(&app.scope, sample_rate)
     set_spectrum_display_sample_rate(&app.spectrum_display, sample_rate)
     retune(app)

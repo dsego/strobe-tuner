@@ -44,26 +44,55 @@ SCOPE_NOISE_BRIGHTNESS :: 0.3
 // The beam is a thin line and its bloom is spread thin, it's added this many times over
 SCOPE_BLOOM_PASSES :: 3
 
+// What the scope's and the lamp's views keep from one frame to the next
+ScopeDisplay :: struct {
+    background: gfx.Color,
+    // the scope beam's visibility, see draw_scope_display
+    visibility: f32,
+    // the scope's screen for its shader, a byte a cell, see draw_scope_screen
+    texture:    gfx.Texture,
+    pixels:     []u8,
+    // each column's brightness on the lamp as last lit, its top and its split bottom, see draw_lamp
+    lamp_held:  [SCOPE_COLUMNS][2]f32,
+}
+
+init_scope_display :: proc(background: u32) -> (self: ScopeDisplay) {
+    self.background = gfx.hex(background)
+    return
+}
+
+destroy_scope_display :: proc(self: ^ScopeDisplay) {
+    gfx.unload_texture(self.texture)
+    delete(self.pixels)
+}
+
 // The scope or the lamp. With the retro glow on the scope's beam glows like the strobe, through the
-// strobe display's render targets. The lamp is lit all over and a glow adds little, it has none.
+// shared glow targets. The lamp is lit all over and a glow adds little, it has none.
 // snr_db is of the whole signal, the beam fades in with it like the strobe's stripes.
-draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: gfx.Rect, config: ^Config, snr_db: f32) {
+draw_scope_display :: proc(
+    self: ^ScopeDisplay,
+    targets: ^GlowTargets,
+    scope: ^core.Scope,
+    rect: gfx.Rect,
+    config: ^Config,
+    snr_db: f32,
+) {
     colors := strobe_colors(config)
     beam_color, dark_color := gfx.hex(colors[0]), gfx.hex(colors[1])
 
     fade := core.STROBE_FADE_SNR_DB
     target := math.lerp(f32(SCOPE_NOISE_BRIGHTNESS), 1, math.smoothstep(fade[0], fade[1], snr_db))
     alpha := 1 - math.exp(-gfx.frame_time() / STROBE_LOOK_TIME_S)
-    display.scope_visibility += alpha * (target - display.scope_visibility)
+    self.visibility += alpha * (target - self.visibility)
 
     if config.strobe_display_type == .SCOPE && config.strobe_glow {
-        begin_glow(display, rect, display.background)
-        draw_scope_screen(display, rect, scope, beam_color, dark_color)
-        end_glow(display, rect, SCOPE_BLOOM_PASSES)
+        begin_glow(targets, rect, self.background)
+        draw_scope_screen(self, rect, scope, beam_color, dark_color)
+        end_glow(targets, rect, SCOPE_BLOOM_PASSES)
         return
     }
 
-    gfx.draw_rect({rect.x, rect.y}, {rect.width, rect.height}, display.background)
+    gfx.draw_rect({rect.x, rect.y}, {rect.width, rect.height}, self.background)
 
     // the beam's dots at the edges reach over it
     gfx.begin_scissor(rect)
@@ -71,9 +100,9 @@ draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: gf
 
     if config.strobe_display_type == .LAMP {
         heights, dwell := core.scope_from_above(scope, config.lamp_shape)
-        draw_lamp(display, rect, heights, scope.depths, dwell, config.lamp_shape, beam_color, dark_color)
+        draw_lamp(self, rect, heights, scope.depths, dwell, config.lamp_shape, beam_color, dark_color)
     } else {
-        draw_scope_screen(display, rect, scope, beam_color, dark_color)
+        draw_scope_screen(self, rect, scope, beam_color, dark_color)
     }
 }
 
@@ -81,8 +110,8 @@ draw_scope_display :: proc(display: ^StrobeDisplay, scope: ^core.Scope, rect: gf
 // color, the lines through the middle in its second color.
 // Every lit cell is a round dot wider than the cell, the dots of neighbouring cells overlap and add up
 // to a thicker and brighter beam, drawn by the scope shader from the screen as a texture, a byte a cell.
-// The beam dims with the display's scope_visibility, 1 is full.
-draw_scope_screen :: proc(display: ^StrobeDisplay, rect: gfx.Rect, scope: ^core.Scope, beam_color, grid_color: gfx.Color) {
+// The beam dims with the display's visibility, 1 is full.
+draw_scope_screen :: proc(self: ^ScopeDisplay, rect: gfx.Rect, scope: ^core.Scope, beam_color, grid_color: gfx.Color) {
     // The Lissajous figure is round, on a square in the middle
     width := core.scope_width(scope)
     rect := rect
@@ -104,11 +133,11 @@ draw_scope_screen :: proc(display: ^StrobeDisplay, rect: gfx.Rect, scope: ^core.
     full := total / f32(width)
 
     columns, rows := i32(scope.columns), i32(scope.rows)
-    if display.scope_texture.width != columns || display.scope_texture.height != rows {
-        gfx.unload_texture(display.scope_texture)
-        display.scope_texture = gfx.create_gray_texture(columns, rows)
-        delete(display.scope_pixels)
-        display.scope_pixels = make([]u8, scope.columns * scope.rows)
+    if self.texture.width != columns || self.texture.height != rows {
+        gfx.unload_texture(self.texture)
+        self.texture = gfx.create_gray_texture(columns, rows)
+        delete(self.pixels)
+        self.pixels = make([]u8, scope.columns * scope.rows)
     }
 
     // A steady beam is shared by a few cells of its column, more where the wave is steep. A third of
@@ -117,12 +146,12 @@ draw_scope_screen :: proc(display: ^StrobeDisplay, rect: gfx.Rect, scope: ^core.
     DARK :: 0.02
     for dwell, cell in scope.screen {
         intensity := min(EXPOSURE * dwell / full, 1)
-        display.scope_pixels[cell] = u8(255 * intensity + 0.5) if intensity >= DARK else 0
+        self.pixels[cell] = u8(255 * intensity + 0.5) if intensity >= DARK else 0
     }
-    gfx.update_texture(display.scope_texture, display.scope_pixels)
+    gfx.update_texture(self.texture, self.pixels)
 
     color := gfx.normalize_color(beam_color)
-    color.a = display.scope_visibility
+    color.a = self.visibility
     uniforms := gfx.ScopeUniforms {
         color     = color,
         cells     = {f32(columns), f32(rows)},
@@ -133,64 +162,7 @@ draw_scope_screen :: proc(display: ^StrobeDisplay, rect: gfx.Rect, scope: ^core.
     defer gfx.end_shader()
 
     gfx.set_shader_uniforms(.SCOPE, &uniforms)
-    gfx.draw_texture(display.scope_texture, {0, 0, f32(width), f32(rows)}, rect)
-}
-
-// The comparator's tracks turned by the lamp instead, the strobe the other way: a DFT bin of the
-// scope's screen from above (core.scope_partials) for each track's partial, instead of its DFT on the
-// samples. They turn like the tracks: by the bin's phase advance, rescaled so all notes spin at the same
-// rate per cent, times the track's speed, and stand still at its partial's target, offset included.
-// The screen's quirks show, a pluck or a weak partial can make the stripes jump. A copy for drawing until the next frame, its
-// DFTs are the comparator's own. The phases between frames are kept in the display.
-lamp_bands :: proc(
-    display: ^StrobeDisplay,
-    scope: ^core.Scope,
-    comparator_bands: []core.PhaseBand,
-    signal_snr_db: f32,
-) -> (
-    bands: []core.PhaseBand,
-) {
-    bands = make([]core.PhaseBand, len(comparator_bands), context.temp_allocator)
-    copy(bands, comparator_bands)
-    if scope.freq_hz <= 0 do return
-
-    // The bin nearest each track's partial, its target a little off for an offset in cents
-    periods := make([]int, len(bands), context.temp_allocator)
-    for band, index in bands {
-        periods[index] = max(int(math.round(core.SCOPE_PERIODS * f64(band.freq_hz) / scope.freq_hz)), 1)
-    }
-    partials := make([]core.ScopePartial, len(bands), context.temp_allocator)
-    noise := max(core.scope_partials(scope, periods, partials), 1e-9)
-
-    // A new reference starts with a dark screen, the phases before it are arbitrary. So are they after a while
-    // without the lamp's tracks, another display showed and the screen went dark, see skip_scope.
-    elapsed := f64(scope.sample_clock - display.lamp_clock) / f64(scope.sample_rate)
-    has_phase := display.lamp_freq_hz == scope.freq_hz && elapsed <= STROBE_STALE_S
-    display.lamp_freq_hz = scope.freq_hz
-    display.lamp_clock = scope.sample_clock
-
-    for &band, index in bands {
-        partial := partials[index]
-        phase_before := display.lamp_phases[index]
-        display.lamp_phases[index] = partial.phase
-        if !band.in_range do continue
-
-        // The screen remembers a note after it fades into the room's noise, the signal's SNR fades it out
-        level := max(partial.level, 1e-9)
-        band.snr_db = min(f32(20 * math.log10(level / noise)), signal_snr_db)
-
-        // As run_phase_detection does it, the shortest way from the previous frame's phase. On the target
-        // the partial drifts on the screen by how far it is from the bin.
-        bin_hz := f64(periods[index]) / core.SCOPE_PERIODS * scope.freq_hz
-        target_advance := math.TAU * (f64(band.freq_hz) - bin_hz) * elapsed
-        advance := core.wrap_phase(partial.phase - phase_before - target_advance) if has_phase else 0
-
-        rescale := core.strobe_rescale(band.freq_hz)
-        band.phase_diff = f32(advance * rescale)
-        core.turn_strobe(&display.lamp_scaled_phases[index], band.phase_diff, band.speed)
-        band.scaled_phase = display.lamp_scaled_phases[index]
-    }
-    return
+    gfx.draw_texture(self.texture, {0, 0, f32(width), f32(rows)}, rect)
 }
 
 // Stripes as bright as the beam is high, the lamp of a mechanical strobe and the first version of this
@@ -201,7 +173,7 @@ lamp_bands :: proc(
 // persistence the screen is only the frame's samples, rarely a whole number of sweeps and a third of one
 // on a low note, the rest would show a dark gap walking across. A screen dark all over stays dark.
 draw_lamp :: proc(
-    display: ^StrobeDisplay,
+    self: ^ScopeDisplay,
     rect: gfx.Rect,
     heights, depths, dwell: []f32,
     shape: core.ScopeShape,
@@ -213,7 +185,7 @@ draw_lamp :: proc(
     lamp_height := rect.height / 2 if shape == .SPLIT else rect.height
 
     for height, column in heights {
-        held := &display.lamp_held[column]
+        held := &self.lamp_held[column]
         if dwell[column] > 0 {
             // The wave as it is goes below zero, zero is halfway
             held[0] = 0.5 + 0.5 * height if shape == .RAW_WAVEFORM else height

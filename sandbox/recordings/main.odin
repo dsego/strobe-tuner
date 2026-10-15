@@ -556,10 +556,10 @@ play :: proc(recording: []f32, sample_rate: f32, pitch_standard: f32) -> (detect
     tuner := core.init_tuner(110, pitch_standard, true)
 
     intervals := INTERVALS
-    strobe := core.init_phase_comparator(110, intervals[:], .HARMONIC, sample_rate)
-    defer core.destroy_phase_comparator(strobe)
-    retune :: proc(strobe: ^core.PhaseComparator, freq_hz, pitch_standard: f32) {
-        core.set_phase_comparator_freq(strobe, freq_hz, pitch_standard, STROBE_SPEED, 2, .HARMONIC)
+    strobe := core.init_strobe_lock_in(110, intervals[:], .HARMONIC, sample_rate)
+    defer core.destroy_strobe_lock_in(strobe)
+    retune :: proc(strobe: ^core.StrobeLockIn, freq_hz, pitch_standard: f32) {
+        core.set_strobe_lock_in_freq(strobe, freq_hz, pitch_standard, STROBE_SPEED, 2, .HARMONIC)
     }
     retune(strobe, tuner.target_note.frequency, pitch_standard)
 

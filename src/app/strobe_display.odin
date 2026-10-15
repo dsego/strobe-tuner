@@ -24,15 +24,8 @@ import "core:time"
 import "../core"
 import "../gfx"
 
-// Bloom for the strobe glow, rendered at a fraction of the strobe size since it gets blurred anyway
-BLOOM_DOWNSCALE :: 2
-BLOOM_TAP_SPACING :: 1.5 // blur taps spaced apart for a wider glow at the same cost
-BLOOM_ITERATIONS :: 2
+// How much of the strobe's bloom is added over it, see glow.odin
 BLOOM_STRENGTH :: 0.2
-
-// Tracks not drawn for longer, another display showed or the app was in the background, start their
-// persistence and motion blur over: what they held is from before
-STROBE_STALE_S :: 0.25
 
 // The stripes shaped from the sine, off a hard square wave. Motion blur averages the pattern over its
 // movement since the previous frame, it reduces shimmer when it spins fast.
@@ -42,13 +35,9 @@ MOTION_BLUR :: true
 StrobeDisplay :: struct {
     background:      gfx.Color,
 
-    // bloom for the strobe glow, the strobe is rendered into scene_rt and blurred through bloom_rt
-    scene_rt:        gfx.RenderTarget,
-    bloom_rt:        [2]gfx.RenderTarget,
-    glow_scale:      f32, // DPI scale the render targets were created for
-    glow_size:       [2]f32, // and the strobe size in points
-    glow_bloom:      [2]f32, // and the bloom targets' size, see ensure_glow_targets
-    glow_drawn:      GlowFrame, // what the render targets hold, see draw_strobe_display
+    // what the glow's render targets hold and at which of their versions, see draw_strobe_display
+    glow_drawn:      GlowFrame,
+    glow_version:    int,
 
     // per band stripe visibility, smoothed so it doesn't flicker, see update_band_visibility
     band_visibility: [core.MAX_BANDS]f32,
@@ -61,19 +50,6 @@ StrobeDisplay :: struct {
     // what turned them and how, a change starts them over, see strobe_tracks
     tracks_lamp:     bool,
     tracks_mode:     core.StrobeMode,
-    // the scope beam's visibility, see draw_scope_display
-    scope_visibility: f32,
-    // the scope's screen for its shader, a byte a cell, see draw_scope_screen
-    scope_texture:    gfx.Texture,
-    scope_pixels:     []u8,
-    // the tracks turned by the lamp, see lamp_bands: each one's phase on the screen at the previous
-    // frame, at this reference and this sample, and the phase it turned to
-    lamp_phases:        [core.MAX_BANDS]f64,
-    lamp_freq_hz:       f64,
-    lamp_clock:         i64,
-    lamp_scaled_phases: [core.MAX_BANDS]f32,
-    // each column's brightness on the lamp as last lit, its top and its split bottom, see draw_lamp
-    lamp_held:          [SCOPE_COLUMNS][2]f32,
 
     // The track whose sheet is open, outlined while the others dim. selection fades it in and out with
     // the sheet, 0 is no selection.
@@ -229,93 +205,6 @@ init_strobe_display :: proc(background: u32) -> (self: StrobeDisplay) {
     return
 }
 
-destroy_strobe_display :: proc(self: ^StrobeDisplay) {
-    gfx.unload_texture(self.scope_texture)
-    delete(self.scope_pixels)
-    unload_glow_targets(self)
-}
-
-unload_glow_targets :: proc(self: ^StrobeDisplay) {
-    if self.glow_scale == 0 do return
-
-    gfx.unload_render_target(self.scene_rt)
-    for rt in self.bloom_rt {
-        gfx.unload_render_target(rt)
-    }
-    self.glow_scale = 0
-    self.glow_drawn = {}
-}
-
-// (Re)create the glow render targets, the scene is rendered at the display's DPI scale to stay sharp, the
-// bloom in the window's own points so the glow spreads the same at any UI scale
-ensure_glow_targets :: proc(self: ^StrobeDisplay, size: [2]f32) {
-    scale := gfx.dpi_scale()
-    bloom := size * gfx.ui_scale() / BLOOM_DOWNSCALE
-    if scale == self.glow_scale && size == self.glow_size && bloom == self.glow_bloom do return
-
-    unload_glow_targets(self)
-
-    // Rounded, a tablet's UI scale can leave 1365.9999 pixels
-    self.scene_rt = gfx.load_render_target(i32(math.round(size.x * scale)), i32(math.round(size.y * scale)))
-    for &rt in self.bloom_rt {
-        rt = gfx.load_render_target(i32(math.round(bloom.x)), i32(math.round(bloom.y)))
-    }
-    self.glow_scale = scale
-    self.glow_size = size
-    self.glow_bloom = bloom
-}
-
-// A view other than the strobe drawn with the glow, between begin_glow and end_glow: offscreen, as large
-// as rect and cut off outside it, then over the screen with its bloom added passes times over
-begin_glow :: proc(self: ^StrobeDisplay, rect: gfx.Rect, background: gfx.Color) {
-    ensure_glow_targets(self, {rect.width, rect.height})
-    gfx.begin_render_target(self.scene_rt, background, {rect.x, rect.y}, self.glow_scale)
-}
-
-end_glow :: proc(self: ^StrobeDisplay, rect: gfx.Rect, passes: int) {
-    gfx.end_render_target()
-    render_bloom(self)
-
-    // Not the strobe's any more
-    self.glow_drawn = {}
-
-    gfx.set_blend_mode(.REPLACE)
-    gfx.draw_render_target(self.scene_rt, rect)
-    gfx.set_blend_mode(.ADD)
-    for _ in 0 ..< passes {
-        gfx.draw_render_target(self.bloom_rt[0], rect)
-    }
-    gfx.set_blend_mode(.ALPHA)
-}
-
-// Separable gaussian blur, ping-pongs between the two targets and ends up in rts[0]
-blur_render_targets :: proc(
-    self: ^StrobeDisplay,
-    rts: [2]gfx.RenderTarget,
-    iterations: int,
-    tap_spacing: f32,
-) {
-    size := gfx.render_target_size(rts[0])
-    dest := gfx.Rect{0, 0, size.x, size.y}
-
-    uniforms := gfx.BloomUniforms {
-        mode = 1,
-    }
-    for _ in 0 ..< iterations {
-        uniforms.texel_step = {tap_spacing / size.x, 0}
-        gfx.set_shader_uniforms(.BLOOM, &uniforms)
-        gfx.begin_render_target(rts[1], nil)
-        gfx.draw_render_target(rts[0], dest)
-        gfx.end_render_target()
-
-        uniforms.texel_step = {0, tap_spacing / size.y}
-        gfx.set_shader_uniforms(.BLOOM, &uniforms)
-        gfx.begin_render_target(rts[0], nil)
-        gfx.draw_render_target(rts[1], dest)
-        gfx.end_render_target()
-    }
-}
-
 // The filter the lamp shines through, the hue scaled up to full brightness and squared to saturate it
 // (FF6767 -> 1.0, 0.16, 0.16). The same for the whole strobe, so the shader gets it ready made.
 glow_filter :: proc(color: u32) -> [3]f32 {
@@ -347,39 +236,16 @@ glow_background :: proc(background: gfx.Color, glow: GlowParams) -> gfx.Color {
     return gfx.color_from_normalized({lifted.r, lifted.g, lifted.b, 1})
 }
 
-render_bloom :: proc(self: ^StrobeDisplay) {
-    gfx.set_blend_mode(.REPLACE)
-    defer gfx.set_blend_mode(.ALPHA)
-
-    gfx.begin_shader(.BLOOM)
-    defer gfx.end_shader()
-
-    // Downsample and keep the bright parts
-    scene_size := gfx.render_target_size(self.scene_rt)
-    uniforms := gfx.BloomUniforms {
-        mode       = 0,
-        texel_step = 1.0 / scene_size,
-    }
-    gfx.set_shader_uniforms(.BLOOM, &uniforms)
-    bloom_size := gfx.render_target_size(self.bloom_rt[0])
-
-    // Each pass replaces every pixel of its target, nothing to clear
-    gfx.begin_render_target(self.bloom_rt[0], nil)
-    gfx.draw_render_target(self.scene_rt, {0, 0, bloom_size.x, bloom_size.y})
-    gfx.end_render_target()
-
-    blur_render_targets(self, self.bloom_rt, BLOOM_ITERATIONS, BLOOM_TAP_SPACING)
-}
-
 // See strobe_geometry for the layout. rect is the strobe's pane, turned sets the strobe into it a quarter
-// turn, see strobe_upright. bands are the comparator's, or the lamp's, see lamp_bands.
+// turn, see strobe_upright. bands are the lock-in's, or the lamp's, see core.strobe_lamp_bands.
 draw_strobe_display :: proc(
     self: ^StrobeDisplay,
+    targets: ^GlowTargets,
     rect: gfx.Rect,
     scale: f32,
     turned: bool,
     bands: []core.PhaseBand,
-    comparator: ^core.PhaseComparator,
+    lock_in: ^core.StrobeLockIn,
     config: ^Config,
 ) {
     shape := config.strobe_shape
@@ -412,21 +278,22 @@ draw_strobe_display :: proc(
     uniforms.glow_filter.rgb = glow_filter(glow.color)
     uniforms.glow_dark_filter.rgb = glow_filter(glow.dark_color) * glow.dark_level
     uniforms.highlight_color = gfx.normalize_color(accent_color)
-    tracks := strobe_tracks(self, upright, bands, comparator, config.strobe_source == .LAMP, config.persistence_periods, uniforms, geometry)
+    tracks := strobe_tracks(self, upright, bands, lock_in, config.strobe_source == .LAMP, config.persistence_periods, uniforms, geometry)
 
     if glow_enabled {
         // Render the strobe offscreen so the bright parts can bloom over the surroundings. A dark strobe
         // stays the same from frame to frame, what the render targets hold is drawn again.
-        ensure_glow_targets(self, {rect.width, rect.height})
-        frame := GlowFrame{rect, turned, self.glow_scale, glow_background(self.background, glow), tracks}
+        ensure_glow_targets(targets, {rect.width, rect.height})
+        frame := GlowFrame{rect, turned, targets.scale, glow_background(self.background, glow), tracks}
 
-        if frame != self.glow_drawn || gfx.last_frame_dropped() {
-            gfx.begin_render_target(self.scene_rt, frame.background, {rect.x, rect.y}, self.glow_scale)
+        if frame != self.glow_drawn || self.glow_version != targets.version || gfx.last_frame_dropped() {
+            gfx.begin_render_target(targets.scene_rt, frame.background, {rect.x, rect.y}, targets.scale)
             draw_strobe_tracks(self, &tracks, rect, turned)
             gfx.end_render_target()
 
-            render_bloom(self)
+            render_bloom(targets)
             self.glow_drawn = frame
+            self.glow_version = targets.version
         }
     }
 
@@ -435,12 +302,12 @@ draw_strobe_display :: proc(
 
     if glow_enabled {
         gfx.set_blend_mode(.REPLACE)
-        gfx.draw_render_target(self.scene_rt, rect)
+        gfx.draw_render_target(targets.scene_rt, rect)
 
         // Add the bloom on top, the light spills into the gaps and the dark background
         gfx.set_blend_mode(.ADD)
         strength := u8(BLOOM_STRENGTH * 255)
-        gfx.draw_render_target(self.bloom_rt[0], rect, {strength, strength, strength, 255})
+        gfx.draw_render_target(targets.bloom_rt[0], rect, {strength, strength, strength, 255})
         gfx.set_blend_mode(.ALPHA)
     } else {
         gfx.draw_rect({rect.x, rect.y}, {rect.width, rect.height}, self.background)
@@ -521,23 +388,23 @@ SHADOW_BOTTOM :: 4
 SHADOW_OVERHANG :: 2
 
 // The inner shadow that sets the strobe into the window, over the trace and the scope's views too
-draw_strobe_shadow :: proc(self: ^StrobeDisplay, strobe: gfx.Rect) {
+draw_strobe_shadow :: proc(strobe: gfx.Rect) {
     shape := gfx.Rect{strobe.x, strobe.y - SHADOW_TOP, strobe.width, strobe.height + SHADOW_TOP + SHADOW_BOTTOM}
-    draw_inner_shadow(self, strobe, shape)
+    draw_inner_shadow(strobe, shape)
 }
 
 // Just the bottom edge of the shadow, ending at bottom, where something covers the strobe from below
 // like the settings sheet. The sides of the shape are far out, the whole shadow has darkened them already.
-draw_strobe_bottom_shadow :: proc(self: ^StrobeDisplay, strobe: gfx.Rect, bottom: f32) {
+draw_strobe_bottom_shadow :: proc(strobe: gfx.Rect, bottom: f32) {
     EDGE :: 24 // enough for the darkening, the shade has faded out above it
     FAR :: 1000
     area := gfx.Rect{strobe.x, bottom + SHADOW_OVERHANG - EDGE, strobe.width, EDGE}
     shape := gfx.Rect{strobe.x - FAR, area.y - FAR, strobe.width + 2 * FAR, bottom + SHADOW_BOTTOM - area.y + FAR}
-    draw_inner_shadow(self, area, shape)
+    draw_inner_shadow(area, shape)
 }
 
 // Shades area along the inside of the rounded rectangle shape, see src/shaders/vulkan/shadow.frag
-draw_inner_shadow :: proc(self: ^StrobeDisplay, area: gfx.Rect, shape: gfx.Rect) {
+draw_inner_shadow :: proc(area: gfx.Rect, shape: gfx.Rect) {
     uniforms := gfx.ShadowUniforms {
         shape = {shape.x - area.x, shape.y - area.y, shape.x + shape.width - area.x, shape.y + shape.height - area.y},
         size  = {area.width, area.height},
@@ -661,7 +528,7 @@ strobe_tracks :: proc(
     self: ^StrobeDisplay,
     strobe_rect: gfx.Rect,
     bands: []core.PhaseBand,
-    comparator: ^core.PhaseComparator,
+    lock_in: ^core.StrobeLockIn,
     lamp: bool,
     persistence_periods: f32,
     shared: gfx.StrobeUniforms,
@@ -669,14 +536,14 @@ strobe_tracks :: proc(
 ) -> (
     tracks: StrobeTracks,
 ) {
-    mode := comparator.mode
+    mode := lock_in.mode
     curvature_radius := geometry.curvature_radius
     band_height := geometry.band_height
     period_count := geometry.period_count
     density := geometry.density
     tracks.count = len(bands)
 
-    stale := time.duration_seconds(time.tick_since(self.tracks_tick)) > STROBE_STALE_S
+    stale := time.duration_seconds(time.tick_since(self.tracks_tick)) > core.STROBE_STALE_S
     self.tracks_tick = time.tick_now()
 
     // The lamp's phase isn't the lock-in's, and a vernier track's stripes are packed tighter than a harmonic
@@ -715,7 +582,7 @@ strobe_tracks :: proc(
         // The shader multiplies the phase by the period count, a denser pattern turns slower to drift as
         // many stripes a second as the desktop's. Drawn as of now, see strobe_phase_ahead. Not the lamp's
         // tracks, they turn by the screen and the readout's rate isn't theirs, they'd jump back each chunk.
-        ahead := core.strobe_phase_ahead(comparator, band) if !lamp else 0
+        ahead := core.strobe_phase_ahead(lock_in, band) if !lamp else 0
         uniforms.phase = (band.scaled_phase + ahead) / density
 
         // The persistence smears the stripes and calms a jittery phase like the lamp's screen. Not the lamp's
@@ -740,11 +607,11 @@ strobe_tracks :: proc(
         if !lamp && persistence_periods > 0 {
             if band.onset do self.band_phasors[band_index] = 0
 
-            persistence_s := persistence_periods / comparator.base_freq_hz
+            persistence_s := persistence_periods / lock_in.base_freq_hz
 
             // How far the stripes moved this frame at the readout's rate, the whole frame however long it
             // took: a hitch moved them all the way
-            expected_step := core.strobe_phase_rate(comparator, band) * gfx.frame_time() / density
+            expected_step := core.strobe_phase_rate(lock_in, band) * gfx.frame_time() / density
             smear = strobe_persistence(&self.band_phasors[band_index], &uniforms.phase, drawn_phase^, expected_step, period_count, persistence_s, frame_time)
         }
 
@@ -757,7 +624,7 @@ strobe_tracks :: proc(
         // near 0.
         uniforms.phase = math.mod(uniforms.phase, math.TAU / period_count)
 
-        // Vernier tracks show the first one's measurement. The lamp's tracks are as far off as the comparator's.
+        // Vernier tracks show the first one's measurement. The lamp's tracks are as far off as the lock-in's.
         response: f32
         if mode == .VERNIER {
             first := bands[0]

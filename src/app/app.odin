@@ -51,8 +51,9 @@ App :: struct {
     config:             ^Config,
     tuner:              core.Tuner,
     pitch_detector:     core.PitchDetector, // follows the pitch standard, see apply_config
-    phase_comparator:   ^core.PhaseComparator,
+    strobe_lock_in:     ^core.StrobeLockIn,
     scope:              core.Scope, // of the scope and the lamp display types, and the tracks the lamp turns
+    strobe_lamp:        core.StrobeLamp, // the tracks the lamp turns, strobe_source LAMP
     audio_capture:      ^audio.Capture,
     audio_devices:      [dynamic]GuiOption,
     audio_device_index: int, // in audio_devices, picked on the input's sheet
@@ -60,7 +61,9 @@ App :: struct {
     refresh_inputs:     bool, // the list is made again, see follow_input
     default_label:      string, // the list's first input, see build_input_list
     input_menu:         int, // the Input menu, see setup_menu_bar
+    glow_targets:       GlowTargets, // shared by the displays that glow
     strobe_display:     StrobeDisplay,
+    scope_display:      ScopeDisplay, // the scope's and the lamp's views
     trace_display:      TraceDisplay,
     spectrum_display:   SpectrumDisplay,
 
@@ -148,12 +151,12 @@ run_app :: proc(config: ^Config) {
     gfx.load_shapes()
     defer gfx.unload_shapes()
 
-    app.phase_comparator = core.init_phase_comparator(
+    app.strobe_lock_in = core.init_strobe_lock_in(
         config.target_freq_hz,
         config.strobe_intervals[:],
         config.strobe_mode,
     )
-    defer core.destroy_phase_comparator(app.phase_comparator)
+    defer core.destroy_strobe_lock_in(app.strobe_lock_in)
 
     app.pitch_detector = core.init_pitch_detector(config.pitch_standard)
     defer core.destroy_pitch_detector(&app.pitch_detector)
@@ -161,8 +164,13 @@ run_app :: proc(config: ^Config) {
     app.scope = core.init_scope(SCOPE_COLUMNS, SCOPE_ROWS)
     defer core.destroy_scope(&app.scope)
 
+    // Made as the first glowing display draws, see ensure_glow_targets
+    defer unload_glow_targets(&app.glow_targets)
+
     app.strobe_display = init_strobe_display(strobe_bg_color)
-    defer destroy_strobe_display(&app.strobe_display)
+
+    app.scope_display = init_scope_display(strobe_bg_color)
+    defer destroy_scope_display(&app.scope_display)
 
     app.trace_display = init_trace_display()
     defer destroy_trace_display(&app.trace_display)
@@ -177,7 +185,7 @@ run_app :: proc(config: ^Config) {
     app.audio_capture = audio_capture
 
     audio.register_node(audio_capture, &app.pitch_detector)
-    audio.register_node(audio_capture, app.phase_comparator)
+    audio.register_node(audio_capture, app.strobe_lock_in)
     audio.register_node(audio_capture, &app.scope)
     audio.register_node(audio_capture, &app.spectrum_display)
     match_input_rate(&app)
@@ -194,7 +202,7 @@ run_app :: proc(config: ^Config) {
     when !gfx.MOBILE {
         gfx.live_resize_frames(proc(data: rawptr) {
             defer free_all(context.temp_allocator)
-            frame((^App)(data))
+            run_frame((^App)(data))
         }, &app)
     }
 
@@ -216,12 +224,12 @@ run_app :: proc(config: ^Config) {
             }
         }
 
-        frame(&app)
+        run_frame(&app)
     }
 }
 
 // A turn of the main loop after its events: the measurements, the layout and the drawing
-frame :: proc(app: ^App) {
+run_frame :: proc(app: ^App) {
     config, audio_capture := app.config, app.audio_capture
     if audio.interruption_ended(audio_capture) do app.restart_audio = true
 
@@ -299,15 +307,15 @@ retune :: proc(app: ^App) {
     config := app.config
     app.traced_track = -1 // the tracks are at another note now
     app.held_readout = {}
-    app.phase_comparator.readout_fit_s = config.readout_fit_s
-    core.set_phase_comparator_tracks(
-        app.phase_comparator,
+    app.strobe_lock_in.readout_fit_s = config.readout_fit_s
+    core.set_strobe_lock_in_tracks(
+        app.strobe_lock_in,
         config.strobe_intervals[:],
         config.strobe_offsets_cents[:],
         config.strobe_speeds[:],
     )
-    core.set_phase_comparator_freq(
-        app.phase_comparator,
+    core.set_strobe_lock_in_freq(
+        app.strobe_lock_in,
         core.tuner_target_freq(&app.tuner),
         config.pitch_standard,
         strobe_speed(config),
@@ -415,10 +423,10 @@ handle_keys :: proc(app: ^App) {
     // The screens' persistence follows, as many periods as the band's window, so the lamp's tracks narrow along
     // with the lock-in's and the two can be compared like for like.
     if plain && gfx.key_pressed(.W) {
-        comparator := app.phase_comparator
-        comparator.band_cents = comparator.band_cents / 2 if comparator.band_cents > 25 else core.DFT_RESOLUTION_CENTS
-        config.persistence_periods = 1 / (math.pow(f32(2), f32(comparator.band_cents) / 1200) - 1)
-        fmt.printfln("Strobe band: %d cents, persistence %.0f periods", comparator.band_cents, config.persistence_periods)
+        lock_in := app.strobe_lock_in
+        lock_in.band_cents = lock_in.band_cents / 2 if lock_in.band_cents > 25 else core.DFT_RESOLUTION_CENTS
+        config.persistence_periods = 1 / (math.pow(f32(2), f32(lock_in.band_cents) / 1200) - 1)
+        fmt.printfln("Strobe band: %d cents, persistence %.0f periods", lock_in.band_cents, config.persistence_periods)
         retune(app)
     }
 
@@ -465,13 +473,13 @@ update_in_tune_tap :: proc(app: ^App, reading: Reading) {
 measure :: proc(app: ^App) -> (reading: Reading) {
     tuner := &app.tuner
     reading.pitch = core.run_pitch_detection(&app.pitch_detector, tuner.pitch)
-    core.run_phase_detection(app.phase_comparator, reading.pitch.is_tonal)
+    core.run_phase_detection(app.strobe_lock_in, reading.pitch.is_tonal)
 
     // The track the readout follows. The strobe keeps the note lit while it shows it. Retuned to another note the
     // tracks start over, their reading was from the note before.
     ready: bool
-    app.readout_track, ready = core.strobe_readout_track(app.phase_comparator, app.readout_track)
-    if core.update_tuner(tuner, reading.pitch, core.strobe_shows_note(app.phase_comparator)) {
+    app.readout_track, ready = core.strobe_readout_track(app.strobe_lock_in, app.readout_track)
+    if core.update_tuner(tuner, reading.pitch, core.strobe_shows_note(app.strobe_lock_in)) {
         retune(app)
         ready = false
     }
@@ -485,10 +493,10 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     // fading note keeps its track's last reading, also once the tuner lets go of it.
     steady := &reading.steady
     reading.strobe_readout = ready && !reading.out_of_range
-    reading.strobe_readout &&= abs(app.phase_comparator.bands[app.readout_track].err_cents) <= core.READOUT_RANGE_CENTS
+    reading.strobe_readout &&= abs(app.strobe_lock_in.bands[app.readout_track].err_cents) <= core.READOUT_RANGE_CENTS
 
     if reading.strobe_readout {
-        band := app.phase_comparator.bands[app.readout_track]
+        band := app.strobe_lock_in.bands[app.readout_track]
         steady.detected_freq = core.freq_at_cents(steady.detected_freq, band.err_cents - steady.err_cents)
         steady.err_cents = band.err_cents
     }
@@ -513,7 +521,7 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     traced_cents := math.nan_f32()
 
     if app.traced_track >= 0 {
-        band := app.phase_comparator.bands[app.traced_track]
+        band := app.strobe_lock_in.bands[app.traced_track]
         fade := core.STROBE_FADE_SNR_DB
         light = math.smoothstep(fade[0], fade[1], band.snr_db)
         if light == 0 || !band.in_range do app.traced_track = -1
@@ -527,7 +535,7 @@ measure :: proc(app: ^App) -> (reading: Reading) {
 
     // The spectrum of what came in, only while it's the display
     config := app.config
-    if config.strobe_display_type == .SPECTRUM do update_spectrum_display(&app.spectrum_display,config.spectrum_windows)
+    if config.strobe_display_type == .SPECTRUM do update_spectrum_display(&app.spectrum_display, config.spectrum_windows)
 
     return
 }
@@ -544,13 +552,13 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
         core.skip_scope(scope)
 
         // The lamp's tracks start over on a dark screen too, the phases they turned by are stale
-        app.strobe_display.lamp_freq_hz = 0
+        app.strobe_lamp.freq_hz = 0
         return
     }
 
     // At the strobe's frequency, not the target note's: that one jumps an octave with the detection while
     // the strobe stays, and every change starts with a dark screen
-    strobe_hz := f64(app.phase_comparator.base_freq_hz)
+    strobe_hz := f64(app.strobe_lock_in.base_freq_hz)
     if scope.freq_hz != strobe_hz do core.set_scope_freq(scope, strobe_hz)
 
     // The lamp is the screen from above, it needs the sweep over time, and so do the tracks it turns
@@ -590,7 +598,7 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
         rows = max(rows, option_rows[app.config.strobe_display_type])
     }
 
-    sheet_layout, swiped := begin_sheet(sheet, rows, &app.strobe_display, layout)
+    sheet_layout, swiped := begin_sheet(sheet, rows, layout)
     close, changed := gui_settings(sheet_layout, app.config, &app.display_options, &app.reset_confirm, &app.open_dropdown)
     if changed do app.config_changed = true
 
@@ -647,7 +655,7 @@ draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
     device_name := "No input"
     if audio.device_count(capture) > 0 do device_name = audio.device_name(capture, capture.active_device)
 
-    sheet_layout, swiped := begin_sheet(sheet, INPUT_ROWS, &app.strobe_display, layout)
+    sheet_layout, swiped := begin_sheet(sheet, INPUT_ROWS, layout)
     close := gui_input(
         sheet_layout,
         device_name,
@@ -670,8 +678,8 @@ draw_track_sheet :: proc(app: ^App, layout: Layout) {
     if sheet.slide == 0 do return
 
     config := app.config
-    bands := app.phase_comparator.bands[:]
-    sheet_layout, swiped := begin_sheet(sheet, TRACK_SETTINGS_ROWS, &app.strobe_display, layout)
+    bands := app.strobe_lock_in.bands[:]
+    sheet_layout, swiped := begin_sheet(sheet, TRACK_SETTINGS_ROWS, layout)
     app.selected_track = min(app.selected_track, len(bands) - 1)
     close, changed := gui_track_settings(sheet_layout, config, app.selected_track, bands[app.selected_track])
     if changed do app.config_changed = true
@@ -693,7 +701,7 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
     if sheet.slide == 0 do return
 
     // Over the whole window, room for every note offset of a preset
-    sheet_layout, swiped := begin_sheet(sheet, 0, &app.strobe_display, layout, gfx.window_size().y)
+    sheet_layout, swiped := begin_sheet(sheet, 0, layout, gfx.window_size().y)
 
     // A new offset starts on the note the tuner is on
     target := -1
@@ -751,7 +759,7 @@ follow_window_size :: proc(config: ^Config, window: [2]f32) {
 // pitch detection still runs often enough to wake it up.
 limit_frame_rate :: proc(app: ^App) {
     signal := app.tuner.active
-    for band in app.phase_comparator.bands {
+    for band in app.strobe_lock_in.bands {
         if band.snr_db > core.STROBE_FADE_SNR_DB[0] do signal = true
     }
     touched := gfx.mouse_down() || gfx.mouse_pressed() || gfx.mouse_wheel() != 0

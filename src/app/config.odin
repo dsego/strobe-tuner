@@ -47,7 +47,7 @@ StrobeShape :: enum {
 // What turns the tracks
 StrobeSource :: enum {
     LOCK_IN, // each track's DFT on the samples, against a reference at its partial, see src/core/phase.odin
-    LAMP, // the lamp's screen, a DFT bin of it for each track's partial, see lamp_bands
+    LAMP, // the lamp's screen, a DFT bin of it for each track's partial, see core.strobe_lamp_bands
 }
 
 // The track presets the I key steps through

@@ -143,7 +143,6 @@ close_sheet :: proc(sheet: ^Sheet) {
 begin_sheet :: proc(
     sheet: ^Sheet,
     rows: int,
-    strobe_display: ^StrobeDisplay,
     layout: Layout,
     extra: f32 = 0,
 ) -> (
@@ -184,7 +183,7 @@ begin_sheet :: proc(
 
     // The strobe looks set into the window above the sheet like above the panel, and the edge shades the
     // panel on the way up. A sheet beside the strobe doesn't reach it.
-    if !layout.beside do draw_strobe_bottom_shadow(strobe_display, layout.strobe, sheet_layout.sheet.y)
+    if !layout.beside do draw_strobe_bottom_shadow(layout.strobe, sheet_layout.sheet.y)
 
     return
 }
