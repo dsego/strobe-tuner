@@ -403,7 +403,7 @@ gui_offset_popup :: proc(rows: OffsetRows, grid: OffsetGrid, editing: NoteOffset
     inset: f32 = OFFSET_POPUP_RADIUS + POINT_WIDTH / 2 // off the round corners
     tip_x := clamp(offset_popup_anchor(grid, editing.popup), rect.x + inset, rect.x + rect.width - inset)
     under := rect.y > offset_row_y(grid, row)
-    line_height := 1 / pixel_fonts.scale
+    line_height := 1 / pixel_font_scale
     for offset: f32 = 0; offset < POINT_HEIGHT; offset += line_height {
         half := POINT_WIDTH / 2 * (1 - offset / POINT_HEIGHT)
         y := rect.y - offset - line_height if under else rect.y + rect.height + offset

@@ -103,46 +103,44 @@ lerp_font :: proc(small, large: PixelFont, amount: f32) -> PixelFont {
 }
 
 PixelFonts :: struct {
-    scale:       f32, // the DPI scale they were loaded for
-    using fonts: struct {
-        label:            PixelFont,
-        label_large:      PixelFont,
-        label_small:      PixelFont,
-        label_times:      PixelFont, // the × after a label's digits, Inter's is only as tall as a lowercase letter
-        title:            PixelFont,
-        icon:             PixelFont,
-        icon_large:       PixelFont,
-        icon_large_bold:  PixelFont, // the large steppers
-        icon_sheet:       PixelFont, // the sheet's ✕, ‹ and ›
-        note:             PixelFont, // the ruler's target note
-        neighbour:        PixelFont,
-        octave:           PixelFont,
-        note_sharp:       PixelFont,
-        neighbour_sharp:  PixelFont,
-        note_flat:        PixelFont,
-        neighbour_flat:   PixelFont,
-        readout:          PixelFont,
-        strobe_arrow:     PixelFont,
-        offset_value:     PixelFont,
-        band_label:       PixelFont, // each track's partial and cents on the strobe
-        band_label_small: PixelFont, // a track's frequency and its offset
-    },
+    label:            PixelFont,
+    label_large:      PixelFont,
+    label_small:      PixelFont,
+    label_times:      PixelFont, // the × after a label's digits, Inter's is only as tall as a lowercase letter
+    title:            PixelFont,
+    icon:             PixelFont,
+    icon_large:       PixelFont,
+    icon_large_bold:  PixelFont, // the large steppers
+    icon_sheet:       PixelFont, // the sheet's ✕, ‹ and ›
+    note:             PixelFont, // the ruler's target note
+    neighbour:        PixelFont,
+    octave:           PixelFont,
+    note_sharp:       PixelFont,
+    neighbour_sharp:  PixelFont,
+    note_flat:        PixelFont,
+    neighbour_flat:   PixelFont,
+    readout:          PixelFont,
+    strobe_arrow:     PixelFont,
+    offset_value:     PixelFont,
+    band_label:       PixelFont, // each track's partial and cents on the strobe
+    band_label_small: PixelFont, // a track's frequency and its offset
 }
 
 // The fonts one after the other, unloaded in a loop
-FONT_COUNT :: size_of(PixelFonts{}.fonts) / size_of(PixelFont)
-#assert(FONT_COUNT * size_of(PixelFont) == size_of(PixelFonts{}.fonts))
+FONT_COUNT :: size_of(PixelFonts) / size_of(PixelFont)
+#assert(FONT_COUNT * size_of(PixelFont) == size_of(PixelFonts))
 
 pixel_fonts: PixelFonts
+pixel_font_scale: f32 // the DPI scale the fonts were loaded for, 0 before the first load
 
 // Called before the frame starts, reloads when the window moves to a screen with another scale or a tablet's
 // size changes the UI scale, see ui_scale. Not during a drag, where the fonts at the old scale draw a little
 // scaled until it's over, macOS.
 update_pixel_fonts :: proc() {
     scale := gfx.dpi_scale()
-    if scale == pixel_fonts.scale do return
+    if scale == pixel_font_scale do return
 
-    if pixel_fonts.scale != 0 && gfx.resizing() do return
+    if pixel_font_scale != 0 && gfx.resizing() do return
 
     unload_pixel_fonts()
 
@@ -158,8 +156,8 @@ update_pixel_fonts :: proc() {
         return {gfx.load_font(ttf, i32(pixels), codepoints), pixels / scale}
     }
 
-    pixel_fonts.scale = scale
-    pixel_fonts.fonts = {
+    pixel_font_scale = scale
+    pixel_fonts = {
         label            = load(inter_medium, LABEL_SIZE, scale, FONT_CODEPOINTS),
         label_large      = load(inter_medium, LABEL_LARGE_SIZE, scale, FONT_CODEPOINTS),
         label_small      = load(inter_medium, LABEL_SMALL_SIZE, scale, FONT_CODEPOINTS),
@@ -185,17 +183,18 @@ update_pixel_fonts :: proc() {
 }
 
 unload_pixel_fonts :: proc() {
-    if pixel_fonts.scale == 0 do return
+    if pixel_font_scale == 0 do return
 
-    fonts := transmute([FONT_COUNT]PixelFont)pixel_fonts.fonts
+    fonts := transmute([FONT_COUNT]PixelFont)pixel_fonts
     for pixel_font in fonts do gfx.unload_font(pixel_font.font)
 
     pixel_fonts = {}
+    pixel_font_scale = 0
 }
 
 // Whole pixels on this screen, so text drawn at a pixel font's size lands texel for pixel
 snap_to_pixels :: proc(position: [2]f32) -> [2]f32 {
-    scale := pixel_fonts.scale
+    scale := pixel_font_scale
     return {math.round(position.x * scale), math.round(position.y * scale)} / scale
 }
 
