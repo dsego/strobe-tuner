@@ -102,7 +102,7 @@ Pass :: struct {
     offscreen:     bool, // into a render target, not the window
     target:        ^sdl.GPUTexture, // the render target's, nil for one that couldn't be made: its draws are dropped
     target_size:   [2]f32, // in pixels
-    clear:         Maybe(Color), // a target's, or the draws cover all of it, the window clears to gpu.clear
+    clear:         Maybe(Color), // a target's, or the draws cover all of it, the window clears to gpu.drawing.clear
     offset:        [2]f32,
     zoom:          f32,
     first_command: int,
@@ -170,8 +170,27 @@ scancodes := [Key]sdl.Scancode {
     .RIGHT_CONTROL = .RCTRL,
 }
 
+// What the frame draws, filled by the draw calls and sent to the GPU by end_frame
+GpuFrame :: struct {
+    vertices:        [dynamic]Vertex,
+    commands:        [dynamic]DrawCommand,
+    passes:          [dynamic]Pass,
+    uniform_data:    [dynamic]u8,
+    texture_pixels:  [dynamic]u8, // the textures updated this frame, see update_texture
+    texture_uploads: [dynamic]TextureUpload,
+}
+
+// What the next draw call is drawn with
+DrawingState :: struct {
+    program:        Program,
+    blend:          BlendMode,
+    scissor:        Maybe(Rect),
+    window_scissor: Maybe(Rect), // the window's while a render target is drawn, see begin_render_target
+    uniforms:       [Program]UniformRange,
+    clear:          Color,
+}
+
 gpu: struct {
-    window:           ^sdl.Window,
     device:           ^sdl.GPUDevice,
     window_format:    sdl.GPUTextureFormat,
     vertex_shader:    ^sdl.GPUShader,
@@ -187,44 +206,51 @@ gpu: struct {
     texture_transfer: ^sdl.GPUTransferBuffer,
     texture_capacity: int,
 
-    // this frame
-    vertices:         [dynamic]Vertex,
-    commands:         [dynamic]DrawCommand,
-    passes:           [dynamic]Pass,
-    uniform_data:     [dynamic]u8,
-    texture_pixels:   [dynamic]u8, // the textures updated this frame, see update_texture
-    texture_uploads:  [dynamic]TextureUpload,
+    frame:            GpuFrame,
+    drawing:          DrawingState,
 
-    // drawing state
-    program:          Program,
-    blend:            BlendMode,
-    scissor:          Maybe(Rect),
-    window_scissor:   Maybe(Rect), // the window's while a render target is drawn, see begin_render_target
-    uniforms:         [Program]UniformRange,
-    clear:            Color,
-    acquire_failed:   bool, // the last frame's swapchain, reported once
-    dropped:          bool, // the last frame wasn't drawn, the render targets hold what they had before it
-    ui_scale:         f32, // the window's points per drawing point, see set_ui_scale
-
-    // input
-    quit:             bool,
-    background:       bool, // set by watch_app_events, on whichever thread SDL pushes the event from
-    max_fps:          int, // see limit_fps
-    keys_pressed:     bit_set[Key],
-    mouse_clicked:    bool,
-    touch:            bool, // the last press was a finger, see touch_input
-    wheel:            f32,
-    last_counter:     u64,
-    frame_time:       f32,
-
-    // The desktop window dragged to another size or a menu open, see live_resize_frames
-    live_resize_frame:   proc(data: rawptr),
-    live_resize_data:    rawptr,
-    live_resize_context: runtime.Context,
-    resizing:            bool, // in a frame drawn from the OS's own loop
-    polling:             bool, // in should_close, where the main loop is stuck while the OS runs a drag, a zoom or a menu
-    drag_tick:           u64, // the last tick of the drag's timer, in milliseconds
+    // the last frame
+    acquire_failed:   bool, // its swapchain, reported once
+    dropped:          bool, // it wasn't drawn, the render targets hold what they had before it
 }
+
+Window :: struct {
+    handle:     ^sdl.Window,
+    ui_scale:   f32, // the window's points per drawing point, see set_ui_scale
+    quit:       bool,
+    background: bool, // set by watch_app_events, on whichever thread SDL pushes the event from
+}
+
+window: Window
+
+Input :: struct {
+    keys_pressed:  bit_set[Key],
+    mouse_clicked: bool,
+    touch:         bool, // the last press was a finger, see touch_input
+    wheel:         f32,
+}
+
+input: Input
+
+Clock :: struct {
+    last_counter: u64,
+    frame_time:   f32,
+    max_fps:      int, // see limit_fps
+}
+
+clock: Clock
+
+// The desktop window dragged to another size or a menu open, see live_resize_frames
+LiveResize :: struct {
+    frame:         proc(data: rawptr),
+    data:          rawptr,
+    frame_context: runtime.Context,
+    resizing:      bool, // in a frame drawn from the OS's own loop
+    polling:       bool, // in should_close, where the main loop is stuck while the OS runs a drag, a zoom or a menu
+    drag_tick:     u64, // the last tick of the drag's timer, in milliseconds
+}
+
+live_resize: LiveResize
 
 // On the desktop the window can be resized down to min_size, none keeps it the size it opened at, and opens
 // with its top left corner at position, none or off every display in the middle of the main one. A phone's
@@ -234,7 +260,7 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}, position
         fmt.eprintln("SDL_Init failed:", sdl.GetError())
         return false
     }
-    gpu.ui_scale = 1
+    window.ui_scale = 1
 
     // Without it SDL picks the orientation from the window's aspect ratio, landscape for the
     // desktop sizes, and keeps rotating the phone away from portrait. On iOS it asks for all four and
@@ -270,26 +296,26 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}, position
     }
 
     // Hidden until it's where it goes
-    gpu.window = sdl.CreateWindow(title, size.x, size.y, {.HIGH_PIXEL_DENSITY, .HIDDEN})
-    if gpu.window == nil {
+    window.handle = sdl.CreateWindow(title, size.x, size.y, {.HIGH_PIXEL_DENSITY, .HIDDEN})
+    if window.handle == nil {
         fmt.eprintln("SDL_CreateWindow failed:", sdl.GetError())
         return false
     }
     when !MOBILE {
-        if placed do sdl.SetWindowPosition(gpu.window, corner.x, corner.y)
+        if placed do sdl.SetWindowPosition(window.handle, corner.x, corner.y)
     }
-    sdl.ShowWindow(gpu.window)
+    sdl.ShowWindow(window.handle)
 
     when !MOBILE {
         if min_size.x > 0 || min_size.y > 0 {
-            sdl.SetWindowResizable(gpu.window, true)
-            sdl.SetWindowMinimumSize(gpu.window, min_size.x, min_size.y)
+            sdl.SetWindowResizable(window.handle, true)
+            sdl.SetWindowMinimumSize(window.handle, min_size.x, min_size.y)
         }
     }
 
     if !init_gpu() do return false
 
-    gpu.last_counter = sdl.GetPerformanceCounter()
+    clock.last_counter = sdl.GetPerformanceCounter()
     return true
 }
 
@@ -302,12 +328,12 @@ init_gpu :: proc() -> bool {
         return false
     }
 
-    if !sdl.ClaimWindowForGPUDevice(gpu.device, gpu.window) {
+    if !sdl.ClaimWindowForGPUDevice(gpu.device, window.handle) {
         fmt.eprintln("SDL_ClaimWindowForGPUDevice failed:", sdl.GetError())
         return false
     }
-    _ = sdl.SetGPUSwapchainParameters(gpu.device, gpu.window, .SDR, .VSYNC)
-    gpu.window_format = sdl.GetGPUSwapchainTextureFormat(gpu.device, gpu.window)
+    _ = sdl.SetGPUSwapchainParameters(gpu.device, window.handle, .SDR, .VSYNC)
+    gpu.window_format = sdl.GetGPUSwapchainTextureFormat(gpu.device, window.handle)
 
     if !create_shaders() || !create_pipelines() || !create_sampler() do return false
 
@@ -398,7 +424,14 @@ fit_to_display :: proc(size: [2]i32, display: sdl.DisplayID) -> [2]i32 {
 }
 
 shutdown :: proc() {
-    gpu.live_resize_frame = nil
+    destroy_gpu()
+
+    sdl.DestroyWindow(window.handle)
+    sdl.Quit()
+}
+
+// What init_gpu made in reverse, and the buffers and lists the frames made, once the GPU is done with them
+destroy_gpu :: proc() {
     _ = sdl.WaitForGPUIdle(gpu.device)
 
     unload_texture(gpu.white)
@@ -417,90 +450,88 @@ shutdown :: proc() {
     }
     if gpu.texture_transfer != nil do sdl.ReleaseGPUTransferBuffer(gpu.device, gpu.texture_transfer)
 
-    delete(gpu.vertices)
-    delete(gpu.commands)
-    delete(gpu.passes)
-    delete(gpu.uniform_data)
-    delete(gpu.texture_pixels)
-    delete(gpu.texture_uploads)
+    delete(gpu.frame.vertices)
+    delete(gpu.frame.commands)
+    delete(gpu.frame.passes)
+    delete(gpu.frame.uniform_data)
+    delete(gpu.frame.texture_pixels)
+    delete(gpu.frame.texture_uploads)
 
-    sdl.ReleaseWindowFromGPUDevice(gpu.device, gpu.window)
+    sdl.ReleaseWindowFromGPUDevice(gpu.device, window.handle)
     sdl.DestroyGPUDevice(gpu.device)
-    sdl.DestroyWindow(gpu.window)
-    sdl.Quit()
 }
 
 should_close :: proc() -> bool {
-    gpu.keys_pressed = {}
-    gpu.mouse_clicked = false
-    gpu.wheel = 0
+    input.keys_pressed = {}
+    input.mouse_clicked = false
+    input.wheel = 0
 
     event: sdl.Event
-    gpu.polling = true
+    live_resize.polling = true
     for sdl.PollEvent(&event) {
         #partial switch event.type {
         case .QUIT, .WINDOW_CLOSE_REQUESTED:
-            gpu.quit = true
+            window.quit = true
         case .KEY_DOWN:
             if event.key.repeat do break
 
             for scancode, key in scancodes {
-                if scancode == event.key.scancode do gpu.keys_pressed += {key}
+                if scancode == event.key.scancode do input.keys_pressed += {key}
             }
 
             // Android's back button, see system_back
-            if event.key.scancode == .AC_BACK do gpu.keys_pressed += {.ESCAPE}
+            if event.key.scancode == .AC_BACK do input.keys_pressed += {.ESCAPE}
         case .MOUSE_BUTTON_DOWN:
-            if event.button.button == sdl.BUTTON_LEFT do gpu.mouse_clicked = true
+            if event.button.button == sdl.BUTTON_LEFT do input.mouse_clicked = true
 
-            gpu.touch = event.button.which == sdl.TOUCH_MOUSEID
+            input.touch = event.button.which == sdl.TOUCH_MOUSEID
         case .MOUSE_WHEEL:
             // Undo natural scrolling, scrolling up always means up
-            gpu.wheel += -event.wheel.y if event.wheel.direction == .FLIPPED else event.wheel.y
+            input.wheel += -event.wheel.y if event.wheel.direction == .FLIPPED else event.wheel.y
         }
     }
-    gpu.polling = false
+    live_resize.polling = false
 
     tick_clock()
-    return gpu.quit
+    return window.quit
 }
 
 // The frame's start, frame_time is since the previous one's
 tick_clock :: proc() {
     counter := sdl.GetPerformanceCounter()
-    gpu.frame_time = f32(f64(counter - gpu.last_counter) / f64(sdl.GetPerformanceFrequency()))
-    gpu.last_counter = counter
+    clock.frame_time = f32(f64(counter - clock.last_counter) / f64(sdl.GetPerformanceFrequency()))
+    clock.last_counter = counter
 }
 
 in_background :: proc() -> bool {
-    return intrinsics.atomic_load(&gpu.background)
+    return intrinsics.atomic_load(&window.background)
 }
 
 // Blocks until the app is back in front, or quit
 wait_for_foreground :: proc() {
     event: sdl.Event
-    for intrinsics.atomic_load(&gpu.background) && !gpu.quit {
-        if sdl.WaitEvent(&event) && event.type == .QUIT do gpu.quit = true
+    for intrinsics.atomic_load(&window.background) && !window.quit {
+        if sdl.WaitEvent(&event) && event.type == .QUIT do window.quit = true
     }
 
     // Not a frame that took as long as the app was away
-    gpu.last_counter = sdl.GetPerformanceCounter()
+    clock.last_counter = sdl.GetPerformanceCounter()
 }
 
 // A desktop window minimized or covered by other windows, nothing of it would show
 window_hidden :: proc() -> bool {
-    return sdl.GetWindowFlags(gpu.window) & {.MINIMIZED, .HIDDEN, .OCCLUDED} != {}
+    return sdl.GetWindowFlags(window.handle) & {.MINIMIZED, .HIDDEN, .OCCLUDED} != {}
 }
 
 // Blocks until the window shows again, or quit
 wait_while_hidden :: proc() {
     event: sdl.Event
-    for window_hidden() && !gpu.quit {
-        if sdl.WaitEvent(&event) && (event.type == .QUIT || event.type == .WINDOW_CLOSE_REQUESTED) do gpu.quit = true
+    for window_hidden() && !window.quit {
+        if sdl.WaitEvent(&event) && (event.type == .QUIT || event.type == .WINDOW_CLOSE_REQUESTED) do window.quit = true
     }
 
     // Not a frame that took as long as the window was hidden
-    gpu.last_counter = sdl.GetPerformanceCounter()
+    clock.last_counter = sdl.GetPerformanceCounter()
 }
 
 // The last frame wasn't drawn, what was drawn into the render targets during it isn't there
@@ -519,9 +550,9 @@ watch_app_events :: proc "c" (userdata: rawptr, event: ^sdl.Event) -> bool {
     // Center or the microphone permission alert, and it may keep drawing then
     #partial switch event.type {
     case .DID_ENTER_BACKGROUND:
-        intrinsics.atomic_store(&gpu.background, true)
+        intrinsics.atomic_store(&window.background, true)
     case .WILL_ENTER_FOREGROUND:
-        intrinsics.atomic_store(&gpu.background, false)
+        intrinsics.atomic_store(&window.background, false)
     }
     return true
 }
@@ -531,9 +562,9 @@ watch_app_events :: proc "c" (userdata: rawptr, event: ^sdl.Event) -> bool {
 // frame draws one with begin_frame and end_frame, as a turn of the main loop does after should_close. An
 // open menu of the menu bar is the same, see start_menu_frames.
 live_resize_frames :: proc(frame: proc(data: rawptr), data: rawptr) {
-    gpu.live_resize_frame = frame
-    gpu.live_resize_data = data
-    gpu.live_resize_context = context
+    live_resize.frame = frame
+    live_resize.data = data
+    live_resize.frame_context = context
     start_menu_frames()
 }
 
@@ -543,15 +574,15 @@ live_resize_frames :: proc(frame: proc(data: rawptr), data: rawptr) {
 DRAG_TIMER_MS :: 50 // the drag's timer ticks every 16 ms, a resize this soon after a tick is the drag's
 
 watch_live_resize :: proc "c" (userdata: rawptr, event: ^sdl.Event) -> bool {
-    if gpu.live_resize_frame == nil || !gpu.polling || gpu.resizing do return true
+    if live_resize.frame == nil || !live_resize.polling || live_resize.resizing do return true
 
     #partial switch event.type {
     case .WINDOW_EXPOSED:
         if event.window.data1 != 1 do return true
 
-        gpu.drag_tick = sdl.GetTicks()
+        live_resize.drag_tick = sdl.GetTicks()
     case .WINDOW_RESIZED:
-        if sdl.GetTicks() - gpu.drag_tick < DRAG_TIMER_MS do return true
+        if sdl.GetTicks() - live_resize.drag_tick < DRAG_TIMER_MS do return true
     case:
         return true
     }
@@ -563,29 +594,29 @@ watch_live_resize :: proc "c" (userdata: rawptr, event: ^sdl.Event) -> bool {
 // A frame from inside the OS's loop, a drag's, a zoom's or an open menu's. The keys and clicks polled before
 // it are its own, the main loop's next frame would take them again.
 draw_from_os_loop :: proc "c" () {
-    context = gpu.live_resize_context
-    gpu.resizing = true
+    context = live_resize.frame_context
+    live_resize.resizing = true
     tick_clock()
-    gpu.live_resize_frame(gpu.live_resize_data)
-    gpu.resizing = false
+    live_resize.frame(live_resize.data)
+    live_resize.resizing = false
 
-    gpu.keys_pressed = {}
-    gpu.mouse_clicked = false
-    gpu.wheel = 0
+    input.keys_pressed = {}
+    input.mouse_clicked = false
+    input.wheel = 0
 }
 
 begin_frame :: proc(clear: Color) {
-    clear_dynamic_array(&gpu.vertices)
-    clear_dynamic_array(&gpu.commands)
-    clear_dynamic_array(&gpu.passes)
-    clear_dynamic_array(&gpu.uniform_data)
-    clear_dynamic_array(&gpu.texture_pixels)
-    clear_dynamic_array(&gpu.texture_uploads)
-    gpu.program = .SPRITE
-    gpu.blend = .ALPHA
-    gpu.scissor = nil
-    gpu.uniforms = {}
-    gpu.clear = clear
+    clear_dynamic_array(&gpu.frame.vertices)
+    clear_dynamic_array(&gpu.frame.commands)
+    clear_dynamic_array(&gpu.frame.passes)
+    clear_dynamic_array(&gpu.frame.uniform_data)
+    clear_dynamic_array(&gpu.frame.texture_pixels)
+    clear_dynamic_array(&gpu.frame.texture_uploads)
+    gpu.drawing = {
+        program = .SPRITE,
+        blend   = .ALPHA,
+        clear   = clear,
+    }
 
     begin_window_pass()
 }
@@ -658,7 +689,7 @@ acquire_command_buffer :: proc() -> ^sdl.GPUCommandBuffer {
 // is reported once, it can fail every frame while Android tears the surface down.
 acquire_swapchain :: proc(command_buffer: ^sdl.GPUCommandBuffer) -> (swapchain: ^sdl.GPUTexture, size: [2]f32) {
     width, height: u32
-    acquired := sdl.WaitAndAcquireGPUSwapchainTexture(command_buffer, gpu.window, &swapchain, &width, &height)
+    acquired := sdl.WaitAndAcquireGPUSwapchainTexture(command_buffer, window.handle, &swapchain, &width, &height)
     if !acquired && !gpu.acquire_failed {
         fmt.eprintln("SDL_WaitAndAcquireGPUSwapchainTexture failed:", sdl.GetError())
     }
@@ -672,7 +703,7 @@ acquire_swapchain :: proc(command_buffer: ^sdl.GPUCommandBuffer) -> (swapchain: 
 // between each render target would move the full screen through memory every time. The window is
 // never sampled, and each target is finished before the window draws it, the order stays right.
 draw_render_targets :: proc(command_buffer: ^sdl.GPUCommandBuffer) {
-    for pass, pass_index in gpu.passes {
+    for pass, pass_index in gpu.frame.passes {
         if !pass.offscreen || pass.target == nil do continue
 
         commands := pass_commands(pass_index)
@@ -698,10 +729,10 @@ draw_render_targets :: proc(command_buffer: ^sdl.GPUCommandBuffer) {
 draw_window :: proc(command_buffer: ^sdl.GPUCommandBuffer, swapchain: ^sdl.GPUTexture, size: [2]f32) {
     // Drawing points to the swapchain's pixels: the display's density and the UI scale
     logical_w: i32
-    sdl.GetWindowSize(gpu.window, &logical_w, nil)
-    zoom := size.x / f32(max(logical_w, 1)) * gpu.ui_scale
+    sdl.GetWindowSize(window.handle, &logical_w, nil)
+    zoom := size.x / f32(max(logical_w, 1)) * window.ui_scale
 
-    clear := normalize_color(gpu.clear)
+    clear := normalize_color(gpu.drawing.clear)
     color_target := sdl.GPUColorTargetInfo {
         texture     = swapchain,
         clear_color = {clear.r, clear.g, clear.b, clear.a},
@@ -709,7 +740,7 @@ draw_window :: proc(command_buffer: ^sdl.GPUCommandBuffer, swapchain: ^sdl.GPUTe
         store_op    = .STORE,
     }
     render_pass := begin_render_pass(command_buffer, &color_target, size)
-    for pass, pass_index in gpu.passes {
+    for pass, pass_index in gpu.frame.passes {
         if pass.offscreen do continue
 
         replay_commands(command_buffer, render_pass, pass_commands(pass_index), .WINDOW, size, {}, zoom)
@@ -719,10 +750,10 @@ draw_window :: proc(command_buffer: ^sdl.GPUCommandBuffer, swapchain: ^sdl.GPUTe
 
 // The draw commands recorded between this pass's start and the next one's
 pass_commands :: proc(pass_index: int) -> []DrawCommand {
-    last_command := len(gpu.commands)
-    if pass_index + 1 < len(gpu.passes) do last_command = gpu.passes[pass_index + 1].first_command
+    last_command := len(gpu.frame.commands)
+    if pass_index + 1 < len(gpu.frame.passes) do last_command = gpu.frame.passes[pass_index + 1].first_command
 
-    return gpu.commands[gpu.passes[pass_index].first_command:last_command]
+    return gpu.frame.commands[gpu.frame.passes[pass_index].first_command:last_command]
 }
 
 begin_render_pass :: proc(
@@ -771,7 +802,7 @@ replay_commands :: proc(
         }
         if command.uniforms.size > 0 && command.uniforms != uniforms {
             uniforms = command.uniforms
-            sdl.PushGPUFragmentUniformData(command_buffer, 0, &gpu.uniform_data[uniforms.offset], u32(uniforms.size))
+            sdl.PushGPUFragmentUniformData(command_buffer, 0, &gpu.frame.uniform_data[uniforms.offset], u32(uniforms.size))
         }
         if sampled {
             texture_binding := sdl.GPUTextureSamplerBinding{command.texture, gpu.sampler}
@@ -801,37 +832,37 @@ scissor_pixels :: proc(scissor: Maybe(Rect), target_size, offset: [2]f32, zoom: 
 // Not from the drag's loop, its timer paces the frames, see live_resize_frames
 wait_for_max_fps :: proc() {
     VSYNC_MARGIN_S :: 0.002
-    if gpu.max_fps == 0 || gpu.resizing do return
+    if clock.max_fps == 0 || live_resize.resizing do return
 
-    elapsed := f64(sdl.GetPerformanceCounter() - gpu.last_counter) / f64(sdl.GetPerformanceFrequency())
-    remaining := 1 / f64(gpu.max_fps) - elapsed - VSYNC_MARGIN_S
+    elapsed := f64(sdl.GetPerformanceCounter() - clock.last_counter) / f64(sdl.GetPerformanceFrequency())
+    remaining := 1 / f64(clock.max_fps) - elapsed - VSYNC_MARGIN_S
     if remaining > 0 do sdl.DelayPrecise(u64(remaining * 1e9))
 }
 
 // 0 for the display's rate, the swapchain waits for vsync
 limit_fps :: proc(fps: int) {
-    gpu.max_fps = fps
+    clock.max_fps = fps
 }
 
 frame_time :: proc() -> f32 {
-    return gpu.frame_time
+    return clock.frame_time
 }
 
 // Pixels per drawing point, the display's density times the UI scale. Text rasterized at it lands texel for
 // pixel.
 dpi_scale :: proc() -> f32 {
-    return sdl.GetWindowPixelDensity(gpu.window) * gpu.ui_scale
+    return sdl.GetWindowPixelDensity(window.handle) * window.ui_scale
 }
 
 // In drawing points, see set_ui_scale
 window_size :: proc() -> [2]f32 {
-    return window_points() / gpu.ui_scale
+    return window_points() / window.ui_scale
 }
 
 // The window's own size, in the system's points
 window_points :: proc() -> [2]f32 {
     width, height: i32
-    sdl.GetWindowSize(gpu.window, &width, &height)
+    sdl.GetWindowSize(window.handle, &width, &height)
     return {f32(width), f32(height)}
 }
 
@@ -839,7 +870,7 @@ window_points :: proc() -> [2]f32 {
 // and iOS, whose points are, the screen's density on Android, where the window is in pixels, the scale setting
 // on a Linux desktop
 content_scale :: proc() -> f32 {
-    density, display := sdl.GetWindowPixelDensity(gpu.window), sdl.GetWindowDisplayScale(gpu.window)
+    density, display := sdl.GetWindowPixelDensity(window.handle), sdl.GetWindowDisplayScale(window.handle)
     if density <= 0 || display <= 0 do return 1
 
     return display / density
@@ -850,44 +881,44 @@ content_scale :: proc() -> f32 {
 // window, its safe area and the pointer report in them, and dpi_scale grows by it so text rasterized for it
 // stays sharp.
 set_ui_scale :: proc(scale: f32) {
-    gpu.ui_scale = scale
+    window.ui_scale = scale
 }
 
 // The scale in effect, see set_ui_scale
 ui_scale :: proc() -> f32 {
-    return gpu.ui_scale
+    return window.ui_scale
 }
 
 // The window's top left corner, in the system's points across the displays
 window_position :: proc() -> [2]i32 {
     position: [2]i32
-    sdl.GetWindowPosition(gpu.window, &position.x, &position.y)
+    sdl.GetWindowPosition(window.handle, &position.x, &position.y)
     return position
 }
 
 // The desktop window, in the system's points, the size is seen at the next poll
 set_window_size :: proc(width, height: i32) {
-    when !MOBILE do sdl.SetWindowSize(gpu.window, width, height)
+    when !MOBILE do sdl.SetWindowSize(window.handle, width, height)
 }
 
 // In a frame drawn from the OS's own loop, a drag's, a zoom's or an open menu's, see live_resize_frames
 resizing :: proc() -> bool {
-    return gpu.resizing
+    return live_resize.resizing
 }
 
 // Part of the window clear of the notch and the home indicator
 safe_area :: proc() -> Rect {
     area: sdl.Rect
-    if !sdl.GetWindowSafeArea(gpu.window, &area) {
+    if !sdl.GetWindowSafeArea(window.handle, &area) {
         size := window_size()
         return {0, 0, size.x, size.y}
     }
-    scale := gpu.ui_scale
+    scale := window.ui_scale
     return {f32(area.x) / scale, f32(area.y) / scale, f32(area.w) / scale, f32(area.h) / scale}
 }
 
 key_pressed :: proc(key: Key) -> bool {
-    return key in gpu.keys_pressed
+    return key in input.keys_pressed
 }
 
 key_down :: proc(key: Key) -> bool {
@@ -897,11 +928,11 @@ key_down :: proc(key: Key) -> bool {
 mouse_position :: proc() -> [2]f32 {
     position: [2]f32
     _ = sdl.GetMouseState(&position.x, &position.y)
-    return position / gpu.ui_scale
+    return position / window.ui_scale
 }
 
 mouse_pressed :: proc() -> bool {
-    return gpu.mouse_clicked
+    return input.mouse_clicked
 }
 
 mouse_down :: proc() -> bool {
@@ -910,11 +941,11 @@ mouse_down :: proc() -> bool {
 
 // Whether the last press was a finger rather than a mouse or a trackpad, a finger covers what it presses
 touch_input :: proc() -> bool {
-    return gpu.touch
+    return input.touch
 }
 
 mouse_wheel :: proc() -> f32 {
-    return gpu.wheel
+    return input.wheel
 }
 
 // One byte a texel, read as the red channel, for pixels the CPU redraws every frame with update_texture.
@@ -947,10 +978,10 @@ update_texture :: proc(texture: Texture, pixels: []u8) {
     assert(len(pixels) == int(texture.width * texture.height))
 
     // Each texture's pixels start on a 16 byte boundary, as copies from a buffer want it
-    offset := (len(gpu.texture_pixels) + 15) &~ 15
-    resize(&gpu.texture_pixels, offset)
-    append(&gpu.texture_pixels, ..pixels)
-    append(&gpu.texture_uploads, TextureUpload{texture, offset})
+    offset := (len(gpu.frame.texture_pixels) + 15) &~ 15
+    resize(&gpu.frame.texture_pixels, offset)
+    append(&gpu.frame.texture_pixels, ..pixels)
+    append(&gpu.frame.texture_uploads, TextureUpload{texture, offset})
 }
 
 // At once, not after the frame: a texture drawn earlier in the frame is still to be drawn in end_frame
@@ -1312,30 +1343,30 @@ measure_text :: proc(font: Font, text: cstring, size: f32, spacing: f32) -> [2]f
 }
 
 begin_scissor :: proc(rect: Rect) {
-    gpu.scissor = rect
+    gpu.drawing.scissor = rect
 }
 
 end_scissor :: proc() {
-    gpu.scissor = nil
+    gpu.drawing.scissor = nil
 }
 
 set_blend_mode :: proc(mode: BlendMode) {
-    gpu.blend = mode
+    gpu.drawing.blend = mode
 }
 
 begin_shader :: proc(shader: Shader) {
-    gpu.program = shader
+    gpu.drawing.program = shader
 }
 
 end_shader :: proc() {
-    gpu.program = .SPRITE
+    gpu.drawing.program = .SPRITE
 }
 
 // Takes effect for the following draws with this shader
 set_shader_uniforms :: proc(shader: Shader, uniforms: ^$T) {
-    offset := len(gpu.uniform_data)
-    append(&gpu.uniform_data, ..mem.ptr_to_bytes(uniforms))
-    gpu.uniforms[shader] = {offset, size_of(T)}
+    offset := len(gpu.frame.uniform_data)
+    append(&gpu.frame.uniform_data, ..mem.ptr_to_bytes(uniforms))
+    gpu.drawing.uniforms[shader] = {offset, size_of(T)}
 }
 
 draw_shader_quad :: proc(rect: Rect) {
@@ -1396,10 +1427,10 @@ begin_render_target :: proc(
     offset: [2]f32 = {},
     zoom: f32 = 1,
 ) {
-    gpu.window_scissor = gpu.scissor
-    gpu.scissor = nil
+    gpu.drawing.window_scissor = gpu.drawing.scissor
+    gpu.drawing.scissor = nil
     append(
-        &gpu.passes,
+        &gpu.frame.passes,
         Pass {
             offscreen = true,
             target = target.texture.handle,
@@ -1407,15 +1438,15 @@ begin_render_target :: proc(
             clear = clear,
             offset = offset,
             zoom = zoom,
-            first_command = len(gpu.commands),
+            first_command = len(gpu.frame.commands),
         },
     )
 }
 
 // Back to drawing into the window, over what's there already
 end_render_target :: proc() {
-    gpu.scissor = gpu.window_scissor
-    gpu.window_scissor = nil
+    gpu.drawing.scissor = gpu.drawing.window_scissor
+    gpu.drawing.window_scissor = nil
     begin_window_pass()
 }
 
@@ -1425,7 +1456,7 @@ draw_render_target :: proc(target: RenderTarget, dest: Rect, tint := WHITE) {
 }
 
 begin_window_pass :: proc() {
-    append(&gpu.passes, Pass{zoom = 1, first_command = len(gpu.commands)})
+    append(&gpu.frame.passes, Pass{zoom = 1, first_command = len(gpu.frame.commands)})
 }
 
 push_quad :: proc(texture: ^sdl.GPUTexture, dest: Rect, uv0, uv1: [2]f32, color: Color) {
@@ -1447,19 +1478,19 @@ push_quad :: proc(texture: ^sdl.GPUTexture, dest: Rect, uv0, uv1: [2]f32, color:
 // Appends to the last draw command if nothing changed since, otherwise starts a new one
 push_vertices :: proc(texture: ^sdl.GPUTexture, vertices: []Vertex) {
     command := DrawCommand {
-        program      = gpu.program,
-        blend        = gpu.blend,
+        program      = gpu.drawing.program,
+        blend        = gpu.drawing.blend,
         texture      = texture,
-        uniforms     = gpu.uniforms[gpu.program],
-        scissor      = gpu.scissor,
-        first_vertex = u32(len(gpu.vertices)),
+        uniforms     = gpu.drawing.uniforms[gpu.drawing.program],
+        scissor      = gpu.drawing.scissor,
+        first_vertex = u32(len(gpu.frame.vertices)),
         vertex_count = u32(len(vertices)),
     }
-    append(&gpu.vertices, ..vertices)
+    append(&gpu.frame.vertices, ..vertices)
 
-    pass := gpu.passes[len(gpu.passes) - 1]
-    if len(gpu.commands) > pass.first_command {
-        last := &gpu.commands[len(gpu.commands) - 1]
+    pass := gpu.frame.passes[len(gpu.frame.passes) - 1]
+    if len(gpu.frame.commands) > pass.first_command {
+        last := &gpu.frame.commands[len(gpu.frame.commands) - 1]
         if last.program == command.program &&
            last.blend == command.blend &&
            last.texture == command.texture &&
@@ -1469,15 +1500,15 @@ push_vertices :: proc(texture: ^sdl.GPUTexture, vertices: []Vertex) {
             return
         }
     }
-    append(&gpu.commands, command)
+    append(&gpu.frame.commands, command)
 }
 
 // The pixels update_texture queued this frame, in one copy pass. A texture that can't be uploaded keeps the
 // pixels it had, the frame is still drawn.
 upload_textures :: proc(command_buffer: ^sdl.GPUCommandBuffer) {
-    if len(gpu.texture_uploads) == 0 do return
+    if len(gpu.frame.texture_uploads) == 0 do return
 
-    size := len(gpu.texture_pixels)
+    size := len(gpu.frame.texture_pixels)
     if size > gpu.texture_capacity {
         if gpu.texture_transfer != nil do sdl.ReleaseGPUTransferBuffer(gpu.device, gpu.texture_transfer)
 
@@ -1495,13 +1526,13 @@ upload_textures :: proc(command_buffer: ^sdl.GPUCommandBuffer) {
         fmt.eprintln("SDL_MapGPUTransferBuffer failed:", sdl.GetError())
         return
     }
-    mem.copy(mapped, raw_data(gpu.texture_pixels), size)
+    mem.copy(mapped, raw_data(gpu.frame.texture_pixels), size)
     sdl.UnmapGPUTransferBuffer(gpu.device, gpu.texture_transfer)
 
     // Every texel is replaced, the GPU can take a fresh copy instead of waiting for the frames still drawing
     // the old one
     copy_pass := sdl.BeginGPUCopyPass(command_buffer)
-    for upload in gpu.texture_uploads {
+    for upload in gpu.frame.texture_uploads {
         texture := upload.texture
         sdl.UploadToGPUTexture(
             copy_pass,
@@ -1515,9 +1546,9 @@ upload_textures :: proc(command_buffer: ^sdl.GPUCommandBuffer) {
 
 // False when the buffers couldn't be made, nothing can be drawn then
 upload_vertices :: proc(command_buffer: ^sdl.GPUCommandBuffer) -> bool {
-    if len(gpu.vertices) == 0 do return true
+    if len(gpu.frame.vertices) == 0 do return true
 
-    size := len(gpu.vertices) * size_of(Vertex)
+    size := len(gpu.frame.vertices) * size_of(Vertex)
 
     if size > gpu.vertex_capacity {
         if gpu.vertex_buffer != nil do sdl.ReleaseGPUBuffer(gpu.device, gpu.vertex_buffer)
@@ -1544,7 +1575,7 @@ upload_vertices :: proc(command_buffer: ^sdl.GPUCommandBuffer) -> bool {
         fmt.eprintln("SDL_MapGPUTransferBuffer failed:", sdl.GetError())
         return false
     }
-    mem.copy(mapped, raw_data(gpu.vertices), size)
+    mem.copy(mapped, raw_data(gpu.frame.vertices), size)
     sdl.UnmapGPUTransferBuffer(gpu.device, gpu.transfer_buffer)
 
     copy_pass := sdl.BeginGPUCopyPass(command_buffer)

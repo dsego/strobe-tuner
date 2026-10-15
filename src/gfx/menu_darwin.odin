@@ -233,8 +233,8 @@ menu_target :: proc() -> ^NS.Object {
         menu.chosen = int(NS.MenuItem_tag(sender))
     }
     frame :: proc "c" (self: NS.id, selector: NS.SEL, timer: ^NS.Timer) {
-        if gpu.live_resize_frame == nil || !gpu.polling || gpu.resizing do return
-        if sdl.GetTicks() - gpu.drag_tick < DRAG_TIMER_MS do return
+        if live_resize.frame == nil || !live_resize.polling || live_resize.resizing do return
+        if sdl.GetTicks() - live_resize.drag_tick < DRAG_TIMER_MS do return
 
         draw_from_os_loop()
     }
