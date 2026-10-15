@@ -14,9 +14,8 @@
 // with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-// The input through miniaudio. Android has capture_android.odin, Odin's miniaudio bindings lay out
-// its structs for desktop Linux there.
-#+build !linux:android
+// The input through miniaudio, AAudio on Android. iOS and Android have one input, the system routes it:
+// built-in mic, headset or a USB interface.
 package audio
 
 import "base:intrinsics"
@@ -32,6 +31,8 @@ import "../core"
 
 // Building for iOS, see platform/ios/build-sim.sh
 IOS :: #config(IOS, false)
+
+ANDROID :: ODIN_PLATFORM_SUBTARGET == .Android
 
 
 Capture :: struct {
@@ -102,7 +103,14 @@ refresh_devices :: proc(self: ^Capture) {
 
     infos: [^]ma.device_info
     count: u32
-    if failed(ma.context_get_devices(&self.ctx, nil, nil, &infos, &count)) do count = 0
+    when ANDROID {
+        // miniaudio lists AAudio's default only when it can open it, not before the microphone is allowed
+        copy(microphone_info.name[:], "Microphone")
+        microphone_info.isDefault = true
+        infos, count = &microphone_info, 1
+    } else {
+        if failed(ma.context_get_devices(&self.ctx, nil, nil, &infos, &count)) do count = 0
+    }
 
     self.capture_infos = infos[:count]
 
@@ -116,6 +124,10 @@ refresh_devices :: proc(self: ^Capture) {
 
 open_stream_on_active_device :: proc(self: ^Capture) -> bool {
     if device_count(self) == 0 do return false
+
+    when ANDROID {
+        if !microphone_allowed() do return false
+    }
 
     config := ma.device_config_init(.capture)
     config.capture.format = .f32
@@ -144,7 +156,17 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
         if self.active_device >= 0 do config.capture.pDeviceID = &self.capture_infos[self.active_device].id
     }
 
-    if failed(ma.device_init(&self.ctx, &config, &self.device)) do return false
+    // Unprocessed has no automatic gain or noise suppression, not every phone has it. Voice recognition is the
+    // next least processed.
+    when ANDROID {
+        config.aaudio.inputPreset = .unprocessed
+        if failed(ma.device_init(&self.ctx, &config, &self.device)) {
+            config.aaudio.inputPreset = .voice_recognition
+            if failed(ma.device_init(&self.ctx, &config, &self.device)) do return false
+        }
+    } else {
+        if failed(ma.device_init(&self.ctx, &config, &self.device)) do return false
+    }
 
     set_input_rate(self, f32(self.device.capture.internalSampleRate))
     self.device_open = true
@@ -192,16 +214,28 @@ start :: proc(self: ^Capture) -> bool {
     return true
 }
 
+// On the way to the background. On Android the microphone is asked for again on the way back, unless its
+// dialog is what sent the app there.
 stop :: proc(self: ^Capture) {
+    when ANDROID {
+        intrinsics.atomic_compare_exchange_strong(&microphone_permission, .GRANTED, .UNKNOWN)
+        intrinsics.atomic_compare_exchange_strong(&microphone_permission, .DENIED, .UNKNOWN)
+    }
+
     if !self.device_open do return
     if failed(ma.device_stop(&self.device)) do return
 
     fmt.println("Stopped input stream")
 }
 
-// Whether an interruption ended since the last call, then the device has to be opened again
+// Whether an interruption ended since the last call, on Android the microphone was allowed, then the device
+// has to be opened again
 interruption_ended :: proc(self: ^Capture) -> bool {
-    return intrinsics.atomic_exchange(&self.interruption_ended, false)
+    ended := intrinsics.atomic_exchange(&self.interruption_ended, false)
+    when ANDROID {
+        if intrinsics.atomic_exchange(&microphone_granted, false) do ended = true
+    }
+    return ended
 }
 
 // Whether the list has to be made again since the last call, see devices_changed in Capture
@@ -219,8 +253,13 @@ devices_changed :: proc(self: ^Capture) -> bool {
     return changed
 }
 
-// The input couldn't be opened, the strobe would just stand still
+// The input couldn't be opened, the strobe would just stand still. While Android asks for the microphone
+// nothing has failed yet, a denied one is microphone_denied.
 input_failed :: proc(self: ^Capture) -> bool {
+    when ANDROID {
+        permission := intrinsics.atomic_load(&microphone_permission)
+        if permission == .ASKED || permission == .DENIED do return false
+    }
     return !self.device_open
 }
 
@@ -271,9 +310,17 @@ notification_callback :: proc "c" (notification: ^ma.device_notification) {
 }
 
 
-// The app's page in the Settings app, where the microphone is turned on again
+// The app's page in the system's settings, where the microphone is turned on again. After two denials
+// Android stops showing its dialog, the settings always work, StrobieActivity opens them there.
 allow_microphone :: proc() {
-    if !sdl.OpenURL("app-settings:") do fmt.println("Couldn't open the app's settings:", sdl.GetError())
+    when ANDROID {
+        OPEN_APP_SETTINGS :: 0x8000 // COMMAND_USER in SDLActivity.java
+        if !sdl.SendAndroidMessage(OPEN_APP_SETTINGS, 0) {
+            fmt.println("Couldn't open the app's settings:", sdl.GetError())
+        }
+    } else {
+        if !sdl.OpenURL("app-settings:") do fmt.println("Couldn't open the app's settings:", sdl.GetError())
+    }
 }
 
 // iOS gives a denied microphone a silent input, nothing fails
@@ -283,7 +330,51 @@ microphone_denied :: proc() -> bool {
         DENIED :: 0x64656e79
         session := intrinsics.objc_send(^AVAudioSession, AVAudioSession, "sharedInstance")
         return intrinsics.objc_send(uint, session, "recordPermission") == DENIED
+    } else when ANDROID {
+        return intrinsics.atomic_load(&microphone_permission) == .DENIED
     } else {
+        return false
+    }
+}
+
+when ANDROID {
+    MicrophonePermission :: enum i32 {
+        UNKNOWN, // asked when the input is opened
+        ASKED, // the system's dialog is up
+        GRANTED,
+        DENIED,
+    }
+
+    // Set from SDL's thread when the permission dialog is answered
+    microphone_permission: MicrophonePermission
+
+    // Set with the permission granted, the input is opened then
+    microphone_granted: bool
+
+    // The one input in the list, see refresh_devices
+    microphone_info: ma.device_info
+
+    // Answered right away when it's allowed, else after the system's dialog, then the input is opened again.
+    // It's asked each time the app comes back, it may have been allowed or taken away meanwhile.
+    microphone_allowed :: proc() -> bool {
+        permission_answered :: proc "c" (userdata: rawptr, permission: cstring, granted: bool) {
+            intrinsics.atomic_store(&microphone_permission, MicrophonePermission.GRANTED if granted else .DENIED)
+            if granted do intrinsics.atomic_store(&microphone_granted, true)
+        }
+
+        switch intrinsics.atomic_load(&microphone_permission) {
+        case .GRANTED:
+            return true
+        case .UNKNOWN:
+            intrinsics.atomic_store(&microphone_permission, MicrophonePermission.ASKED)
+
+            // Not asked after all, the next try asks again, see input_failed
+            if !sdl.RequestAndroidPermission("android.permission.RECORD_AUDIO", permission_answered, nil) {
+                fmt.println("Couldn't ask for the microphone:", sdl.GetError())
+                intrinsics.atomic_store(&microphone_permission, MicrophonePermission.UNKNOWN)
+            }
+        case .ASKED, .DENIED:
+        }
         return false
     }
 }

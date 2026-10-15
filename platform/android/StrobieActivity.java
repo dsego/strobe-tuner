@@ -24,7 +24,7 @@ import org.libsdl.app.SDLActivity;
 // SDL's activity runs the app. Odin emits a C main that starts its runtime and calls the app's main,
 // SDL calls that instead of SDL_main.
 public class StrobieActivity extends SDLActivity {
-    // Sent by allow_microphone in src/audio/capture_android.odin
+    // Sent by allow_microphone in src/audio/capture.odin
     private static final int COMMAND_OPEN_APP_SETTINGS = COMMAND_USER;
 
     @Override

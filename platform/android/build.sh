@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Build the SDL renderer for Android as an .apk signed with a debug key, without Gradle.
 #
-# The native libraries (SDL3, pffft, pa_ringbuffer) are built with the NDK once, into external/android.
+# The native libraries (SDL3, miniaudio, pffft, pa_ringbuffer) are built with the NDK once, into external/android.
 # Odin only emits an object file, the NDK's clang links it into libmain.so. SDL's Java activity loads it,
 # javac and d8 compile that, aapt2 packages it all.
 #
@@ -65,6 +65,14 @@ if [ ! -f "$DEPS/libpa_ringbuffer.a" ]; then
     $AR rcs "$DEPS/libpa_ringbuffer.a" "$DEPS/pa_ringbuffer.o"
 fi
 
+# The miniaudio.a in the Odin folder is built for the Mac, the same miniaudio.c as Odin's bindings goes here.
+# It opens AAudio at run time.
+if [ ! -f "$DEPS/libminiaudio.a" ]; then
+    echo "Building miniaudio"
+    $CC $CFLAGS -c "$ODIN_ROOT/vendor/miniaudio/src/miniaudio.c" -o "$DEPS/miniaudio.o"
+    $AR rcs "$DEPS/libminiaudio.a" "$DEPS/miniaudio.o"
+fi
+
 # Odin's stb bindings look for the libraries in the Odin folder, where Linux has them. Built there with the
 # NDK, the Odin folder has to be writable, like for the Linux build.
 if [ ! -f "$ODIN_ROOT/vendor/stb/lib/stb_image.a" ]; then
@@ -118,11 +126,12 @@ $CC -shared \
     "$OUT/app.o" \
     "$DEPS/libpffft.a" \
     "$DEPS/libpa_ringbuffer.a" \
+    "$DEPS/libminiaudio.a" \
     "$ODIN_ROOT/vendor/stb/lib/stb_image.a" \
     "$ODIN_ROOT/vendor/stb/lib/stb_truetype.a" \
     "$ODIN_ROOT/vendor/stb/lib/stb_rect_pack.a" \
     -L"$LIBS" -lSDL3 \
-    -laaudio -landroid -lm \
+    -landroid -ldl -lm \
     -Wl,--no-undefined \
     -Wl,-z,max-page-size=16384 \
     -o "$LIBS/libmain.so"
