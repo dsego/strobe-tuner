@@ -126,10 +126,10 @@ draw_strobe_with_tracks :: proc(app: ^App, layout: Layout) {
     }
 
     displays := &app.displays
-    draw_strobe_display(&displays.strobe, &displays.glow_targets, strobe, layout.strobe_scale, layout.strobe_turned, bands, lock_in, config)
+    draw_strobe_display(&displays.strobe, &displays.glow_targets, layout, bands, lock_in, config)
 
     if config.strobe_mode == .HARMONIC && !input_missing(app) && gui_button(strobe) {
-        track := strobe_track_at(config.strobe_shape, strobe, layout.strobe_scale, layout.strobe_turned, len(bands), gfx.mouse_position())
+        track := strobe_track_at(config.strobe_shape, layout, len(bands), gfx.mouse_position())
         if track >= 0 {
             app.sheets.selected_track = track
             app.sheets.track.open = true
@@ -138,20 +138,15 @@ draw_strobe_with_tracks :: proc(app: ^App, layout: Layout) {
 }
 
 draw_trace_area :: proc(app: ^App, view: gfx.Rect) {
-    config, displays := app.config, &app.displays
-    colors := strobe_colors(config)
-    seconds, range := config.trace_seconds, config.trace_range_cents
-    line_color, band_color, background := gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color)
-    draw_trace_display(&displays.trace, &displays.glow_targets, view, seconds, range, line_color, band_color, background, config.strobe_glow)
+    displays := &app.displays
+    draw_trace_display(&displays.trace, &displays.glow_targets, view, app.config)
 }
 
 draw_spectrum_area :: proc(app: ^App, view: gfx.Rect) {
-    config, displays := app.config, &app.displays
+    displays := &app.displays
     track_hz := strobe_track_hz(app.measurement.strobe_lock_in)
     active := app.measurement.note_target.active
-    colors := strobe_colors(config)
-    line_color, band_color, background := gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color)
-    draw_spectrum_display(&displays.spectrum, &displays.glow_targets, view, track_hz, active, config, line_color, band_color, background)
+    draw_spectrum_display(&displays.spectrum, &displays.glow_targets, view, track_hz, active, app.config)
 }
 
 // The partials the strobe's tracks follow, until the end of the frame

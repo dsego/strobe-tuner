@@ -85,18 +85,11 @@ record_trace :: proc(self: ^TraceDisplay, cents, light: f32, fresh: bool, frame_
     }
 }
 
-// Oldest on the left, the latest point on the right edge, sharp is up. seconds across, range_cents from
-// the middle to the top and bottom.
+// Oldest on the left, the latest point on the right edge, sharp is up. The config's trace seconds across,
+// its range in cents from the middle to the top and bottom.
 // The line in the colorway's lit color, the in tune band in its second color
 // With the retro glow the band and the line glow like the spectrum's curve.
-draw_trace_display :: proc(
-    self: ^TraceDisplay,
-    targets: ^GlowTargets,
-    rect: gfx.Rect,
-    seconds, range_cents: f32,
-    line_color, band_color, background: gfx.Color,
-    retro_glow: bool,
-) {
+draw_trace_display :: proc(self: ^TraceDisplay, targets: ^GlowTargets, rect: gfx.Rect, config: ^Config) {
     // The in tune band, a line through the middle of it and the trace over them
     draw_plot :: proc(self: ^TraceDisplay, plot: gfx.Rect, span, cents_range: f32, line_color, band_color: gfx.Color) {
         middle := plot.y + plot.height / 2
@@ -127,14 +120,17 @@ draw_trace_display :: proc(
         draw_trace_line(self, plot, middle, scale, 2 * LINE_RADIUS + pixel, pixel, line_color)
     }
 
+    colors := strobe_colors(config)
+    line_color, band_color, background := gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color)
+
     // As the config file has them, none or longer than the readings kept is as far as they go
-    span := clamp(seconds, TRACE_MIN_SECONDS, TRACE_MAX_SECONDS)
-    cents_range := max(range_cents, TRACE_BAND)
+    span := clamp(config.trace_seconds, TRACE_MIN_SECONDS, TRACE_MAX_SECONDS)
+    cents_range := max(config.trace_range_cents, TRACE_BAND)
 
     PADDING :: 28
     plot := gfx.Rect{rect.x, rect.y + PADDING, rect.width, rect.height - 2 * PADDING}
 
-    if retro_glow {
+    if config.strobe_glow {
         begin_glow(targets, rect, background)
         draw_plot(self, plot, span, cents_range, line_color, band_color)
         end_glow(targets, rect, 1)

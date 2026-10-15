@@ -265,8 +265,10 @@ draw_spectrum_display :: proc(
     track_hz: []f32,
     active: bool,
     config: ^Config,
-    line_color, band_color, background: gfx.Color,
 ) {
+    colors := strobe_colors(config)
+    line_color, band_color, background := gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color)
+
     gfx.draw_rect({rect.x, rect.y}, {rect.width, rect.height}, background)
 
     padding: f32 = SPECTRUM_PADDING_TOP + SPECTRUM_PADDING_BOTTOM

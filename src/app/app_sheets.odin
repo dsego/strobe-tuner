@@ -123,7 +123,7 @@ draw_track_sheet :: proc(app: ^App, layout: Layout) {
 
     // Tapping another track outside the sheet switches to it, anywhere else closes the sheet
     if gui_button(sheet_layout.outside) {
-        track := strobe_track_at(config.strobe_shape, layout.strobe, layout.strobe_scale, layout.strobe_turned, len(bands), gfx.mouse_position())
+        track := strobe_track_at(config.strobe_shape, layout, len(bands), gfx.mouse_position())
         if track >= 0 do sheets.selected_track = track
         else do close = true
     }

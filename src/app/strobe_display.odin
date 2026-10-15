@@ -174,9 +174,10 @@ strobe_geometry :: proc(shape: StrobeShape, rect: gfx.Rect, scale: f32, band_cou
 }
 
 // The track under point, -1 for none. The tracks are concentric, the gap outside a track counts as part
-// of it, so the whole ring from one track to the next is its touch area. Flat ones are stacked. pane and
-// turned are the strobe's, see strobe_upright.
-strobe_track_at :: proc(shape: StrobeShape, pane: gfx.Rect, scale: f32, turned: bool, band_count: int, point: [2]f32) -> int {
+// of it, so the whole ring from one track to the next is its touch area. Flat ones are stacked. The
+// layout's strobe pane, scale and quarter turn as the strobe is drawn, see strobe_upright.
+strobe_track_at :: proc(shape: StrobeShape, layout: Layout, band_count: int, point: [2]f32) -> int {
+    pane, scale, turned := layout.strobe, layout.strobe_scale, layout.strobe_turned
     if !gfx.point_in_rect(point, pane) do return -1
 
     rect := strobe_upright(pane, turned)
@@ -236,18 +237,18 @@ glow_background :: proc(background: gfx.Color, glow: GlowParams) -> gfx.Color {
     return gfx.color_from_normalized({lifted.r, lifted.g, lifted.b, 1})
 }
 
-// See strobe_geometry for the layout. rect is the strobe's pane, turned sets the strobe into it a quarter
-// turn, see strobe_upright. bands are the lock-in's, or the lamp's, see core.strobe_lamp_bands.
+// See strobe_geometry for the tracks' layout. In the layout's strobe pane at its scale, turned sets the
+// strobe into it a quarter turn, see strobe_upright. bands are the lock-in's, or the lamp's, see
+// core.strobe_lamp_bands.
 draw_strobe_display :: proc(
     self: ^StrobeDisplay,
     targets: ^GlowTargets,
-    rect: gfx.Rect,
-    scale: f32,
-    turned: bool,
+    layout: Layout,
     bands: []core.PhaseBand,
     lock_in: ^core.StrobeLockIn,
     config: ^Config,
 ) {
+    rect, scale, turned := layout.strobe, layout.strobe_scale, layout.strobe_turned
     shape := config.strobe_shape
     upright := strobe_upright(rect, turned)
     geometry := strobe_geometry(shape, upright, scale, len(bands))
