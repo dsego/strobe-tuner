@@ -315,70 +315,86 @@ draw_strobe_display :: proc(
     }
 
     if config.strobe_mode == .HARMONIC && (config.partial_labels != .NONE || config.show_band_cents) {
-        draw_track_labels(rect, turned, upright, bands, geometry, config)
+        for band, band_index in bands do draw_track_label(rect, turned, upright, band, band_index, len(bands), geometry, config)
+    }
+}
+
+// The track's partial, e.g. 1×, 2×: on the right, on the curve of a curved track a little in from the edge or
+// in the middle of a flat one, and on the top of a wheel's ring, where the ring runs level and the labels of
+// the rings stack in a column. The cents on the left. Turned, the right is the pane's top and the left its
+// bottom: the labels sit along them over the ends of their tracks, upright.
+draw_track_label :: proc(
+    pane: gfx.Rect,
+    turned: bool,
+    upright: gfx.Rect,
+    band: core.PhaseBand,
+    band_index, band_count: int,
+    geometry: StrobeGeometry,
+    config: ^Config,
+) {
+    label_height := pixel_fonts.band_label.size
+    label_y, on_ring := track_label_y(upright, band_index, band_count, geometry)
+
+    // Turned, the middle of the label across the pane
+    label_x := pane.x + label_y + 0.5 * label_height
+
+    // How far off this partial is, nothing while it's too quiet to measure. Right aligned on the decimal point
+    // like the readout, the digits don't shift as the value changes.
+    if config.show_band_cents && band.snr_db > core.NOISE_FLOOR_SNR_DB_THRESHOLD {
+        font := pixel_fonts.band_label
+        width := measure_label(font, "-00.0").x
+        text := fmt.ctprintf("%+.1f", band.err_cents)
+        position := [2]f32{upright.x + 16 + width, label_y}
+        if turned do position = {label_x + 0.5 * width, pane.y + pane.height - 16 - label_height}
+
+        draw_text_right(font.font, text, position, font.size, 0, accent_color)
     }
 
-    // The partial of each track, e.g. 1×, 2×: on the right, on the curve of a curved track a little in from
-    // the edge or in the middle of a flat one, and on the top of a wheel's ring, where the ring runs level
-    // and the labels of the rings stack in a column. The cents on the left. Turned, the right is the pane's
-    // top and the left its bottom: the labels sit along them over the ends of their tracks, upright.
-    draw_track_labels :: proc(pane: gfx.Rect, turned: bool, rect: gfx.Rect, bands: []core.PhaseBand, geometry: StrobeGeometry, config: ^Config) {
-        band_height := geometry.band_height
-        label_height := pixel_fonts.band_label.size
+    if config.partial_labels == .NONE do return
 
-        // The middle of a track down from its top, see STROBE_TRACK_GAP
-        track_middle := 0.5 * (band_height - STROBE_TRACK_GAP)
-
-        center := strobe_center(geometry, rect, len(bands))
-
-        // The outer edge of each track, from the innermost one's
-        radius := geometry.curvature_radius - band_height
-        for band, band_index in bands {
-            order := len(bands) - 1 - band_index
-            radius += band_height
-
-            label_y: f32
-            on_ring: [2]f32 // a wheel's, the middle of the label
-            switch geometry.shape {
-            case .CURVED:
-                // From the centre of the circles across to the label, and up to the track there
-                // A pane wider than the outer track, past STROBE_MAX_SCALE, has the label at the track's end
-                across := min(0.5 * rect.width - 28, radius)
-                up := math.sqrt(radius * radius - across * across)
-                label_y = geometry.y + band_height * (f32(order) + 0.6) + radius - up
-            case .FLAT:
-                label_y = geometry.y + band_height * f32(order) + track_middle - 0.5 * label_height
-            case .WHEEL:
-                on_ring = {center.x, center.y - (radius - track_middle)}
-                label_y = on_ring.y - 0.5 * label_height
-            }
-
-            // Turned, the middle of the label across the pane
-            label_x := pane.x + label_y + 0.5 * label_height
-
-            // How far off this partial is, nothing while it's too quiet to measure. Right aligned on the
-            // decimal point like the readout, the digits don't shift as the value changes.
-            if config.show_band_cents && band.snr_db > core.NOISE_FLOOR_SNR_DB_THRESHOLD {
-                font := pixel_fonts.band_label
-                width := measure_label(font, "-00.0").x
-                text := fmt.ctprintf("%+.1f", band.err_cents)
-                position := [2]f32{rect.x + 16 + width, label_y}
-                if turned do position = {label_x + 0.5 * width, pane.y + pane.height - 16 - label_height}
-
-                draw_text_right(font.font, text, position, font.size, 0, accent_color)
-            }
-
-            if config.partial_labels == .NONE do continue
-
-            if geometry.shape == .WHEEL {
-                draw_strobe_partial_label(strobe_pane_point(pane, turned, on_ring), config.partial_labels, band, centered = true)
-            } else if turned {
-                draw_strobe_partial_label({label_x, pane.y + 12 + 0.5 * label_height}, config.partial_labels, band, centered = true)
-            } else {
-                draw_strobe_partial_label({rect.x + rect.width - 12, label_y}, config.partial_labels, band)
-            }
-        }
+    if geometry.shape == .WHEEL {
+        draw_strobe_partial_label(strobe_pane_point(pane, turned, on_ring), config.partial_labels, band, centered = true)
+    } else if turned {
+        draw_strobe_partial_label({label_x, pane.y + 12 + 0.5 * label_height}, config.partial_labels, band, centered = true)
+    } else {
+        draw_strobe_partial_label({upright.x + upright.width - 12, label_y}, config.partial_labels, band)
     }
+}
+
+// The top of a track's labels in the upright strobe, and on a wheel the middle of the label on its ring
+track_label_y :: proc(
+    upright: gfx.Rect,
+    band_index, band_count: int,
+    geometry: StrobeGeometry,
+) -> (
+    label_y: f32,
+    on_ring: [2]f32,
+) {
+    band_height := geometry.band_height
+    label_height := pixel_fonts.band_label.size
+
+    // The middle of a track down from its top, see STROBE_TRACK_GAP
+    track_middle := 0.5 * (band_height - STROBE_TRACK_GAP)
+
+    // Tracks counted from the top, and the track's outer edge, the innermost one's on the curvature radius
+    order := band_count - 1 - band_index
+    radius := geometry.curvature_radius + band_height * f32(band_index)
+
+    switch geometry.shape {
+    case .CURVED:
+        // From the centre of the circles across to the label, and up to the track there
+        // A pane wider than the outer track, past STROBE_MAX_SCALE, has the label at the track's end
+        across := min(0.5 * upright.width - 28, radius)
+        up := math.sqrt(radius * radius - across * across)
+        label_y = geometry.y + band_height * (f32(order) + 0.6) + radius - up
+    case .FLAT:
+        label_y = geometry.y + band_height * f32(order) + track_middle - 0.5 * label_height
+    case .WHEEL:
+        center := strobe_center(geometry, upright, band_count)
+        on_ring = {center.x, center.y - (radius - track_middle)}
+        label_y = on_ring.y - 0.5 * label_height
+    }
+    return
 }
 
 // The shadow's rounded rectangle is on the strobe's sides and a little past its top and bottom, so those
