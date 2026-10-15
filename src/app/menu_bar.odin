@@ -37,7 +37,7 @@ MenuCommand :: enum {
     RETRO_GLOW,
     LOCK_NOTE,
     DEFAULT_SIZE,
-    INPUTS, // and the ones after it, the Input menu's by their place in audio_devices, see list_inputs
+    INPUTS, // and the ones after it, the Input menu's by their place in audio_devices, see build_input_list
 }
 
 MAX_INPUT_COMMANDS :: gfx.MAX_MENU_COMMANDS - int(MenuCommand.INPUTS)
@@ -86,14 +86,14 @@ setup_menu_bar :: proc(app: ^App) {
     )
     gfx.add_menu("View", view[:])
 
-    // Filled by list_inputs, and the list made again as it opens for what's connected now. The one opened
+    // Filled by build_input_list, and the list made again as it opens for what's connected now. The one opened
     // follows in the next frame, see follow_input.
     looking :: proc(data: rawptr) {
         app := (^App)(data)
         if app.audio_capture == nil do return
 
         audio.refresh_devices(app.audio_capture)
-        list_inputs(app)
+        build_input_list(app)
     }
     app.input_menu = gfx.add_menu("Input", {}, looking, app)
 

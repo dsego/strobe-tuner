@@ -56,9 +56,9 @@ App :: struct {
     audio_capture:      ^audio.Capture,
     audio_devices:      [dynamic]GuiOption,
     audio_device_index: int, // in audio_devices, picked on the input's sheet
-    input_listed:       int, // audio_device_index as list_inputs picked it, another one is a pick
+    input_listed:       int, // audio_device_index as build_input_list picked it, another one is a pick
     refresh_inputs:     bool, // the list is made again, see follow_input
-    default_label:      string, // the list's first input, see list_inputs
+    default_label:      string, // the list's first input, see build_input_list
     input_menu:         int, // the Input menu, see setup_menu_bar
     strobe_display:     StrobeDisplay,
     trace_display:      TraceDisplay,
@@ -183,7 +183,7 @@ run_app :: proc(config: ^Config) {
     match_input_rate(&app)
     audio.start(audio_capture)
 
-    list_inputs(&app)
+    build_input_list(&app)
     defer delete(app.audio_devices)
     defer delete(app.default_label)
 

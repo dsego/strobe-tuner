@@ -55,7 +55,7 @@ follow_input :: proc(app: ^App) {
     if app.refresh_inputs {
         app.refresh_inputs = false
         audio.refresh_devices(capture)
-        list_inputs(app)
+        build_input_list(app)
 
         // One may be there now
         if audio.input_failed(capture) do app.restart_audio = true
@@ -67,7 +67,7 @@ follow_input :: proc(app: ^App) {
 // The list on the input's sheet and in the Input menu: the system default with the device it is now, then
 // the devices, none without any. The config's input is picked, the default while it isn't connected. The
 // one opened follows in follow_input.
-list_inputs :: proc(app: ^App) {
+build_input_list :: proc(app: ^App) {
     capture := app.audio_capture
     clear(&app.audio_devices)
     app.audio_device_index, app.input_listed = 0, 0
