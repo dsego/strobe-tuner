@@ -121,7 +121,7 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     case .TRACE:
         colors := strobe_colors(config)
         seconds, range := config.trace_seconds, config.trace_range_cents
-        draw_cents_trace(&app.cents_trace, view, seconds, range, gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color))
+        draw_trace_display(&app.trace_display,view, seconds, range, gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color))
 
     case .SPECTRUM:
         comparator := app.phase_comparator
@@ -129,8 +129,8 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         for band, index in comparator.bands do track_hz[index] = band.freq_hz
 
         colors := strobe_colors(config)
-        draw_spectrum_view(
-            &app.spectrum_view,
+        draw_spectrum_display(
+            &app.spectrum_display,
             display,
             view,
             track_hz,

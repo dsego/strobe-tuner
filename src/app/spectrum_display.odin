@@ -52,7 +52,7 @@ SPECTRUM_SMOOTHING_S :: #config(SPECTRUM_SMOOTHING_S, 0.1)
 // smoothly, this far behind. Down on the noise they go all the way, the spectrum still disappears.
 SPECTRUM_HOLD_DB :: 2
 
-// The power of each bin averaged over this many of its windows, see update_spectrum_view:
+// The power of each bin averaged over this many of its windows, see update_spectrum_display:
 // -define:SPECTRUM_AVERAGE_WINDOWS=n to try another
 SPECTRUM_AVERAGE_WINDOWS :: #config(SPECTRUM_AVERAGE_WINDOWS, 0.25)
 
@@ -98,7 +98,7 @@ louder_peak :: proc(first, second: SpectrumPeak) -> bool {
     return first.db > second.db
 }
 
-SpectrumView :: struct {
+SpectrumDisplay :: struct {
     using node: core.AudioCaptureNode, // its own samples, read whole however long a frame takes
     // The detector's, so it's what the detection hears, see core.PitchDetector
     highpass:   core.Biquad,
@@ -126,13 +126,13 @@ held_within :: proc(held, value, hold: f32) -> f32 {
     return clamp(held, value - hold, value + hold)
 }
 
-init_spectrum_view :: proc(sample_rate: f32 = core.DEFAULT_SAMPLE_RATE) -> (self: SpectrumView) {
+init_spectrum_display :: proc(sample_rate: f32 = core.DEFAULT_SAMPLE_RATE) -> (self: SpectrumDisplay) {
     core.init_audio_capture_node(&self, sample_rate)
     size_spectrum_filters(&self)
     return
 }
 
-destroy_spectrum_view :: proc(self: ^SpectrumView) {
+destroy_spectrum_display :: proc(self: ^SpectrumDisplay) {
     core.destroy_audio_capture_node(self)
     core.destroy_windowed_spectrum(&self.transform)
     delete(self.power)
@@ -144,22 +144,22 @@ destroy_spectrum_view :: proc(self: ^SpectrumView) {
 
 // The input opened at another rate, the filters are made for it and everything starts over like for another
 // input, the transform is made at the next update
-set_spectrum_view_sample_rate :: proc(self: ^SpectrumView, sample_rate: f32) {
+set_spectrum_display_sample_rate :: proc(self: ^SpectrumDisplay, sample_rate: f32) {
     if sample_rate == self.sample_rate do return
 
     self.sample_rate = sample_rate
     size_spectrum_filters(self)
-    reset_spectrum_view(self)
+    reset_spectrum_display(self)
 }
 
-size_spectrum_filters :: proc(self: ^SpectrumView) {
+size_spectrum_filters :: proc(self: ^SpectrumDisplay) {
     self.highpass = core.init_highpass(core.PITCH_HIGHPASS_HZ, self.sample_rate)
     self.lowpass = core.init_lowpass(core.pitch_lowpass_hz(self.sample_rate), self.sample_rate)
 }
 
 // Another input's signal is unrelated to the previous one's, like core.reset_pitch_detector: the samples
 // start out silent, the filters from rest and the average from nothing
-reset_spectrum_view :: proc(self: ^SpectrumView) {
+reset_spectrum_display :: proc(self: ^SpectrumDisplay) {
     slice.zero(self.transform.samples)
     slice.zero(self.power)
 
@@ -175,7 +175,7 @@ reset_spectrum_view :: proc(self: ^SpectrumView) {
 // Every frame, the new spectrum of what came in since the one before. windows is the window's length in the
 // detector's, the Window setting. While another display shows nothing reads here, the ring buffer fills up
 // and the first read back skips what's stale, see core.audio_capture_read.
-update_spectrum_view :: proc(self: ^SpectrumView, windows: f32) {
+update_spectrum_display :: proc(self: ^SpectrumDisplay, windows: f32) {
     window := int(windows) * core.pitch_window(self.sample_rate)
     if len(self.transform.samples) != window {
         core.destroy_windowed_spectrum(&self.transform)
@@ -194,7 +194,7 @@ update_spectrum_view :: proc(self: ^SpectrumView, windows: f32) {
     read, elapsed := core.audio_capture_read_filtered(self, transform.samples, &self.highpass, &self.lowpass)
 
     // The stale skip coming back from another display, the picture and the filters start over on what's next
-    if read == 0 && elapsed > 0 do reset_spectrum_view(self)
+    if read == 0 && elapsed > 0 do reset_spectrum_display(self)
     if read == 0 do return
 
     core.run_windowed_spectrum(transform)
@@ -258,8 +258,8 @@ spectrum_y :: proc(db: f32, range: [2]f32, plot: gfx.Rect) -> f32 {
 
 // Low notes on the left on a log scale, a C every octave. track_hz are the strobe tracks' partials, marked
 // and lit while the tuner has the note.
-draw_spectrum_view :: proc(
-    self: ^SpectrumView,
+draw_spectrum_display :: proc(
+    self: ^SpectrumDisplay,
     display: ^StrobeDisplay,
     rect: gfx.Rect,
     track_hz: []f32,
@@ -443,7 +443,7 @@ draw_spectrum_view :: proc(
     }
 
     // The peaks that stand out over the noise, the one most over it first
-    find_peaks :: proc(self: ^SpectrumView, shown: []f32, low_hz, high_hz, bin_hz: f32) -> []SpectrumPeak {
+    find_peaks :: proc(self: ^SpectrumDisplay, shown: []f32, low_hz, high_hz, bin_hz: f32) -> []SpectrumPeak {
         // The highest past the main lobe, 4 bins either side under the Hann window, its first sidelobes 31 dB down
         SIDE_BINS :: 6
         peaks := make([dynamic]SpectrumPeak, context.temp_allocator)
@@ -474,7 +474,7 @@ draw_spectrum_view :: proc(
     // partials a few semitones apart stacked up a cluster of names. A name fades in, and a dropped one fades
     // out where it was, see SPECTRUM_LABEL_FADE_S.
     draw_peak_labels :: proc(
-        self: ^SpectrumView,
+        self: ^SpectrumDisplay,
         peaks: []SpectrumPeak,
         plot: gfx.Rect,
         low_hz, high_hz, pitch_standard: f32,

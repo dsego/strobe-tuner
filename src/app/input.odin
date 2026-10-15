@@ -115,7 +115,7 @@ switch_input :: proc(app: ^App) {
     core.reset_pitch_detector(&app.pitch_detector)
     core.reset_phase_comparator(app.phase_comparator)
     core.reset_scope(&app.scope)
-    reset_spectrum_view(&app.spectrum_view)
+    reset_spectrum_display(&app.spectrum_display)
     app.readout_track, app.traced_track = -1, -1
     app.held_readout = {}
     match_input_rate(app)
@@ -130,7 +130,7 @@ match_input_rate :: proc(app: ^App) {
     core.set_pitch_detector_sample_rate(&app.pitch_detector, sample_rate)
     core.set_phase_comparator_sample_rate(app.phase_comparator, sample_rate)
     core.set_scope_sample_rate(&app.scope, sample_rate)
-    set_spectrum_view_sample_rate(&app.spectrum_view, sample_rate)
+    set_spectrum_display_sample_rate(&app.spectrum_display, sample_rate)
     retune(app)
 }
 

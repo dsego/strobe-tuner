@@ -41,7 +41,7 @@ TraceSample :: struct {
     light: f32, // 0 to 1, as lit as the strobe track's stripes
 }
 
-Trace :: struct {
+TraceDisplay :: struct {
     samples: []TraceSample,
     head:    int, // where the next one goes
     count:   int,
@@ -49,28 +49,28 @@ Trace :: struct {
     clock:   f64,
 }
 
-create_trace :: proc() -> (self: Trace) {
+init_trace_display :: proc() -> (self: TraceDisplay) {
     self.samples = make([]TraceSample, TRACE_CAPACITY)
     return self
 }
 
-destroy_trace :: proc(self: ^Trace) {
+destroy_trace_display :: proc(self: ^TraceDisplay) {
     delete(self.samples)
 }
 
-trace_sample :: proc(self: ^Trace, index: int) -> TraceSample {
+trace_sample :: proc(self: ^TraceDisplay, index: int) -> TraceSample {
     capacity := len(self.samples)
     return self.samples[(self.head - self.count + index + capacity) % capacity]
 }
 
-push_sample :: proc(self: ^Trace, sample: TraceSample) {
+push_sample :: proc(self: ^TraceDisplay, sample: TraceSample) {
     self.samples[self.head] = sample
     self.head = (self.head + 1) % len(self.samples)
     self.count = min(self.count + 1, len(self.samples))
 }
 
 // Called every frame, fresh tells a new reading from the previous one repeated
-record_trace :: proc(self: ^Trace, cents, light: f32, fresh: bool, frame_time: f32) {
+record_trace :: proc(self: ^TraceDisplay, cents, light: f32, fresh: bool, frame_time: f32) {
     self.clock += f64(frame_time)
 
     lost := self.count > 0 && math.is_nan(trace_sample(self, self.count - 1).cents)
@@ -85,7 +85,7 @@ record_trace :: proc(self: ^Trace, cents, light: f32, fresh: bool, frame_time: f
 // Oldest on the left, the latest point on the right edge, sharp is up. seconds across, range_cents from
 // the middle to the top and bottom.
 // The line in the colorway's lit color, the in tune band in its second color
-draw_cents_trace :: proc(self: ^Trace, rect: gfx.Rect, seconds, range_cents: f32, line_color, band_color, background: gfx.Color) {
+draw_trace_display :: proc(self: ^TraceDisplay, rect: gfx.Rect, seconds, range_cents: f32, line_color, band_color, background: gfx.Color) {
     // As the config file has them, none or longer than the readings kept is as far as they go
     span := clamp(seconds, TRACE_MIN_SECONDS, TRACE_MAX_SECONDS)
     cents_range := max(range_cents, TRACE_BAND)
@@ -132,14 +132,14 @@ draw_cents_trace :: proc(self: ^Trace, rect: gfx.Rect, seconds, range_cents: f32
 
 // A curve through the readings, dimmed along the line as the readings' light, with a gap where the pitch
 // was lost
-draw_trace_line :: proc(self: ^Trace, plot: gfx.Rect, middle: f32, scale: [2]f32, radius: f32, color: gfx.Color) {
+draw_trace_line :: proc(self: ^TraceDisplay, plot: gfx.Rect, middle: f32, scale: [2]f32, radius: f32, color: gfx.Color) {
     // Placed by time, the newest reading is at the right edge now and scrolls left
     point :: proc(sample: TraceSample, clock: f64, plot: gfx.Rect, middle: f32, scale: [2]f32) -> [2]f32 {
         x := plot.x + plot.width - f32(clock - sample.time) * scale.x
         limit := plot.height / 2
         return {x, middle - clamp(sample.cents * scale.y, -limit, limit)}
     }
-    usable :: proc(self: ^Trace, index: int) -> bool {
+    usable :: proc(self: ^TraceDisplay, index: int) -> bool {
         return index >= 0 && index < self.count && !math.is_nan(trace_sample(self, index).cents)
     }
 

@@ -61,8 +61,8 @@ App :: struct {
     default_label:      string, // the list's first input, see list_inputs
     input_menu:         int, // the Input menu, see setup_menu_bar
     strobe_display:     StrobeDisplay,
-    cents_trace:        Trace,
-    spectrum_view:      SpectrumView,
+    trace_display:      TraceDisplay,
+    spectrum_display:   SpectrumDisplay,
 
     open_dropdown:      Dropdown, // the dropdown whose menu is open
     settings_sheet:     Sheet,
@@ -164,11 +164,11 @@ run_app :: proc(config: ^Config) {
     app.strobe_display = init_strobe_display(strobe_bg_color)
     defer destroy_strobe_display(&app.strobe_display)
 
-    app.cents_trace = create_trace()
-    defer destroy_trace(&app.cents_trace)
+    app.trace_display = init_trace_display()
+    defer destroy_trace_display(&app.trace_display)
 
-    app.spectrum_view = init_spectrum_view()
-    defer destroy_spectrum_view(&app.spectrum_view)
+    app.spectrum_display = init_spectrum_display()
+    defer destroy_spectrum_display(&app.spectrum_display)
 
     // Opened or not, the strobe area says why there's no input, see draw_strobe_area
     audio_capture := audio.init(config.input_device)
@@ -179,7 +179,7 @@ run_app :: proc(config: ^Config) {
     audio.register_node(audio_capture, &app.pitch_detector)
     audio.register_node(audio_capture, app.phase_comparator)
     audio.register_node(audio_capture, &app.scope)
-    audio.register_node(audio_capture, &app.spectrum_view)
+    audio.register_node(audio_capture, &app.spectrum_display)
     match_input_rate(&app)
     audio.start(audio_capture)
 
@@ -523,11 +523,11 @@ measure :: proc(app: ^App) -> (reading: Reading) {
         }
     }
 
-    record_trace(&app.cents_trace, traced_cents, light, reading.pitch.fresh, gfx.frame_time())
+    record_trace(&app.trace_display, traced_cents, light, reading.pitch.fresh, gfx.frame_time())
 
     // The spectrum of what came in, only while it's the display
     config := app.config
-    if config.strobe_display_type == .SPECTRUM do update_spectrum_view(&app.spectrum_view, config.spectrum_windows)
+    if config.strobe_display_type == .SPECTRUM do update_spectrum_display(&app.spectrum_display,config.spectrum_windows)
 
     return
 }
