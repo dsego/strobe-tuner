@@ -269,39 +269,93 @@ draw_spectrum_display :: proc(
 ) {
     gfx.draw_rect({rect.x, rect.y}, {rect.width, rect.height}, background)
 
-    // Room for the labels above the peaks and the octaves under the plot
-    PADDING_TOP :: 40
-    PADDING_BOTTOM :: 28
-    plot := gfx.Rect{rect.x, rect.y + PADDING_TOP, rect.width, rect.height - PADDING_TOP - PADDING_BOTTOM}
+    padding: f32 = SPECTRUM_PADDING_TOP + SPECTRUM_PADDING_BOTTOM
+    plot := gfx.Rect{rect.x, rect.y + SPECTRUM_PADDING_TOP, rect.width, rect.height - padding}
     if len(self.levels) == 0 || plot.width <= 0 || plot.height <= 0 do return
 
     low_hz: f32 = SPECTRUM_LOW_HZ
     high_hz := core.pitch_lowpass_hz(self.sample_rate)
     bin_hz := self.sample_rate / f32(self.transform.fft_size)
-    pitch_standard := config.pitch_standard
 
     // What's drawn, and the plot's bottom and top in it
     shown, range := self.over, SPECTRUM_SNR_DB
     if config.spectrum_scale == .DBFS do shown, range = self.levels, SPECTRUM_DBFS_DB
 
-    // The octaves' Cs and the tracks' partials across the plot
-    octave_x := make([dynamic][2]f32, context.temp_allocator) // x and the octave
+    octaves := spectrum_octaves(config.pitch_standard, low_hz, high_hz, plot)
+    track_x := spectrum_track_marks(track_hz, low_hz, high_hz, plot)
+    points := update_spectrum_curve(self, shown, range, plot, low_hz, high_hz, bin_hz)
+
+    // The curve's glow and the labels' pills reach past the sides. The glow's offscreen drawing isn't cut, see
+    // gfx.begin_render_target.
+    gfx.begin_scissor(rect)
+    defer gfx.end_scissor()
+
+    // With the retro glow the curve glows like the scope's beam, the bloom added once: the scope's thin
+    // beam takes it a few times over, the curve's thicker and busier
+    if config.strobe_glow {
+        begin_glow(targets, rect, background)
+        draw_spectrum_plot(plot, points, octaves, track_x, active, line_color, band_color, background)
+        end_glow(targets, rect, 1)
+    } else {
+        draw_spectrum_plot(plot, points, octaves, track_x, active, line_color, band_color, background)
+    }
+
+    // The text over it, sharp
+    draw_spectrum_octave_labels(octaves, plot)
+
+    peaks := find_spectrum_peaks(self, shown, low_hz, high_hz, bin_hz)
+    if config.spectrum_peak_level do draw_spectrum_peak_level(&self.peak_line, peaks, plot, range, config.spectrum_scale, background)
+    if config.spectrum_labels != .OFF {
+        draw_peak_labels(self, peaks, plot, low_hz, high_hz, config.pitch_standard, config.spectrum_labels, background)
+    } else {
+        clear(&self.named)
+    }
+}
+
+// Room for the labels above the peaks and the octaves under the plot
+SPECTRUM_PADDING_TOP :: 40
+SPECTRUM_PADDING_BOTTOM :: 28
+
+SPECTRUM_COLUMN_STEP :: 2 // points between the curve's points across the plot
+
+// An octave's C on the plot
+SpectrumOctave :: struct {
+    x:      f32,
+    octave: int,
+}
+
+// The octaves' Cs across the plot, those within it
+spectrum_octaves :: proc(pitch_standard, low_hz, high_hz: f32, plot: gfx.Rect) -> []SpectrumOctave {
+    octaves := make([dynamic]SpectrumOctave, context.temp_allocator)
     for octave in 1 ..= 8 {
         c_hz := core.freq_at_cents(pitch_standard, f32((octave - 4) * 1200 - 900))
-        if c_hz >= low_hz && c_hz <= high_hz do append(&octave_x, [2]f32{spectrum_x(c_hz, low_hz, high_hz, plot), f32(octave)})
+        if c_hz >= low_hz && c_hz <= high_hz do append(&octaves, SpectrumOctave{spectrum_x(c_hz, low_hz, high_hz, plot), octave})
     }
+    return octaves[:]
+}
+
+// The tracks' partials across the plot, those within it
+spectrum_track_marks :: proc(track_hz: []f32, low_hz, high_hz: f32, plot: gfx.Rect) -> []f32 {
     track_x := make([dynamic]f32, context.temp_allocator)
     for freq in track_hz {
         if freq >= low_hz && freq <= high_hz do append(&track_x, spectrum_x(freq, low_hz, high_hz, plot))
     }
+    return track_x[:]
+}
 
-    // The curve, a point every couple of points across: the loudest bin under it, or between two bins where
-    // the low notes spread a bin over several columns. High up a column is the loudest of dozens of bins, of
-    // the noise a different one every frame: each point follows over SPECTRUM_SMOOTHING_S, up and down
-    // alike, the noise settles near its middle. Rising at once and only falling slowly held it at the top of
-    // its peaks, stuck under the plot's ceiling. Within SPECTRUM_HOLD_DB of where it is a point holds.
-    STEP :: 2
-    count := int(plot.width / STEP) + 1
+// The curve, a point every SPECTRUM_COLUMN_STEP across, see spectrum_column_db. High up a column is the
+// loudest of dozens of bins, of the noise a different one every frame: each point follows over
+// SPECTRUM_SMOOTHING_S, up and down alike, the noise settles near its middle. Rising at once and only
+// falling slowly held it at the top of its peaks, stuck under the plot's ceiling. Within SPECTRUM_HOLD_DB
+// of where it is a point holds. Kept in self.columns, the points live until the end of the frame.
+update_spectrum_curve :: proc(
+    self: ^SpectrumDisplay,
+    shown: []f32,
+    range: [2]f32,
+    plot: gfx.Rect,
+    low_hz, high_hz, bin_hz: f32,
+) -> [][2]f32 {
+    count := int(plot.width / SPECTRUM_COLUMN_STEP) + 1
     if len(self.columns) != count {
         clear(&self.columns)
         resize(&self.columns, count)
@@ -311,18 +365,10 @@ draw_spectrum_display :: proc(
 
     points := make([dynamic][2]f32, context.temp_allocator)
     for column in 0 ..< count {
-        x := f32(column) * STEP
+        x := f32(column) * SPECTRUM_COLUMN_STEP
         from := low_hz * math.pow(high_hz / low_hz, x / plot.width) / bin_hz
-        to := low_hz * math.pow(high_hz / low_hz, (x + STEP) / plot.width) / bin_hz
-        last := len(shown) - 1
-
-        db := range[0]
-        if to - from >= 1 {
-            for bin in int(math.ceil(from)) ..= min(int(to), last) do db = max(db, shown[bin])
-        } else {
-            below := min(int(from), last - 1)
-            db = math.lerp(shown[below], shown[below + 1], from - f32(below))
-        }
+        to := low_hz * math.pow(high_hz / low_hz, (x + SPECTRUM_COLUMN_STEP) / plot.width) / bin_hz
+        db := spectrum_column_db(shown, from, to, range[0])
 
         height := &self.columns[column]
         level := clamp((db - range[0]) / (range[1] - range[0]), 0, 1)
@@ -331,255 +377,292 @@ draw_spectrum_display :: proc(
         height^ += (target - height^) * follow
         append(&points, [2]f32{plot.x + x, plot.y + plot.height * (1 - height^)})
     }
+    return points[:]
+}
 
-    // With the retro glow the curve glows like the scope's beam, the bloom added once: the scope's thin
-    // beam takes it a few times over, the curve's thicker and busier
-    if config.strobe_glow {
-        begin_glow(targets, rect, background)
-        draw_plot(plot, points[:], octave_x[:], track_x[:], active, line_color, band_color, background)
-        end_glow(targets, rect, 1)
+// The loudest bin under a column from bin from to bin to, or between two bins where the low notes spread a
+// bin over several columns. Nothing louder is floor.
+spectrum_column_db :: proc(shown: []f32, from, to, floor: f32) -> f32 {
+    last := len(shown) - 1
+    if to - from < 1 {
+        below := min(int(from), last - 1)
+        return math.lerp(shown[below], shown[below + 1], from - f32(below))
     }
 
-    gfx.begin_scissor(rect)
-    defer gfx.end_scissor()
+    db := floor
+    for bin in int(math.ceil(from)) ..= min(int(to), last) do db = max(db, shown[bin])
+    return db
+}
 
-    if !config.strobe_glow do draw_plot(plot, points[:], octave_x[:], track_x[:], active, line_color, band_color, background)
+// The octaves' lines and the tracks' marks behind the curve, filled solid under it so they stay behind.
+// The curve like the trace's line, a soft glow under a thin line, both of anti-aliased dots.
+draw_spectrum_plot :: proc(
+    plot: gfx.Rect,
+    points: [][2]f32,
+    octaves: []SpectrumOctave,
+    track_x: []f32,
+    active: bool,
+    line_color, band_color, background: gfx.Color,
+) {
+    grid := band_color
+    grid.a = 70
+    for octave in octaves do gfx.draw_rect({octave.x, plot.y}, {1, plot.height}, grid)
 
-    // The text over it, sharp. Each C under its line, held inside the edges, C8's near the right one.
+    mark := accent_color
+    mark.a = 160 if active else 60
+    for x in track_x do gfx.draw_rect({x - 0.5, plot.y}, {1.5, plot.height}, mark)
+
+    fill := lerp_color(background, line_color, 0.2)
+    fill.a = 255
+    bottom := plot.y + plot.height
+    for index in 0 ..< len(points) - 1 {
+        point := points[index]
+        gfx.draw_rect({point.x, point.y}, {points[index + 1].x - point.x, bottom - point.y}, fill)
+    }
+
+    // Thinner than the trace's, a spectrum is jagged and the fill under it carries the shape. The glow is
+    // two strips, the narrow one over the wide one for a softer edge.
+    GLOW_RADIUS :: 2.5
+    LINE_WIDTH :: 1.2
+    glow := line_color
+    glow.a = SPECTRUM_GLOW_ALPHA
+    gfx.draw_polyline(points, 2 * GLOW_RADIUS, glow)
+    gfx.draw_polyline(points, GLOW_RADIUS, glow)
+
+    for index in 1 ..< len(points) {
+        gfx.draw_line(points[index - 1], points[index], LINE_WIDTH, line_color)
+    }
+}
+
+// Each C under its line, held inside the edges, C8's near the right one
+draw_spectrum_octave_labels :: proc(octaves: []SpectrumOctave, plot: gfx.Rect) {
     font := pixel_fonts.band_label_small
-    for octave in octave_x {
-        text := fmt.ctprintf("C%d", int(octave.y))
+    for octave in octaves {
+        text := fmt.ctprintf("C%d", octave.octave)
         width := measure_label(font, text).x
         x := clamp(octave.x - width / 2, plot.x + 4, plot.x + plot.width - width - 4)
         draw_label(font, text, {x, plot.y + plot.height + 6}, text_color_muted)
     }
+}
 
-    peaks := find_peaks(self, shown, low_hz, high_hz, bin_hz)
-    if config.spectrum_peak_level do draw_peak_level(&self.peak_line, peaks, plot, range, config.spectrum_scale, background)
-    if config.spectrum_labels != .OFF {
-        draw_peak_labels(self, peaks, plot, low_hz, high_hz, pitch_standard, config.spectrum_labels, background)
-    } else {
-        clear(&self.named)
+// On a pill of the background, the lines and the curve don't run through the text
+draw_spectrum_label_pill :: proc(bounds: gfx.Rect, background: gfx.Color, alpha: f32 = 1) {
+    PADDING :: [2]f32{8, 3}
+    pill := background
+    pill.a = u8(220 * alpha)
+    gfx.draw_pill({bounds.x - PADDING.x, bounds.y - PADDING.y, bounds.width + 2 * PADDING.x, bounds.height + 2 * PADDING.y}, pill)
+}
+
+// A line across at the loudest peak, at the right end over it how high, as the scale says: its SNR or
+// its level in dBFS. The reading was its level on both, on SNR the line stood still while it fell with
+// the recording's own noise. It holds within SPECTRUM_HOLD_DB like the curve, the reading jumped every
+// frame and with it the line.
+draw_spectrum_peak_level :: proc(
+    held: ^f32,
+    peaks: []SpectrumPeak,
+    plot: gfx.Rect,
+    range: [2]f32,
+    scale: SpectrumScale,
+    background: gfx.Color,
+) {
+    if len(peaks) == 0 do return
+
+    loudest := peaks[0]
+    for peak in peaks do if peak.level > loudest.level do loudest = peak
+
+    held^ = held_within(held^, loudest.shown, SPECTRUM_HOLD_DB)
+    y := spectrum_y(held^, range, plot)
+    line := text_color_muted
+    line.a = 140
+    gfx.draw_rect({plot.x, y - 0.5}, {plot.width, 1}, line)
+
+    font := pixel_fonts.label_small
+    text := fmt.ctprintf("%.0f dB SNR" if scale == .SNR else "%.0f dBFS", held^)
+    size := measure_label(font, text)
+    position := [2]f32{plot.x + plot.width - size.x - 12, y - size.y - 6}
+    draw_spectrum_label_pill({position.x, position.y, size.x, size.y}, background)
+    draw_label(font, text, position, text_color_muted)
+}
+
+// The peaks that stand out over the noise, the one most over it first
+find_spectrum_peaks :: proc(self: ^SpectrumDisplay, shown: []f32, low_hz, high_hz, bin_hz: f32) -> []SpectrumPeak {
+    // The highest past the main lobe, 4 bins either side under the Hann window, its first sidelobes 31 dB down
+    SIDE_BINS :: 6
+    peaks := make([dynamic]SpectrumPeak, context.temp_allocator)
+    over := self.over
+    first := max(int(low_hz / bin_hz), SIDE_BINS)
+    last := min(int(high_hz / bin_hz), len(over) - 1 - SIDE_BINS)
+    for bin in first ..= last {
+        db := over[bin]
+        // As low as a named peak keeps its name, the labels pick from these
+        if db < SPECTRUM_PROMINENCE_DB - SPECTRUM_LABEL_HOLD_DB do continue
+
+        highest := true
+        for other in bin - SIDE_BINS ..= bin + SIDE_BINS {
+            if over[other] > db || (over[other] == db && other < bin) do highest = false
+        }
+        if !highest do continue
+
+        offset, value := core.parabolic(over[bin - 1], db, over[bin + 1])
+        append(&peaks, SpectrumPeak{(f32(bin) + offset) * bin_hz, value, self.levels[bin], shown[bin]})
     }
+    slice.sort_by(peaks[:], louder_peak)
+    return peaks[:]
+}
 
-    // On a pill of the background, the lines and the curve don't run through the text
-    draw_label_pill :: proc(bounds: gfx.Rect, background: gfx.Color, alpha: f32 = 1) {
-        PADDING :: [2]f32{8, 3}
-        pill := background
-        pill.a = u8(220 * alpha)
-        gfx.draw_pill({bounds.x - PADDING.x, bounds.y - PADDING.y, bounds.width + 2 * PADDING.x, bounds.height + 2 * PADDING.y}, pill)
+// A peak that could be named this frame, see draw_peak_labels
+PeakLabelCandidate :: struct {
+    peak:   SpectrumPeak,
+    rank:   f32, // its dB over the noise, higher if it was shown
+    hz:     f32, // as shown
+    alpha:  f32,
+    before: Maybe(int), // its name in the frame before
+}
+
+// The note, its Hz under it, or either alone, and the bubble's size
+PeakLabelText :: struct {
+    name, hz:                 cstring,
+    name_size, hz_size, size: [2]f32,
+}
+
+// The loudest peaks named by their note and Hz, over the curve as it's drawn. The loudest first, the
+// ones named in the frame before kept and ranked higher, see SPECTRUM_LABEL_HOLD_DB. One beside a louder
+// one's name is left out, whatever their heights: kept apart only where the bubbles overlapped, a run of
+// partials a few semitones apart stacked up a cluster of names. A name fades in, and a dropped one fades
+// out where it was, see SPECTRUM_LABEL_FADE_S.
+draw_peak_labels :: proc(
+    self: ^SpectrumDisplay,
+    peaks: []SpectrumPeak,
+    plot: gfx.Rect,
+    low_hz, high_hz, pitch_standard: f32,
+    labels: SpectrumLabels,
+    background: gfx.Color,
+) {
+    fade_step := gfx.frame_time() / SPECTRUM_LABEL_FADE_S
+    named_before := slice.clone(self.named[:], context.temp_allocator)
+    clear(&self.named)
+
+    candidates := peak_label_candidates(peaks, named_before)
+    loudest := peaks[0].db if len(peaks) > 0 else 0
+    carried := pick_named_peaks(self, candidates, loudest, len(named_before), plot, low_hz, high_hz, pitch_standard, labels, fade_step)
+    fade_dropped_peak_labels(self, named_before, carried, fade_step)
+
+    for named in self.named do if !named.shown do draw_named_peak(named, pitch_standard, labels, background)
+    for named in self.named do if named.shown do draw_named_peak(named, pitch_standard, labels, background)
+}
+
+// Into self.named, up to SPECTRUM_MAX_LABELS of the candidates in their order, within
+// SPECTRUM_LABEL_RANGE_DB of the loudest and not beside one already picked. Returns which of the frame
+// before's names were carried over.
+pick_named_peaks :: proc(
+    self: ^SpectrumDisplay,
+    candidates: []PeakLabelCandidate,
+    loudest: f32,
+    before_count: int,
+    plot: gfx.Rect,
+    low_hz, high_hz, pitch_standard: f32,
+    labels: SpectrumLabels,
+    fade_step: f32,
+) -> (
+    carried: []bool,
+) {
+    carried = make([]bool, before_count, context.temp_allocator)
+    shown_count := 0
+    for candidate in candidates {
+        peak := candidate.peak
+        if shown_count == SPECTRUM_MAX_LABELS do break
+        if peak.db < loudest - SPECTRUM_LABEL_RANGE_DB do continue
+
+        size := peak_label_text(candidate.hz, pitch_standard, labels).size
+        bounds := peak_label_bounds(self, plot, spectrum_x(peak.freq, low_hz, high_hz, plot), size)
+        if beside_named_peak(self.named[:], bounds) do continue
+
+        if before, ok := candidate.before.?; ok do carried[before] = true
+        alpha := min(candidate.alpha + fade_step, 1)
+        append(&self.named, NamedPeak{peak.freq, candidate.hz, alpha, true, bounds})
+        shown_count += 1
     }
+    return
+}
 
-    // A line across at the loudest peak, at the right end over it how high, as the scale says: its SNR or
-    // its level in dBFS. The reading was its level on both, on SNR the line stood still while it fell with
-    // the recording's own noise. It holds within SPECTRUM_HOLD_DB like the curve, the reading jumped every
-    // frame and with it the line.
-    draw_peak_level :: proc(
-        held: ^f32,
-        peaks: []SpectrumPeak,
-        plot: gfx.Rect,
-        range: [2]f32,
-        scale: SpectrumScale,
-        background: gfx.Color,
-    ) {
-        if len(peaks) == 0 do return
-
-        loudest := peaks[0]
-        for peak in peaks do if peak.level > loudest.level do loudest = peak
-
-        held^ = held_within(held^, loudest.shown, SPECTRUM_HOLD_DB)
-        y := spectrum_y(held^, range, plot)
-        line := text_color_muted
-        line.a = 140
-        gfx.draw_rect({plot.x, y - 0.5}, {plot.width, 1}, line)
-
-        font := pixel_fonts.label_small
-        text := fmt.ctprintf("%.0f dB SNR" if scale == .SNR else "%.0f dBFS", held^)
-        size := measure_label(font, text)
-        position := [2]f32{plot.x + plot.width - size.x - 12, y - size.y - 6}
-        draw_label_pill({position.x, position.y, size.x, size.y}, background)
-        draw_label(font, text, position, text_color_muted)
-    }
-
-    // The octaves' lines and the tracks' marks behind the curve, filled solid under it so they stay behind.
-    // The curve like the trace's line, a soft glow under a thin line, both of anti-aliased dots.
-    draw_plot :: proc(
-        plot: gfx.Rect,
-        points: [][2]f32,
-        octave_x: [][2]f32,
-        track_x: []f32,
-        active: bool,
-        line_color, band_color, background: gfx.Color,
-    ) {
-        grid := band_color
-        grid.a = 70
-        for octave in octave_x do gfx.draw_rect({octave.x, plot.y}, {1, plot.height}, grid)
-
-        mark := accent_color
-        mark.a = 160 if active else 60
-        for x in track_x do gfx.draw_rect({x - 0.5, plot.y}, {1.5, plot.height}, mark)
-
-        fill := lerp_color(background, line_color, 0.2)
-        fill.a = 255
-        bottom := plot.y + plot.height
-        for index in 0 ..< len(points) - 1 {
-            point := points[index]
-            gfx.draw_rect({point.x, point.y}, {points[index + 1].x - point.x, bottom - point.y}, fill)
-        }
-
-        // Thinner than the trace's, a spectrum is jagged and the fill under it carries the shape. The glow is
-        // two strips, the narrow one over the wide one for a softer edge.
-        GLOW_RADIUS :: 2.5
-        LINE_WIDTH :: 1.2
-        glow := line_color
-        glow.a = SPECTRUM_GLOW_ALPHA
-        gfx.draw_polyline(points[:], 2 * GLOW_RADIUS, glow)
-        gfx.draw_polyline(points[:], GLOW_RADIUS, glow)
-
-        for index in 1 ..< len(points) {
-            gfx.draw_line(points[index - 1], points[index], LINE_WIDTH, line_color)
-        }
-    }
-
-    // The peaks that stand out over the noise, the one most over it first
-    find_peaks :: proc(self: ^SpectrumDisplay, shown: []f32, low_hz, high_hz, bin_hz: f32) -> []SpectrumPeak {
-        // The highest past the main lobe, 4 bins either side under the Hann window, its first sidelobes 31 dB down
-        SIDE_BINS :: 6
-        peaks := make([dynamic]SpectrumPeak, context.temp_allocator)
-        over := self.over
-        first := max(int(low_hz / bin_hz), SIDE_BINS)
-        last := min(int(high_hz / bin_hz), len(over) - 1 - SIDE_BINS)
-        for bin in first ..= last {
-            db := over[bin]
-            // As low as a named peak keeps its name, the labels pick from these
-            if db < SPECTRUM_PROMINENCE_DB - SPECTRUM_LABEL_HOLD_DB do continue
-
-            highest := true
-            for other in bin - SIDE_BINS ..= bin + SIDE_BINS {
-                if over[other] > db || (over[other] == db && other < bin) do highest = false
-            }
-            if !highest do continue
-
-            offset, value := core.parabolic(over[bin - 1], db, over[bin + 1])
-            append(&peaks, SpectrumPeak{(f32(bin) + offset) * bin_hz, value, self.levels[bin], shown[bin]})
-        }
-        slice.sort_by(peaks[:], louder_peak)
-        return peaks[:]
-    }
-
-    // The loudest peaks named by their note and Hz, over the curve as it's drawn. The loudest first, the
-    // ones named in the frame before kept and ranked higher, see SPECTRUM_LABEL_HOLD_DB. One beside a louder
-    // one's name is left out, whatever their heights: kept apart only where the bubbles overlapped, a run of
-    // partials a few semitones apart stacked up a cluster of names. A name fades in, and a dropped one fades
-    // out where it was, see SPECTRUM_LABEL_FADE_S.
-    draw_peak_labels :: proc(
-        self: ^SpectrumDisplay,
-        peaks: []SpectrumPeak,
-        plot: gfx.Rect,
-        low_hz, high_hz, pitch_standard: f32,
-        labels: SpectrumLabels,
-        background: gfx.Color,
-    ) {
-        Candidate :: struct {
-            peak:   SpectrumPeak,
-            rank:   f32, // its dB over the noise, higher if it was shown
-            hz:     f32, // as shown
-            alpha:  f32,
-            before: int, // its name in the frame before, -1 for none
-        }
-
-        // The note, its Hz under it, or either alone, and the bubble's size
-        label_text :: proc(hz, pitch_standard: f32, labels: SpectrumLabels) -> (name, hz_text: cstring, name_size, hz_size, size: [2]f32) {
-            GAP :: 4
-            if labels != .HZ do name = fmt.ctprintf("%s", core.note_name(core.freq_to_note(hz, pitch_standard)))
-            if labels != .NOTE do hz_text = fmt.ctprintf("%.0fHz", hz)
-            name_size = measure_label(pixel_fonts.band_label, name) if name != nil else {}
-            hz_size = measure_label(pixel_fonts.band_label_small, hz_text) if hz_text != nil else {}
-            size = {max(name_size.x, hz_size.x), name_size.y + hz_size.y + (GAP if labels == .BOTH else 0)}
-            return
-        }
-
-        draw_named :: proc(named: NamedPeak, pitch_standard: f32, labels: SpectrumLabels, background: gfx.Color) {
-            name, hz, name_size, hz_size, size := label_text(named.hz, pitch_standard, labels)
-            bounds := named.bounds
-            name_color, hz_color := text_color_light, text_color_muted
-            name_color.a = u8(f32(name_color.a) * named.alpha)
-            hz_color.a = u8(f32(hz_color.a) * named.alpha)
-
-            draw_label_pill(bounds, background, named.alpha)
-            if name != nil do draw_label(pixel_fonts.band_label, name, {bounds.x + (size.x - name_size.x) / 2, bounds.y}, name_color)
-
-            if hz != nil {
-                hz_y := bounds.y + bounds.height - hz_size.y
-                draw_label(pixel_fonts.band_label_small, hz, {bounds.x + (size.x - hz_size.x) / 2, hz_y}, hz_color)
-            }
-        }
-
-        fade_step := gfx.frame_time() / SPECTRUM_LABEL_FADE_S
-        named_before := slice.clone(self.named[:], context.temp_allocator)
-        clear(&self.named)
-
-        // The frame before's name within half a semitone carries over, its Hz held from there, and its rank
-        // if it was shown
-        candidates := make([dynamic]Candidate, context.temp_allocator)
-        for peak in peaks {
-            candidate := Candidate{peak, peak.db, peak.freq, 0, -1}
-            for before, index in named_before {
-                if abs(math.log2(peak.freq / before.freq)) > 1.0 / 24 do continue
-
-                candidate.hz = held_within(before.hz, peak.freq, SPECTRUM_LABEL_HOLD_HZ)
-                candidate.alpha = before.alpha
-                candidate.before = index
-                if before.shown do candidate.rank += SPECTRUM_LABEL_HOLD_DB
-                break
-            }
-
-            was_shown := candidate.before >= 0 && named_before[candidate.before].shown
-            if was_shown || peak.db >= SPECTRUM_PROMINENCE_DB do append(&candidates, candidate)
-        }
-        slice.sort_by(candidates[:], proc(first, second: Candidate) -> bool { return first.rank > second.rank })
-
-        loudest := peaks[0].db if len(peaks) > 0 else 0
-        carried := make([]bool, len(named_before), context.temp_allocator)
-        shown_count := 0
-        for candidate in candidates {
-            peak := candidate.peak
-            if shown_count == SPECTRUM_MAX_LABELS do break
-            if peak.db < loudest - SPECTRUM_LABEL_RANGE_DB do continue
-
-            // Centered over the peak, inside the plot's sides, on the curve's point there as drawn, it holds
-            // still, the peak's level a frame wobbles
-            _, _, _, _, size := label_text(candidate.hz, pitch_standard, labels)
-            x := spectrum_x(peak.freq, low_hz, high_hz, plot)
-            point := clamp(int((x - plot.x) / STEP + 0.5), 0, len(self.columns) - 1)
-            curve := plot.y + plot.height * (1 - self.columns[point])
-            top := max(curve - size.y - 6, plot.y - size.y)
-            bounds := gfx.Rect{clamp(x - size.x / 2, plot.x + 4, plot.x + plot.width - size.x - 4), top, size.x, size.y}
-
-            // Too close beside a louder one's
-            beside := false
-            for other in self.named {
-                if bounds.x < other.bounds.x + other.bounds.width + 8 && other.bounds.x < bounds.x + bounds.width + 8 do beside = true
-            }
-            if beside do continue
-
-            if candidate.before >= 0 do carried[candidate.before] = true
-            alpha := min(candidate.alpha + fade_step, 1)
-            append(&self.named, NamedPeak{peak.freq, candidate.hz, alpha, true, bounds})
-            shown_count += 1
-        }
-
-        // The dropped ones fade out where they were, under the shown ones
+// The peaks that can be named, the most over the noise first. The frame before's name within half a semitone
+// carries over, its Hz held from there, and its rank if it was shown.
+peak_label_candidates :: proc(peaks: []SpectrumPeak, named_before: []NamedPeak) -> []PeakLabelCandidate {
+    candidates := make([dynamic]PeakLabelCandidate, context.temp_allocator)
+    for peak in peaks {
+        candidate := PeakLabelCandidate{peak, peak.db, peak.freq, 0, nil}
+        was_shown := false
         for before, index in named_before {
-            if carried[index] do continue
+            if abs(math.log2(peak.freq / before.freq)) > 1.0 / 24 do continue
 
-            faded := before
-            faded.alpha -= fade_step
-            faded.shown = false
-            if faded.alpha > 0 do append(&self.named, faded)
+            candidate.hz = held_within(before.hz, peak.freq, SPECTRUM_LABEL_HOLD_HZ)
+            candidate.alpha = before.alpha
+            candidate.before = index
+            was_shown = before.shown
+            if before.shown do candidate.rank += SPECTRUM_LABEL_HOLD_DB
+            break
         }
 
-        for named in self.named do if !named.shown do draw_named(named, pitch_standard, labels, background)
-        for named in self.named do if named.shown do draw_named(named, pitch_standard, labels, background)
+        if was_shown || peak.db >= SPECTRUM_PROMINENCE_DB do append(&candidates, candidate)
+    }
+    slice.sort_by(candidates[:], proc(first, second: PeakLabelCandidate) -> bool { return first.rank > second.rank })
+    return candidates[:]
+}
+
+// Centered over the peak at x, inside the plot's sides, on the curve's point there as drawn, it holds still,
+// the peak's level a frame wobbles
+peak_label_bounds :: proc(self: ^SpectrumDisplay, plot: gfx.Rect, x: f32, size: [2]f32) -> gfx.Rect {
+    point := clamp(int((x - plot.x) / SPECTRUM_COLUMN_STEP + 0.5), 0, len(self.columns) - 1)
+    curve := plot.y + plot.height * (1 - self.columns[point])
+    top := max(curve - size.y - 6, plot.y - size.y)
+    return {clamp(x - size.x / 2, plot.x + 4, plot.x + plot.width - size.x - 4), top, size.x, size.y}
+}
+
+// Too close beside a louder one's name, whatever their heights
+beside_named_peak :: proc(named: []NamedPeak, bounds: gfx.Rect) -> bool {
+    GAP :: 8
+    for other in named {
+        if bounds.x < other.bounds.x + other.bounds.width + GAP && other.bounds.x < bounds.x + bounds.width + GAP do return true
+    }
+    return false
+}
+
+// The dropped ones fade out where they were, under the shown ones
+fade_dropped_peak_labels :: proc(self: ^SpectrumDisplay, named_before: []NamedPeak, carried: []bool, fade_step: f32) {
+    for before, index in named_before {
+        if carried[index] do continue
+
+        faded := before
+        faded.alpha -= fade_step
+        faded.shown = false
+        if faded.alpha > 0 do append(&self.named, faded)
+    }
+}
+
+peak_label_text :: proc(hz, pitch_standard: f32, labels: SpectrumLabels) -> (text: PeakLabelText) {
+    GAP :: 4
+    if labels != .HZ do text.name = fmt.ctprintf("%s", core.note_name(core.freq_to_note(hz, pitch_standard)))
+    if labels != .NOTE do text.hz = fmt.ctprintf("%.0fHz", hz)
+    if text.name != nil do text.name_size = measure_label(pixel_fonts.band_label, text.name)
+    if text.hz != nil do text.hz_size = measure_label(pixel_fonts.band_label_small, text.hz)
+
+    text.size = {max(text.name_size.x, text.hz_size.x), text.name_size.y + text.hz_size.y + (GAP if labels == .BOTH else 0)}
+    return
+}
+
+draw_named_peak :: proc(named: NamedPeak, pitch_standard: f32, labels: SpectrumLabels, background: gfx.Color) {
+    text := peak_label_text(named.hz, pitch_standard, labels)
+    bounds := named.bounds
+    name_color, hz_color := text_color_light, text_color_muted
+    name_color.a = u8(f32(name_color.a) * named.alpha)
+    hz_color.a = u8(f32(hz_color.a) * named.alpha)
+
+    draw_spectrum_label_pill(bounds, background, named.alpha)
+    if text.name != nil {
+        draw_label(pixel_fonts.band_label, text.name, {bounds.x + (text.size.x - text.name_size.x) / 2, bounds.y}, name_color)
+    }
+    if text.hz != nil {
+        hz_y := bounds.y + bounds.height - text.hz_size.y
+        draw_label(pixel_fonts.band_label_small, text.hz, {bounds.x + (text.size.x - text.hz_size.x) / 2, hz_y}, hz_color)
     }
 }
