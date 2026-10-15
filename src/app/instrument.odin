@@ -106,12 +106,15 @@ Setup :: struct {
     tuning:     int, // counted from 0 in the instrument's TUNINGS
     capo:       int,
     transpose:  int,
-    preset:     int, // counted from 0, -1 for a built-in instrument
+    preset:     Maybe(int), // counted from 0, none on a built-in instrument
 }
 
-// The preset that's tuned to, -1 on a built-in instrument
-selected_preset :: proc(config: ^Config) -> int {
-    return config.preset if config.preset >= 0 && config.preset < PRESET_SLOTS else -1
+// The preset that's tuned to, none on a built-in instrument or one hand edited out of range
+selected_preset :: proc(config: ^Config) -> Maybe(int) {
+    preset, ok := config.preset.?
+    if ok && preset >= 0 && preset < PRESET_SLOTS do return preset
+
+    return nil
 }
 
 preset_setup :: proc(config: ^Config, preset: int) -> Setup {
@@ -121,10 +124,10 @@ preset_setup :: proc(config: ^Config, preset: int) -> Setup {
 
 // What's tuned to, the selected preset or the built-in instrument
 current_setup :: proc(config: ^Config) -> Setup {
-    if preset := selected_preset(config); preset >= 0 do return preset_setup(config, preset)
+    if preset, ok := selected_preset(config).?; ok do return preset_setup(config, preset)
 
     instrument := config.instrument
-    return {instrument, config.instrument_tunings[instrument], config.instrument_capos[instrument], config.transpose, -1}
+    return {instrument, config.instrument_tunings[instrument], config.instrument_capos[instrument], config.transpose, nil}
 }
 
 // With its index in the instrument's TUNINGS, none on chromatic
@@ -174,7 +177,8 @@ setup_label :: proc(setup: Setup) -> string {
     names := INSTRUMENT_NAMES
     abbreviations := INSTRUMENT_ABBREVIATIONS
     keys := TRANSPOSE_KEYS
-    prefix := fmt.tprintf("P%d - ", setup.preset + 1) if setup.preset >= 0 else ""
+    prefix := ""
+    if preset, ok := setup.preset.?; ok do prefix = fmt.tprintf("P%d - ", preset + 1)
 
     // A Bb instrument, the way it's said
     if transpose := transpose_key(setup); transpose != 0 {
@@ -212,6 +216,9 @@ gui_instrument_button :: proc(pos: [2]f32, config: ^Config) -> bool {
     return gui_button({pos.x - 12, pos.y - TOUCH_HEIGHT / 2, label_x + label_width + 12 - (pos.x - 12), TOUCH_HEIGHT})
 }
 
+INSTRUMENT_WIDTH :: 240 // the dropdown of what's tuned to
+INSTRUMENT_CONTROL_WIDTH :: 176 // the rows' dropdowns and steppers
+
 // The sheet, it covers the window. On top with no label what's tuned to: the built-in instruments and the
 // presets. Under it a preset's instrument, then a stringed instrument's tuning and capo, the
 // strings next to the title, or the transpose for chromatic, and a preset's note offsets under them. target
@@ -227,7 +234,7 @@ gui_instrument :: proc(
     changed: bool,
 ) {
     setup := current_setup(config)
-    preset := setup.preset
+    preset, is_preset := setup.preset.?
     tuning, tuning_index := setup_tuning(setup)
     stringed := len(tuning.strings) > 0
 
@@ -235,21 +242,18 @@ gui_instrument :: proc(
     tuning_value := &config.instrument_tunings[setup.instrument]
     capo_value := &config.instrument_capos[setup.instrument]
     transpose_value := &config.transpose
-    if preset >= 0 {
+    if is_preset {
         tuning_value = &config.preset_tunings[preset]
         capo_value = &config.preset_capos[preset]
         transpose_value = &config.preset_transposes[preset]
     }
 
     // On top with no label what's tuned to. Under a preset its instrument. Then a stringed instrument's
-    // tuning and capo, or the transpose.
-    INSTRUMENT_WIDTH :: 240
+    // tuning, no row with only the standard one like a baritone ukulele's, and its capo, or the transpose.
     top_row := settings_row(sheet_layout, 0, "", 0)
     instrument_rect := gfx.Rect{sheet_layout.rows.x, top_row.y, INSTRUMENT_WIDTH, top_row.height}
-
-    // No tuning row with only the standard one, a baritone ukulele's
     tunable := len(TUNINGS[setup.instrument]) > 1
-    tuning_row := 2 if preset >= 0 else 1
+    tuning_row := 2 if is_preset else 1
     options_row := tuning_row + 1 if tunable else tuning_row
 
     // The strings next to the title
@@ -259,97 +263,136 @@ gui_instrument :: proc(
     close = draw_sheet_header(sheet_layout, "Instrument", details)
 
     if stringed {
-        rect := settings_row(sheet_layout, options_row, "Capo", 176)
-        capo := capo_fret(setup)
-        steps, reset := gui_stepper_buttons(rect, fmt.ctprintf("Fret %d", capo) if capo > 0 else "None")
-        capo = 0 if reset else clamp(capo + int(steps), 0, CAPO_MAX_FRET)
-        if capo != capo_value^ {
-            capo_value^ = capo
-            changed = true
-        }
+        rect := settings_row(sheet_layout, options_row, "Capo", INSTRUMENT_CONTROL_WIDTH)
+        if gui_capo_row(rect, setup, capo_value) do changed = true
     } else {
-        keys := TRANSPOSE_KEYS
-        rect := settings_row(sheet_layout, options_row, "Transpose", 176)
-        transpose := transpose_key(setup)
-        steps, reset := gui_stepper_buttons(rect, fmt.ctprintf("%s", keys[transpose]))
-        if reset do transpose = 0
-
-        transpose = (transpose - int(steps)) %% 12
-        if transpose != transpose_value^ {
-            transpose_value^ = transpose
-            changed = true
-        }
+        rect := settings_row(sheet_layout, options_row, "Transpose", INSTRUMENT_CONTROL_WIDTH)
+        if gui_transpose_row(rect, setup, transpose_value) do changed = true
     }
 
-    if preset >= 0 && gui_note_offsets(sheet_layout, options_row + 1, config, target) {
-        changed = true
-    }
+    if is_preset && gui_note_offsets(sheet_layout, options_row + 1, config, preset, target) do changed = true
 
     // The dropdowns from the bottom up, their menus open down over the rows under them
     if tunable {
-        tunings := TUNINGS[setup.instrument]
-        options := make([]GuiOption, len(tunings), context.temp_allocator)
-        for listed, index in tunings do options[index] = {i32(index), listed.name}
-
-        rect := settings_row(sheet_layout, tuning_row, "Tuning", 176)
-        selected := tuning_index
-        gui_settings_dropdown(open, .TUNING, rect, options, &selected, down = true)
-        if selected != tuning_index {
-            // A preset's string offsets stay with the strings
-            tuning_value^ = selected
-            changed = true
-        }
+        rect := settings_row(sheet_layout, tuning_row, "Tuning", INSTRUMENT_CONTROL_WIDTH)
+        if gui_tuning_dropdown(open, rect, setup.instrument, tuning_index, tuning_value) do changed = true
     }
 
-    if preset >= 0 {
-        options := instrument_options(0)
-        rect := settings_row(sheet_layout, 1, "Instrument", 176)
-        selected := int(setup.instrument)
-        gui_settings_dropdown(open, .PRESET_INSTRUMENT, rect, options, &selected, down = true)
-        if selected != int(setup.instrument) {
-            // Offsets and a capo are on one instrument, not the next
-            config.preset_instruments[preset] = Instrument(selected)
-            config.preset_tunings[preset] = 0
-            config.preset_capos[preset] = 0
-            config.preset_transposes[preset] = 0
-            config.note_offset_counts[preset] = 0
-            config.note_offset_notes[preset] = {}
-            config.note_offset_cents[preset] = {}
-            reset_note_offsets_editing()
-            changed = true
-        }
+    if is_preset {
+        rect := settings_row(sheet_layout, 1, "Instrument", INSTRUMENT_CONTROL_WIDTH)
+        if gui_preset_instrument_dropdown(open, rect, config, preset) do changed = true
     }
 
-    {
-        // The built-in instruments, then the preset slots by number with what's in them like the corner, a
-        // line between them. An unused slot is chromatic as it starts, its instrument is picked under it.
-        options := instrument_options(PRESET_SLOTS)
-        for slot in 0 ..< PRESET_SLOTS {
-            option := len(Instrument) + slot
-            held := preset_setup(config, slot)
-            empty := held.instrument == .CHROMATIC && transpose_key(held) == 0 && config.note_offset_counts[slot] == 0
-            held.preset = -1 // without the P1 in front
-            summary := "Empty" if empty else setup_label(held)
-            options[option] = {i32(option), fmt.tprintf("Preset %d - %s", slot + 1, summary)}
-        }
-        dividers := []int{len(Instrument)}
-
-        current := len(Instrument) + preset if preset >= 0 else int(config.instrument)
-        selected := current
-        gui_settings_dropdown(open, .INSTRUMENT, instrument_rect, options, &selected, down = true, dividers = dividers)
-        if selected != current {
-            if selected >= len(Instrument) {
-                config.preset = selected - len(Instrument)
-            } else {
-                config.instrument = Instrument(selected)
-                config.preset = -1
-            }
-            reset_note_offsets_editing()
-            changed = true
-        }
-    }
+    if gui_instrument_dropdown(open, instrument_rect, config, setup.preset) do changed = true
 
     return
+}
+
+// Writes the fret to capo_value, true when it changed
+gui_capo_row :: proc(rect: gfx.Rect, setup: Setup, capo_value: ^int) -> bool {
+    capo := capo_fret(setup)
+    steps, reset := gui_stepper_buttons(rect, fmt.ctprintf("Fret %d", capo) if capo > 0 else "None")
+    capo = 0 if reset else clamp(capo + int(steps), 0, CAPO_MAX_FRET)
+    if capo == capo_value^ do return false
+
+    capo_value^ = capo
+    return true
+}
+
+// Writes the key to transpose_value, true when it changed. Down a key is up a semitone, see TRANSPOSE_KEYS.
+gui_transpose_row :: proc(rect: gfx.Rect, setup: Setup, transpose_value: ^int) -> bool {
+    keys := TRANSPOSE_KEYS
+    transpose := transpose_key(setup)
+    steps, reset := gui_stepper_buttons(rect, fmt.ctprintf("%s", keys[transpose]))
+    if reset do transpose = 0
+
+    transpose = (transpose - int(steps)) %% len(keys)
+    if transpose == transpose_value^ do return false
+
+    transpose_value^ = transpose
+    return true
+}
+
+// Writes the tuning to tuning_value, true when it changed. A preset's string offsets stay with the strings.
+gui_tuning_dropdown :: proc(
+    open: ^Dropdown,
+    rect: gfx.Rect,
+    instrument: Instrument,
+    tuning_index: int,
+    tuning_value: ^int,
+) -> bool {
+    tunings := TUNINGS[instrument]
+    options := make([]GuiOption, len(tunings), context.temp_allocator)
+    for listed, index in tunings do options[index] = {i32(index), listed.name}
+
+    selected := tuning_index
+    gui_settings_dropdown(open, .TUNING, rect, options, &selected, down = true)
+    if selected == tuning_index do return false
+
+    tuning_value^ = selected
+    return true
+}
+
+// A preset's instrument, another one starts the preset over, offsets and a capo are on one instrument and
+// not the next. True when it changed.
+gui_preset_instrument_dropdown :: proc(open: ^Dropdown, rect: gfx.Rect, config: ^Config, preset: int) -> bool {
+    current := int(config.preset_instruments[preset])
+    selected := current
+    gui_settings_dropdown(open, .PRESET_INSTRUMENT, rect, instrument_options(0), &selected, down = true)
+    if selected == current do return false
+
+    clear_preset(config, preset, Instrument(selected))
+    reset_note_offsets_editing()
+    return true
+}
+
+// The preset as it starts on the instrument, the standard tuning, no capo, transpose or note offsets
+clear_preset :: proc(config: ^Config, preset: int, instrument: Instrument) {
+    config.preset_instruments[preset] = instrument
+    config.preset_tunings[preset] = 0
+    config.preset_capos[preset] = 0
+    config.preset_transposes[preset] = 0
+    config.note_offset_counts[preset] = 0
+    config.note_offset_notes[preset] = {}
+    config.note_offset_cents[preset] = {}
+}
+
+// What's tuned to, a built-in instrument or a preset, the one that is is preset. True when it changed.
+gui_instrument_dropdown :: proc(open: ^Dropdown, rect: gfx.Rect, config: ^Config, preset: Maybe(int)) -> bool {
+    current := int(config.instrument)
+    if slot, ok := preset.?; ok do current = len(Instrument) + slot
+
+    // A line between the built-in instruments and the presets
+    dividers := []int{len(Instrument)}
+
+    options := instrument_and_preset_options(config)
+    selected := current
+    gui_settings_dropdown(open, .INSTRUMENT, rect, options, &selected, down = true, dividers = dividers)
+    if selected == current do return false
+
+    if selected >= len(Instrument) {
+        config.preset = selected - len(Instrument)
+    } else {
+        config.instrument = Instrument(selected)
+        config.preset = nil
+    }
+    reset_note_offsets_editing()
+    return true
+}
+
+// The built-in instruments, then the preset slots by number with what's in them like the corner. An unused
+// slot is chromatic as it starts, its instrument is picked under it.
+instrument_and_preset_options :: proc(config: ^Config) -> []GuiOption {
+    options := instrument_options(PRESET_SLOTS)
+    for slot in 0 ..< PRESET_SLOTS {
+        option := len(Instrument) + slot
+        held := preset_setup(config, slot)
+        empty := held.instrument == .CHROMATIC && transpose_key(held) == 0 && config.note_offset_counts[slot] == 0
+        held.preset = nil // without the P1 in front
+        summary := "Empty" if empty else setup_label(held)
+        options[option] = {i32(option), fmt.tprintf("Preset %d - %s", slot + 1, summary)}
+    }
+    return options
 }
 
 // The built-in instruments by name, and room after them for extra options. Lives until the end of the frame.

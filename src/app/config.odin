@@ -123,10 +123,10 @@ Config :: struct {
     // Concert A, e.g. 440 Hz
     pitch_standard:               f32,
 
-    // What's tuned to: the built-in instrument, or a preset counted from 0, -1 for none. See gui_instrument.
+    // What's tuned to: the built-in instrument, or a preset counted from 0. See gui_instrument.
     // Every note, or only an instrument's strings in one of its TUNINGS.
     instrument:                   Instrument,
-    preset:                       int,
+    preset:                       Maybe(int),
     // per built-in instrument: the tuning counted from 0 in its TUNINGS, and the fret a capo is on, the
     // strings sound that many semitones up, 0 is none
     instrument_tunings:           [Instrument]int,
@@ -230,7 +230,7 @@ config_defaults :: Config {
     target_freq_hz               = 110.0,
     pitch_standard               = 440.0,
     instrument                   = .CHROMATIC,
-    preset                       = -1,
+    preset                       = nil,
     transpose                    = 0,
 
     // --- Strobe ---

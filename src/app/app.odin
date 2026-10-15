@@ -237,7 +237,7 @@ run_frame :: proc(app: ^App) {
         safe.width = STROBE_WIDTH
     }
 
-    layout := compute_layout(window, safe, selected_preset(config) >= 0)
+    layout := compute_layout(window, safe, selected_preset(config) != nil)
     update_pixel_fonts()
     update_menu_checks(app)
 

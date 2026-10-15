@@ -119,12 +119,22 @@ load_config :: proc() -> Config {
 // instrument. Arrays nested and enums named, a new instrument or longer rows don't shift what's saved onto
 // another. Missing or doesn't parse keeps its default, a number that isn't finite too, and an array's
 // missing trailing elements are zero, an enumerated array's missing names keep theirs. An enum of a number
-// is a config from before they were named. Others keep their default: slices, dynamic arrays, structs.
+// is a config from before they were named. A Maybe of an integer is the integer or nil. Others keep their
+// default: slices, dynamic arrays, structs, other unions.
 read_value :: proc(ptr: rawptr, type: ^runtime.Type_Info, written: string) {
     text := strings.trim_space(written)
     if len(text) == 0 do return
 
     #partial switch info in reflect.type_info_base(type).variant {
+    case reflect.Type_Info_Union:
+        if len(info.variants) != 1 || !reflect.is_integer(info.variants[0]) do return
+
+        if text == "nil" {
+            runtime.mem_zero(ptr, type.size)
+        } else if value, ok := strconv.parse_int(text); ok {
+            write_int_field(ptr, info.variants[0].size, value)
+            reflect.set_union_variant_type_info(any{ptr, type.id}, info.variants[0])
+        }
     case reflect.Type_Info_Enum:
         if value, ok := reflect.enum_from_name_any(type.id, strings.trim(text, "\".")); ok {
             write_int_field(ptr, type.size, int(value))
@@ -368,20 +378,31 @@ test_read_value :: proc(t: ^testing.T) {
     testing.expect_value(t, config.note_offset_notes[0][2], 0)
     testing.expect_value(t, config.note_offset_notes[1][0], 3)
 
+    // A preset's number or none, a config from before none reads -1, see selected_preset
+    read(&config.preset, "2")
+    testing.expect_value(t, config.preset, 2)
+    read(&config.preset, "nil")
+    testing.expect_value(t, config.preset, nil)
+    read(&config.preset, "-1")
+    testing.expect_value(t, selected_preset(&config), nil)
+
     // Written as save_config does and read back
     saved := config_defaults
     saved.preset_instruments = {.UKULELE, .BASS, .SEVEN_STRING, .GUITAR}
     saved.instrument_tunings[.BARITONE_UKULELE] = 3
     saved.note_offset_cents[2] = {-1.5, 2.25, 0, 0, 0, 0, 0, 0, 0, 7}
     saved.strobe_mode = .VERNIER
+    saved.preset = 3
 
     loaded := config_defaults
     read(&loaded.preset_instruments, fmt.tprintf("%v", saved.preset_instruments))
     read(&loaded.instrument_tunings, fmt.tprintf("%v", saved.instrument_tunings))
     read(&loaded.note_offset_cents, fmt.tprintf("%v", saved.note_offset_cents))
     read(&loaded.strobe_mode, fmt.tprintf("%v", saved.strobe_mode))
+    read(&loaded.preset, fmt.tprintf("%v", saved.preset))
     testing.expect_value(t, loaded.preset_instruments, saved.preset_instruments)
     testing.expect_value(t, loaded.instrument_tunings, saved.instrument_tunings)
     testing.expect_value(t, loaded.note_offset_cents, saved.note_offset_cents)
     testing.expect_value(t, loaded.strobe_mode, saved.strobe_mode)
+    testing.expect_value(t, loaded.preset, saved.preset)
 }

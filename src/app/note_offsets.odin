@@ -44,8 +44,8 @@ MAX_NOTE_OFFSETS :: 10
 // What each note from A0 is tuned off by, from the rows of the selected preset, a stringed instrument's
 // strings as they sound with the capo. None on a built-in instrument.
 active_note_offsets :: proc(config: ^Config) -> (offsets: [core.NOTE_COUNT]f32) {
-    preset := selected_preset(config)
-    if preset < 0 do return
+    preset, ok := selected_preset(config).?
+    if !ok do return
 
     cents := config.note_offset_cents[preset]
     if strings := tuning_strings(config); len(strings) > 0 {
@@ -445,15 +445,14 @@ gui_offset_popup :: proc(rows: OffsetRows, grid: OffsetGrid, editing: NoteOffset
 }
 
 
-// The selected preset's offsets on the instrument's sheet, under its first_row rows: a row with the title and
+// The preset's offsets on the instrument's sheet, under its first_row rows: a row with the title and
 // the buttons, then a row an offset. target is the note the tuner is on counted from A0, a new row starts
 // there, or -1. Returns true when the rows changed.
 //
 // With a mouse the selected row is lighter and its values are steppers, one row at a time, the rows stay
 // where they are. A finger would cover what it steps, tapped the note or the cents open a popup over the row
 // with the steppers large.
-gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Config, target: int) -> (changed: bool) {
-    preset := selected_preset(config)
+gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Config, preset, target: int) -> (changed: bool) {
     setup := preset_setup(config, preset)
     tuning, _ := setup_tuning(setup)
     rows := OffsetRows {
