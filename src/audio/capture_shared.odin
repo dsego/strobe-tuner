@@ -31,7 +31,7 @@ DECIMATE_CHUNK :: 2048
 SYSTEM_DEFAULT :: -1
 NOT_LISTED :: -2
 
-register_node :: proc(self: ^Capture, node: ^core.AudioCaptureNode) {
+register_audio_node :: proc(self: ^Capture, node: ^core.AudioCaptureNode) {
     append(&self.nodes, node)
 }
 

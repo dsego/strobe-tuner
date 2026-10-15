@@ -184,10 +184,10 @@ run_app :: proc(config: ^Config) {
 
     app.audio_capture = audio_capture
 
-    audio.register_node(audio_capture, &app.pitch_detector)
-    audio.register_node(audio_capture, app.strobe_lock_in)
-    audio.register_node(audio_capture, &app.scope)
-    audio.register_node(audio_capture, &app.spectrum_display)
+    audio.register_audio_node(audio_capture, &app.pitch_detector)
+    audio.register_audio_node(audio_capture, app.strobe_lock_in)
+    audio.register_audio_node(audio_capture, &app.scope)
+    audio.register_audio_node(audio_capture, &app.spectrum_display)
     match_input_rate(&app)
     audio.start(audio_capture)
 
