@@ -122,6 +122,80 @@ ShaderCode :: struct {
     entrypoint: cstring,
 }
 
+// What the frame draws, filled by the draw calls and sent to the GPU by end_frame
+GpuFrame :: struct {
+    vertices:        [dynamic]Vertex,
+    commands:        [dynamic]DrawCommand,
+    passes:          [dynamic]Pass,
+    uniform_data:    [dynamic]u8,
+    texture_pixels:  [dynamic]u8, // the textures updated this frame, see update_texture
+    texture_uploads: [dynamic]TextureUpload,
+}
+
+// What the next draw call is drawn with
+DrawingState :: struct {
+    program:        Program,
+    blend:          BlendMode,
+    scissor:        Maybe(Rect),
+    window_scissor: Maybe(Rect), // the window's while a render target is drawn, see begin_render_target
+    uniforms:       [Program]UniformRange,
+    clear:          Color,
+}
+
+Gpu :: struct {
+    device:           ^sdl.GPUDevice,
+    window_format:    sdl.GPUTextureFormat,
+    vertex_shader:    ^sdl.GPUShader,
+    fragment_shaders: [Program]^sdl.GPUShader,
+    pipelines:        [Program][BlendMode][PassKind]^sdl.GPUGraphicsPipeline,
+    sampler:          ^sdl.GPUSampler,
+    white:            Texture,
+
+    // grows as needed
+    vertex_buffer:    ^sdl.GPUBuffer,
+    transfer_buffer:  ^sdl.GPUTransferBuffer,
+    vertex_capacity:  int,
+    texture_transfer: ^sdl.GPUTransferBuffer,
+    texture_capacity: int,
+
+    frame:            GpuFrame,
+    drawing:          DrawingState,
+
+    // the last frame
+    acquire_failed:   bool, // its swapchain, reported once
+    dropped:          bool, // it wasn't drawn, the render targets hold what they had before it
+}
+
+Window :: struct {
+    handle:     ^sdl.Window,
+    ui_scale:   f32, // the window's points per drawing point, see set_ui_scale
+    quit:       bool,
+    background: bool, // set by watch_app_events, on whichever thread SDL pushes the event from
+}
+
+Input :: struct {
+    keys_pressed:  bit_set[Key],
+    mouse_clicked: bool,
+    touch:         bool, // the last press was a finger, see touch_input
+    wheel:         f32,
+}
+
+Clock :: struct {
+    last_counter: u64,
+    frame_time:   f32,
+    max_fps:      int, // see limit_fps
+}
+
+// The desktop window dragged to another size or a menu open, see live_resize_frames
+LiveResize :: struct {
+    frame:         proc(data: rawptr),
+    data:          rawptr,
+    frame_context: runtime.Context,
+    resizing:      bool, // in a frame drawn from the OS's own loop
+    polling:       bool, // in should_close, where the main loop is stuck while the OS runs a drag, a zoom or a menu
+    drag_tick:     u64, // the last tick of the drag's timer, in milliseconds
+}
+
 // Metal on Apple, Vulkan elsewhere. The SPIR-V is compiled from src/shaders/vulkan into build/spirv by
 // src/shaders/vulkan/compile.sh, Metal takes the source.
 when ODIN_OS == .Darwin {
@@ -170,86 +244,10 @@ scancodes := [Key]sdl.Scancode {
     .RIGHT_CONTROL = .RCTRL,
 }
 
-// What the frame draws, filled by the draw calls and sent to the GPU by end_frame
-GpuFrame :: struct {
-    vertices:        [dynamic]Vertex,
-    commands:        [dynamic]DrawCommand,
-    passes:          [dynamic]Pass,
-    uniform_data:    [dynamic]u8,
-    texture_pixels:  [dynamic]u8, // the textures updated this frame, see update_texture
-    texture_uploads: [dynamic]TextureUpload,
-}
-
-// What the next draw call is drawn with
-DrawingState :: struct {
-    program:        Program,
-    blend:          BlendMode,
-    scissor:        Maybe(Rect),
-    window_scissor: Maybe(Rect), // the window's while a render target is drawn, see begin_render_target
-    uniforms:       [Program]UniformRange,
-    clear:          Color,
-}
-
-gpu: struct {
-    device:           ^sdl.GPUDevice,
-    window_format:    sdl.GPUTextureFormat,
-    vertex_shader:    ^sdl.GPUShader,
-    fragment_shaders: [Program]^sdl.GPUShader,
-    pipelines:        [Program][BlendMode][PassKind]^sdl.GPUGraphicsPipeline,
-    sampler:          ^sdl.GPUSampler,
-    white:            Texture,
-
-    // grows as needed
-    vertex_buffer:    ^sdl.GPUBuffer,
-    transfer_buffer:  ^sdl.GPUTransferBuffer,
-    vertex_capacity:  int,
-    texture_transfer: ^sdl.GPUTransferBuffer,
-    texture_capacity: int,
-
-    frame:            GpuFrame,
-    drawing:          DrawingState,
-
-    // the last frame
-    acquire_failed:   bool, // its swapchain, reported once
-    dropped:          bool, // it wasn't drawn, the render targets hold what they had before it
-}
-
-Window :: struct {
-    handle:     ^sdl.Window,
-    ui_scale:   f32, // the window's points per drawing point, see set_ui_scale
-    quit:       bool,
-    background: bool, // set by watch_app_events, on whichever thread SDL pushes the event from
-}
-
-window: Window
-
-Input :: struct {
-    keys_pressed:  bit_set[Key],
-    mouse_clicked: bool,
-    touch:         bool, // the last press was a finger, see touch_input
-    wheel:         f32,
-}
-
-input: Input
-
-Clock :: struct {
-    last_counter: u64,
-    frame_time:   f32,
-    max_fps:      int, // see limit_fps
-}
-
-clock: Clock
-
-// The desktop window dragged to another size or a menu open, see live_resize_frames
-LiveResize :: struct {
-    frame:         proc(data: rawptr),
-    data:          rawptr,
-    frame_context: runtime.Context,
-    resizing:      bool, // in a frame drawn from the OS's own loop
-    polling:       bool, // in should_close, where the main loop is stuck while the OS runs a drag, a zoom or a menu
-    drag_tick:     u64, // the last tick of the drag's timer, in milliseconds
-}
-
+gpu:         Gpu
+window:      Window
+input:       Input
+clock:       Clock
 live_resize: LiveResize
 
 // On the desktop the window can be resized down to min_size, none keeps it the size it opened at, and opens

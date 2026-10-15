@@ -21,12 +21,14 @@ import sdl "vendor:sdl3"
 // A short tap felt in the hand: the Taptic Engine on an iPhone, the vibrator on an Android phone. An iPad, a
 // Mac or a phone without one has none, has_haptics says so and haptic_tap does nothing.
 
-haptics: struct {
+Haptics :: struct {
     checked:   bool,
     available: bool,
     android:   ^sdl.Haptic, // the phone's vibrator, SDL lists it as a haptic device
     ios:       ^UIImpactFeedbackGenerator, // made once, prepared after each tap so the next one comes on time
 }
+
+haptics: Haptics
 
 has_haptics :: proc() -> bool {
     if haptics.checked do return haptics.available

@@ -28,7 +28,7 @@ import sdl "vendor:sdl3"
 // SDL sees every key before the menu does, a key equivalent reaches the app's key handling too. Each item
 // has Command in its key, and the plain keys the app handles skip while Command is down.
 
-menu: struct {
+Menu :: struct {
     target:   ^NS.Object, // gets every item's action, see menu_target
     chosen:   int, // the last item chosen, 0 none
     items:    [MAX_MENU_COMMANDS]^NS.MenuItem, // by command, for set_menu_checked
@@ -41,6 +41,8 @@ menu: struct {
     delegate: ^NS.Object,
     ctx:      runtime.Context, // the app's, its allocator for what opening makes
 }
+
+menu: Menu
 
 MAX_MENUS :: 4
 
