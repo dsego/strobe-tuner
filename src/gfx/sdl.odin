@@ -111,8 +111,11 @@ Pass :: struct {
 // Render targets are always this format, the window may use another one
 TARGET_FORMAT :: sdl.GPUTextureFormat.R8G8B8A8_UNORM
 
-PASS_WINDOW :: 0
-PASS_TARGET :: 1
+// Which of a program's pipelines a pass draws with, they differ in the format they draw into
+PassKind :: enum {
+    WINDOW,
+    TARGET,
+}
 
 ShaderCode :: struct {
     code:       []u8,
@@ -173,7 +176,7 @@ gpu: struct {
     window_format:    sdl.GPUTextureFormat,
     vertex_shader:    ^sdl.GPUShader,
     fragment_shaders: [Program]^sdl.GPUShader,
-    pipelines:        [Program][BlendMode][2]^sdl.GPUGraphicsPipeline,
+    pipelines:        [Program][BlendMode][PassKind]^sdl.GPUGraphicsPipeline,
     sampler:          ^sdl.GPUSampler,
     white:            Texture,
 
@@ -332,8 +335,8 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}, position
             target := create_pipeline(program, blend, TARGET_FORMAT)
             if window == nil || target == nil do return false
 
-            gpu.pipelines[program][blend][PASS_WINDOW] = window
-            gpu.pipelines[program][blend][PASS_TARGET] = target
+            gpu.pipelines[program][blend][.WINDOW] = window
+            gpu.pipelines[program][blend][.TARGET] = target
         }
     }
 
@@ -553,128 +556,88 @@ begin_frame :: proc(clear: Color) {
     begin_window_pass()
 }
 
+// Uploads the frame's textures and vertices, draws the render targets, then the window
 end_frame :: proc() {
-    pass_commands :: proc(pass_index: int) -> []DrawCommand {
-        last_command := len(gpu.commands)
-        if pass_index + 1 < len(gpu.passes) do last_command = gpu.passes[pass_index + 1].first_command
-
-        return gpu.commands[gpu.passes[pass_index].first_command:last_command]
-    }
-
-    begin_render_pass :: proc(
-        command_buffer: ^sdl.GPUCommandBuffer,
-        color_target: ^sdl.GPUColorTargetInfo,
-        target_size: [2]f32,
-    ) -> ^sdl.GPURenderPass {
-        render_pass := sdl.BeginGPURenderPass(command_buffer, color_target, 1, nil)
-        sdl.SetGPUViewport(render_pass, {0, 0, target_size.x, target_size.y, 0, 1})
-        binding := sdl.GPUBufferBinding{gpu.vertex_buffer, 0}
-        if gpu.vertex_buffer != nil do sdl.BindGPUVertexBuffers(render_pass, 0, &binding, 1)
-
-        return render_pass
-    }
-
-    // offset is the drawing position of the target's top left corner, zoom scales drawing coordinates to
-    // its pixels
-    draw_commands :: proc(
-        command_buffer: ^sdl.GPUCommandBuffer,
-        render_pass: ^sdl.GPURenderPass,
-        commands: []DrawCommand,
-        target_size: [2]f32,
-        offset: [2]f32,
-        zoom: f32,
-        kind: int,
-    ) {
-        // xy scale drawing coordinates to clip space, zw is the drawing position of the top left corner
-        view := [4]f32{2 * zoom / target_size.x, 2 * zoom / target_size.y, offset.x, offset.y}
-
-        // Bound and pushed only when they change
-        pipeline: ^sdl.GPUGraphicsPipeline
-        uniforms: UniformRange
-        samplers := PROGRAM_SAMPLERS
-        for command in commands {
-            if command.vertex_count == 0 do continue
-
-            // A texture that failed to load
-            sampled := samplers[command.program] > 0
-            if sampled && command.texture == nil do continue
-
-            if next := gpu.pipelines[command.program][command.blend][kind]; next != pipeline {
-                pipeline = next
-                sdl.BindGPUGraphicsPipeline(render_pass, pipeline)
-                sdl.PushGPUVertexUniformData(command_buffer, 0, &view, size_of(view))
-            }
-            if command.uniforms.size > 0 && command.uniforms != uniforms {
-                uniforms = command.uniforms
-                sdl.PushGPUFragmentUniformData(
-                    command_buffer,
-                    0,
-                    &gpu.uniform_data[uniforms.offset],
-                    u32(uniforms.size),
-                )
-            }
-            if sampled {
-                texture_binding := sdl.GPUTextureSamplerBinding{command.texture, gpu.sampler}
-                sdl.BindGPUFragmentSamplers(render_pass, 0, &texture_binding, 1)
-            }
-
-            scissor := sdl.Rect{0, 0, i32(target_size.x), i32(target_size.y)}
-            if rect, ok := command.scissor.?; ok {
-                x0 := clamp(math.round((rect.x - offset.x) * zoom), 0, target_size.x)
-                y0 := clamp(math.round((rect.y - offset.y) * zoom), 0, target_size.y)
-                x1 := clamp(math.round((rect.x + rect.width - offset.x) * zoom), x0, target_size.x)
-                y1 := clamp(
-                    math.round((rect.y + rect.height - offset.y) * zoom),
-                    y0,
-                    target_size.y,
-                )
-                scissor = {i32(x0), i32(y0), i32(x1 - x0), i32(y1 - y0)}
-            }
-            sdl.SetGPUScissor(render_pass, scissor)
-
-            sdl.DrawGPUPrimitives(render_pass, command.vertex_count, 1, command.first_vertex, 0)
-        }
-    }
-
     // Without one nothing is drawn, the render targets hold what they had, see last_frame_dropped
-    command_buffer := sdl.AcquireGPUCommandBuffer(gpu.device)
+    command_buffer := acquire_command_buffer()
     if command_buffer == nil {
-        fmt.eprintln("SDL_AcquireGPUCommandBuffer failed:", sdl.GetError())
         gpu.dropped = true
-        sdl.Delay(16)
+        submit_gpu_command_buffer(command_buffer)
         return
     }
 
-    swapchain: ^sdl.GPUTexture
-    swapchain_w, swapchain_h: u32
-    acquired := sdl.WaitAndAcquireGPUSwapchainTexture(
-        command_buffer,
-        gpu.window,
-        &swapchain,
-        &swapchain_w,
-        &swapchain_h,
-    )
-
-    // Once, it can fail every frame while Android tears the surface down
-    if !acquired && !gpu.acquire_failed {
-        fmt.eprintln("SDL_WaitAndAcquireGPUSwapchainTexture failed:", sdl.GetError())
-    }
-    gpu.acquire_failed = !acquired
+    swapchain, swapchain_size := acquire_swapchain(command_buffer)
 
     // The textures' new pixels go up first, before the passes that draw them. No vertex buffer, nothing to
     // draw with.
     upload_textures(command_buffer)
     gpu.dropped = !upload_vertices(command_buffer)
     if gpu.dropped {
-        _ = sdl.SubmitGPUCommandBuffer(command_buffer)
-        sdl.Delay(16)
+        submit_gpu_command_buffer(command_buffer)
         return
     }
 
-    // The render targets first, then the window in a single pass. Apple's and nearly every phone's GPU
-    // draws in tiles, each pass loads its whole target into them and stores it back, a window pass
-    // between each render target would move the full screen through memory every time. The window is
-    // never sampled, and each target is finished before the window draws it, the order stays right.
+    draw_render_targets(command_buffer)
+
+    // Minimized or hidden, the window has nothing to draw into. The render targets are drawn all the same,
+    // they're up to date when it shows again.
+    if swapchain == nil {
+        submit_gpu_command_buffer(command_buffer)
+        return
+    }
+
+    draw_window(command_buffer, swapchain, swapchain_size)
+    submit_gpu_command_buffer(command_buffer, .MAX_FPS)
+}
+
+// How the main loop is paced after a frame is submitted
+FrameWait :: enum {
+    // The window doesn't show the frame, no swapchain waits for vsync and the loop would spin with
+    // nothing to pace it. A 60 Hz frame's sleep stands in for the wait.
+    UNSHOWN,
+    // The rest of the frame at the limited rate, see wait_for_max_fps
+    MAX_FPS,
+}
+
+UNSHOWN_FRAME_MS :: 16
+
+// Without a command buffer it only waits
+submit_gpu_command_buffer :: proc(command_buffer: ^sdl.GPUCommandBuffer, wait: FrameWait = .UNSHOWN) {
+    if command_buffer != nil do _ = sdl.SubmitGPUCommandBuffer(command_buffer)
+
+    switch wait {
+    case .UNSHOWN:
+        sdl.Delay(UNSHOWN_FRAME_MS)
+    case .MAX_FPS:
+        wait_for_max_fps()
+    }
+}
+
+acquire_command_buffer :: proc() -> ^sdl.GPUCommandBuffer {
+    command_buffer := sdl.AcquireGPUCommandBuffer(gpu.device)
+    if command_buffer == nil do fmt.eprintln("SDL_AcquireGPUCommandBuffer failed:", sdl.GetError())
+
+    return command_buffer
+}
+
+// The window's texture to draw into and its size in pixels, nil while it's minimized or hidden. A failure
+// is reported once, it can fail every frame while Android tears the surface down.
+acquire_swapchain :: proc(command_buffer: ^sdl.GPUCommandBuffer) -> (swapchain: ^sdl.GPUTexture, size: [2]f32) {
+    width, height: u32
+    acquired := sdl.WaitAndAcquireGPUSwapchainTexture(command_buffer, gpu.window, &swapchain, &width, &height)
+    if !acquired && !gpu.acquire_failed {
+        fmt.eprintln("SDL_WaitAndAcquireGPUSwapchainTexture failed:", sdl.GetError())
+    }
+    gpu.acquire_failed = !acquired
+
+    return swapchain, {f32(width), f32(height)}
+}
+
+// The render targets first, then the window in a single pass. Apple's and nearly every phone's GPU
+// draws in tiles, each pass loads its whole target into them and stores it back, a window pass
+// between each render target would move the full screen through memory every time. The window is
+// never sampled, and each target is finished before the window draws it, the order stays right.
+draw_render_targets :: proc(command_buffer: ^sdl.GPUCommandBuffer) {
     for pass, pass_index in gpu.passes {
         if !pass.offscreen || pass.target == nil do continue
 
@@ -692,31 +655,17 @@ end_frame :: proc() {
             color_target.load_op = .CLEAR
         }
         render_pass := begin_render_pass(command_buffer, &color_target, pass.target_size)
-        draw_commands(
-            command_buffer,
-            render_pass,
-            commands,
-            pass.target_size,
-            pass.offset,
-            pass.zoom,
-            PASS_TARGET,
-        )
+        replay_commands(command_buffer, render_pass, commands, .TARGET, pass.target_size, pass.offset, pass.zoom)
         sdl.EndGPURenderPass(render_pass)
     }
+}
 
-    // Minimized or hidden, the window has nothing to draw into. The render targets are drawn all the same,
-    // they're up to date when it shows again.
-    if swapchain == nil {
-        _ = sdl.SubmitGPUCommandBuffer(command_buffer)
-        sdl.Delay(16)
-        return
-    }
-
+// Every window pass into the swapchain, size in pixels
+draw_window :: proc(command_buffer: ^sdl.GPUCommandBuffer, swapchain: ^sdl.GPUTexture, size: [2]f32) {
     // Drawing points to the swapchain's pixels: the display's density and the UI scale
     logical_w: i32
     sdl.GetWindowSize(gpu.window, &logical_w, nil)
-    window_zoom := f32(swapchain_w) / f32(max(logical_w, 1)) * gpu.ui_scale
-    window_size := [2]f32{f32(swapchain_w), f32(swapchain_h)}
+    zoom := size.x / f32(max(logical_w, 1)) * gpu.ui_scale
 
     clear := normalize_color(gpu.clear)
     color_target := sdl.GPUColorTargetInfo {
@@ -725,36 +674,104 @@ end_frame :: proc() {
         load_op     = .CLEAR,
         store_op    = .STORE,
     }
-    render_pass := begin_render_pass(command_buffer, &color_target, window_size)
+    render_pass := begin_render_pass(command_buffer, &color_target, size)
     for pass, pass_index in gpu.passes {
         if pass.offscreen do continue
 
-        draw_commands(
-            command_buffer,
-            render_pass,
-            pass_commands(pass_index),
-            window_size,
-            {},
-            window_zoom,
-            PASS_WINDOW,
-        )
+        replay_commands(command_buffer, render_pass, pass_commands(pass_index), .WINDOW, size, {}, zoom)
     }
     sdl.EndGPURenderPass(render_pass)
+}
 
-    _ = sdl.SubmitGPUCommandBuffer(command_buffer)
+// The draw commands recorded between this pass's start and the next one's
+pass_commands :: proc(pass_index: int) -> []DrawCommand {
+    last_command := len(gpu.commands)
+    if pass_index + 1 < len(gpu.passes) do last_command = gpu.passes[pass_index + 1].first_command
 
-    // The rest of the frame at the limited rate, counted from the start of the frame in should_close.
-    // A little short of it, the swapchain waits for the vsync that ends it, a sleep a touch too long
-    // would miss that one and hold the frame on screen a refresh longer.
-    // Not from the drag's loop, its timer paces the frames, see live_resize_frames
-    VSYNC_MARGIN_S :: 0.002
-    if gpu.max_fps > 0 && !gpu.resizing {
-        elapsed :=
-            f64(sdl.GetPerformanceCounter() - gpu.last_counter) /
-            f64(sdl.GetPerformanceFrequency())
-        remaining := 1 / f64(gpu.max_fps) - elapsed - VSYNC_MARGIN_S
-        if remaining > 0 do sdl.DelayPrecise(u64(remaining * 1e9))
+    return gpu.commands[gpu.passes[pass_index].first_command:last_command]
+}
+
+begin_render_pass :: proc(
+    command_buffer: ^sdl.GPUCommandBuffer,
+    color_target: ^sdl.GPUColorTargetInfo,
+    target_size: [2]f32,
+) -> ^sdl.GPURenderPass {
+    render_pass := sdl.BeginGPURenderPass(command_buffer, color_target, 1, nil)
+    sdl.SetGPUViewport(render_pass, {0, 0, target_size.x, target_size.y, 0, 1})
+    binding := sdl.GPUBufferBinding{gpu.vertex_buffer, 0}
+    if gpu.vertex_buffer != nil do sdl.BindGPUVertexBuffers(render_pass, 0, &binding, 1)
+
+    return render_pass
+}
+
+// Issues the GPU draws for commands recorded during the frame: binds each one's pipeline, uniforms,
+// texture and scissor, then draws its vertices. offset is the drawing position of the target's top left
+// corner, zoom scales drawing coordinates to its pixels.
+replay_commands :: proc(
+    command_buffer: ^sdl.GPUCommandBuffer,
+    render_pass: ^sdl.GPURenderPass,
+    commands: []DrawCommand,
+    kind: PassKind,
+    target_size: [2]f32,
+    offset: [2]f32,
+    zoom: f32,
+) {
+    // xy scale drawing coordinates to clip space, zw is the drawing position of the top left corner
+    view := [4]f32{2 * zoom / target_size.x, 2 * zoom / target_size.y, offset.x, offset.y}
+
+    // Bound and pushed only when they change
+    pipeline: ^sdl.GPUGraphicsPipeline
+    uniforms: UniformRange
+    samplers := PROGRAM_SAMPLERS
+    for command in commands {
+        if command.vertex_count == 0 do continue
+
+        // A texture that failed to load
+        sampled := samplers[command.program] > 0
+        if sampled && command.texture == nil do continue
+
+        if next := gpu.pipelines[command.program][command.blend][kind]; next != pipeline {
+            pipeline = next
+            sdl.BindGPUGraphicsPipeline(render_pass, pipeline)
+            sdl.PushGPUVertexUniformData(command_buffer, 0, &view, size_of(view))
+        }
+        if command.uniforms.size > 0 && command.uniforms != uniforms {
+            uniforms = command.uniforms
+            sdl.PushGPUFragmentUniformData(command_buffer, 0, &gpu.uniform_data[uniforms.offset], u32(uniforms.size))
+        }
+        if sampled {
+            texture_binding := sdl.GPUTextureSamplerBinding{command.texture, gpu.sampler}
+            sdl.BindGPUFragmentSamplers(render_pass, 0, &texture_binding, 1)
+        }
+
+        sdl.SetGPUScissor(render_pass, scissor_pixels(command.scissor, target_size, offset, zoom))
+        sdl.DrawGPUPrimitives(render_pass, command.vertex_count, 1, command.first_vertex, 0)
     }
+}
+
+// A scissor in drawing coordinates as the target's pixels, none is all of it
+scissor_pixels :: proc(scissor: Maybe(Rect), target_size, offset: [2]f32, zoom: f32) -> sdl.Rect {
+    rect, ok := scissor.?
+    if !ok do return {0, 0, i32(target_size.x), i32(target_size.y)}
+
+    x0 := clamp(math.round((rect.x - offset.x) * zoom), 0, target_size.x)
+    y0 := clamp(math.round((rect.y - offset.y) * zoom), 0, target_size.y)
+    x1 := clamp(math.round((rect.x + rect.width - offset.x) * zoom), x0, target_size.x)
+    y1 := clamp(math.round((rect.y + rect.height - offset.y) * zoom), y0, target_size.y)
+    return {i32(x0), i32(y0), i32(x1 - x0), i32(y1 - y0)}
+}
+
+// The rest of the frame at the limited rate, counted from the start of the frame in should_close.
+// A little short of it, the swapchain waits for the vsync that ends it, a sleep a touch too long
+// would miss that one and hold the frame on screen a refresh longer.
+// Not from the drag's loop, its timer paces the frames, see live_resize_frames
+wait_for_max_fps :: proc() {
+    VSYNC_MARGIN_S :: 0.002
+    if gpu.max_fps == 0 || gpu.resizing do return
+
+    elapsed := f64(sdl.GetPerformanceCounter() - gpu.last_counter) / f64(sdl.GetPerformanceFrequency())
+    remaining := 1 / f64(gpu.max_fps) - elapsed - VSYNC_MARGIN_S
+    if remaining > 0 do sdl.DelayPrecise(u64(remaining * 1e9))
 }
 
 // 0 for the display's rate, the swapchain waits for vsync
