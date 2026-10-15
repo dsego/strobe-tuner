@@ -246,9 +246,17 @@ update_spectrum_display :: proc(self: ^SpectrumDisplay, windows: f32) {
     }
 }
 
+// Where the frequencies go across the plot
+SpectrumAxes :: struct {
+    plot:    gfx.Rect,
+    low_hz:  f32, // at the left edge
+    high_hz: f32, // at the right edge
+}
+
 // Across the plot, low notes on the left on a log scale
-spectrum_x :: proc(freq, low_hz, high_hz: f32, plot: gfx.Rect) -> f32 {
-    return plot.x + plot.width * math.ln(freq / low_hz) / math.ln(high_hz / low_hz)
+spectrum_x :: proc(freq: f32, axes: SpectrumAxes) -> f32 {
+    plot := axes.plot
+    return plot.x + plot.width * math.ln(freq / axes.low_hz) / math.ln(axes.high_hz / axes.low_hz)
 }
 
 // Up the plot, range is its bottom and top in dB
@@ -278,14 +286,15 @@ draw_spectrum_display :: proc(
     low_hz: f32 = SPECTRUM_LOW_HZ
     high_hz := core.pitch_lowpass_hz(self.sample_rate)
     bin_hz := self.sample_rate / f32(self.transform.fft_size)
+    axes := SpectrumAxes{plot, low_hz, high_hz}
 
     // What's drawn, and the plot's bottom and top in it
     shown, range := self.over, SPECTRUM_SNR_DB
     if config.spectrum_scale == .DBFS do shown, range = self.levels, SPECTRUM_DBFS_DB
 
-    octaves := spectrum_octaves(config.pitch_standard, low_hz, high_hz, plot)
-    track_x := spectrum_track_marks(track_hz, low_hz, high_hz, plot)
-    points := update_spectrum_curve(self, shown, range, plot, low_hz, high_hz, bin_hz)
+    octaves := spectrum_octaves(config.pitch_standard, axes)
+    track_x := spectrum_track_marks(track_hz, axes)
+    points := update_spectrum_curve(self, shown, range, axes, bin_hz)
 
     // The curve's glow and the labels' pills reach past the sides. The glow's offscreen drawing isn't cut, see
     // gfx.begin_render_target.
@@ -308,7 +317,7 @@ draw_spectrum_display :: proc(
     peaks := find_spectrum_peaks(self, shown, low_hz, high_hz, bin_hz)
     if config.spectrum_peak_level do draw_spectrum_peak_level(&self.peak_line, peaks, plot, range, config.spectrum_scale, background)
     if config.spectrum_labels != .OFF {
-        draw_peak_labels(self, peaks, plot, low_hz, high_hz, config.pitch_standard, config.spectrum_labels, background)
+        draw_peak_labels(self, peaks, axes, config, background)
     } else {
         clear(&self.named)
     }
@@ -327,20 +336,20 @@ SpectrumOctave :: struct {
 }
 
 // The octaves' Cs across the plot, those within it
-spectrum_octaves :: proc(pitch_standard, low_hz, high_hz: f32, plot: gfx.Rect) -> []SpectrumOctave {
+spectrum_octaves :: proc(pitch_standard: f32, axes: SpectrumAxes) -> []SpectrumOctave {
     octaves := make([dynamic]SpectrumOctave, context.temp_allocator)
     for octave in 1 ..= 8 {
         c_hz := core.freq_at_cents(pitch_standard, f32((octave - 4) * 1200 - 900))
-        if c_hz >= low_hz && c_hz <= high_hz do append(&octaves, SpectrumOctave{spectrum_x(c_hz, low_hz, high_hz, plot), octave})
+        if c_hz >= axes.low_hz && c_hz <= axes.high_hz do append(&octaves, SpectrumOctave{spectrum_x(c_hz, axes), octave})
     }
     return octaves[:]
 }
 
 // The tracks' partials across the plot, those within it
-spectrum_track_marks :: proc(track_hz: []f32, low_hz, high_hz: f32, plot: gfx.Rect) -> []f32 {
+spectrum_track_marks :: proc(track_hz: []f32, axes: SpectrumAxes) -> []f32 {
     track_x := make([dynamic]f32, context.temp_allocator)
     for freq in track_hz {
-        if freq >= low_hz && freq <= high_hz do append(&track_x, spectrum_x(freq, low_hz, high_hz, plot))
+        if freq >= axes.low_hz && freq <= axes.high_hz do append(&track_x, spectrum_x(freq, axes))
     }
     return track_x[:]
 }
@@ -354,9 +363,10 @@ update_spectrum_curve :: proc(
     self: ^SpectrumDisplay,
     shown: []f32,
     range: [2]f32,
-    plot: gfx.Rect,
-    low_hz, high_hz, bin_hz: f32,
+    axes: SpectrumAxes,
+    bin_hz: f32,
 ) -> [][2]f32 {
+    plot, low_hz, high_hz := axes.plot, axes.low_hz, axes.high_hz
     count := int(plot.width / SPECTRUM_COLUMN_STEP) + 1
     if len(self.columns) != count {
         clear(&self.columns)
@@ -535,9 +545,8 @@ PeakLabelText :: struct {
 draw_peak_labels :: proc(
     self: ^SpectrumDisplay,
     peaks: []SpectrumPeak,
-    plot: gfx.Rect,
-    low_hz, high_hz, pitch_standard: f32,
-    labels: SpectrumLabels,
+    axes: SpectrumAxes,
+    config: ^Config,
     background: gfx.Color,
 ) {
     fade_step := gfx.frame_time() / SPECTRUM_LABEL_FADE_S
@@ -546,9 +555,10 @@ draw_peak_labels :: proc(
 
     candidates := peak_label_candidates(peaks, named_before)
     loudest := peaks[0].db if len(peaks) > 0 else 0
-    carried := pick_named_peaks(self, candidates, loudest, len(named_before), plot, low_hz, high_hz, pitch_standard, labels, fade_step)
+    carried := pick_named_peaks(self, candidates, loudest, len(named_before), axes, config, fade_step)
     fade_dropped_peak_labels(self, named_before, carried, fade_step)
 
+    pitch_standard, labels := config.pitch_standard, config.spectrum_labels
     for named in self.named do if !named.shown do draw_named_peak(named, pitch_standard, labels, background)
     for named in self.named do if named.shown do draw_named_peak(named, pitch_standard, labels, background)
 }
@@ -561,9 +571,8 @@ pick_named_peaks :: proc(
     candidates: []PeakLabelCandidate,
     loudest: f32,
     before_count: int,
-    plot: gfx.Rect,
-    low_hz, high_hz, pitch_standard: f32,
-    labels: SpectrumLabels,
+    axes: SpectrumAxes,
+    config: ^Config,
     fade_step: f32,
 ) -> (
     carried: []bool,
@@ -575,8 +584,8 @@ pick_named_peaks :: proc(
         if shown_count == SPECTRUM_MAX_LABELS do break
         if peak.db < loudest - SPECTRUM_LABEL_RANGE_DB do continue
 
-        size := peak_label_text(candidate.hz, pitch_standard, labels).size
-        bounds := peak_label_bounds(self, plot, spectrum_x(peak.freq, low_hz, high_hz, plot), size)
+        size := peak_label_text(candidate.hz, config.pitch_standard, config.spectrum_labels).size
+        bounds := peak_label_bounds(self, axes.plot, spectrum_x(peak.freq, axes), size)
         if beside_named_peak(self.named[:], bounds) do continue
 
         if before, ok := candidate.before.?; ok do carried[before] = true

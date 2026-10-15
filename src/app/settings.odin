@@ -21,6 +21,7 @@ import "core:math"
 import "core:slice"
 import "core:time"
 
+import "../audio"
 import "../core"
 import "../gfx"
 
@@ -509,20 +510,15 @@ InputStats :: struct {
 INPUT_STATS_HOLD_S :: 0.25
 
 // The picker, the rate the input runs at and what's measured of it, and how far its level is over the
-// background. device_rate is the device's own, sample_rate what's measured after a fast one's decimation.
-// Returns close when ✕ is tapped.
-gui_audio_input :: proc(
-    sheet_layout: SheetLayout,
-    device_name: string,
-    device_rate: f32,
-    sample_rate: f32,
-    stats: InputStats,
-    audio_devices: []GuiOption,
-    audio_device_index: ^int,
-    open: ^Dropdown,
-) -> (
-    close: bool,
-) {
+// background. The capture's device rate is the device's own, its sample rate what's measured after a fast
+// one's decimation. Returns close when ✕ is tapped.
+gui_audio_input :: proc(sheet_layout: SheetLayout, input: ^AudioInput, open: ^Dropdown) -> (close: bool) {
+    capture := input.capture
+    device_rate, sample_rate, stats := capture.device_rate, capture.sample_rate, input.stats
+
+    device_name := "No input"
+    if audio.device_count(capture) > 0 do device_name = audio.device_name(capture, capture.active_device)
+
     close = draw_sheet_header(sheet_layout, "Input", fmt.ctprintf("%s", device_name))
     row := 0
 
@@ -555,8 +551,8 @@ gui_audio_input :: proc(
     value_row(sheet_layout, &row, "SNR", decibels(stats.snr_db, "dB"))
 
     when !gfx.MOBILE {
-        if len(audio_devices) > 0 {
-            gui_settings_dropdown(open, .INPUT, picker, audio_devices, audio_device_index, left_pad = 36, down = true)
+        if len(input.devices) > 0 {
+            gui_settings_dropdown(open, .INPUT, picker, input.devices[:], &input.device_index, left_pad = 36, down = true)
             draw_centered_icon(ICON_MICROPHONE, {picker.x + 12, picker.y, ICON_SIZE, picker.height}, icon_color)
         }
     }

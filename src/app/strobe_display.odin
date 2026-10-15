@@ -279,7 +279,7 @@ draw_strobe_display :: proc(
     uniforms.glow_filter.rgb = glow_filter(glow.color)
     uniforms.glow_dark_filter.rgb = glow_filter(glow.dark_color) * glow.dark_level
     uniforms.highlight_color = gfx.normalize_color(accent_color)
-    tracks := strobe_tracks(self, upright, bands, lock_in, config.strobe_source == .LAMP, config.persistence_periods, uniforms, geometry)
+    tracks := strobe_tracks(self, upright, bands, lock_in, config, uniforms, geometry)
 
     if glow_enabled {
         // Render the strobe offscreen so the bright parts can bloom over the surroundings. A dark strobe
@@ -547,13 +547,13 @@ strobe_tracks :: proc(
     strobe_rect: gfx.Rect,
     bands: []core.PhaseBand,
     lock_in: ^core.StrobeLockIn,
-    lamp: bool,
-    persistence_periods: f32,
+    config: ^Config,
     shared: gfx.StrobeUniforms,
     geometry: StrobeGeometry,
 ) -> (
     tracks: StrobeTracks,
 ) {
+    lamp, persistence_periods := config.strobe_source == .LAMP, config.persistence_periods
     mode := lock_in.mode
     stale := tracks_went_stale(self, lamp, mode)
     tracks.count = len(bands)

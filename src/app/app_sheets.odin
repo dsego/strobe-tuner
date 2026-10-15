@@ -18,7 +18,6 @@ package app
 
 import "core:math"
 
-import "../audio"
 import "../core"
 import "../gfx"
 
@@ -178,21 +177,8 @@ draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
         input.stats_age = 0
     }
 
-    capture := input.capture
-    device_name := "No input"
-    if audio.device_count(capture) > 0 do device_name = audio.device_name(capture, capture.active_device)
-
     sheet_layout, swiped := begin_sheet(sheet, INPUT_ROWS, layout)
-    close := gui_audio_input(
-        sheet_layout,
-        device_name,
-        capture.device_rate,
-        capture.sample_rate,
-        input.stats,
-        input.devices[:],
-        &input.device_index,
-        &sheets.open_dropdown,
-    )
+    close := gui_audio_input(sheet_layout, input, &sheets.open_dropdown)
     grab_sheet(sheet, sheet_layout)
 
     if close || sheet_dismissed(sheet_layout, swiped) {
