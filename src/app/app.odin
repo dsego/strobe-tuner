@@ -109,12 +109,8 @@ run_app :: proc(config: ^Config) {
         config = config,
         measurement = {readout_track = -1, traced_track = -1},
     }
-    measurement := &app.measurement
-    note_target := &measurement.note_target
-    note_target^ = core.init_note_target(config.target_freq_hz, config.pitch_standard, prevent_octave_jumps = true)
-
     // Saved for the next start
-    defer config.target_freq_hz = note_target.target_note.frequency
+    defer config.target_freq_hz = app.measurement.note_target.target_note.frequency
 
     size, min_size, position := window_placement(config)
     if !gfx.init(size.x, size.y, APP_NAME, min_size, position) do return
@@ -129,54 +125,19 @@ run_app :: proc(config: ^Config) {
     gfx.load_shapes()
     defer gfx.unload_shapes()
 
-    measurement.strobe_lock_in = core.init_strobe_lock_in(
-        config.target_freq_hz,
-        config.strobe_intervals[:],
-        config.strobe_mode,
-    )
-    defer core.destroy_strobe_lock_in(measurement.strobe_lock_in)
+    init_measurement(&app.measurement, config)
+    defer destroy_measurement(&app.measurement)
 
-    measurement.pitch_detector = core.init_pitch_detector(config.pitch_standard)
-    defer core.destroy_pitch_detector(&measurement.pitch_detector)
-
-    measurement.scope = core.init_scope(SCOPE_COLUMNS, SCOPE_ROWS)
-    defer core.destroy_scope(&measurement.scope)
-
-    // Made as the first glowing display draws, see ensure_glow_targets
-    displays := &app.displays
-    defer unload_glow_targets(&displays.glow_targets)
-
-    displays.strobe = init_strobe_display(strobe_bg_color)
-
-    displays.scope = init_scope_display(strobe_bg_color)
-    defer destroy_scope_display(&displays.scope)
-
-    displays.trace = init_trace_display()
-    defer destroy_trace_display(&displays.trace)
-
-    displays.spectrum = init_spectrum_display()
-    defer destroy_spectrum_display(&displays.spectrum)
+    init_displays(&app.displays)
+    defer destroy_displays(&app.displays)
 
     // Opened or not, the strobe area says why there's no input, see draw_strobe_area
-    audio_capture := audio.init(config.input_device)
-    defer audio.destroy(audio_capture)
-
-    app.input.capture = audio_capture
-
-    audio.register_audio_node(audio_capture, &measurement.pitch_detector)
-    audio.register_audio_node(audio_capture, measurement.strobe_lock_in)
-    audio.register_audio_node(audio_capture, &measurement.scope)
-    audio.register_audio_node(audio_capture, &displays.spectrum)
-    match_input_rate(&app)
-    audio.start(audio_capture)
-
-    build_input_list(&app.input, config.input_device)
-    defer delete(app.input.devices)
-    defer delete(app.input.default_label)
+    open_audio_input(&app)
+    defer close_audio_input(&app)
 
     apply_config(&app)
 
-    // The desktop window keeps drawing while it's dragged or zoomed to another size, the loop below is stuck
+    // The desktop window keeps drawing while it's dragged or zoomed to another size, the main loop is stuck
     // in the OS's own loop meanwhile
     when !gfx.MOBILE {
         gfx.live_resize_frames(proc(data: rawptr) {
@@ -185,12 +146,69 @@ run_app :: proc(config: ^Config) {
         }, &app)
     }
 
+    run_main_loop(&app)
+}
+
+// The note target from the last run's note, the strobe's lock-in, the pitch detector and the scope's samples
+init_measurement :: proc(measurement: ^Measurement, config: ^Config) {
+    measurement.note_target = core.init_note_target(config.target_freq_hz, config.pitch_standard, prevent_octave_jumps = true)
+    measurement.strobe_lock_in = core.init_strobe_lock_in(config.target_freq_hz, config.strobe_intervals[:], config.strobe_mode)
+    measurement.pitch_detector = core.init_pitch_detector(config.pitch_standard)
+    measurement.scope = core.init_scope(SCOPE_COLUMNS, SCOPE_ROWS)
+}
+
+destroy_measurement :: proc(measurement: ^Measurement) {
+    core.destroy_scope(&measurement.scope)
+    core.destroy_pitch_detector(&measurement.pitch_detector)
+    core.destroy_strobe_lock_in(measurement.strobe_lock_in)
+}
+
+// The glow's targets are made as the first glowing display draws, see ensure_glow_targets
+init_displays :: proc(displays: ^Displays) {
+    displays.strobe = init_strobe_display(strobe_bg_color)
+    displays.scope = init_scope_display(strobe_bg_color)
+    displays.trace = init_trace_display()
+    displays.spectrum = init_spectrum_display()
+}
+
+destroy_displays :: proc(displays: ^Displays) {
+    destroy_spectrum_display(&displays.spectrum)
+    destroy_trace_display(&displays.trace)
+    destroy_scope_display(&displays.scope)
+    unload_glow_targets(&displays.glow_targets)
+}
+
+// The configured input, or the default, its samples to everything that measures or shows them. The list of
+// inputs for the settings.
+open_audio_input :: proc(app: ^App) {
+    measurement := &app.measurement
+    capture := audio.init(app.config.input_device)
+    app.input.capture = capture
+
+    audio.register_audio_node(capture, &measurement.pitch_detector)
+    audio.register_audio_node(capture, measurement.strobe_lock_in)
+    audio.register_audio_node(capture, &measurement.scope)
+    audio.register_audio_node(capture, &app.displays.spectrum)
+    match_input_rate(app)
+    audio.start(capture)
+
+    build_input_list(&app.input, app.config.input_device)
+}
+
+close_audio_input :: proc(app: ^App) {
+    delete(app.input.default_label)
+    delete(app.input.devices)
+    audio.destroy(app.input.capture)
+}
+
+// Until the window closes, a frame at a time, waiting while the app is in the background or hidden
+run_main_loop :: proc(app: ^App) {
     for !gfx.should_close() {
         // The labels and readouts are formatted into the temp allocator, nothing in it outlives a frame
         defer free_all(context.temp_allocator)
 
         if gfx.in_background() {
-            wait_in_background(&app)
+            wait_in_background(app)
             continue
         }
 
@@ -203,7 +221,7 @@ run_app :: proc(config: ^Config) {
             }
         }
 
-        run_frame(&app)
+        run_frame(app)
     }
 }
 
