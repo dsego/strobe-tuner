@@ -117,66 +117,16 @@ gui_settings :: proc(
 ) {
     // The controls end short of the ✕, the › after the displays sits in the column under it. The display's
     // options line up with them.
-    CHEVRON_GAP :: 8
     sheet_layout := sheet_layout
-    sheet_layout.end_inset = ICON_SHEET_SIZE + CHEVRON_GAP
+    sheet_layout.end_inset = ICON_SHEET_SIZE + SETTINGS_CHEVRON_GAP
 
-    display_names := DISPLAY_NAMES
-    if display_options^ {
-        back: bool
-        close, back = draw_back_header(sheet_layout, display_names[config.strobe_display_type])
-        if back do display_options^ = false
-
-        switch config.strobe_display_type {
-        case .STROBE:
-            changed = gui_strobe_display_options(sheet_layout, config)
-        case .SCOPE:
-            gui_scope_display_options(sheet_layout, config)
-        case .TRACE:
-            gui_trace_display_options(sheet_layout, config)
-        case .LAMP:
-            gui_lamp_display_options(sheet_layout, config)
-        case .SPECTRUM:
-            gui_spectrum_display_options(sheet_layout, config)
-        }
-        return
-    }
+    if display_options^ do return gui_display_options_page(sheet_layout, config, display_options)
 
     close = draw_sheet_header(sheet_layout, "Settings", VERSION)
     row := 0
+    if gui_concert_a_row(sheet_layout, &row, config) do changed = true
 
-    {
-        rect := settings_row(sheet_layout, row, "Concert A", SETTINGS_CONTROL_WIDTH)
-        row += 1
-        pitch_standard, ok := gui_stepper(
-            rect,
-            config.pitch_standard,
-            1,
-            PITCH_STANDARD_MIN,
-            PITCH_STANDARD_MAX,
-            config_defaults.pitch_standard,
-            "%.0f Hz",
-        )
-        if ok {
-            config.pitch_standard = pitch_standard
-            changed = true
-        }
-    }
-
-    // The displays in a dropdown, its menu opens down over the rows under it and is drawn after them. The ›
-    // after it under the ✕ opens the picked display's options.
-    display_rect := settings_row(sheet_layout, row, "Display", DISPLAY_MENU_WIDTH)
-    row += 1
-    {
-        right := display_rect.x + display_rect.width
-        draw_centered_icon(ICON_CARET_RIGHT, {right + CHEVRON_GAP, display_rect.y, ICON_SHEET_SIZE, display_rect.height}, icon_color, .SHEET)
-
-        // From the control to the sheet's edge, the row's height
-        sheet_right := sheet_layout.sheet.x + sheet_layout.sheet.width
-        if gui_button(touch_area({right, display_rect.y, sheet_right - right, display_rect.height})) {
-            display_options^ = true
-        }
-    }
+    display_rect := gui_display_row(sheet_layout, &row, display_options)
 
     // The displays read the colors and the glow from the config as they draw, nothing to retune
     colorway_names := COLORWAY_NAMES
@@ -188,47 +138,107 @@ gui_settings :: proc(
     // A tap in the hand as the readout holds in tune, only where there's something to tap with
     if gfx.has_haptics() do gui_settings_segmented(sheet_layout, &row, "In-tune tap", {"Off", "On"}, &config.in_tune_tap)
 
-    {
-        // Everything back to the defaults, the presets stay. The first tap asks, the second resets, a tap
-        // anywhere else leaves the settings as they are.
-        rect := settings_row(sheet_layout, row, "Reset to defaults", 0)
-        row += 1
-        if gui_small_button(rect.x, rect, "SURE?" if confirm_reset^ else "RESET", warn = confirm_reset^) {
-            if confirm_reset^ {
-                reset_config(config)
-                changed = true
-            }
-            confirm_reset^ = !confirm_reset^
-        } else if gfx.mouse_pressed() {
-            confirm_reset^ = false
-        }
-    }
+    if gui_reset_row(sheet_layout, &row, config, confirm_reset) do changed = true
 
-    {
-        options: [len(StrobeDisplayType)]GuiOption
-        for name, type in display_names do options[int(type)] = {i32(type), string(name)}
+    // Last, its menu opens down over the rows under it
+    gui_display_dropdown(open, display_rect, config)
+    return
+}
 
-        selected := int(config.strobe_display_type)
-        gui_settings_dropdown(open, .DISPLAY, display_rect, options[:], &selected, down = true)
-        config.strobe_display_type = StrobeDisplayType(selected)
+SETTINGS_CHEVRON_GAP :: 8 // between a row's control and the › after it
+
+// The picked display's options, a page of their own. The ‹ goes back to the settings.
+gui_display_options_page :: proc(sheet_layout: SheetLayout, config: ^Config, display_options: ^bool) -> (close: bool, changed: bool) {
+    display_names := DISPLAY_NAMES
+    back: bool
+    close, back = draw_back_header(sheet_layout, display_names[config.strobe_display_type])
+    if back do display_options^ = false
+
+    switch config.strobe_display_type {
+    case .STROBE:
+        changed = gui_strobe_display_options(sheet_layout, config)
+    case .SCOPE:
+        gui_scope_display_options(sheet_layout, config)
+    case .TRACE:
+        gui_trace_display_options(sheet_layout, config)
+    case .LAMP:
+        gui_lamp_display_options(sheet_layout, config)
+    case .SPECTRUM:
+        gui_spectrum_display_options(sheet_layout, config)
     }
     return
+}
 
-    // The header of the display's options, the ‹ before the title back to the settings. Returns close when
-    // the ✕ is tapped and back when the ‹ is.
-    draw_back_header :: proc(sheet_layout: SheetLayout, title: cstring) -> (close: bool, back: bool) {
-        GAP :: 6
-        shifted := sheet_layout
-        shifted.title.x += ICON_SHEET_SIZE + GAP
-        close = draw_sheet_header(shifted, title)
-        position := sheet_layout.title
-        draw_centered_icon(ICON_CARET_LEFT, {position.x, position.y, ICON_SHEET_SIZE, TITLE_SIZE}, icon_color, .SHEET)
+// The header of the display's options, the ‹ before the title back to the settings. Returns close when
+// the ✕ is tapped and back when the ‹ is.
+draw_back_header :: proc(sheet_layout: SheetLayout, title: cstring) -> (close: bool, back: bool) {
+    GAP :: 6
+    shifted := sheet_layout
+    shifted.title.x += ICON_SHEET_SIZE + GAP
+    close = draw_sheet_header(shifted, title)
+    position := sheet_layout.title
+    draw_centered_icon(ICON_CARET_LEFT, {position.x, position.y, ICON_SHEET_SIZE, TITLE_SIZE}, icon_color, .SHEET)
 
-        // From the sheet's edge past the title, as tall as the ✕'s
-        right := shifted.title.x + measure_label(pixel_fonts.title, title, 1).x + GAP
-        back = gui_button({sheet_layout.sheet.x, sheet_layout.close.y, right - sheet_layout.sheet.x, sheet_layout.close.height})
-        return
+    // From the sheet's edge past the title, as tall as the ✕'s
+    right := shifted.title.x + measure_label(pixel_fonts.title, title, 1).x + GAP
+    back = gui_button({sheet_layout.sheet.x, sheet_layout.close.y, right - sheet_layout.sheet.x, sheet_layout.close.height})
+    return
+}
+
+gui_concert_a_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config) -> bool {
+    rect := settings_row(sheet_layout, row^, "Concert A", SETTINGS_CONTROL_WIDTH)
+    row^ += 1
+
+    default := config_defaults.pitch_standard
+    pitch_standard, ok := gui_stepper(rect, config.pitch_standard, 1, PITCH_STANDARD_MIN, PITCH_STANDARD_MAX, default, "%.0f Hz")
+    if !ok do return false
+
+    config.pitch_standard = pitch_standard
+    return true
+}
+
+// The row of the display dropdown, drawn last by gui_display_dropdown, and the › after it under the ✕ that
+// opens the picked display's options. Returns where the dropdown goes.
+gui_display_row :: proc(sheet_layout: SheetLayout, row: ^int, display_options: ^bool) -> gfx.Rect {
+    rect := settings_row(sheet_layout, row^, "Display", DISPLAY_MENU_WIDTH)
+    row^ += 1
+
+    right := rect.x + rect.width
+    draw_centered_icon(ICON_CARET_RIGHT, {right + SETTINGS_CHEVRON_GAP, rect.y, ICON_SHEET_SIZE, rect.height}, icon_color, .SHEET)
+
+    // From the control to the sheet's edge, the row's height
+    sheet_right := sheet_layout.sheet.x + sheet_layout.sheet.width
+    if gui_button(touch_area({right, rect.y, sheet_right - right, rect.height})) do display_options^ = true
+
+    return rect
+}
+
+// Everything back to the defaults, the presets stay. The first tap asks, the second resets, a tap anywhere
+// else leaves the settings as they are. Returns true when it reset.
+gui_reset_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config, confirm_reset: ^bool) -> (reset: bool) {
+    rect := settings_row(sheet_layout, row^, "Reset to defaults", 0)
+    row^ += 1
+
+    if gui_small_button(rect.x, rect, "SURE?" if confirm_reset^ else "RESET", warn = confirm_reset^) {
+        if confirm_reset^ {
+            reset_config(config)
+            reset = true
+        }
+        confirm_reset^ = !confirm_reset^
+    } else if gfx.mouse_pressed() {
+        confirm_reset^ = false
     }
+    return
+}
+
+gui_display_dropdown :: proc(open: ^Dropdown, rect: gfx.Rect, config: ^Config) {
+    display_names := DISPLAY_NAMES
+    options: [len(StrobeDisplayType)]GuiOption
+    for name, type in display_names do options[int(type)] = {i32(type), string(name)}
+
+    selected := int(config.strobe_display_type)
+    gui_settings_dropdown(open, .DISPLAY, rect, options[:], &selected, down = true)
+    config.strobe_display_type = StrobeDisplayType(selected)
 }
 
 // The strobe's options, a row each. Returns changed when the strobe needs updating.
