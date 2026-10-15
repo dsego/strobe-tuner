@@ -28,7 +28,7 @@ import "core:math"
 import "core:math/linalg"
 import "core:mem"
 import sdl "vendor:sdl3"
-import stbtt "vendor:stb/truetype"
+import stb_truetype "vendor:stb/truetype"
 
 Texture :: struct {
     handle:        ^sdl.GPUTexture,
@@ -924,94 +924,136 @@ unload_texture :: proc(texture: Texture) {
     if texture.handle != nil do sdl.ReleaseGPUTexture(gpu.device, texture.handle)
 }
 
+// A glyph's bitmap and where it goes in the font atlas, in pixels at the atlas size
+GlyphBox :: struct {
+    codepoint: rune,
+    x0, y0:    i32, // the bitmap's top left from the text position, y0 from the baseline
+    width:     i32,
+    height:    i32,
+    atlas:     [2]i32,
+}
+
+GLYPH_PADDING :: 2 // keeps the neighbours out of the linear filtering
+
 // Bakes the glyphs into an atlas at size, drawn scaled from there
 load_font :: proc(ttf: []u8, size: i32, codepoints: string) -> (font: Font) {
-    info: stbtt.fontinfo
-    if !stbtt.InitFont(&info, raw_data(ttf), 0) {
+    info: stb_truetype.fontinfo
+    if !stb_truetype.InitFont(&info, raw_data(ttf), 0) {
         fmt.eprintln("Could not load font")
         return
     }
 
-    scale := stbtt.ScaleForPixelHeight(&info, f32(size))
-    ascent, descent, line_gap: i32
-    stbtt.GetFontVMetrics(&info, &ascent, &descent, &line_gap)
+    scale := stb_truetype.ScaleForPixelHeight(&info, f32(size))
+    boxes := measure_glyphs(&info, scale, codepoints)
+    atlas_size := pack_glyphs(boxes)
 
-    PADDING :: 2 // keeps the neighbours out of the linear filtering
-    atlas_width: i32 = 2048 if size > 64 else 512
+    for box in boxes do font.glyphs[box.codepoint] = glyph_from_box(&info, box, scale)
 
-    GlyphBox :: struct {
-        codepoint: rune,
-        x0, y0:    i32,
-        width:     i32,
-        height:    i32,
-        atlas:     [2]i32,
-    }
+    coverage := rasterize_glyphs(&info, boxes, scale, atlas_size)
+    font.texture = create_texture(atlas_size.x, atlas_size.y, white_pixels(coverage))
+    font.base_size = f32(size)
+    if len(boxes) > 0 do font.fallback = font.glyphs[boxes[0].codepoint]
+
+    return
+}
+
+// Each glyph's bitmap size at scale, in the order of codepoints, each codepoint once
+measure_glyphs :: proc(info: ^stb_truetype.fontinfo, scale: f32, codepoints: string) -> []GlyphBox {
     boxes := make([dynamic]GlyphBox, context.temp_allocator)
-
-    // Shelf packing, row by row
-    pen: [2]i32 = PADDING
-    row_height: i32 = 0
+    seen := make(map[rune]bool, context.temp_allocator)
     for codepoint in codepoints {
-        if codepoint in font.glyphs do continue
+        if codepoint in seen do continue
+
+        seen[codepoint] = true
 
         box := GlyphBox {
             codepoint = codepoint,
         }
         x1, y1: i32
-        stbtt.GetCodepointBitmapBox(&info, codepoint, scale, scale, &box.x0, &box.y0, &x1, &y1)
+        stb_truetype.GetCodepointBitmapBox(info, codepoint, scale, scale, &box.x0, &box.y0, &x1, &y1)
         box.width = x1 - box.x0
         box.height = y1 - box.y0
+        append(&boxes, box)
+    }
+    return boxes[:]
+}
 
-        if pen.x + box.width + PADDING > atlas_width {
-            pen = {PADDING, pen.y + row_height + PADDING}
+// Shelf packing: left to right in rows, a new row below when one is full. The atlas is about square, as wide
+// as the boxes' area needs and never narrower than the widest glyph. Returns the atlas size.
+pack_glyphs :: proc(boxes: []GlyphBox) -> [2]i32 {
+    area, widest: i32
+    for box in boxes {
+        area += (box.width + GLYPH_PADDING) * (box.height + GLYPH_PADDING)
+        widest = max(widest, box.width)
+    }
+    width := max(i32(math.ceil(math.sqrt(f32(area)))), widest) + 2 * GLYPH_PADDING
+
+    pen: [2]i32 = GLYPH_PADDING
+    row_height: i32 = 0
+    for &box in boxes {
+        if pen.x + box.width + GLYPH_PADDING > width {
+            pen = {GLYPH_PADDING, pen.y + row_height + GLYPH_PADDING}
             row_height = 0
         }
         box.atlas = pen
-        pen.x += box.width + PADDING
+        pen.x += box.width + GLYPH_PADDING
         row_height = max(row_height, box.height)
-        append(&boxes, box)
-
-        // The advance rounded to whole pixels, the next glyph lands texel for pixel too. Cut down instead the
-        // letters sit up to a pixel too close, unevenly.
-        advance, left_side_bearing: i32
-        stbtt.GetCodepointHMetrics(&info, codepoint, &advance, &left_side_bearing)
-        font.glyphs[codepoint] = Glyph {
-            source  = {f32(box.atlas.x), f32(box.atlas.y), f32(box.width), f32(box.height)},
-            offset  = {f32(box.x0), f32(box.y0 + i32(f32(ascent) * scale))},
-            advance = math.round(f32(advance) * scale),
-        }
     }
-    atlas_height := pen.y + row_height + PADDING
+    return {width, pen.y + row_height + GLYPH_PADDING}
+}
 
-    alpha := make([]u8, atlas_width * atlas_height, context.temp_allocator)
+// Where a packed glyph is in the atlas and how it's placed in a line of text
+glyph_from_box :: proc(info: ^stb_truetype.fontinfo, box: GlyphBox, scale: f32) -> Glyph {
+    ascent, descent, line_gap: i32
+    stb_truetype.GetFontVMetrics(info, &ascent, &descent, &line_gap)
+
+    // The advance rounded to whole pixels, the next glyph lands texel for pixel too. Cut down instead the
+    // letters sit up to a pixel too close, unevenly.
+    advance, left_side_bearing: i32
+    stb_truetype.GetCodepointHMetrics(info, box.codepoint, &advance, &left_side_bearing)
+
+    return Glyph {
+        source  = {f32(box.atlas.x), f32(box.atlas.y), f32(box.width), f32(box.height)},
+        offset  = {f32(box.x0), f32(box.y0 + i32(f32(ascent) * scale))},
+        advance = math.round(f32(advance) * scale),
+    }
+}
+
+// Each glyph's coverage drawn into its box, one byte per atlas pixel
+rasterize_glyphs :: proc(
+    info: ^stb_truetype.fontinfo,
+    boxes: []GlyphBox,
+    scale: f32,
+    atlas_size: [2]i32,
+) -> []u8 {
+    coverage := make([]u8, atlas_size.x * atlas_size.y, context.temp_allocator)
     for box in boxes {
         if box.width <= 0 || box.height <= 0 do continue
 
-        stbtt.MakeCodepointBitmap(
-            &info,
-            &alpha[box.atlas.y * atlas_width + box.atlas.x],
+        stb_truetype.MakeCodepointBitmap(
+            info,
+            &coverage[box.atlas.y * atlas_size.x + box.atlas.x],
             box.width,
             box.height,
-            atlas_width,
+            atlas_size.x,
             scale,
             scale,
             box.codepoint,
         )
     }
+    return coverage
+}
 
-    pixels := make([]u8, len(alpha) * 4, context.temp_allocator)
-    for coverage, i in alpha {
-        pixels[i * 4 + 0] = 255
-        pixels[i * 4 + 1] = 255
-        pixels[i * 4 + 2] = 255
-        pixels[i * 4 + 3] = coverage
+// RGBA white with the coverage as alpha, text is tinted when drawn
+white_pixels :: proc(coverage: []u8) -> []u8 {
+    pixels := make([]u8, len(coverage) * 4, context.temp_allocator)
+    for alpha, index in coverage {
+        pixels[index * 4 + 0] = 255
+        pixels[index * 4 + 1] = 255
+        pixels[index * 4 + 2] = 255
+        pixels[index * 4 + 3] = alpha
     }
-
-    font.texture = create_texture(atlas_width, atlas_height, pixels)
-    font.base_size = f32(size)
-    if len(boxes) > 0 do font.fallback = font.glyphs[boxes[0].codepoint]
-
-    return
+    return pixels
 }
 
 unload_font :: proc(font: Font) {
