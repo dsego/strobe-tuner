@@ -26,7 +26,7 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
     config := app.config
 
     draw_strobe_area(app, layout)
-    draw_tuning_arrows(app, layout, reading)
+    draw_tuning_arrows(&app.displays, &app.measurement.note_target, layout, reading)
     draw_note_controls(app, layout, reading)
 
     // The strobe's reading, none before a track settled, and nothing to measure on another note than a locked
@@ -88,7 +88,8 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
 // The strobe, or the trace or the scope's view in its place. Tapping a track opens its sheet, tapping the scope
 // flips its sweep.
 draw_strobe_area :: proc(app: ^App, layout: Layout) {
-    config, display, targets := app.config, &app.strobe_display, &app.glow_targets
+    displays := &app.displays
+    config, display, targets := app.config, &displays.strobe, &displays.glow_targets
     measurement := &app.measurement
     strobe, view := layout.strobe, layout.strobe_view
 
@@ -123,7 +124,7 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         colors := strobe_colors(config)
         seconds, range := config.trace_seconds, config.trace_range_cents
         line_color, band_color, background := gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color)
-        draw_trace_display(&app.trace_display, targets, view, seconds, range, line_color, band_color, background, config.strobe_glow)
+        draw_trace_display(&displays.trace, targets, view, seconds, range, line_color, band_color, background, config.strobe_glow)
 
     case .SPECTRUM:
         lock_in := measurement.strobe_lock_in
@@ -132,7 +133,7 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
 
         colors := strobe_colors(config)
         draw_spectrum_display(
-            &app.spectrum_display,
+            &displays.spectrum,
             targets,
             view,
             track_hz,
@@ -144,7 +145,7 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         )
 
     case .SCOPE, .LAMP:
-        draw_scope_display(&app.scope_display, targets, &measurement.scope, view, config, measurement.pitch_detector.snr_db)
+        draw_scope_display(&displays.scope, targets, &measurement.scope, view, config, measurement.pitch_detector.snr_db)
 
         // Between the wave over time and the Lissajous figure
         if config.strobe_display_type == .SCOPE && !input_missing(app) && gui_button(strobe) {
@@ -194,9 +195,7 @@ input_missing :: proc(app: ^App) -> bool {
 
 // An arrow on the side the pitch is off to, pointing inwards the way to tune: flat on the left pointing right
 // to tune up, like higher notes are to the right on the ruler
-draw_tuning_arrows :: proc(app: ^App, layout: Layout, reading: Reading) {
-    note_target := &app.measurement.note_target
-
+draw_tuning_arrows :: proc(displays: ^Displays, note_target: ^core.NoteTarget, layout: Layout, reading: Reading) {
     // Only the strong readings, a fading note drifts and would flash the arrows. The strobe's close to the
     // note, like the readout. On another note than the locked one, as far as the notes are apart.
     cents := core.target_cents_off(note_target, note_target.last_good_pitch.detected_freq)
@@ -209,8 +208,8 @@ draw_tuning_arrows :: proc(app: ^App, layout: Layout, reading: Reading) {
     // Without a lock or a string, further than half a semitone is a neighbouring note that isn't confirmed yet
     if !note_target.active || (!measures_target && distance > 50) do return
 
-    app.flat_arrow = core.schmitt_trigger_neg(app.flat_arrow, cents, -8, -10)
-    app.sharp_arrow = core.schmitt_trigger(app.sharp_arrow, cents, 8, 10)
+    displays.flat_arrow = core.schmitt_trigger_neg(displays.flat_arrow, cents, -8, -10)
+    displays.sharp_arrow = core.schmitt_trigger(displays.sharp_arrow, cents, 8, 10)
 
     arrow := pixel_fonts.strobe_arrow
 
@@ -218,11 +217,11 @@ draw_tuning_arrows :: proc(app: ^App, layout: Layout, reading: Reading) {
     // at the top pointing down, in the middle
     if layout.strobe_turned {
         strobe, view := layout.strobe, layout.strobe_view
-        glyph: cstring = "▲" if app.flat_arrow else "▼"
+        glyph: cstring = "▲" if displays.flat_arrow else "▼"
         x := strobe.x + (strobe.width - gfx.measure_text(arrow.font, glyph, arrow.size, 0).x) / 2
-        if app.flat_arrow {
+        if displays.flat_arrow {
             gfx.draw_text(arrow.font, glyph, snap_to_pixels({x, view.y + view.height - 10 - arrow.size}), arrow.size, 0, accent_color)
-        } else if app.sharp_arrow {
+        } else if displays.sharp_arrow {
             gfx.draw_text(arrow.font, glyph, snap_to_pixels({x, view.y + 10}), arrow.size, 0, accent_color)
         }
         return
@@ -230,9 +229,9 @@ draw_tuning_arrows :: proc(app: ^App, layout: Layout, reading: Reading) {
 
     arrow_y := layout.strobe_view.y + 10
 
-    if app.flat_arrow {
+    if displays.flat_arrow {
         gfx.draw_text(arrow.font, "▶", snap_to_pixels({layout.strobe.x + 10, arrow_y}), arrow.size, 0, accent_color)
-    } else if app.sharp_arrow {
+    } else if displays.sharp_arrow {
         width := gfx.measure_text(arrow.font, "◀", arrow.size, 0).x
         position := snap_to_pixels({layout.strobe.x + layout.strobe.width - 10 - width, arrow_y})
         gfx.draw_text(arrow.font, "◀", position, arrow.size, 0, accent_color)

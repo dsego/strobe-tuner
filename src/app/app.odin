@@ -51,11 +51,7 @@ App :: struct {
     config:             ^Config,
     measurement:        Measurement,
     input:              AudioInput,
-    glow_targets:       GlowTargets, // shared by the displays that glow
-    strobe_display:     StrobeDisplay,
-    scope_display:      ScopeDisplay, // the scope's and the lamp's views
-    trace_display:      TraceDisplay,
-    spectrum_display:   SpectrumDisplay,
+    displays:           Displays,
 
     open_dropdown:      Dropdown, // the dropdown whose menu is open
     settings_sheet:     Sheet,
@@ -66,10 +62,6 @@ App :: struct {
     selected_track:     int,
     instrument_sheet:   Sheet, // the instruments and the presets, opened from the bottom left corner
     input_sheet:        Sheet, // the picker, the rate and the levels, opened by tapping the input's level
-
-    // The arrows on the strobe, see draw_tuning_arrows
-    flat_arrow:         bool,
-    sharp_arrow:        bool,
 
     in_tune_s:          f32, // how long the readout has held in tune, see update_in_tune_tap
     in_tune_tapped:     bool, // and it tapped, not again until the readout moves away
@@ -90,6 +82,19 @@ Measurement :: struct {
     readout_track:  int, // the strobe track the readout follows, see core.strobe_readout_track
     held_readout:   HeldReadout, // the last one shown while the note was lit, see measure
     traced_track:   int, // the track the readout followed, the trace stays on it while its stripes show
+}
+
+// What the strobe area draws, the display picked in the settings and the arrows over it
+Displays :: struct {
+    glow_targets: GlowTargets, // shared by the displays that glow
+    strobe:       StrobeDisplay,
+    scope:        ScopeDisplay, // the scope's and the lamp's views
+    trace:        TraceDisplay,
+    spectrum:     SpectrumDisplay,
+
+    // The arrows on the strobe, see draw_tuning_arrows
+    flat_arrow:   bool,
+    sharp_arrow:  bool,
 }
 
 // This frame's measurements, for the main screen
@@ -147,18 +152,19 @@ run_app :: proc(config: ^Config) {
     defer core.destroy_scope(&measurement.scope)
 
     // Made as the first glowing display draws, see ensure_glow_targets
-    defer unload_glow_targets(&app.glow_targets)
+    displays := &app.displays
+    defer unload_glow_targets(&displays.glow_targets)
 
-    app.strobe_display = init_strobe_display(strobe_bg_color)
+    displays.strobe = init_strobe_display(strobe_bg_color)
 
-    app.scope_display = init_scope_display(strobe_bg_color)
-    defer destroy_scope_display(&app.scope_display)
+    displays.scope = init_scope_display(strobe_bg_color)
+    defer destroy_scope_display(&displays.scope)
 
-    app.trace_display = init_trace_display()
-    defer destroy_trace_display(&app.trace_display)
+    displays.trace = init_trace_display()
+    defer destroy_trace_display(&displays.trace)
 
-    app.spectrum_display = init_spectrum_display()
-    defer destroy_spectrum_display(&app.spectrum_display)
+    displays.spectrum = init_spectrum_display()
+    defer destroy_spectrum_display(&displays.spectrum)
 
     // Opened or not, the strobe area says why there's no input, see draw_strobe_area
     audio_capture := audio.init(config.input_device)
@@ -169,7 +175,7 @@ run_app :: proc(config: ^Config) {
     audio.register_audio_node(audio_capture, &measurement.pitch_detector)
     audio.register_audio_node(audio_capture, measurement.strobe_lock_in)
     audio.register_audio_node(audio_capture, &measurement.scope)
-    audio.register_audio_node(audio_capture, &app.spectrum_display)
+    audio.register_audio_node(audio_capture, &displays.spectrum)
     match_input_rate(&app)
     audio.start(audio_capture)
 
@@ -272,7 +278,7 @@ run_frame :: proc(app: ^App) {
         if strobe_shows do draw_strobe_area(app, layout)
     } else if panel_covered {
         draw_strobe_area(app, layout)
-        draw_tuning_arrows(app, layout, reading)
+        draw_tuning_arrows(&app.displays, &app.measurement.note_target, layout, reading)
     } else {
         draw_main_screen(app, layout, reading)
     }
@@ -530,11 +536,11 @@ measure :: proc(app: ^App) -> (reading: Reading) {
         }
     }
 
-    record_trace(&app.trace_display, traced_cents, light, reading.pitch.fresh, gfx.frame_time())
+    record_trace(&app.displays.trace, traced_cents, light, reading.pitch.fresh, gfx.frame_time())
 
     // The spectrum of what came in, only while it's the display
     config := app.config
-    if config.strobe_display_type == .SPECTRUM do update_spectrum_display(&app.spectrum_display, config.spectrum_windows)
+    if config.strobe_display_type == .SPECTRUM do update_spectrum_display(&app.displays.spectrum, config.spectrum_windows)
 
     return
 }

@@ -128,7 +128,7 @@ switch_input :: proc(app: ^App) {
     // Nothing of the previous input's carries over
     audio.switch_device(app.input.capture, picked_device(&app.input))
     reset_measurement(&app.measurement)
-    reset_spectrum_display(&app.spectrum_display)
+    reset_spectrum_display(&app.displays.spectrum)
     match_input_rate(app)
 }
 
@@ -139,7 +139,7 @@ match_input_rate :: proc(app: ^App) {
     if sample_rate == 0 || sample_rate == app.measurement.strobe_lock_in.sample_rate do return
 
     set_measurement_sample_rate(&app.measurement, sample_rate)
-    set_spectrum_display_sample_rate(&app.spectrum_display, sample_rate)
+    set_spectrum_display_sample_rate(&app.displays.spectrum, sample_rate)
     retune(&app.measurement, app.config)
 }
 
