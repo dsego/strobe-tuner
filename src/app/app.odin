@@ -124,21 +124,7 @@ run_app :: proc(config: ^Config) {
     // Saved for the next start
     defer config.target_freq_hz = tuner.target_note.frequency
 
-    // The window opens where it was last used and at its size, see follow_window_size. The plots take a window
-    // of their own size, it stays as it is.
-    min_size := WINDOW_MIN_SIZE
-    size := [2]i32{STROBE_WIDTH, DESKTOP_HEIGHT}
-    position: Maybe([2]i32)
-    when DEBUG_STATS {
-        min_size = {}
-        size.x = 1200
-    } else {
-        if config.window_size != {} {
-            size = {i32(config.window_size.x), i32(config.window_size.y)}
-            position = [2]i32{i32(config.window_position.x), i32(config.window_position.y)}
-        }
-    }
-
+    size, min_size, position := window_placement(config)
     if !gfx.init(size.x, size.y, APP_NAME, min_size, position) do return
 
     defer gfx.shutdown()
@@ -738,6 +724,24 @@ save_when_settled :: proc(app: ^App) {
     app.config.target_freq_hz = app.tuner.target_note.frequency
     save_config(app.config^)
     app.unsaved, app.unsaved_s = false, 0
+}
+
+// The window opens where it was last used and at its size, see follow_window_size. The plots take a window of
+// their own size, it stays as it is.
+window_placement :: proc(config: ^Config) -> (size, min_size: [2]i32, position: Maybe([2]i32)) {
+    min_size = WINDOW_MIN_SIZE
+    size = {STROBE_WIDTH, DESKTOP_HEIGHT}
+    when DEBUG_STATS {
+        min_size = {}
+        size.x = 1200
+    } else {
+        if config.window_size != {} {
+            size = {i32(config.window_size.x), i32(config.window_size.y)}
+            position = [2]i32{i32(config.window_position.x), i32(config.window_position.y)}
+        }
+    }
+
+    return
 }
 
 // The desktop window opens where it was last used and at its size, kept up to date here once a drag is over
