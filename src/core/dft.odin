@@ -134,6 +134,11 @@ run_single_dft :: proc(self: ^SingleFreqDFT, samples: []f32) -> complex64 {
     return self.dft
 }
 
+// A DFT's sum so far, DFT_LANES of the samples side by side
+DftLanes :: struct {
+    re, im: #simd[DFT_LANES]f32,
+}
+
 // Several DFTs of the same window size over the same samples, a block of the samples at a time through each.
 // Every DFT sums in the same order as on its own, the results are the same.
 run_single_dfts :: proc(dfts: []^SingleFreqDFT, samples: []f32) {
@@ -145,32 +150,40 @@ run_single_dfts :: proc(dfts: []^SingleFreqDFT, samples: []f32) {
     assert(len(samples) >= window_size)
     for dft in dfts do assert(dft.window_size == window_size)
 
-    // The samples are real, two multiplies each instead of a full complex multiply
-    re_lanes, im_lanes: [MAX_BANDS]#simd[DFT_LANES]f32
+    lanes: [MAX_BANDS]DftLanes
     vector_end := window_size - window_size % DFT_LANES
     for block := 0; block < vector_end; block += DFT_BLOCK {
         block_end := min(block + DFT_BLOCK, vector_end)
-        for dft, dft_index in dfts {
-            re, im := re_lanes[dft_index], im_lanes[dft_index]
-            for index := block; index < block_end; index += DFT_LANES {
-                sample := simd.from_slice(#simd[DFT_LANES]f32, samples[index:])
-                re += sample * simd.from_slice(#simd[DFT_LANES]f32, dft.twiddles_real[index:])
-                im += sample * simd.from_slice(#simd[DFT_LANES]f32, dft.twiddles_imag[index:])
-            }
-            re_lanes[dft_index], im_lanes[dft_index] = re, im
-        }
+        for dft, dft_index in dfts do sum_dft_block(&lanes[dft_index], dft, samples, block, block_end)
     }
 
-    size := f32(window_size)
-    for dft, dft_index in dfts {
-        re := simd.reduce_add_pairs(re_lanes[dft_index])
-        im := simd.reduce_add_pairs(im_lanes[dft_index])
-        for index in vector_end ..< window_size {
-            re += samples[index] * dft.twiddles_real[index]
-            im += samples[index] * dft.twiddles_imag[index]
-        }
-        dft.dft = complex(re / size, im / size)
+    for dft, dft_index in dfts do dft.dft = sum_dft_lanes(lanes[dft_index], dft, samples, vector_end)
+}
+
+// The samples from start to end, a whole number of lanes, into the DFT's lanes. The samples are real, two
+// multiplies each instead of a full complex multiply.
+sum_dft_block :: #force_inline proc(lanes: ^DftLanes, dft: ^SingleFreqDFT, samples: []f32, start, end: int) {
+    re, im := lanes.re, lanes.im
+    for index := start; index < end; index += DFT_LANES {
+        sample := simd.from_slice(#simd[DFT_LANES]f32, samples[index:])
+        re += sample * simd.from_slice(#simd[DFT_LANES]f32, dft.twiddles_real[index:])
+        im += sample * simd.from_slice(#simd[DFT_LANES]f32, dft.twiddles_imag[index:])
     }
+    lanes.re, lanes.im = re, im
+}
+
+// The DFT's lanes summed into its value, with the samples from vector_end that don't fill a whole lane, scaled
+// by the window size
+sum_dft_lanes :: proc(lanes: DftLanes, dft: ^SingleFreqDFT, samples: []f32, vector_end: int) -> complex64 {
+    re := simd.reduce_add_pairs(lanes.re)
+    im := simd.reduce_add_pairs(lanes.im)
+    for index in vector_end ..< dft.window_size {
+        re += samples[index] * dft.twiddles_real[index]
+        im += samples[index] * dft.twiddles_imag[index]
+    }
+
+    size := f32(dft.window_size)
+    return complex(re / size, im / size)
 }
 
 
