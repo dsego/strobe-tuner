@@ -49,8 +49,8 @@ MAINS_HUM :: #config(MAINS_HUM, false)
 MAINS_HZ :: [?]f32{50, 60}
 MAINS_CENTS :: 8
 
-// The window moves on by a display frame at 60 fps, the 8192 point FFT is cheap. The tuner confirms a note by
-// time, so the rate only changes how soon it's seen.
+// The window moves on by a display frame at 60 fps, the 8192 point FFT is cheap. The note recognition confirms
+// a note by time, so the rate only changes how soon it's seen.
 DETECTIONS_PER_SECOND :: 60
 
 // The pitch detection hears up to here, above C8 (4186 Hz). Hiss and pick noise over it only blur the
@@ -153,7 +153,7 @@ reset_pitch_detector :: proc(self: ^PitchDetector) {
     reset_noise_floor(&self.noise_floor)
 }
 
-// Takes the previous detection to repeat when there are no new samples, the Tuner keeps the history
+// Takes the previous detection to repeat when there are no new samples, the NoteTarget keeps the history
 run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> PitchInfo {
     info := PitchInfo{}
 

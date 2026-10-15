@@ -186,7 +186,7 @@ run_case :: proc(test_case: Case) -> (result: Result) {
 
     detector := core.init_pitch_detector(test_case.pitch_standard)
     defer core.destroy_pitch_detector(&detector)
-    tuner := core.init_tuner(110, test_case.pitch_standard, true)
+    note_target := core.init_note_target(110, test_case.pitch_standard, true)
 
     intervals := INTERVALS
     strobe := core.init_strobe_lock_in(110, intervals[:], .HARMONIC)
@@ -194,7 +194,7 @@ run_case :: proc(test_case: Case) -> (result: Result) {
     retune :: proc(strobe: ^core.StrobeLockIn, freq_hz, pitch_standard: f32) {
         core.set_strobe_lock_in_freq(strobe, freq_hz, pitch_standard, STROBE_SPEED, 2, .HARMONIC)
     }
-    retune(strobe, tuner.target_note.frequency, test_case.pitch_standard)
+    retune(strobe, note_target.target_note.frequency, test_case.pitch_standard)
 
     measure_from := len(samples) - int(MEASURE_S * SAMPLERATE)
     readout_track := -1
@@ -204,16 +204,16 @@ run_case :: proc(test_case: Case) -> (result: Result) {
         frame := samples[start:start + FRAME_SAMPLES]
         core.audio_capture_write(&detector, frame)
         core.audio_capture_write(strobe, frame)
-        pitch := core.run_pitch_detection(&detector, tuner.pitch)
+        pitch := core.run_pitch_detection(&detector, note_target.pitch)
         core.run_phase_detection(strobe, pitch.is_tonal)
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
-        if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) {
-            retune(strobe, tuner.target_note.frequency, test_case.pitch_standard)
+        if core.update_note_target(&note_target, pitch, core.strobe_shows_note(strobe)) {
+            retune(strobe, note_target.target_note.frequency, test_case.pitch_standard)
             readout_ready = false
         }
         if !pitch.fresh || start < measure_from do continue
 
-        if !tuner.active || tuner.target_note.cents != note.cents {
+        if !note_target.active || note_target.target_note.cents != note.cents {
             result.wrong_note += 1
             continue
         }
@@ -250,13 +250,13 @@ run_noise_only :: proc(noise_snr_db: f32) -> (active_s: f32) {
 
     detector := core.init_pitch_detector()
     defer core.destroy_pitch_detector(&detector)
-    tuner := core.init_tuner(110, 440, true)
+    note_target := core.init_note_target(110, 440, true)
 
     for start := 0; start + FRAME_SAMPLES <= len(samples); start += FRAME_SAMPLES {
         core.audio_capture_write(&detector, samples[start:start + FRAME_SAMPLES])
-        pitch := core.run_pitch_detection(&detector, tuner.pitch)
-        core.update_tuner(&tuner, pitch)
-        if tuner.active do active_s += f32(FRAME_SAMPLES) / SAMPLERATE
+        pitch := core.run_pitch_detection(&detector, note_target.pitch)
+        core.update_note_target(&note_target, pitch)
+        if note_target.active do active_s += f32(FRAME_SAMPLES) / SAMPLERATE
     }
     return
 }

@@ -791,11 +791,11 @@ test_phase_over_a_hitch :: proc(t: ^testing.T) {
 
 
 // A voice down a semitone and back up, the strobe retuned to each note a moment after it changes like the
-// tuner does. Each track hears the note as well when it comes back as before it left.
+// note target does. Each track hears the note as well when it comes back as before it left.
 @(test)
 test_note_away_and_back :: proc(t: ^testing.T) {
     FRAME :: 800
-    RETUNE_AFTER :: 9 // frames, about what the tuner takes to confirm a note
+    RETUNE_AFTER :: 9 // frames, about what the note recognition takes to confirm a note
     a3, g_sharp3: f32 = 220, 207.65
 
     intervals := []f32{1, 2, 4}

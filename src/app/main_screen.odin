@@ -36,7 +36,7 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
         reading.steady.detected_freq,
         reading.steady.err_cents,
         reading.strobe_readout,
-        app.tuner.active,
+        app.note_target.active,
     )
 
     // The displays in a cycle, the number keys go straight to one
@@ -135,7 +135,7 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
             targets,
             view,
             track_hz,
-            app.tuner.active,
+            app.note_target.active,
             config,
             gfx.hex(colors.x),
             gfx.hex(colors.y),
@@ -194,19 +194,19 @@ input_missing :: proc(app: ^App) -> bool {
 // An arrow on the side the pitch is off to, pointing inwards the way to tune: flat on the left pointing right
 // to tune up, like higher notes are to the right on the ruler
 draw_tuning_arrows :: proc(app: ^App, layout: Layout, reading: Reading) {
-    tuner := &app.tuner
+    note_target := &app.note_target
 
     // Only the strong readings, a fading note drifts and would flash the arrows. The strobe's close to the
     // note, like the readout. On another note than the locked one, as far as the notes are apart.
-    cents := core.tuner_cents_off(tuner, tuner.last_good_pitch.detected_freq)
+    cents := core.target_cents_off(note_target, note_target.last_good_pitch.detected_freq)
     if reading.strobe_readout do cents = reading.steady.err_cents
-    if reading.out_of_range do cents = core.tuner_out_of_range_cents(tuner)
+    if reading.out_of_range do cents = core.out_of_range_cents(note_target)
 
     distance := abs(cents)
-    measures_target := core.measures_target(tuner)
+    measures_target := core.measures_target(note_target)
 
     // Without a lock or a string, further than half a semitone is a neighbouring note that isn't confirmed yet
-    if !tuner.active || (!measures_target && distance > 50) do return
+    if !note_target.active || (!measures_target && distance > 50) do return
 
     app.flat_arrow = core.schmitt_trigger_neg(app.flat_arrow, cents, -8, -10)
     app.sharp_arrow = core.schmitt_trigger(app.sharp_arrow, cents, 8, 10)
@@ -241,7 +241,7 @@ draw_tuning_arrows :: proc(app: ^App, layout: Layout, reading: Reading) {
 // The target note on the ruler with the gauge under it, the lock, and the note's offset. The lock button (or
 // space, or tapping the note) locks the note, tapping another note on the ruler locks that one instead.
 draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
-    config, tuner := app.config, &app.tuner
+    config, note_target := app.config, &app.note_target
     setup := current_setup(config)
     string_mode := setup.instrument != .CHROMATIC
 
@@ -249,19 +249,19 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     // work the same either way. With a capo the strings sound higher and keep the names of the open strings,
     // like the chord shapes played over it.
     transpose := -capo_fret(setup) if string_mode else transpose_key(setup)
-    shown_cents := tuner.target_note.cents
-    shown_note := core.cents_to_note(f32(shown_cents + 100 * transpose), tuner.target_note.pitch_standard)
+    shown_cents := note_target.target_note.cents
+    shown_note := core.cents_to_note(f32(shown_cents + 100 * transpose), note_target.target_note.pitch_standard)
 
     // The strings, or every note of a piano with the target among them. There's always a target, load_config
     // holds the start note in A0 to C8.
     ruler_notes: []core.Note
     target: int
     if string_mode {
-        ruler_notes = make([]core.Note, tuner.string_count, context.temp_allocator)
+        ruler_notes = make([]core.Note, note_target.string_count, context.temp_allocator)
         for &note, index in ruler_notes {
-            note = core.cents_to_note(f32(100 * (tuner.strings[index] + transpose)), shown_note.pitch_standard)
+            note = core.cents_to_note(f32(100 * (note_target.strings[index] + transpose)), shown_note.pitch_standard)
         }
-        target = tuner.string_index
+        target = note_target.string_index
     } else {
         ruler_notes = make([]core.Note, core.NOTE_COUNT, context.temp_allocator)
         for &note, index in ruler_notes {
@@ -269,14 +269,14 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
         }
         target = clamp(shown_cents / 100 - core.LOWEST_NOTE, 0, core.NOTE_COUNT - 1)
     }
-    step, note_tapped, swiping := gui_note_ruler(layout.ruler, ruler_notes, target, tuner.active)
+    step, note_tapped, swiping := gui_note_ruler(layout.ruler, ruler_notes, target, note_target.active)
 
     // Within half a semitone of the note, or a few semitones of a string. Another note than a locked one
     // pins it at the end on that side.
     cents := reading.steady.err_cents
-    lit := tuner.active && (reading.steady.measured || reading.out_of_range)
+    lit := note_target.active && (reading.steady.measured || reading.out_of_range)
 
-    if reading.out_of_range do cents = 1200 * core.tuner_out_of_range_side(tuner)
+    if reading.out_of_range do cents = 1200 * core.out_of_range_side(note_target)
 
     // Further than the gauge reaches from any string, e.g. a guitar's low E on a ukulele, it says so instead
     // of the gauge stuck at its end, and which way
@@ -289,7 +289,7 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
         draw_cents_gauge(layout.gauge, cents, lit, string_mode, gfx.hex(strobe_colors(config).x))
     }
 
-    lock_toggled := gui_lock_toggle(layout.lock, tuner.locked) || note_tapped
+    lock_toggled := gui_lock_toggle(layout.lock, note_target.locked) || note_tapped
     if !gui.disabled {
         if gfx.key_pressed(.SPACE) || app.menu == .LOCK_NOTE do lock_toggled = true
         if gfx.key_pressed(.LEFT) do step = -1
@@ -298,22 +298,22 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
 
     // A swipe locks the note in the middle as it goes, the one it started on right away, rather than the
     // target following the detected note under the finger
-    if swiping do lock_toggled = !tuner.locked
+    if swiping do lock_toggled = !note_target.locked
     if lock_toggled || step != 0 do app.quiet_time = 0
 
-    retune_target := lock_toggled && core.toggle_note_lock(tuner)
+    retune_target := lock_toggled && core.toggle_note_lock(note_target)
 
-    if core.step_target_note(tuner, step) do retune_target = true
+    if core.step_target_note(note_target, step) do retune_target = true
     if retune_target do retune(app)
 
     // A note that's tuned off pitch says so between the letter and the lock, the strobe and the readout are on
     // the offset note, see gui_note_offsets.
-    if offset := core.note_offset_cents(tuner, tuner.target_note); offset != 0 {
+    if offset := core.note_offset_cents(note_target, note_target.target_note); offset != 0 {
         text := offset_cents_text(offset)
         width := measure_label(pixel_fonts.label, text, 1).x
 
         // Like the note, white while there's a pitch
-        color := text_color_white if tuner.active else text_color_muted
+        color := text_color_white if note_target.active else text_color_muted
         draw_label(pixel_fonts.label, text, layout.note_offset - {width / 2, LABEL_SIZE / 2}, color, 1)
     }
 }

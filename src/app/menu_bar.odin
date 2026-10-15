@@ -109,7 +109,7 @@ update_menu_checks :: proc(app: ^App) {
         gfx.set_menu_checked(int(command), app.config.strobe_colorway == colorway)
     }
     gfx.set_menu_checked(int(MenuCommand.RETRO_GLOW), app.config.strobe_glow)
-    gfx.set_menu_checked(int(MenuCommand.LOCK_NOTE), app.tuner.locked)
+    gfx.set_menu_checked(int(MenuCommand.LOCK_NOTE), app.note_target.locked)
 
     for index in 0 ..< min(len(app.audio_devices), MAX_INPUT_COMMANDS) {
         gfx.set_menu_checked(int(MenuCommand.INPUTS) + index, index == app.audio_device_index)

@@ -114,7 +114,7 @@ main :: proc() {
 
     detector := core.init_pitch_detector()
     defer core.destroy_pitch_detector(&detector)
-    tuner := core.init_tuner(110, 440, true)
+    note_target := core.init_note_target(110, 440, true)
 
     intervals := INTERVALS
     widths := BAND_WIDTHS_CENTS
@@ -151,16 +151,16 @@ main :: proc() {
         for &lamp in lamps do core.audio_capture_write(&lamp.scope, frame)
 
         // Like the app, see sandbox/replay
-        pitch := core.run_pitch_detection(&detector, tuner.pitch)
+        pitch := core.run_pitch_detection(&detector, note_target.pitch)
         for each in strobes do core.run_phase_detection(each, pitch.is_tonal)
-        if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) {
-            for each in strobes do retune(each, tuner.target_note.frequency)
+        if core.update_note_target(&note_target, pitch, core.strobe_shows_note(strobe)) {
+            for each in strobes do retune(each, note_target.target_note.frequency)
         }
 
         regions: [HARMONICS]Region
         for band, index in strobe.bands {
             regions[index] = .DARK
-            if !tuner.active do continue
+            if !note_target.active do continue
 
             if band.snr_db >= fully_lit do regions[index] = .LIT
             else if band.snr_db > core.STROBE_FADE_SNR_DB[0] do regions[index] = .TAIL

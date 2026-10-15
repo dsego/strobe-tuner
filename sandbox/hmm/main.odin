@@ -115,7 +115,7 @@ main :: proc() {
 
     detector := core.init_pitch_detector()
     defer core.destroy_pitch_detector(&detector)
-    tuner := core.init_tuner(110, 440, true, note_switch_s)
+    note_target := core.init_note_target(110, 440, true, note_switch_s)
 
     intervals := INTERVALS
     strobe := core.init_strobe_lock_in(110, intervals[:], .HARMONIC)
@@ -137,15 +137,15 @@ main :: proc() {
         frame := samples[start:start + FRAME_SAMPLES]
         core.audio_capture_write(&detector, frame)
         core.audio_capture_write(strobe, frame)
-        pitch := core.run_pitch_detection(&detector, tuner.pitch)
+        pitch := core.run_pitch_detection(&detector, note_target.pitch)
         core.run_phase_detection(strobe, pitch.is_tonal)
-        if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) do retune(strobe, tuner.target_note.frequency)
+        if core.update_note_target(&note_target, pitch, core.strobe_shows_note(strobe)) do retune(strobe, note_target.target_note.frequency)
         if !pitch.fresh do continue
 
         hmm_step(&belief, detector.nsdf.peaks[:], pitch.snr_db)
 
         tuner_shows := "-"
-        if detected, has_detected := tuner.detected_note.?; has_detected && tuner.active do tuner_shows = core.note_name(detected)
+        if detected, has_detected := note_target.detected_note.?; has_detected && note_target.active do tuner_shows = core.note_name(detected)
         best_state := UNVOICED
         for state in 0 ..< core.NOTE_COUNT {
             if belief[state] > belief[best_state] do best_state = state

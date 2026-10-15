@@ -553,7 +553,7 @@ play :: proc(recording: []f32, sample_rate: f32, pitch_standard: f32) -> (detect
 
     detector := core.init_pitch_detector(pitch_standard, sample_rate)
     defer core.destroy_pitch_detector(&detector)
-    tuner := core.init_tuner(110, pitch_standard, true)
+    note_target := core.init_note_target(110, pitch_standard, true)
 
     intervals := INTERVALS
     strobe := core.init_strobe_lock_in(110, intervals[:], .HARMONIC, sample_rate)
@@ -561,7 +561,7 @@ play :: proc(recording: []f32, sample_rate: f32, pitch_standard: f32) -> (detect
     retune :: proc(strobe: ^core.StrobeLockIn, freq_hz, pitch_standard: f32) {
         core.set_strobe_lock_in_freq(strobe, freq_hz, pitch_standard, STROBE_SPEED, 2, .HARMONIC)
     }
-    retune(strobe, tuner.target_note.frequency, pitch_standard)
+    retune(strobe, note_target.target_note.frequency, pitch_standard)
 
     readout_track := -1
     readout_ready := false
@@ -572,11 +572,11 @@ play :: proc(recording: []f32, sample_rate: f32, pitch_standard: f32) -> (detect
         frame := samples[start:start + frame_samples]
         core.audio_capture_write(&detector, frame)
         core.audio_capture_write(strobe, frame)
-        pitch := core.run_pitch_detection(&detector, tuner.pitch)
+        pitch := core.run_pitch_detection(&detector, note_target.pitch)
         core.run_phase_detection(strobe, pitch.is_tonal)
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
-        if core.update_tuner(&tuner, pitch, core.strobe_shows_note(strobe)) {
-            retune(strobe, tuner.target_note.frequency, pitch_standard)
+        if core.update_note_target(&note_target, pitch, core.strobe_shows_note(strobe)) {
+            retune(strobe, note_target.target_note.frequency, pitch_standard)
             readout_ready = false
             retuned_s = time_s
         }
@@ -585,14 +585,14 @@ play :: proc(recording: []f32, sample_rate: f32, pitch_standard: f32) -> (detect
         // The strobe's track from the target, none until one settled, see src/app/app.odin
         detection := Detection {
             time_s     = time_s,
-            active     = tuner.active,
+            active     = note_target.active,
             retuned    = retuned_s >= 0 && time_s - retuned_s <= NULL_HOLD_S,
-            note_cents = tuner.target_note.cents,
+            note_cents = note_target.target_note.cents,
         }
         if readout_ready && abs(strobe.bands[readout_track].err_cents) <= core.READOUT_RANGE_CENTS {
             band := strobe.bands[readout_track]
             detection.read = true
-            detection.cents = f32(tuner.target_note.cents) + band.err_cents
+            detection.cents = f32(note_target.target_note.cents) + band.err_cents
         }
         // Lit like sandbox/accuracy counts it, an instrument's partials are whole multiples
         fade := core.STROBE_FADE_SNR_DB
