@@ -19,7 +19,6 @@ package app
 import "core:fmt"
 
 import "../audio"
-import "../core"
 import "../gfx"
 
 // A picked input that's gone is looked for this often, the system says nothing when one is plugged in that
@@ -126,14 +125,10 @@ switch_input :: proc(app: ^App) {
     app.input.restart = false
     if len(app.input.devices) == 0 do return
 
-    // Nothing of the previous input's carries over, the readout it held included
+    // Nothing of the previous input's carries over
     audio.switch_device(app.input.capture, picked_device(&app.input))
-    core.reset_pitch_detector(&app.pitch_detector)
-    core.reset_strobe_lock_in(app.strobe_lock_in)
-    core.reset_scope(&app.scope)
+    reset_measurement(&app.measurement)
     reset_spectrum_display(&app.spectrum_display)
-    app.readout_track, app.traced_track = -1, -1
-    app.held_readout = {}
     match_input_rate(app)
 }
 
@@ -141,13 +136,11 @@ switch_input :: proc(app: ^App) {
 // changes anything, the strobe's windows are retuned to it. Nothing without an input.
 match_input_rate :: proc(app: ^App) {
     sample_rate := app.input.capture.sample_rate
-    if sample_rate == 0 || sample_rate == app.strobe_lock_in.sample_rate do return
+    if sample_rate == 0 || sample_rate == app.measurement.strobe_lock_in.sample_rate do return
 
-    core.set_pitch_detector_sample_rate(&app.pitch_detector, sample_rate)
-    core.set_strobe_lock_in_sample_rate(app.strobe_lock_in, sample_rate)
-    core.set_scope_sample_rate(&app.scope, sample_rate)
+    set_measurement_sample_rate(&app.measurement, sample_rate)
     set_spectrum_display_sample_rate(&app.spectrum_display, sample_rate)
-    retune(app)
+    retune(&app.measurement, app.config)
 }
 
 // The input's index picked in the settings, the open one without a list

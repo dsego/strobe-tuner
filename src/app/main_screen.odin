@@ -36,7 +36,7 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
         reading.steady.detected_freq,
         reading.steady.err_cents,
         reading.strobe_readout,
-        app.note_target.active,
+        app.measurement.note_target.active,
     )
 
     // The displays in a cycle, the number keys go straight to one
@@ -89,6 +89,7 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
 // flips its sweep.
 draw_strobe_area :: proc(app: ^App, layout: Layout) {
     config, display, targets := app.config, &app.strobe_display, &app.glow_targets
+    measurement := &app.measurement
     strobe, view := layout.strobe, layout.strobe_view
 
     // The selected track stands out as its sheet comes up
@@ -102,10 +103,10 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     switch config.strobe_display_type {
     case .STROBE:
         // Turned by the lock-in or by the lamp's screen
-        lock_in := app.strobe_lock_in
+        lock_in := measurement.strobe_lock_in
         bands := lock_in.bands[:]
         if config.strobe_source == .LAMP {
-            bands = core.strobe_lamp_bands(&app.strobe_lamp, &app.scope, bands, app.pitch_detector.snr_db)
+            bands = core.strobe_lamp_bands(&measurement.strobe_lamp, &measurement.scope, bands, measurement.pitch_detector.snr_db)
         }
         draw_strobe_display(display, targets, strobe, layout.strobe_scale, layout.strobe_turned, bands, lock_in, config)
 
@@ -125,7 +126,7 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         draw_trace_display(&app.trace_display, targets, view, seconds, range, line_color, band_color, background, config.strobe_glow)
 
     case .SPECTRUM:
-        lock_in := app.strobe_lock_in
+        lock_in := measurement.strobe_lock_in
         track_hz := make([]f32, len(lock_in.bands), context.temp_allocator)
         for band, index in lock_in.bands do track_hz[index] = band.freq_hz
 
@@ -135,7 +136,7 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
             targets,
             view,
             track_hz,
-            app.note_target.active,
+            measurement.note_target.active,
             config,
             gfx.hex(colors.x),
             gfx.hex(colors.y),
@@ -143,7 +144,7 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         )
 
     case .SCOPE, .LAMP:
-        draw_scope_display(&app.scope_display, targets, &app.scope, view, config, app.pitch_detector.snr_db)
+        draw_scope_display(&app.scope_display, targets, &measurement.scope, view, config, measurement.pitch_detector.snr_db)
 
         // Between the wave over time and the Lissajous figure
         if config.strobe_display_type == .SCOPE && !input_missing(app) && gui_button(strobe) {
@@ -194,7 +195,7 @@ input_missing :: proc(app: ^App) -> bool {
 // An arrow on the side the pitch is off to, pointing inwards the way to tune: flat on the left pointing right
 // to tune up, like higher notes are to the right on the ruler
 draw_tuning_arrows :: proc(app: ^App, layout: Layout, reading: Reading) {
-    note_target := &app.note_target
+    note_target := &app.measurement.note_target
 
     // Only the strong readings, a fading note drifts and would flash the arrows. The strobe's close to the
     // note, like the readout. On another note than the locked one, as far as the notes are apart.
@@ -241,7 +242,7 @@ draw_tuning_arrows :: proc(app: ^App, layout: Layout, reading: Reading) {
 // The target note on the ruler with the gauge under it, the lock, and the note's offset. The lock button (or
 // space, or tapping the note) locks the note, tapping another note on the ruler locks that one instead.
 draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
-    config, note_target := app.config, &app.note_target
+    config, note_target := app.config, &app.measurement.note_target
     setup := current_setup(config)
     string_mode := setup.instrument != .CHROMATIC
 
@@ -304,7 +305,7 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     retune_target := lock_toggled && core.toggle_note_lock(note_target)
 
     if core.step_target_note(note_target, step) do retune_target = true
-    if retune_target do retune(app)
+    if retune_target do retune(&app.measurement, config)
 
     // A note that's tuned off pitch says so between the letter and the lock, the strobe and the readout are on
     // the offset note, see gui_note_offsets.
@@ -329,7 +330,7 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo, meter
     gfx.draw_rect(meter + {0, LEVEL_METER_HEIGHT}, {LEVEL_BAR_WIDTH, 3}, gfx.hex(strobe_bg_color))
     gfx.draw_rect(meter + {0, LEVEL_METER_HEIGHT}, {LEVEL_BAR_WIDTH + floor_level, 3}, gfx.PURPLE)
 
-    base_band := app.strobe_lock_in.bands[0]
+    base_band := app.measurement.strobe_lock_in.bands[0]
     stat(fmt.ctprintf("Band SNR %.1f", base_band.snr_db), layout.stats)
     stat(fmt.ctprintf("Band NF %.1f", core.dbfs(base_band.noise_floor.level)), layout.stats + {0, 15})
     stat(fmt.ctprintf("Band drift %.1f", base_band.drift_cents), layout.stats + {0, 30})
@@ -342,6 +343,6 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo, meter
     if pitch.is_weak_pitch do stat("weak", {600, 10}, gfx.PURPLE, large = true)
 
     font := pixel_fonts.label_small.font
-    draw_nsdf(gfx.Rect{520, 40, 660, 200}, &app.pitch_detector.nsdf, font)
-    draw_freq_plot(gfx.Rect{520, 300, 660, 200}, &app.pitch_detector.nsdf, font)
+    draw_nsdf(gfx.Rect{520, 40, 660, 200}, &app.measurement.pitch_detector.nsdf, font)
+    draw_freq_plot(gfx.Rect{520, 300, 660, 200}, &app.measurement.pitch_detector.nsdf, font)
 }

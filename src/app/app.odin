@@ -49,11 +49,7 @@ VERNIER_SPEED_MULTIPLIER :: 2
 // What the main loop keeps from one frame to the next
 App :: struct {
     config:             ^Config,
-    note_target:        core.NoteTarget,
-    pitch_detector:     core.PitchDetector, // follows the pitch standard, see apply_config
-    strobe_lock_in:     ^core.StrobeLockIn,
-    scope:              core.Scope, // of the scope and the lamp display types, and the tracks the lamp turns
-    strobe_lamp:        core.StrobeLamp, // the tracks the lamp turns, strobe_source LAMP
+    measurement:        Measurement,
     input:              AudioInput,
     glow_targets:       GlowTargets, // shared by the displays that glow
     strobe_display:     StrobeDisplay,
@@ -75,15 +71,25 @@ App :: struct {
     flat_arrow:         bool,
     sharp_arrow:        bool,
 
-    readout_track:      int, // the strobe track the readout follows, see core.strobe_readout_track
     in_tune_s:          f32, // how long the readout has held in tune, see update_in_tune_tap
     in_tune_tapped:     bool, // and it tapped, not again until the readout moves away
-    held_readout:       HeldReadout, // the last one shown while the note was lit, see measure
-    traced_track:      int, // the track the readout followed, the trace stays on it while its stripes show
     config_changed:     bool, // the note target and the strobe need the new config, see apply_config
     unsaved:            bool, // the config changed since it was saved, see save_when_settled
     unsaved_s:          f32, // since it last changed
     quiet_time:         f32, // seconds with no signal and nobody touching anything, see IDLE_AFTER_S
+}
+
+// What hears the input and what's read from it, from one frame to the next, see measure
+Measurement :: struct {
+    pitch_detector: core.PitchDetector, // follows the pitch standard, see apply_config
+    note_target:    core.NoteTarget,
+    strobe_lock_in: ^core.StrobeLockIn,
+    scope:          core.Scope, // of the scope and the lamp display types, and the tracks the lamp turns
+    strobe_lamp:    core.StrobeLamp, // the tracks the lamp turns, strobe_source LAMP
+
+    readout_track:  int, // the strobe track the readout follows, see core.strobe_readout_track
+    held_readout:   HeldReadout, // the last one shown while the note was lit, see measure
+    traced_track:   int, // the track the readout followed, the trace stays on it while its stripes show
 }
 
 // This frame's measurements, for the main screen
@@ -104,11 +110,11 @@ HeldReadout :: struct {
 
 run_app :: proc(config: ^Config) {
     app := App {
-        config        = config,
-        readout_track = -1,
-        traced_track  = -1,
+        config = config,
+        measurement = {readout_track = -1, traced_track = -1},
     }
-    note_target := &app.note_target
+    measurement := &app.measurement
+    note_target := &measurement.note_target
     note_target^ = core.init_note_target(config.target_freq_hz, config.pitch_standard, prevent_octave_jumps = true)
 
     // Saved for the next start
@@ -127,18 +133,18 @@ run_app :: proc(config: ^Config) {
     gfx.load_shapes()
     defer gfx.unload_shapes()
 
-    app.strobe_lock_in = core.init_strobe_lock_in(
+    measurement.strobe_lock_in = core.init_strobe_lock_in(
         config.target_freq_hz,
         config.strobe_intervals[:],
         config.strobe_mode,
     )
-    defer core.destroy_strobe_lock_in(app.strobe_lock_in)
+    defer core.destroy_strobe_lock_in(measurement.strobe_lock_in)
 
-    app.pitch_detector = core.init_pitch_detector(config.pitch_standard)
-    defer core.destroy_pitch_detector(&app.pitch_detector)
+    measurement.pitch_detector = core.init_pitch_detector(config.pitch_standard)
+    defer core.destroy_pitch_detector(&measurement.pitch_detector)
 
-    app.scope = core.init_scope(SCOPE_COLUMNS, SCOPE_ROWS)
-    defer core.destroy_scope(&app.scope)
+    measurement.scope = core.init_scope(SCOPE_COLUMNS, SCOPE_ROWS)
+    defer core.destroy_scope(&measurement.scope)
 
     // Made as the first glowing display draws, see ensure_glow_targets
     defer unload_glow_targets(&app.glow_targets)
@@ -160,9 +166,9 @@ run_app :: proc(config: ^Config) {
 
     app.input.capture = audio_capture
 
-    audio.register_audio_node(audio_capture, &app.pitch_detector)
-    audio.register_audio_node(audio_capture, app.strobe_lock_in)
-    audio.register_audio_node(audio_capture, &app.scope)
+    audio.register_audio_node(audio_capture, &measurement.pitch_detector)
+    audio.register_audio_node(audio_capture, measurement.strobe_lock_in)
+    audio.register_audio_node(audio_capture, &measurement.scope)
     audio.register_audio_node(audio_capture, &app.spectrum_display)
     match_input_rate(&app)
     audio.start(audio_capture)
@@ -279,20 +285,19 @@ run_frame :: proc(app: ^App) {
 }
 
 // The strobe on the target note with the current tracks, speed and mode
-retune :: proc(app: ^App) {
-    config := app.config
-    app.traced_track = -1 // the tracks are at another note now
-    app.held_readout = {}
-    app.strobe_lock_in.readout_fit_s = config.readout_fit_s
+retune :: proc(measurement: ^Measurement, config: ^Config) {
+    measurement.traced_track = -1 // the tracks are at another note now
+    measurement.held_readout = {}
+    measurement.strobe_lock_in.readout_fit_s = config.readout_fit_s
     core.set_strobe_lock_in_tracks(
-        app.strobe_lock_in,
+        measurement.strobe_lock_in,
         config.strobe_intervals[:],
         config.strobe_offsets_cents[:],
         config.strobe_speeds[:],
     )
     core.set_strobe_lock_in_freq(
-        app.strobe_lock_in,
-        core.target_freq(&app.note_target),
+        measurement.strobe_lock_in,
+        core.target_freq(&measurement.note_target),
         config.pitch_standard,
         strobe_speed(config),
         VERNIER_SPEED_MULTIPLIER,
@@ -300,26 +305,43 @@ retune :: proc(app: ^App) {
     )
 }
 
+// Started over on another input, the readout it held included
+reset_measurement :: proc(measurement: ^Measurement) {
+    core.reset_pitch_detector(&measurement.pitch_detector)
+    core.reset_strobe_lock_in(measurement.strobe_lock_in)
+    core.reset_scope(&measurement.scope)
+    measurement.readout_track, measurement.traced_track = -1, -1
+    measurement.held_readout = {}
+}
+
+// The windows and filters sized for the input's sample rate
+set_measurement_sample_rate :: proc(measurement: ^Measurement, sample_rate: f32) {
+    core.set_pitch_detector_sample_rate(&measurement.pitch_detector, sample_rate)
+    core.set_strobe_lock_in_sample_rate(measurement.strobe_lock_in, sample_rate)
+    core.set_scope_sample_rate(&measurement.scope, sample_rate)
+}
+
 // The pitch detection, the note target and the strobe brought up to the config, at the start and after a
 // change. The tracks start over, so only for what they measure: the displays read their colors and options from
 // the config as they draw.
 apply_config :: proc(app: ^App) {
-    note_target, config := &app.note_target, app.config
+    measurement, config := &app.measurement, app.config
+    note_target := &measurement.note_target
 
     // Same notes, retuned to the pitch standard
-    app.pitch_detector.pitch_standard = config.pitch_standard
+    measurement.pitch_detector.pitch_standard = config.pitch_standard
     core.set_target_pitch_standard(note_target, config.pitch_standard)
     note_target.offsets_cents = active_note_offsets(config)
     core.set_target_strings(note_target, tuning_strings(config))
 
-    retune(app)
+    retune(measurement, config)
     app.config_changed = false
 }
 
 // A phone suspends the app in the background and may end it there without warning. The config is saved on the
 // way out, the input is opened again on the way back.
 wait_in_background :: proc(app: ^App) {
-    app.config.target_freq_hz = app.note_target.target_note.frequency
+    app.config.target_freq_hz = app.measurement.note_target.target_note.frequency
     save_config(app.config^)
     audio.stop(app.input.capture)
     gfx.wait_for_foreground()
@@ -392,18 +414,18 @@ handle_keys :: proc(app: ^App) {
         config.strobe_intervals = options[config.strobe_intervals_index]
         config.strobe_offsets_cents = defaults.strobe_offsets_cents
         config.strobe_speeds = defaults.strobe_speeds
-        retune(app)
+        retune(&app.measurement, config)
     }
 
     // Hidden, the tracks' band a semitone, a half or a quarter wide: each half has half the noise and twice the lag.
     // The screens' persistence follows, as many periods as the band's window, so the lamp's tracks narrow along
     // with the lock-in's and the two can be compared like for like.
     if plain && gfx.key_pressed(.W) {
-        lock_in := app.strobe_lock_in
+        lock_in := app.measurement.strobe_lock_in
         lock_in.band_cents = lock_in.band_cents / 2 if lock_in.band_cents > 25 else core.DFT_RESOLUTION_CENTS
         config.persistence_periods = 1 / (math.pow(f32(2), f32(lock_in.band_cents) / 1200) - 1)
         fmt.printfln("Strobe band: %d cents, persistence %.0f periods", lock_in.band_cents, config.persistence_periods)
-        retune(app)
+        retune(&app.measurement, config)
     }
 
     // Without a menu bar Ctrl+, opens the settings and Ctrl+0 puts the window back to the strobe's size, see
@@ -429,7 +451,7 @@ update_in_tune_tap :: proc(app: ^App, reading: Reading) {
 
     // Dark, the readout shown is the held one, see measure
     cents := abs(reading.steady.err_cents)
-    if !app.note_target.active || !reading.strobe_readout || cents > IN_TUNE_REARM_CENTS {
+    if !app.measurement.note_target.active || !reading.strobe_readout || cents > IN_TUNE_REARM_CENTS {
         app.in_tune_s, app.in_tune_tapped = 0, false
         return
     }
@@ -447,16 +469,17 @@ update_in_tune_tap :: proc(app: ^App, reading: Reading) {
 
 // The pitch detection, the strobe and the note target on the new audio
 measure :: proc(app: ^App) -> (reading: Reading) {
-    note_target := &app.note_target
-    reading.pitch = core.run_pitch_detection(&app.pitch_detector, note_target.pitch)
-    core.run_phase_detection(app.strobe_lock_in, reading.pitch.is_tonal)
+    measurement := &app.measurement
+    note_target, lock_in := &measurement.note_target, measurement.strobe_lock_in
+    reading.pitch = core.run_pitch_detection(&measurement.pitch_detector, note_target.pitch)
+    core.run_phase_detection(lock_in, reading.pitch.is_tonal)
 
     // The track the readout follows. The strobe keeps the note lit while it shows it. Retuned to another note the
     // tracks start over, their reading was from the note before.
     ready: bool
-    app.readout_track, ready = core.strobe_readout_track(app.strobe_lock_in, app.readout_track)
-    if core.update_note_target(note_target, reading.pitch, core.strobe_shows_note(app.strobe_lock_in)) {
-        retune(app)
+    measurement.readout_track, ready = core.strobe_readout_track(lock_in, measurement.readout_track)
+    if core.update_note_target(note_target, reading.pitch, core.strobe_shows_note(lock_in)) {
+        retune(measurement, app.config)
         ready = false
     }
 
@@ -469,10 +492,10 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     // fading note keeps its track's last reading, also once the note target lets go of it.
     steady := &reading.steady
     reading.strobe_readout = ready && !reading.out_of_range
-    reading.strobe_readout &&= abs(app.strobe_lock_in.bands[app.readout_track].err_cents) <= core.READOUT_RANGE_CENTS
+    reading.strobe_readout &&= abs(lock_in.bands[measurement.readout_track].err_cents) <= core.READOUT_RANGE_CENTS
 
     if reading.strobe_readout {
-        band := app.strobe_lock_in.bands[app.readout_track]
+        band := lock_in.bands[measurement.readout_track]
         steady.detected_freq = core.freq_at_cents(steady.detected_freq, band.err_cents - steady.err_cents)
         steady.err_cents = band.err_cents
     }
@@ -480,12 +503,12 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     // The readout's cents, the strobe's so an in tune note is on the middle line, none before a track settled.
     // The track the readout followed carries on as the note decays and the readout gives way, the line as lit as
     // its stripes and dark with them, not the noisy weak detections.
-    if reading.strobe_readout do app.traced_track = app.readout_track
+    if reading.strobe_readout do measurement.traced_track = measurement.readout_track
 
     // Lit, the readout is the track's as it measures. Dark, it keeps the last one shown: the track goes on
     // measuring whatever passes through its band, the room's noise would read as a wandering pitch. Another
     // note starts over, see retune.
-    held := &app.held_readout
+    held := &measurement.held_readout
     if note_target.active {
         if reading.strobe_readout do held^ = {true, steady.detected_freq, steady.err_cents}
     } else {
@@ -496,13 +519,13 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     light: f32 = 1
     traced_cents := math.nan_f32()
 
-    if app.traced_track >= 0 {
-        band := app.strobe_lock_in.bands[app.traced_track]
+    if measurement.traced_track >= 0 {
+        band := lock_in.bands[measurement.traced_track]
         fade := core.STROBE_FADE_SNR_DB
         light = math.smoothstep(fade[0], fade[1], band.snr_db)
-        if light == 0 || !band.in_range do app.traced_track = -1
+        if light == 0 || !band.in_range do measurement.traced_track = -1
 
-        if app.traced_track >= 0 && !reading.out_of_range && abs(band.err_cents) <= core.READOUT_RANGE_CENTS {
+        if measurement.traced_track >= 0 && !reading.out_of_range && abs(band.err_cents) <= core.READOUT_RANGE_CENTS {
             traced_cents = band.err_cents
         }
     }
@@ -519,7 +542,8 @@ measure :: proc(app: ^App) -> (reading: Reading) {
 // The new audio onto the scope's screen, while its views or the tracks the lamp turns show it. strobe_shows
 // is false while a sheet covers the whole strobe area.
 feed_scope :: proc(app: ^App, strobe_shows: bool) {
-    scope, config := &app.scope, app.config
+    measurement, config := &app.measurement, app.config
+    scope := &measurement.scope
 
     type := config.strobe_display_type
     shown := type == .SCOPE || type == .LAMP || (type == .STROBE && config.strobe_source == .LAMP)
@@ -528,13 +552,13 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
         core.skip_scope(scope)
 
         // The lamp's tracks start over on a dark screen too, the phases they turned by are stale
-        app.strobe_lamp.freq_hz = 0
+        measurement.strobe_lamp.freq_hz = 0
         return
     }
 
     // At the strobe's frequency, not the target note's: that one jumps an octave with the detection while
     // the strobe stays, and every change starts with a dark screen
-    strobe_hz := f64(app.strobe_lock_in.base_freq_hz)
+    strobe_hz := f64(measurement.strobe_lock_in.base_freq_hz)
     if scope.freq_hz != strobe_hz do core.set_scope_freq(scope, strobe_hz)
 
     // The lamp is the screen from above, it needs the sweep over time, and so do the tracks it turns
@@ -544,7 +568,7 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
     // In periods of the strobe's frequency, the smear and the waver per cent look the same on every note
     scope.persistence_seconds = f64(config.persistence_periods) / strobe_hz
     scope.gain = config.scope_gain
-    scope.noise_floor = app.pitch_detector.noise_floor.level
+    scope.noise_floor = measurement.pitch_detector.noise_floor.level
     core.update_scope(scope)
 }
 
@@ -655,7 +679,7 @@ draw_track_sheet :: proc(app: ^App, layout: Layout) {
     if sheet.slide == 0 do return
 
     config := app.config
-    bands := app.strobe_lock_in.bands[:]
+    bands := app.measurement.strobe_lock_in.bands[:]
     sheet_layout, swiped := begin_sheet(sheet, TRACK_SETTINGS_ROWS, layout)
     app.selected_track = min(app.selected_track, len(bands) - 1)
     close, changed := gui_track_settings(sheet_layout, config, app.selected_track, bands[app.selected_track])
@@ -682,7 +706,7 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
 
     // A new offset starts on the note the strobe is on
     target := -1
-    if index, in_range := core.note_index(app.note_target.target_note); in_range {
+    if index, in_range := core.note_index(app.measurement.note_target.target_note); in_range {
         target = index
     }
     close, changed := gui_instrument(sheet_layout, app.config, &app.open_dropdown, target)
@@ -712,7 +736,7 @@ save_when_settled :: proc(app: ^App) {
     if app.unsaved_s < SAVE_SETTLE_S do return
 
     // With the note the strobe is on, a crash or a stop from the debugger starts on it too
-    app.config.target_freq_hz = app.note_target.target_note.frequency
+    app.config.target_freq_hz = app.measurement.note_target.target_note.frequency
     save_config(app.config^)
     app.unsaved, app.unsaved_s = false, 0
 }
@@ -753,8 +777,8 @@ follow_window_size :: proc(config: ^Config, window: [2]f32) {
 // Fewer frames with nothing to show. The strobe is dark while no band is above the background noise, and the
 // pitch detection still runs often enough to wake it up.
 limit_frame_rate :: proc(app: ^App) {
-    signal := app.note_target.active
-    for band in app.strobe_lock_in.bands {
+    signal := app.measurement.note_target.active
+    for band in app.measurement.strobe_lock_in.bands {
         if band.snr_db > core.STROBE_FADE_SNR_DB[0] do signal = true
     }
     touched := gfx.mouse_down() || gfx.mouse_pressed() || gfx.mouse_wheel() != 0
