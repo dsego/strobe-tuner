@@ -37,7 +37,7 @@ MenuCommand :: enum {
     RETRO_GLOW,
     LOCK_NOTE,
     DEFAULT_SIZE,
-    INPUTS, // and the ones after it, the Input menu's by their place in audio_devices, see build_input_list
+    INPUTS, // and the ones after it, the Input menu's by their place in AudioInput.devices, see build_input_list
 }
 
 MAX_INPUT_COMMANDS :: gfx.MAX_MENU_COMMANDS - int(MenuCommand.INPUTS)
@@ -90,12 +90,12 @@ setup_menu_bar :: proc(app: ^App) {
     // follows in the next frame, see follow_input.
     looking :: proc(data: rawptr) {
         app := (^App)(data)
-        if app.audio_capture == nil do return
+        if app.input.capture == nil do return
 
-        audio.refresh_devices(app.audio_capture)
-        build_input_list(app)
+        audio.refresh_devices(app.input.capture)
+        build_input_list(&app.input, app.config.input_device)
     }
-    app.input_menu = gfx.add_menu("Input", {}, looking, app)
+    app.input.menu = gfx.add_menu("Input", {}, looking, app)
 
     gfx.add_window_menu_items({{title = "Strobe Size", key = "0", command = int(MenuCommand.DEFAULT_SIZE)}})
 }
@@ -111,7 +111,7 @@ update_menu_checks :: proc(app: ^App) {
     gfx.set_menu_checked(int(MenuCommand.RETRO_GLOW), app.config.strobe_glow)
     gfx.set_menu_checked(int(MenuCommand.LOCK_NOTE), app.note_target.locked)
 
-    for index in 0 ..< min(len(app.audio_devices), MAX_INPUT_COMMANDS) {
-        gfx.set_menu_checked(int(MenuCommand.INPUTS) + index, index == app.audio_device_index)
+    for index in 0 ..< min(len(app.input.devices), MAX_INPUT_COMMANDS) {
+        gfx.set_menu_checked(int(MenuCommand.INPUTS) + index, index == app.input.device_index)
     }
 }

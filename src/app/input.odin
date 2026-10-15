@@ -26,92 +26,108 @@ import "../gfx"
 // isn't its default
 MISSING_INPUT_POLL_S :: 2
 
+// The audio input open and the list to pick another from, on the input's sheet and in the Input menu
+AudioInput :: struct {
+    capture:       ^audio.Capture,
+    devices:       [dynamic]GuiOption,
+    device_index:  int, // in devices, picked on the input's sheet or in the Input menu
+    listed:        int, // device_index as build_input_list picked it, another one is a pick
+    refresh:       bool, // the list is made again, see follow_input
+    default_label: string, // the list's first input, see build_input_list
+    menu:          int, // the Input menu, see setup_menu_bar
+    restart:       bool, // opens the input again, after the background or an interruption
+    missing_s:     f32, // since the picked input was last looked for, see MISSING_INPUT_POLL_S
+    stats:         InputStats, // on its sheet, held INPUT_STATS_HOLD_S
+    stats_age:     f32,
+}
+
 // The input as it's picked and as the system has it. A pick on the input's sheet or in the Input menu is kept
 // by its name, for the next start too. The list is made again when the system changed it, or the sheet or the
 // menu opens, and every MISSING_INPUT_POLL_S while a picked input is gone, it waits on the system default
 // until it's back. Before the frame copies the config, the name the config had is freed here.
 follow_input :: proc(app: ^App) {
-    capture := app.audio_capture
+    input := &app.input
+    capture := input.capture
 
-    // Picked since the last frame, the list's own pick is input_listed
-    if app.audio_device_index != app.input_listed {
-        picked := picked_device(app)
+    // Picked since the last frame, the list's own pick is listed
+    if input.device_index != input.listed {
+        picked := picked_device(input)
         set_input_device(app.config, "" if picked == audio.SYSTEM_DEFAULT else audio.device_name(capture, picked))
-        app.input_listed = app.audio_device_index
+        input.listed = input.device_index
         app.unsaved = true
     }
 
     if audio.devices_changed(capture) {
-        app.refresh_inputs = true
-        app.restart_audio = true
+        input.refresh = true
+        input.restart = true
     }
 
     missing := app.config.input_device != "" && audio.find_device(capture, app.config.input_device) == audio.SYSTEM_DEFAULT
-    app.missing_input_s = app.missing_input_s + gfx.frame_time() if missing else 0
-    if app.missing_input_s >= MISSING_INPUT_POLL_S {
-        app.missing_input_s = 0
-        app.refresh_inputs = true
+    input.missing_s = input.missing_s + gfx.frame_time() if missing else 0
+    if input.missing_s >= MISSING_INPUT_POLL_S {
+        input.missing_s = 0
+        input.refresh = true
     }
-    if app.refresh_inputs {
-        app.refresh_inputs = false
+    if input.refresh {
+        input.refresh = false
         audio.refresh_devices(capture)
-        build_input_list(app)
+        build_input_list(input, app.config.input_device)
 
         // One may be there now
-        if audio.input_failed(capture) do app.restart_audio = true
+        if audio.input_failed(capture) do input.restart = true
     }
 
-    if app.restart_audio || picked_device(app) != capture.active_device do switch_input(app)
+    if input.restart || picked_device(input) != capture.active_device do switch_input(app)
 }
 
 // The list on the input's sheet and in the Input menu: the system default with the device it is now, then
-// the devices, none without any. The config's input is picked, the default while it isn't connected. The
-// one opened follows in follow_input.
-build_input_list :: proc(app: ^App) {
-    capture := app.audio_capture
-    clear(&app.audio_devices)
-    app.audio_device_index, app.input_listed = 0, 0
+// the devices, none without any. The wanted input, the config's, is picked, the default while it isn't
+// connected. The one opened follows in follow_input.
+build_input_list :: proc(input: ^AudioInput, wanted_name: string) {
+    capture := input.capture
+    clear(&input.devices)
+    input.device_index, input.listed = 0, 0
 
     if audio.device_count(capture) > 0 {
-        delete(app.default_label)
+        delete(input.default_label)
         default_name := audio.device_name(capture, audio.SYSTEM_DEFAULT)
-        if default_name == "" do app.default_label = fmt.aprint("Default")
-        else do app.default_label = fmt.aprintf("Default (%s)", default_name)
+        if default_name == "" do input.default_label = fmt.aprint("Default")
+        else do input.default_label = fmt.aprintf("Default (%s)", default_name)
 
-        append(&app.audio_devices, GuiOption{audio.SYSTEM_DEFAULT, app.default_label})
-        wanted := audio.find_device(capture, app.config.input_device)
+        append(&input.devices, GuiOption{audio.SYSTEM_DEFAULT, input.default_label})
+        wanted := audio.find_device(capture, wanted_name)
         for index in 0 ..< audio.device_count(capture) {
-            append(&app.audio_devices, GuiOption{index, audio.device_name(capture, index)})
-            if index == wanted do app.audio_device_index = len(app.audio_devices) - 1
+            append(&input.devices, GuiOption{index, audio.device_name(capture, index)})
+            if index == wanted do input.device_index = len(input.devices) - 1
         }
-        app.input_listed = app.audio_device_index
+        input.listed = input.device_index
     }
 
     // The default, a line, the devices. As many as there are commands for, the sheet has them all.
     items: [dynamic]gfx.MenuItem
     items.allocator = context.temp_allocator
-    for option, index in app.audio_devices[:min(len(app.audio_devices), MAX_INPUT_COMMANDS)] {
+    for option, index in input.devices[:min(len(input.devices), MAX_INPUT_COMMANDS)] {
         if index == 1 do append(&items, gfx.MenuItem{})
         append(&items, gfx.MenuItem{title = fmt.ctprintf("%s", option.label), command = int(MenuCommand.INPUTS) + index})
     }
     if len(items) == 0 do append(&items, gfx.MenuItem{title = "No Input Found"})
 
-    gfx.set_menu_items(app.input_menu, items[:])
+    gfx.set_menu_items(input.menu, items[:])
 
     // Checked already, the menu may be opening now and show before the next frame's update_menu_checks
-    if len(app.audio_devices) > 0 && app.audio_device_index < MAX_INPUT_COMMANDS {
-        gfx.set_menu_checked(int(MenuCommand.INPUTS) + app.audio_device_index, true)
+    if len(input.devices) > 0 && input.device_index < MAX_INPUT_COMMANDS {
+        gfx.set_menu_checked(int(MenuCommand.INPUTS) + input.device_index, true)
     }
 }
 
 // The input picked, or the same one again, the measurements start afresh on it. Without any there's nothing
 // to open.
 switch_input :: proc(app: ^App) {
-    app.restart_audio = false
-    if len(app.audio_devices) == 0 do return
+    app.input.restart = false
+    if len(app.input.devices) == 0 do return
 
     // Nothing of the previous input's carries over, the readout it held included
-    audio.switch_device(app.audio_capture, picked_device(app))
+    audio.switch_device(app.input.capture, picked_device(&app.input))
     core.reset_pitch_detector(&app.pitch_detector)
     core.reset_strobe_lock_in(app.strobe_lock_in)
     core.reset_scope(&app.scope)
@@ -124,7 +140,7 @@ switch_input :: proc(app: ^App) {
 // The measurements at the rate the input opened at, their windows and filters sized for it. Only a new rate
 // changes anything, the strobe's windows are retuned to it. Nothing without an input.
 match_input_rate :: proc(app: ^App) {
-    sample_rate := app.audio_capture.sample_rate
+    sample_rate := app.input.capture.sample_rate
     if sample_rate == 0 || sample_rate == app.strobe_lock_in.sample_rate do return
 
     core.set_pitch_detector_sample_rate(&app.pitch_detector, sample_rate)
@@ -135,8 +151,8 @@ match_input_rate :: proc(app: ^App) {
 }
 
 // The input's index picked in the settings, the open one without a list
-picked_device :: proc(app: ^App) -> i32 {
-    if len(app.audio_devices) == 0 do return app.audio_capture.active_device
+picked_device :: proc(input: ^AudioInput) -> i32 {
+    if len(input.devices) == 0 do return input.capture.active_device
 
-    return app.audio_devices[app.audio_device_index].id
+    return input.devices[input.device_index].id
 }

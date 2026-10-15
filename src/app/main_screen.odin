@@ -57,7 +57,7 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
     // A slow input, a Bluetooth headset's microphone at 16 or 24 kHz, gets a warning before the icon. The high
     // notes and the partials over its Nyquist are out of reach, their tracks show empty.
     WARNING_GAP :: 4
-    if sample_rate := app.audio_capture.sample_rate; sample_rate > 0 && sample_rate < core.LOW_SAMPLE_RATE {
+    if sample_rate := app.input.capture.sample_rate; sample_rate > 0 && sample_rate < core.LOW_SAMPLE_RATE {
         draw_icon(ICON_WARNING, layout.level_meter + {-ICON_SIZE - WARNING_GAP, icon_y}, warning_color)
     }
 
@@ -78,8 +78,8 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
     left := layout.level_meter.x - ICON_SIZE - WARNING_GAP
     if gui_button({left, meter.y + LEVEL_METER_HEIGHT / 2 - 22, LEVEL_METER_WIDTH + ICON_SIZE + WARNING_GAP, 44}) {
         app.input_sheet.open = true
-        app.input_stats_age = INPUT_STATS_HOLD_S
-        app.refresh_inputs = true
+        app.input.stats_age = INPUT_STATS_HOLD_S
+        app.input.refresh = true
     }
 
     when DEBUG_STATS do draw_debug_stats(app, layout, reading.pitch, meter)
@@ -164,9 +164,9 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     title, hint: cstring
     if audio.microphone_denied() {
         title, hint = "Microphone access is off", "Tap to allow it in Settings"
-    } else if len(app.audio_devices) == 0 {
+    } else if len(app.input.devices) == 0 {
         title, hint = "No input found", "Connect one and tap to look again"
-    } else if audio.input_failed(app.audio_capture) {
+    } else if audio.input_failed(app.input.capture) {
         title, hint = "The input didn't open", "Tap to try again"
     }
 
@@ -181,14 +181,14 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         // Tried again on what's connected now
         if gui_button(strobe) {
             if audio.microphone_denied() do audio.allow_microphone()
-            else do app.restart_audio, app.refresh_inputs = true, true
+            else do app.input.restart, app.input.refresh = true, true
         }
     }
 }
 
 // The strobe area says why there's no input instead, see draw_strobe_area
 input_missing :: proc(app: ^App) -> bool {
-    return audio.microphone_denied() || audio.input_failed(app.audio_capture)
+    return audio.microphone_denied() || audio.input_failed(app.input.capture)
 }
 
 // An arrow on the side the pitch is off to, pointing inwards the way to tune: flat on the left pointing right

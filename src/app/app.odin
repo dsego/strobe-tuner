@@ -54,13 +54,7 @@ App :: struct {
     strobe_lock_in:     ^core.StrobeLockIn,
     scope:              core.Scope, // of the scope and the lamp display types, and the tracks the lamp turns
     strobe_lamp:        core.StrobeLamp, // the tracks the lamp turns, strobe_source LAMP
-    audio_capture:      ^audio.Capture,
-    audio_devices:      [dynamic]GuiOption,
-    audio_device_index: int, // in audio_devices, picked on the input's sheet
-    input_listed:       int, // audio_device_index as build_input_list picked it, another one is a pick
-    refresh_inputs:     bool, // the list is made again, see follow_input
-    default_label:      string, // the list's first input, see build_input_list
-    input_menu:         int, // the Input menu, see setup_menu_bar
+    input:              AudioInput,
     glow_targets:       GlowTargets, // shared by the displays that glow
     strobe_display:     StrobeDisplay,
     scope_display:      ScopeDisplay, // the scope's and the lamp's views
@@ -76,8 +70,6 @@ App :: struct {
     selected_track:     int,
     instrument_sheet:   Sheet, // the instruments and the presets, opened from the bottom left corner
     input_sheet:        Sheet, // the picker, the rate and the levels, opened by tapping the input's level
-    input_stats:        InputStats, // on its sheet, held INPUT_STATS_HOLD_S
-    input_stats_age:    f32,
 
     // The arrows on the strobe, see draw_tuning_arrows
     flat_arrow:         bool,
@@ -91,8 +83,6 @@ App :: struct {
     config_changed:     bool, // the note target and the strobe need the new config, see apply_config
     unsaved:            bool, // the config changed since it was saved, see save_when_settled
     unsaved_s:          f32, // since it last changed
-    restart_audio:      bool, // opens the input again, after the background or an interruption
-    missing_input_s:    f32, // since the picked input was last looked for, see MISSING_INPUT_POLL_S
     quiet_time:         f32, // seconds with no signal and nobody touching anything, see IDLE_AFTER_S
 }
 
@@ -168,7 +158,7 @@ run_app :: proc(config: ^Config) {
     audio_capture := audio.init(config.input_device)
     defer audio.destroy(audio_capture)
 
-    app.audio_capture = audio_capture
+    app.input.capture = audio_capture
 
     audio.register_audio_node(audio_capture, &app.pitch_detector)
     audio.register_audio_node(audio_capture, app.strobe_lock_in)
@@ -177,9 +167,9 @@ run_app :: proc(config: ^Config) {
     match_input_rate(&app)
     audio.start(audio_capture)
 
-    build_input_list(&app)
-    defer delete(app.audio_devices)
-    defer delete(app.default_label)
+    build_input_list(&app.input, config.input_device)
+    defer delete(app.input.devices)
+    defer delete(app.input.default_label)
 
     apply_config(&app)
 
@@ -216,8 +206,8 @@ run_app :: proc(config: ^Config) {
 
 // A turn of the main loop after its events: the measurements, the layout and the drawing
 run_frame :: proc(app: ^App) {
-    config, audio_capture := app.config, app.audio_capture
-    if audio.interruption_ended(audio_capture) do app.restart_audio = true
+    config, audio_capture := app.config, app.input.capture
+    if audio.interruption_ended(audio_capture) do app.input.restart = true
 
     follow_input(app)
 
@@ -331,9 +321,9 @@ apply_config :: proc(app: ^App) {
 wait_in_background :: proc(app: ^App) {
     app.config.target_freq_hz = app.note_target.target_note.frequency
     save_config(app.config^)
-    audio.stop(app.audio_capture)
+    audio.stop(app.input.capture)
     gfx.wait_for_foreground()
-    app.restart_audio = true
+    app.input.restart = true
 }
 
 // Settings… from the menu bar or Ctrl+, closes the settings when they're up, the sheet covers the strobe
@@ -377,7 +367,7 @@ handle_keys :: proc(app: ^App) {
 
     // Opened in the next frame like a pick on the input's sheet, see follow_input
     input := int(app.menu) - int(MenuCommand.INPUTS)
-    if input >= 0 && input < len(app.audio_devices) do app.audio_device_index = input
+    if input >= 0 && input < len(app.input.devices) do app.input.device_index = input
 
     if plain && gfx.key_pressed(.G) do config.strobe_glow = !config.strobe_glow
 
@@ -625,19 +615,20 @@ draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
     if sheet.slide == 0 do return
 
     // A few times a second, the latest detection's
-    app.input_stats_age += gfx.frame_time()
-    if app.input_stats_age >= INPUT_STATS_HOLD_S {
+    input := &app.input
+    input.stats_age += gfx.frame_time()
+    if input.stats_age >= INPUT_STATS_HOLD_S {
         pitch := reading.pitch
 
         // The floor is the level's average, quiet wobbles under it, the SNR of the background is 0. None
         // until something was measured, e.g. without an input, a reading that isn't one would be 0 dBFS.
         none := math.nan_f32()
-        app.input_stats = {none, none, none}
-        if pitch.measured do app.input_stats = {pitch.rms_dbfs, core.dbfs(pitch.noise_floor), max(pitch.snr_db, 0)}
-        app.input_stats_age = 0
+        input.stats = {none, none, none}
+        if pitch.measured do input.stats = {pitch.rms_dbfs, core.dbfs(pitch.noise_floor), max(pitch.snr_db, 0)}
+        input.stats_age = 0
     }
 
-    capture := app.audio_capture
+    capture := input.capture
     device_name := "No input"
     if audio.device_count(capture) > 0 do device_name = audio.device_name(capture, capture.active_device)
 
@@ -647,9 +638,9 @@ draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
         device_name,
         capture.device_rate,
         capture.sample_rate,
-        app.input_stats,
-        app.audio_devices[:],
-        &app.audio_device_index,
+        input.stats,
+        input.devices[:],
+        &input.device_index,
         &app.open_dropdown,
     )
     grab_sheet(sheet, sheet_layout)
