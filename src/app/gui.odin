@@ -188,6 +188,7 @@ RULER_SPACING :: 70 // between the letters of neighbouring notes, room for a sha
 RULER_CENTER_GAP :: 30 // extra room either side of the large note
 RULER_EDGE :: 36 // half a letter and a sharp, the outermost ones stay inside the edges
 RULER_MAX_PER_SIDE :: 2
+RULER_HALFWAY :: 0.5 // notes, closer to the middle than this a note is the one in the middle
 RULER_SLIDE_SPEED :: 14 // per second, how quickly the slide closes the distance
 RULER_SWIPE_START :: 10 // points sideways before a press on the ruler is a swipe and not a tap
 RULER_VELOCITY_S :: 0.024 // the finger's speed smoothed over about this long, half of it each frame at 60 FPS
@@ -418,7 +419,7 @@ draw_ruler :: proc(layout: RulerLayout, notes: []core.Note, position: f32, note_
         large := 1 - math.smoothstep(f32(0), 1, distance)
 
         // The octave fades in on the way to the middle, gone halfway so there's only ever one
-        octave := 1 - math.smoothstep(f32(0), 0.5, distance)
+        octave := 1 - math.smoothstep(f32(0), RULER_HALFWAY, distance)
 
         // Muted a note away, the ones at the ends fade out
         color := fade_color(lerp_color(text_color_muted, note_color, large), clamp(f32(layout.per_side) + 1 - distance, 0, 1))
@@ -437,7 +438,7 @@ ruler_tap :: proc(layout: RulerLayout, notes: []core.Note, position: f32, target
         offset := f32(index) - position
         distance := abs(offset)
         x := ruler_note_x(layout, offset)
-        if index == target && distance < 0.5 {
+        if index == target && distance < RULER_HALFWAY {
             half := layout.spacing / 2 + layout.center_gap
             toggle_lock = gfx.point_in_rect(mouse, {x - half, rect.y, 2 * half, rect.height})
         } else if index != target && distance <= f32(layout.per_side) {
