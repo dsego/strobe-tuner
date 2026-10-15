@@ -48,27 +48,18 @@ VERNIER_SPEED_MULTIPLIER :: 2
 
 // What the main loop keeps from one frame to the next
 App :: struct {
-    config:             ^Config,
-    measurement:        Measurement,
-    input:              AudioInput,
-    displays:           Displays,
+    config:         ^Config,
+    measurement:    Measurement,
+    input:          AudioInput,
+    displays:       Displays,
+    sheets:         Sheets,
 
-    open_dropdown:      Dropdown, // the dropdown whose menu is open
-    settings_sheet:     Sheet,
-    display_options:    bool, // the settings sheet shows the display's options, see gui_settings
-    reset_confirm:      bool, // RESET on the settings sheet was tapped once and asks
-    menu:               MenuCommand, // the menu bar's item chosen this frame, see handle_keys
-    track_sheet:        Sheet, // a track's own, opened by tapping the track
-    selected_track:     int,
-    instrument_sheet:   Sheet, // the instruments and the presets, opened from the bottom left corner
-    input_sheet:        Sheet, // the picker, the rate and the levels, opened by tapping the input's level
-
-    in_tune_s:          f32, // how long the readout has held in tune, see update_in_tune_tap
-    in_tune_tapped:     bool, // and it tapped, not again until the readout moves away
-    config_changed:     bool, // the note target and the strobe need the new config, see apply_config
-    unsaved:            bool, // the config changed since it was saved, see save_when_settled
-    unsaved_s:          f32, // since it last changed
-    quiet_time:         f32, // seconds with no signal and nobody touching anything, see IDLE_AFTER_S
+    in_tune_s:      f32, // how long the readout has held in tune, see update_in_tune_tap
+    in_tune_tapped: bool, // and it tapped, not again until the readout moves away
+    config_changed: bool, // the note target and the strobe need the new config, see apply_config
+    unsaved:        bool, // the config changed since it was saved, see save_when_settled
+    unsaved_s:      f32, // since it last changed
+    quiet_time:     f32, // seconds with no signal and nobody touching anything, see IDLE_AFTER_S
 }
 
 // What hears the input and what's read from it, from one frame to the next, see measure
@@ -95,6 +86,18 @@ Displays :: struct {
     // The arrows on the strobe, see draw_tuning_arrows
     flat_arrow:   bool,
     sharp_arrow:  bool,
+}
+
+// The sheets over the main screen, one is up at a time, see draw_sheets
+Sheets :: struct {
+    settings:        Sheet,
+    display_options: bool, // the settings sheet shows the display's options, see gui_settings
+    reset_confirm:   bool, // RESET on the settings sheet was tapped once and asks
+    track:           Sheet, // a track's own, opened by tapping the track
+    selected_track:  int,
+    instrument:      Sheet, // the instruments and the presets, opened from the bottom left corner
+    input:           Sheet, // the picker, the rate and the levels, opened by tapping the input's level
+    open_dropdown:   Dropdown, // the dropdown whose menu is open, on the settings, the instrument or the input sheet
 }
 
 // This frame's measurements, for the main screen
@@ -224,7 +227,7 @@ run_frame :: proc(app: ^App) {
     follow_input(app)
 
     config_before := config^
-    handle_keys(app)
+    menu := handle_keys(app)
 
     if app.config_changed do apply_config(app)
 
@@ -261,13 +264,13 @@ run_frame :: proc(app: ^App) {
     // may move down later in the frame.
     gui.disabled = false
     panel_covered := false
-    for sheet in app_sheets(app) {
+    for sheet in all_sheets(&app.sheets) {
         slide_sheet(sheet)
         if sheet.open || sheet.slide > 0 do gui.disabled = true
         if sheet.slide == 1 && !sheet.drag.active do panel_covered = true
     }
 
-    instrument_sheet := app.instrument_sheet
+    instrument_sheet := app.sheets.instrument
     covered := !layout.beside && instrument_sheet.slide == 1 && !instrument_sheet.drag.active
     strobe_shows := !covered || safe.y > 0
 
@@ -280,7 +283,7 @@ run_frame :: proc(app: ^App) {
         draw_strobe_area(app, layout)
         draw_tuning_arrows(&app.displays, &app.measurement.note_target, layout, reading)
     } else {
-        draw_main_screen(app, layout, reading)
+        draw_main_screen(app, layout, reading, menu)
     }
     draw_sheets(app, layout, reading)
 
@@ -355,46 +358,47 @@ wait_in_background :: proc(app: ^App) {
 }
 
 // Settings… from the menu bar or Ctrl+, closes the settings when they're up, the sheet covers the strobe
-toggle_settings_sheet :: proc(app: ^App) {
-    if app.settings_sheet.open do close_settings_sheet(app)
-    else do open_settings_sheet(app)
+toggle_settings_sheet :: proc(sheets: ^Sheets) {
+    if sheets.settings.open do close_settings_sheet(sheets)
+    else do open_settings_sheet(sheets)
 }
 
 // Over whichever sheet is up
-open_settings_sheet :: proc(app: ^App) {
-    for sheet in app_sheets(app) do if sheet != &app.settings_sheet do dismiss_sheet(app, sheet)
+open_settings_sheet :: proc(sheets: ^Sheets) {
+    for sheet in all_sheets(sheets) do if sheet != &sheets.settings do dismiss_sheet(sheets, sheet)
     reset_note_offsets_editing()
 
-    app.settings_sheet.open = true
-    app.display_options = false
-    app.reset_confirm = false
+    sheets.settings.open = true
+    sheets.display_options = false
+    sheets.reset_confirm = false
 }
 
-handle_keys :: proc(app: ^App) {
+// The menu bar's item chosen this frame is returned for the main screen's, see draw_note_controls
+handle_keys :: proc(app: ^App) -> (menu: MenuCommand) {
     config := app.config
 
     // A menu item's key reaches the keys here too, the plain ones skip while Command is down
-    app.menu = MenuCommand(gfx.menu_command())
+    menu = MenuCommand(gfx.menu_command())
     command := gfx.key_down(.LEFT_SUPER) || gfx.key_down(.RIGHT_SUPER)
     plain := !command
 
-    #partial switch app.menu {
+    #partial switch menu {
     case .SETTINGS:
-        toggle_settings_sheet(app)
+        toggle_settings_sheet(&app.sheets)
     case .RETRO_GLOW:
         config.strobe_glow = !config.strobe_glow
     case .DEFAULT_SIZE:
         config.window_size = {}
     }
     for menu_command, type in DISPLAY_COMMANDS {
-        if app.menu == menu_command do config.strobe_display_type = type
+        if menu == menu_command do config.strobe_display_type = type
     }
     for menu_command, colorway in COLORWAY_COMMANDS {
-        if app.menu == menu_command do config.strobe_colorway = colorway
+        if menu == menu_command do config.strobe_colorway = colorway
     }
 
     // Opened in the next frame like a pick on the input's sheet, see follow_input
-    input := int(app.menu) - int(MenuCommand.INPUTS)
+    input := int(menu) - int(MenuCommand.INPUTS)
     if input >= 0 && input < len(app.input.devices) do app.input.device_index = input
 
     if plain && gfx.key_pressed(.G) do config.strobe_glow = !config.strobe_glow
@@ -438,10 +442,11 @@ handle_keys :: proc(app: ^App) {
     // follow_window_size
     when !gfx.MOBILE && ODIN_OS != .Darwin {
         control := gfx.key_down(.LEFT_CONTROL) || gfx.key_down(.RIGHT_CONTROL)
-        if control && gfx.key_pressed(.COMMA) do toggle_settings_sheet(app)
+        if control && gfx.key_pressed(.COMMA) do toggle_settings_sheet(&app.sheets)
 
         if control && gfx.key_pressed(.NUM_0) do config.window_size = {}
     }
+    return
 }
 
 // The In-tune tap: once the strobe's readout holds within IN_TUNE_CENTS for IN_TUNE_HOLD_S the phone taps,
@@ -583,7 +588,7 @@ draw_sheets :: proc(app: ^App, layout: Layout, reading: Reading) {
     // Android's back button is Escape. It closes a sheet, with none up it leaves the app as anywhere else.
     when gfx.ANDROID {
         sheets_down := true
-        for sheet in app_sheets(app) do sheets_down &&= sheet.slide == 0
+        for sheet in all_sheets(&app.sheets) do sheets_down &&= sheet.slide == 0
         if gfx.key_pressed(.ESCAPE) && sheets_down do gfx.system_back()
     }
 
@@ -594,44 +599,44 @@ draw_sheets :: proc(app: ^App, layout: Layout, reading: Reading) {
 }
 
 draw_settings_sheet :: proc(app: ^App, layout: Layout) {
-    sheet := &app.settings_sheet
+    sheets := &app.sheets
+    sheet := &sheets.settings
     if sheet.slide == 0 do return
 
     // The display's options page has rows of its own, the strobe's more than the settings
     rows := settings_rows()
-    if app.display_options {
+    if sheets.display_options {
         option_rows := DISPLAY_OPTION_ROWS
         rows = max(rows, option_rows[app.config.strobe_display_type])
     }
 
     sheet_layout, swiped := begin_sheet(sheet, rows, layout)
-    close, changed := gui_settings(sheet_layout, app.config, &app.display_options, &app.reset_confirm, &app.open_dropdown)
+    close, changed := gui_settings(sheet_layout, app.config, &sheets.display_options, &sheets.reset_confirm, &sheets.open_dropdown)
     if changed do app.config_changed = true
 
     grab_sheet(sheet, sheet_layout)
 
     // Escape goes back from the display's options like the ‹
-    if app.display_options && gfx.key_pressed(.ESCAPE) {
-        app.display_options = false
+    if sheets.display_options && gfx.key_pressed(.ESCAPE) {
+        sheets.display_options = false
     } else if close || sheet_dismissed(sheet_layout, swiped) {
-        close_settings_sheet(app)
+        close_settings_sheet(sheets)
     }
 }
 
-close_settings_sheet :: proc(app: ^App) {
-    dismiss_sheet(app, &app.settings_sheet)
-    app.reset_confirm = false
+close_settings_sheet :: proc(sheets: ^Sheets) {
+    dismiss_sheet(sheets, &sheets.settings)
+    sheets.reset_confirm = false
 }
 
-// Every sheet, one is up at a time
-app_sheets :: proc(app: ^App) -> [4]^Sheet {
-    return {&app.settings_sheet, &app.track_sheet, &app.instrument_sheet, &app.input_sheet}
+all_sheets :: proc(sheets: ^Sheets) -> [4]^Sheet {
+    return {&sheets.settings, &sheets.track, &sheets.instrument, &sheets.input}
 }
 
 // Closed with the dropdown menu that may be open on it
-dismiss_sheet :: proc(app: ^App, sheet: ^Sheet) {
+dismiss_sheet :: proc(sheets: ^Sheets, sheet: ^Sheet) {
     close_sheet(sheet)
-    app.open_dropdown = .NONE
+    sheets.open_dropdown = .NONE
     gui.menu_open = false
 }
 
@@ -641,7 +646,8 @@ next_display :: proc(type: StrobeDisplayType) -> StrobeDisplayType {
 }
 
 draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
-    sheet := &app.input_sheet
+    sheets := &app.sheets
+    sheet := &sheets.input
     if sheet.slide == 0 do return
 
     // A few times a second, the latest detection's
@@ -671,24 +677,25 @@ draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
         input.stats,
         input.devices[:],
         &input.device_index,
-        &app.open_dropdown,
+        &sheets.open_dropdown,
     )
     grab_sheet(sheet, sheet_layout)
 
     if close || sheet_dismissed(sheet_layout, swiped) {
-        dismiss_sheet(app, sheet)
+        dismiss_sheet(sheets, sheet)
     }
 }
 
 draw_track_sheet :: proc(app: ^App, layout: Layout) {
-    sheet := &app.track_sheet
+    sheets := &app.sheets
+    sheet := &sheets.track
     if sheet.slide == 0 do return
 
     config := app.config
     bands := app.measurement.strobe_lock_in.bands[:]
     sheet_layout, swiped := begin_sheet(sheet, TRACK_SETTINGS_ROWS, layout)
-    app.selected_track = min(app.selected_track, len(bands) - 1)
-    close, changed := gui_track_settings(sheet_layout, config, app.selected_track, bands[app.selected_track])
+    sheets.selected_track = min(sheets.selected_track, len(bands) - 1)
+    close, changed := gui_track_settings(sheet_layout, config, sheets.selected_track, bands[sheets.selected_track])
     if changed do app.config_changed = true
 
     grab_sheet(sheet, sheet_layout)
@@ -696,7 +703,7 @@ draw_track_sheet :: proc(app: ^App, layout: Layout) {
     // Tapping another track outside the sheet switches to it, anywhere else closes the sheet
     if gui_button(sheet_layout.outside) {
         track := strobe_track_at(config.strobe_shape, layout.strobe, layout.strobe_scale, layout.strobe_turned, len(bands), gfx.mouse_position())
-        if track >= 0 do app.selected_track = track
+        if track >= 0 do sheets.selected_track = track
         else do close = true
     }
 
@@ -704,7 +711,8 @@ draw_track_sheet :: proc(app: ^App, layout: Layout) {
 }
 
 draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
-    sheet := &app.instrument_sheet
+    sheets := &app.sheets
+    sheet := &sheets.instrument
     if sheet.slide == 0 do return
 
     // Over the whole window, room for every note offset of a preset
@@ -715,7 +723,7 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
     if index, in_range := core.note_index(app.measurement.note_target.target_note); in_range {
         target = index
     }
-    close, changed := gui_instrument(sheet_layout, app.config, &app.open_dropdown, target)
+    close, changed := gui_instrument(sheet_layout, app.config, &sheets.open_dropdown, target)
     if changed {
         app.config_changed = true
 
@@ -725,7 +733,7 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
     grab_sheet(sheet, sheet_layout)
 
     if close || sheet_dismissed(sheet_layout, swiped) {
-        dismiss_sheet(app, sheet)
+        dismiss_sheet(sheets, sheet)
         reset_note_offsets_editing()
     }
 }
@@ -735,7 +743,7 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
 // window dragged bigger where the system's loop doesn't hold the frames, e.g. Linux, isn't written every frame.
 save_when_settled :: proc(app: ^App) {
     sheets_open := false
-    for sheet in app_sheets(app) do sheets_open ||= sheet.open
+    for sheet in all_sheets(&app.sheets) do sheets_open ||= sheet.open
     if !app.unsaved || sheets_open do return
 
     app.unsaved_s += gfx.frame_time()
@@ -789,7 +797,7 @@ limit_frame_rate :: proc(app: ^App) {
     }
     touched := gfx.mouse_down() || gfx.mouse_pressed() || gfx.mouse_wheel() != 0
     sliding := note_ruler.swipe.gesture == .COASTING
-    for sheet in app_sheets(app) {
+    for sheet in all_sheets(&app.sheets) {
         if sheet.slide != f32(int(sheet.open)) do sliding = true
     }
 

@@ -22,12 +22,12 @@ import "../audio"
 import "../core"
 import "../gfx"
 
-draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
+draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu: MenuCommand) {
     config := app.config
 
     draw_strobe_area(app, layout)
     draw_tuning_arrows(&app.displays, &app.measurement.note_target, layout, reading)
-    draw_note_controls(app, layout, reading)
+    draw_note_controls(app, layout, reading, menu)
 
     // The strobe's reading, none before a track settled, and nothing to measure on another note than a locked
     // one. The gauge points the way without one.
@@ -45,9 +45,9 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
     }
 
     // Opens on the settings, not the display's options it was closed on
-    if gui_settings_button(layout.settings) do open_settings_sheet(app)
+    if gui_settings_button(layout.settings) do open_settings_sheet(&app.sheets)
 
-    if gui_instrument_button(layout.instrument, config) do app.instrument_sheet.open = true
+    if gui_instrument_button(layout.instrument, config) do app.sheets.instrument.open = true
 
     // The input level, the microphone icon marks it as the input. The level is the rounded track cut off flat
     // where it ends.
@@ -77,7 +77,7 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading) {
     // levels show right away, not after the first hold, and its list has what's connected now.
     left := layout.level_meter.x - ICON_SIZE - WARNING_GAP
     if gui_button({left, meter.y + LEVEL_METER_HEIGHT / 2 - 22, LEVEL_METER_WIDTH + ICON_SIZE + WARNING_GAP, 44}) {
-        app.input_sheet.open = true
+        app.sheets.input.open = true
         app.input.stats_age = INPUT_STATS_HOLD_S
         app.input.refresh = true
     }
@@ -94,8 +94,8 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     strobe, view := layout.strobe, layout.strobe_view
 
     // The selected track stands out as its sheet comes up
-    display.selected_track = app.selected_track
-    display.selection = app.track_sheet.slide
+    display.selected_track = app.sheets.selected_track
+    display.selection = app.sheets.track.slide
 
     // The background behind the notch. The strobe's tracks reach up behind it too, the trace and the scope's
     // views start under it.
@@ -115,8 +115,8 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         if config.strobe_mode == .HARMONIC && !input_missing(app) && gui_button(strobe) {
             track := strobe_track_at(config.strobe_shape, strobe, layout.strobe_scale, layout.strobe_turned, len(bands), gfx.mouse_position())
             if track >= 0 {
-                app.selected_track = track
-                app.track_sheet.open = true
+                app.sheets.selected_track = track
+                app.sheets.track.open = true
             }
         }
 
@@ -240,7 +240,7 @@ draw_tuning_arrows :: proc(displays: ^Displays, note_target: ^core.NoteTarget, l
 
 // The target note on the ruler with the gauge under it, the lock, and the note's offset. The lock button (or
 // space, or tapping the note) locks the note, tapping another note on the ruler locks that one instead.
-draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
+draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading, menu: MenuCommand) {
     config, note_target := app.config, &app.measurement.note_target
     setup := current_setup(config)
     string_mode := setup.instrument != .CHROMATIC
@@ -291,7 +291,7 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
 
     lock_toggled := gui_lock_toggle(layout.lock, note_target.locked) || note_tapped
     if !gui.disabled {
-        if gfx.key_pressed(.SPACE) || app.menu == .LOCK_NOTE do lock_toggled = true
+        if gfx.key_pressed(.SPACE) || menu == .LOCK_NOTE do lock_toggled = true
         if gfx.key_pressed(.LEFT) do step = -1
         if gfx.key_pressed(.RIGHT) do step = 1
     }
