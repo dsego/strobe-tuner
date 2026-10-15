@@ -642,7 +642,7 @@ draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
     if audio.device_count(capture) > 0 do device_name = audio.device_name(capture, capture.active_device)
 
     sheet_layout, swiped := begin_sheet(sheet, INPUT_ROWS, layout)
-    close := gui_input(
+    close := gui_audio_input(
         sheet_layout,
         device_name,
         capture.device_rate,

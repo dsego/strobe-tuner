@@ -372,8 +372,9 @@ gui_track_settings :: proc(
         steps, reset := gui_stepper_buttons(rect, partial_text(partial), times = true)
         if reset {
             partial = preset_partial
-        } else if steps != 0 {
-            partial = step_partial(partial, int(steps))
+        } else {
+            // A step at a time along TRACK_PARTIALS, a scroll can take a few
+            for _ in 0 ..< abs(int(steps)) do partial = next_partial_above(partial) if steps > 0 else next_partial_below(partial)
         }
         if partial != config.strobe_intervals[slot] {
             config.strobe_intervals[slot] = partial
@@ -472,7 +473,7 @@ INPUT_STATS_HOLD_S :: 0.25
 // The picker, the rate the input runs at and what's measured of it, and how far its level is over the
 // background. device_rate is the device's own, sample_rate what's measured after a fast one's decimation.
 // Returns close when ✕ is tapped.
-gui_input :: proc(
+gui_audio_input :: proc(
     sheet_layout: SheetLayout,
     device_name: string,
     device_rate: f32,
@@ -558,26 +559,20 @@ track_slot :: proc(config: ^Config, track: int) -> int {
     return -1
 }
 
-// The next partial up or down from one of TRACK_PARTIALS or any other set in the config file
-step_partial :: proc(partial: f32, steps: int) -> f32 {
+// The first of TRACK_PARTIALS above the partial, which can be one set in the config file between them. The
+// highest stays.
+next_partial_above :: proc(partial: f32) -> f32 {
+    for listed in TRACK_PARTIALS {
+        if listed > partial do return listed
+    }
+    return partial
+}
+
+// The first of TRACK_PARTIALS below the partial, see next_partial_above. The lowest stays.
+next_partial_below :: proc(partial: f32) -> f32 {
     partials := TRACK_PARTIALS
-    partial := partial
-    for _ in 0 ..< abs(steps) {
-        if steps > 0 {
-            for candidate in partials {
-                if candidate > partial {
-                    partial = candidate
-                    break
-                }
-            }
-        } else {
-            #reverse for candidate in partials {
-                if candidate < partial {
-                    partial = candidate
-                    break
-                }
-            }
-        }
+    #reverse for listed in partials {
+        if listed < partial do return listed
     }
     return partial
 }
