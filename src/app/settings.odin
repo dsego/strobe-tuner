@@ -35,7 +35,7 @@ settings_rows :: proc() -> int {
     return 6 if gfx.has_haptics() else 5
 }
 
-// The rows of each display's options page, see gui_display_options
+// The rows of each display's options page, see gui_strobe_display_options and the others after it
 DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 8, .SCOPE = 3, .TRACE = 2, .LAMP = 3, .SPECTRUM = 4}
 
 // For the longer labels of the display's options, three of them as wide as the four colors
@@ -124,7 +124,18 @@ gui_settings :: proc(
         close, back = draw_back_header(sheet_layout, display_names[config.strobe_display_type])
         if back do display_options^ = false
 
-        changed = gui_display_options(sheet_layout, config)
+        switch config.strobe_display_type {
+        case .STROBE:
+            changed = gui_strobe_display_options(sheet_layout, config)
+        case .SCOPE:
+            gui_scope_display_options(sheet_layout, config)
+        case .TRACE:
+            gui_trace_display_options(sheet_layout, config)
+        case .LAMP:
+            gui_lamp_display_options(sheet_layout, config)
+        case .SPECTRUM:
+            gui_spectrum_display_options(sheet_layout, config)
+        }
         return
     }
 
@@ -217,67 +228,78 @@ gui_settings :: proc(
     }
 }
 
-// The picked display's options, a row each. Returns changed when the strobe needs updating.
-gui_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (changed: bool) {
+// The strobe's options, a row each. Returns changed when the strobe needs updating.
+gui_strobe_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (changed: bool) {
     row := 0
-    switch config.strobe_display_type {
-    case .STROBE:
-        gui_settings_segmented(sheet_layout, &row, "Shape", {"Flat", "Wheel", "Curved"}, &config.strobe_shape, WIDE_SEGMENT_WIDTH)
+    gui_settings_segmented(sheet_layout, &row, "Shape", {"Flat", "Wheel", "Curved"}, &config.strobe_shape, WIDE_SEGMENT_WIDTH)
 
-        // What turns the tracks: their own DFT, or the lamp's screen, the strobe the other way
-        gui_settings_segmented(sheet_layout, &row, "Turned by", {"Lock-in", "Lamp"}, &config.strobe_source, WIDE_SEGMENT_WIDTH)
+    // What turns the tracks: their own DFT, or the lamp's screen, the strobe the other way
+    gui_settings_segmented(sheet_layout, &row, "Turned by", {"Lock-in", "Lamp"}, &config.strobe_source, WIDE_SEGMENT_WIDTH)
 
-        // Harmonic shows a track per partial, vernier the same frequency at different sensitivities
-        if gui_settings_segmented(sheet_layout, &row, "Mode", {"Harmonic", "Vernier"}, &config.strobe_mode, WIDE_SEGMENT_WIDTH) {
-            changed = true
-        }
-
-        // 200% spins twice as fast per cent, for the final adjustment
-        if gui_settings_segmented(sheet_layout, &row, "Spin rate", {"100%", "200%"}, &config.strobe_fast, WIDE_SEGMENT_WIDTH) {
-            changed = true
-        }
-
-        // How long every cents number averages, the readout under the strobe and the labels on the tracks
-        // are the same fit. The longer evens out a voice's vibrato into its mean pitch, a turned peg shows
-        // later on the numbers while the stripes move at once.
-        if gui_steps(sheet_layout, &row, "Readout speed", {"0.15 s", "0.4 s"}, &config.readout_fit_s, READOUT_FIT_STEPS_S) {
-            changed = true
-        }
-
-        // The stripes smear and calm down on an unsteady note like the lamp's, the same setting as the scope's
-        // and the lamp's screen, see strobe_persistence
-        gui_persistence_row(sheet_layout, &row, config, SMOOTHING_LABEL)
-
-        // The labels on the tracks: the partial, and how far off it is
-        harmonic := config.strobe_mode == .HARMONIC
-        gui_settings_segmented(sheet_layout, &row, "Partials", {"Off", "1×", "Hz", "Note"}, &config.partial_labels, enabled = harmonic)
-        gui_settings_segmented(sheet_layout, &row, "Track cents", {"Off", "On"}, &config.show_band_cents, enabled = harmonic)
-    case .SCOPE:
-        // Tapping the scope flips it too
-        gui_settings_segmented(sheet_layout, &row, "Sweep", {"Time", "X-Y"}, &config.scope_sweep)
-        gui_screen_options(sheet_layout, &row, config)
-    case .TRACE:
-        gui_steps(sheet_layout, &row, "Span", STEP_LABELS, &config.trace_seconds, TRACE_SPAN_STEPS_S)
-        gui_steps(sheet_layout, &row, "Range", {"Narrow", "Wide"}, &config.trace_range_cents, TRACE_RANGE_STEPS_CENTS)
-    case .LAMP:
-        // The positive half of the wave like a mechanical strobe's lamp, the wave as it is, or both halves
-        // split. Tapping the lamp flips it too.
-        gui_settings_segmented(sheet_layout, &row, "Rectifier", {"Half", "None", "Split"}, &config.lamp_shape)
-        gui_screen_options(sheet_layout, &row, config)
-    case .SPECTRUM:
-        gui_steps(sheet_layout, &row, "Window", {"85 ms", "170 ms", "340 ms"}, &config.spectrum_windows, SPECTRUM_WINDOW_STEPS)
-        gui_settings_segmented(sheet_layout, &row, "Scale", {"SNR", "dBFS"}, &config.spectrum_scale)
-        gui_settings_segmented(sheet_layout, &row, "Labels", {"Off", "Note", "Hz", "Both"}, &config.spectrum_labels)
-        gui_settings_segmented(sheet_layout, &row, "Peak level", {"Off", "On"}, &config.spectrum_peak_level)
+    // Harmonic shows a track per partial, vernier the same frequency at different sensitivities
+    if gui_settings_segmented(sheet_layout, &row, "Mode", {"Harmonic", "Vernier"}, &config.strobe_mode, WIDE_SEGMENT_WIDTH) {
+        changed = true
     }
+
+    // 200% spins twice as fast per cent, for the final adjustment
+    if gui_settings_segmented(sheet_layout, &row, "Spin rate", {"100%", "200%"}, &config.strobe_fast, WIDE_SEGMENT_WIDTH) {
+        changed = true
+    }
+
+    // How long every cents number averages, the readout under the strobe and the labels on the tracks are the
+    // same fit. The longer evens out a voice's vibrato into its mean pitch, a turned peg shows later on the
+    // numbers while the stripes move at once.
+    if gui_steps(sheet_layout, &row, "Readout speed", {"0.15 s", "0.4 s"}, &config.readout_fit_s, READOUT_FIT_STEPS_S) {
+        changed = true
+    }
+
+    // The stripes smear and calm down on an unsteady note like the lamp's, the same setting as the scope's and
+    // the lamp's screen, see strobe_persistence
+    gui_persistence_row(sheet_layout, &row, config, SMOOTHING_LABEL)
+
+    // The labels on the tracks: the partial, and how far off it is
+    harmonic := config.strobe_mode == .HARMONIC
+    gui_settings_segmented(sheet_layout, &row, "Partials", {"Off", "1×", "Hz", "Note"}, &config.partial_labels, enabled = harmonic)
+    gui_settings_segmented(sheet_layout, &row, "Track cents", {"Off", "On"}, &config.show_band_cents, enabled = harmonic)
     return
+}
 
-    // The scope's and the lamp's screen. Held, a note's decay shows, the wave shrinks and the stripes dim
-    // like a mechanical strobe's lamp. Auto keeps a fading note filling the screen.
-    gui_screen_options :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config) {
-        gui_persistence_row(sheet_layout, row, config, PERSISTENCE_LABEL)
-        gui_settings_segmented(sheet_layout, row, "Gain", {"Auto", "Hold"}, &config.scope_gain)
-    }
+gui_scope_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
+    row := 0
+
+    // Tapping the scope flips it too
+    gui_settings_segmented(sheet_layout, &row, "Sweep", {"Time", "X-Y"}, &config.scope_sweep)
+    gui_screen_options(sheet_layout, &row, config)
+}
+
+gui_trace_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
+    row := 0
+    gui_steps(sheet_layout, &row, "Span", STEP_LABELS, &config.trace_seconds, TRACE_SPAN_STEPS_S)
+    gui_steps(sheet_layout, &row, "Range", {"Narrow", "Wide"}, &config.trace_range_cents, TRACE_RANGE_STEPS_CENTS)
+}
+
+gui_lamp_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
+    row := 0
+
+    // The positive half of the wave like a mechanical strobe's lamp, the wave as it is, or both halves split.
+    // Tapping the lamp flips it too.
+    gui_settings_segmented(sheet_layout, &row, "Rectifier", {"Half", "None", "Split"}, &config.lamp_shape)
+    gui_screen_options(sheet_layout, &row, config)
+}
+
+gui_spectrum_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
+    row := 0
+    gui_steps(sheet_layout, &row, "Window", {"85 ms", "170 ms", "340 ms"}, &config.spectrum_windows, SPECTRUM_WINDOW_STEPS)
+    gui_settings_segmented(sheet_layout, &row, "Scale", {"SNR", "dBFS"}, &config.spectrum_scale)
+    gui_settings_segmented(sheet_layout, &row, "Labels", {"Off", "Note", "Hz", "Both"}, &config.spectrum_labels)
+    gui_settings_segmented(sheet_layout, &row, "Peak level", {"Off", "On"}, &config.spectrum_peak_level)
+}
+
+// The scope's and the lamp's screen. Held, a note's decay shows, the wave shrinks and the stripes dim like a
+// mechanical strobe's lamp. Auto keeps a fading note filling the screen.
+gui_screen_options :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config) {
+    gui_persistence_row(sheet_layout, row, config, PERSISTENCE_LABEL)
+    gui_settings_segmented(sheet_layout, row, "Gain", {"Auto", "Hold"}, &config.scope_gain)
 }
 
 // The screens' persistence, the same row on the strobe's, the scope's and the lamp's options under its label
