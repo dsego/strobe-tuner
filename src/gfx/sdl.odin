@@ -258,30 +258,15 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}, position
     when MOBILE do _, _ = corner, placed // a phone's window is the screen
 
     when !MOBILE {
-        // Placed where its title bar shows on a display, the one it was on may be gone
-        TITLE_BAR :: 28
+        // Placed only where its title bar shows, the display it was on may be gone
         display := sdl.GetPrimaryDisplay()
         if placed {
-            title_bar := sdl.Rect{corner.x, corner.y, size.x, TITLE_BAR}
-            placed = false
-            count: i32
-            displays := sdl.GetDisplays(&count)
-            for index in 0 ..< count {
-                bounds: sdl.Rect
-                if !sdl.GetDisplayUsableBounds(displays[index], &bounds) do continue
+            title_bar_display, shows := display_showing_title_bar(corner, size.x)
+            if shows do display = title_bar_display
 
-                if sdl.HasRectIntersection(title_bar, bounds) {
-                    display, placed = displays[index], true
-                    break
-                }
-            }
-            sdl.free(displays)
+            placed = shows
         }
-
-        bounds: sdl.Rect
-        if sdl.GetDisplayUsableBounds(display, &bounds) {
-            size = {min(size.x, bounds.w), min(size.y, bounds.h)}
-        }
+        size = fit_to_display(size, display)
     }
 
     // Hidden until it's where it goes
@@ -302,6 +287,15 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}, position
         }
     }
 
+    if !init_gpu() do return false
+
+    gpu.last_counter = sdl.GetPerformanceCounter()
+    return true
+}
+
+// The GPU device drawing into the window, the shaders and pipelines of every program, the sampler and the
+// white texture. Errors are printed.
+init_gpu :: proc() -> bool {
     gpu.device = sdl.CreateGPUDevice(SHADER_FORMAT, ODIN_DEBUG, nil)
     if gpu.device == nil {
         fmt.eprintln("SDL_CreateGPUDevice failed:", sdl.GetError())
@@ -315,31 +309,16 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}, position
     _ = sdl.SetGPUSwapchainParameters(gpu.device, gpu.window, .SDR, .VSYNC)
     gpu.window_format = sdl.GetGPUSwapchainTextureFormat(gpu.device, gpu.window)
 
-    gpu.vertex_shader = create_shader(vertex_shader_code, .VERTEX, 0, 1)
-    if gpu.vertex_shader == nil do return false
+    if !create_shaders() || !create_pipelines() || !create_sampler() do return false
 
-    // Every program but the sprite takes its uniforms
-    samplers := PROGRAM_SAMPLERS
-    for program in Program {
-        uniform_buffers: u32 = 0 if program == .SPRITE else 1
-        shader := create_shader(fragment_shader_code[program], .FRAGMENT, samplers[program], uniform_buffers)
-        if shader == nil do return false
+    // What the solid shapes sample, the sprite shader always takes a texture and their color tints it
+    white := [4]u8{255, 255, 255, 255}
+    gpu.white = create_texture(1, 1, white[:])
+    return true
+}
 
-        gpu.fragment_shaders[program] = shader
-    }
-
-    // Like a shader, one that couldn't be made would leave its draws to whatever was bound before
-    for program in Program {
-        for blend in BlendMode {
-            window := create_pipeline(program, blend, gpu.window_format)
-            target := create_pipeline(program, blend, TARGET_FORMAT)
-            if window == nil || target == nil do return false
-
-            gpu.pipelines[program][blend][.WINDOW] = window
-            gpu.pipelines[program][blend][.TARGET] = target
-        }
-    }
-
+// The one sampler every texture is drawn with: linear, clamped at the edges
+create_sampler :: proc() -> bool {
     gpu.sampler = sdl.CreateGPUSampler(
         gpu.device,
         {
@@ -355,12 +334,67 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}, position
         fmt.eprintln("SDL_CreateGPUSampler failed:", sdl.GetError())
         return false
     }
-
-    white := [4]u8{255, 255, 255, 255}
-    gpu.white = create_texture(1, 1, white[:])
-
-    gpu.last_counter = sdl.GetPerformanceCounter()
     return true
+}
+
+// The vertex shader all programs share and each program's fragment shader
+create_shaders :: proc() -> bool {
+    gpu.vertex_shader = create_shader(vertex_shader_code, .VERTEX, 0, 1)
+    if gpu.vertex_shader == nil do return false
+
+    // Every program but the sprite takes its uniforms
+    samplers := PROGRAM_SAMPLERS
+    for program in Program {
+        uniform_buffers: u32 = 0 if program == .SPRITE else 1
+        shader := create_shader(fragment_shader_code[program], .FRAGMENT, samplers[program], uniform_buffers)
+        if shader == nil do return false
+
+        gpu.fragment_shaders[program] = shader
+    }
+    return true
+}
+
+// A pipeline per program, blend mode and pass kind. Like a shader, one that couldn't be made would leave its
+// draws to whatever was bound before.
+create_pipelines :: proc() -> bool {
+    for program in Program {
+        for blend in BlendMode {
+            window := create_pipeline(program, blend, gpu.window_format)
+            target := create_pipeline(program, blend, TARGET_FORMAT)
+            if window == nil || target == nil do return false
+
+            gpu.pipelines[program][blend][.WINDOW] = window
+            gpu.pipelines[program][blend][.TARGET] = target
+        }
+    }
+    return true
+}
+
+// The display whose usable area a window's title bar overlaps, with the window's top left corner at corner.
+// False on none, the window would open where it can't be grabbed.
+display_showing_title_bar :: proc(corner: [2]i32, width: i32) -> (display: sdl.DisplayID, shows: bool) {
+    TITLE_BAR_HEIGHT :: 28
+    title_bar := sdl.Rect{corner.x, corner.y, width, TITLE_BAR_HEIGHT}
+
+    count: i32
+    displays := sdl.GetDisplays(&count)
+    defer sdl.free(displays)
+
+    for index in 0 ..< count {
+        bounds: sdl.Rect
+        if !sdl.GetDisplayUsableBounds(displays[index], &bounds) do continue
+
+        if sdl.HasRectIntersection(title_bar, bounds) do return displays[index], true
+    }
+    return
+}
+
+// A size cut down to the display's usable area, one remembered from a bigger display may not fit
+fit_to_display :: proc(size: [2]i32, display: sdl.DisplayID) -> [2]i32 {
+    bounds: sdl.Rect
+    if !sdl.GetDisplayUsableBounds(display, &bounds) do return size
+
+    return {min(size.x, bounds.w), min(size.y, bounds.h)}
 }
 
 shutdown :: proc() {
