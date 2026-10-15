@@ -66,11 +66,13 @@ sheet_bg_color: u32 = 0x40414AFF
 strobe_bg_color: u32 = 0x15161AFF
 settings_separator_color := gfx.hex(0x35363EFF)
 note_offset_selected_color := gfx.hex(0x4D4E58FF)
+menu_highlight_color := gfx.hex(0x15141BFF) // a dropdown's option under the finger
 
 text_color_dark := gfx.hex(0x15141BFF)
 text_color_light := gfx.hex(0xBDBDBDFF)
 text_color_white := gfx.hex(0xFBFBFBFF) // the note and readout while there's a pitch, titles
 text_color_muted := gfx.hex(0x7D7E8FFF) // the note and readout without a pitch, the ruler's neighbours
+text_color_hover := gfx.hex(0xFFFFFFFF) // a dropdown's option under the finger
 text_color_disabled := gfx.hex(0x5C5D6AFF) // a control that does nothing right now, on a dark pill
 icon_color := gfx.hex(0x9A9BAAFF)
 accent_color := gfx.hex(0x82E2FFFF) // the input level, the arrows, the partial labels and the note offsets
@@ -611,124 +613,149 @@ GuiOption :: struct {
     label: string,
 }
 
+DROPDOWN_CARET_WIDTH :: 22 // from the button's right edge
+DROPDOWN_LABEL_GAP :: 4 // between the button's label and the caret
+DROPDOWN_OPTION_HEIGHT :: 24
+DROPDOWN_MENU_GAP :: 6 // between the button and the menu, it counts as the menu's for the presses
+DROPDOWN_MENU_RADIUS :: 12
+DROPDOWN_MENU_PAD :: 4 // above the first option and below the last one, part of them and their highlight
+DROPDOWN_DIVIDER_SPACE :: 8 // between the groups, the line in the middle
+DROPDOWN_DIVIDER_INSET :: 6 // the line a little in from the edges of the menu
+DROPDOWN_TEXT_INSET :: 12 // an option's label from the menu's edges
+DROPDOWN_TEXT_DROP :: 4 // an option's label from its top
+
+// A button with the selected option that opens a menu of them above it, or under it with down. Returns
+// whether the menu is open, selected changes when an option is picked.
 gui_dropdown :: proc(
     position: [2]f32,
     width: f32,
     options: []GuiOption,
-    selected_idx: ^int,
-    edit_mode: bool,
+    selected: ^int,
+    open: bool,
     left_pad: f32 = 12,
     height: f32 = 24,
     down := false, // the menu opens under the button, it's drawn after the controls below it
     dividers: []int = nil, // the options with a line above them, each starts a group
 ) -> bool {
-    edit_mode := edit_mode
-    btn_bounds := gfx.Rect{position.x, position.y, width, height}
+    button_rect := gfx.Rect{position.x, position.y, width, height}
+    draw_dropdown_button(button_rect, options[selected^].label, left_pad)
 
-    // Draw the button
-    CARET_WIDTH :: 22 // from the right edge, the label ends short of it
-    gfx.draw_pill(btn_bounds, pill_dark)
-    draw_centered_icon(ICON_CARET_DOWN, {position.x + width - CARET_WIDTH, position.y, ICON_SIZE, height}, icon_color)
+    menu_rect := dropdown_menu_rect(button_rect, len(options), dividers, down)
+    if !dropdown_press(open, button_rect, menu_rect, down) do return false
 
-    draw_label(
-        pixel_fonts.label,
-        fit_label(pixel_fonts.label, options[selected_idx^].label, width - left_pad - CARET_WIDTH - 4),
-        {position.x + left_pad, position.y + (height - LABEL_SIZE) / 2},
-        text_color_light,
-        1,
-    )
-
-    // The menu sits 6pt above the button, or below it, the gap counts as part of it for the clicks
-    MENU_RADIUS :: 12
-    MENU_PAD :: 4 // above the first option and below the last one, part of them and their highlight
-    DIVIDER_SPACE :: 8 // between the groups, the line in the middle
-    is_divider :: proc(dividers: []int, option, count: int) -> bool {
-        return option > 0 && option < count && slice.contains(dividers, option)
+    picked, was_picked := draw_dropdown_menu(menu_rect, options, dividers)
+    if was_picked {
+        selected^ = picked
+        gui.menu_open = false
+        return false
     }
-    menu_height := f32(len(options) * 24) + 2 * MENU_PAD
-    for option in 0 ..< len(options) {
-        if is_divider(dividers, option, len(options)) do menu_height += DIVIDER_SPACE
+    return true
+}
+
+draw_dropdown_button :: proc(rect: gfx.Rect, label: string, left_pad: f32) {
+    gfx.draw_pill(rect, pill_dark)
+    draw_centered_icon(ICON_CARET_DOWN, {rect.x + rect.width - DROPDOWN_CARET_WIDTH, rect.y, ICON_SIZE, rect.height}, icon_color)
+
+    fitted := fit_label(pixel_fonts.label, label, rect.width - left_pad - DROPDOWN_CARET_WIDTH - DROPDOWN_LABEL_GAP)
+    draw_label(pixel_fonts.label, fitted, {rect.x + left_pad, rect.y + (rect.height - LABEL_SIZE) / 2}, text_color_light, 1)
+}
+
+// Where the open menu is drawn, the options one under the other with room for the dividers
+dropdown_menu_rect :: proc(button_rect: gfx.Rect, count: int, dividers: []int, down: bool) -> gfx.Rect {
+    height := f32(count * DROPDOWN_OPTION_HEIGHT) + 2 * DROPDOWN_MENU_PAD
+    for index in 0 ..< count {
+        if dropdown_divider_above(dividers, index) do height += DROPDOWN_DIVIDER_SPACE
     }
-    menu_bounds := gfx.Rect{position.x, position.y - menu_height - 6, width, menu_height + 6}
-    if down do menu_bounds.y = position.y + height
 
-    mouse_point := gfx.mouse_position()
+    y := button_rect.y - height - DROPDOWN_MENU_GAP
+    if down do y = button_rect.y + button_rect.height + DROPDOWN_MENU_GAP
+    return {button_rect.x, y, button_rect.width, height}
+}
 
-    if gfx.mouse_pressed() {
-        if edit_mode {
-            // An option or clicked outside, either way the menu's
-            gui.press_taken = true
-            if !gfx.point_in_rect(mouse_point, menu_bounds) {
-                edit_mode = false
-                gui.menu_open = false
-            }
-        } else {
-            if gui_takes_input() && gfx.point_in_rect(mouse_point, btn_bounds) {
-                edit_mode = true
-                gui.menu_open = true
-                gui.press_taken = true
-            }
+// Every option in dividers but the first starts a group with a line above it
+dropdown_divider_above :: proc(dividers: []int, index: int) -> bool {
+    return index > 0 && slice.contains(dividers, index)
+}
+
+// A press on the button opens the menu, one outside the menu and its gap closes it. An open menu takes every
+// press, an option's or not.
+dropdown_press :: proc(open: bool, button_rect, menu_rect: gfx.Rect, down: bool) -> bool {
+    if !gfx.mouse_pressed() do return open
+
+    mouse := gfx.mouse_position()
+    if open {
+        gui.press_taken = true
+
+        reach := menu_rect
+        reach.height += DROPDOWN_MENU_GAP
+        if down do reach.y -= DROPDOWN_MENU_GAP
+        if gfx.point_in_rect(mouse, reach) do return true
+
+        gui.menu_open = false
+        return false
+    }
+
+    if gui_takes_input() && gfx.point_in_rect(mouse, button_rect) {
+        gui.menu_open = true
+        gui.press_taken = true
+        return true
+    }
+    return false
+}
+
+// The open menu, the option under the finger highlighted and picked by a press
+draw_dropdown_menu :: proc(rect: gfx.Rect, options: []GuiOption, dividers: []int) -> (picked: int, was_picked: bool) {
+    // Follows the menu's corners on the first and the last option: rounded all around, then the side facing
+    // the other options squared off
+    draw_option_highlight :: proc(rect: gfx.Rect, first, last: bool) {
+        square := [2]f32{rect.width, rect.height - DROPDOWN_MENU_RADIUS}
+        if first || last {
+            gfx.draw_rounded_rect(rect, DROPDOWN_MENU_RADIUS, menu_highlight_color)
+        }
+        if !first {
+            gfx.draw_rect({rect.x, rect.y}, square, menu_highlight_color)
+        }
+        if !last {
+            gfx.draw_rect({rect.x, rect.y + DROPDOWN_MENU_RADIUS}, square, menu_highlight_color)
         }
     }
 
-    if edit_mode {
-        menu_position := [2]f32{menu_bounds.x, menu_bounds.y + (f32(6) if down else 0)}
-        gfx.draw_rounded_rect({menu_position.x, menu_position.y, width, menu_height}, MENU_RADIUS, pill_dark)
+    gfx.draw_rounded_rect(rect, DROPDOWN_MENU_RADIUS, pill_dark)
 
-        spaced: f32 = 0 // by the dividers above
-        for option, index in options {
-            first, last := index == 0, index == len(options) - 1
-            divider := is_divider(dividers, index, len(options))
-            if divider do spaced += DIVIDER_SPACE
+    mouse := gfx.mouse_position()
+    spaced: f32 = 0 // by the dividers above
+    for option, index in options {
+        first, last := index == 0, index == len(options) - 1
+        divider := dropdown_divider_above(dividers, index)
+        if divider do spaced += DROPDOWN_DIVIDER_SPACE
 
-            option_y := menu_position.y + MENU_PAD + f32(index * 24) + spaced
-            text_y := option_y + 4
+        option_y := rect.y + DROPDOWN_MENU_PAD + f32(index * DROPDOWN_OPTION_HEIGHT) + spaced
 
-            // The first and the last reach over the padding to the menu's edge
-            option_bounds := gfx.Rect{menu_position.x, option_y, width, 24}
-            if first {
-                option_bounds.y -= MENU_PAD
-                option_bounds.height += MENU_PAD
-            }
-            if last do option_bounds.height += MENU_PAD
+        // The first and the last reach over the padding to the menu's edge
+        option_rect := gfx.Rect{rect.x, option_y, rect.width, DROPDOWN_OPTION_HEIGHT}
+        if first {
+            option_rect.y -= DROPDOWN_MENU_PAD
+            option_rect.height += DROPDOWN_MENU_PAD
+        }
+        if last do option_rect.height += DROPDOWN_MENU_PAD
 
-            hover := gfx.point_in_rect(mouse_point, option_bounds)
-            if hover && gfx.mouse_pressed() {
-                edit_mode = false
-                gui.menu_open = false
-                selected_idx^ = index
-            }
+        hover := gfx.point_in_rect(mouse, option_rect)
+        if hover && gfx.mouse_pressed() do picked, was_picked = index, true
 
-            if hover {
-                // The highlight follows the menu's corners on the first and the last option: rounded all
-                // around, then the side facing the other options squared off
-                highlight := gfx.hex(0x15141BFF)
-                square := [2]f32{option_bounds.width, option_bounds.height - MENU_RADIUS}
+        if hover do draw_option_highlight(option_rect, first, last)
 
-                if first || last {
-                    gfx.draw_rounded_rect(option_bounds, MENU_RADIUS, highlight)
-                }
-                if !first {
-                    gfx.draw_rect({option_bounds.x, option_bounds.y}, square, highlight)
-                }
-                if !last {
-                    gfx.draw_rect({option_bounds.x, option_bounds.y + MENU_RADIUS}, square, highlight)
-                }
-            }
+        label := fit_label(pixel_fonts.label, option.label, rect.width - 2 * DROPDOWN_TEXT_INSET)
+        text_color := text_color_hover if hover else text_color_light
+        draw_label(pixel_fonts.label, label, {rect.x + DROPDOWN_TEXT_INSET, option_y + DROPDOWN_TEXT_DROP}, text_color, 1)
 
-            text_pos := [2]f32{option_bounds.x + 12, text_y}
-            label := fit_label(pixel_fonts.label, option.label, width - 24)
-            draw_label(pixel_fonts.label, label, text_pos, gfx.hex(0xFFFFFFFF) if hover else text_color_light, 1)
-
-            // A line in the sheet's colour, a little in from the edges of the menu
-            if divider {
-                INSET :: 6
-                gfx.draw_rect({option_bounds.x + INSET, option_bounds.y - DIVIDER_SPACE / 2 - 1}, {width - 2 * INSET, 2}, gfx.hex(sheet_bg_color))
-            }
+        // A line in the sheet's colour between the groups
+        if divider {
+            line_y := option_rect.y - DROPDOWN_DIVIDER_SPACE / 2 - 1
+            line_width := rect.width - 2 * DROPDOWN_DIVIDER_INSET
+            gfx.draw_rect({rect.x + DROPDOWN_DIVIDER_INSET, line_y}, {line_width, 2}, gfx.hex(sheet_bg_color))
         }
     }
-
-    return edit_mode
+    return
 }
 
 // The label in width at the dropdowns' spacing, a long one cut short with "…", e.g. a device's name
