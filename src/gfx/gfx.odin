@@ -18,57 +18,8 @@ package gfx
 
 import "core:math/linalg"
 
-// Rendering and input go through a small immediate mode API, sdl.odin implements it with SDL3 GPU: Metal
-// shaders in src/shaders/metal/ on macOS and iOS, Vulkan shaders in src/shaders/vulkan/ on Linux and Android.
-//
-//   init(width, height, title, min_size, position) -> bool, shutdown()   the desktop window resizes down to
-//                                       min_size and opens at position
-//   live_resize_frames(frame, data)     frame draws a frame while the desktop window is dragged or zoomed to another size,
-//                                       or a menu of the menu bar is open
-//   resizing() -> bool                  in a frame drawn during the drag, the zoom or the open menu
-//   set_window_size(width, height)      the desktop window, in the system's points
-//   should_close() -> bool              polls the window events, call once per frame
-//   begin_frame(clear), end_frame()
-//   frame_time() -> f32, dpi_scale() -> f32   pixels per drawing point
-//   window_size() -> [2]f32, safe_area() -> Rect   in drawing points, the system's over the UI scale
-//   window_points() -> [2]f32           the window's own size, in the system's points
-//   window_position() -> [2]i32         its top left corner, in the system's points across the displays
-//   content_scale() -> f32              the system's points per density-independent one, a phone's or a tablet's
-//   set_ui_scale(scale), ui_scale() -> f32   system points per drawing point, 1.5 on a 13-inch iPad
-//   in_background() -> bool, wait_for_foreground()  a phone, nothing may be drawn in the background
-//   window_hidden() -> bool, wait_while_hidden()    the desktop window minimized or covered, after should_close
-//   last_frame_dropped() -> bool        nothing was drawn, the render targets hold what they had before it
-//   system_back()                       what Android does with its back button
-//   limit_fps(fps)                      fewer frames while there's nothing to show, 0 for the display's rate
-//
-//   key_pressed(key), key_down(key), mouse_position(), mouse_pressed(), mouse_down(), mouse_wheel()
-//   touch_input() -> bool               the last press was a finger
-//   has_haptics() -> bool, haptic_tap()  a tap felt in the hand, a phone's, see haptics.odin
-//
-//   MenuItem, add_app_menu_items(settings, items), add_window_menu_items(items)
-//   add_menu(title, items, opening, data) -> menu, set_menu_items(menu, items)
-//   menu_command() -> int, set_menu_checked(command, checked)   the macOS menu bar, nothing elsewhere
-//
-//   Texture, create_texture(width, height, pixels), unload_texture(texture)
-//   create_gray_texture(width, height), update_texture(texture, pixels)
-//   Font, load_font(ttf, size, codepoints), unload_font(font)
-//   draw_texture(texture, source, dest, tint), negative source width/height flips the image
-//   draw_rect(position, size, color)
-//   draw_line(start, end, thickness, color), draw_circle(center, radius, color)
-//   draw_polyline(points, thickness, color)   one mitred strip, even where a translucent line bends
-//   draw_text(font, text, position, size, spacing, color), measure_text(font, text, size, spacing)
-//   begin_scissor(rect), end_scissor(), set_blend_mode(mode)
-//   load_shapes(), unload_shapes(), draw_rounded_rect(rect, radius, color), draw_pill(rect, color),
-//   draw_disc(rect, color), see shapes.odin
-//
-//   Shader, .STROBE, .BLOOM, .SHADOW or .SCOPE, each written for Metal and for Vulkan
-//   begin_shader(shader), end_shader(), set_shader_uniforms(shader, &uniforms)
-//   draw_shader_quad(rect)              runs the active shader over rect, texcoords 0..1
-//   draw_shader_quad_turned(rect)       the same a quarter turn anticlockwise, the shader's top edge on the left
-//
-//   RenderTarget, load_render_target(width, height), unload_render_target(target)
-//   begin_render_target(target, clear, offset, zoom), end_render_target()
-//   draw_render_target(target, dest, tint), render_target_size(target)
+// Rendering and input on SDL3 GPU: Metal shaders in src/shaders/metal/ on macOS and iOS, Vulkan shaders in
+// src/shaders/vulkan/ on Linux and Android.
 
 
 // Building for iOS, see platform/ios/build-sim.sh

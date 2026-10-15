@@ -1052,25 +1052,10 @@ line_normal :: proc(start, end: [2]f32) -> [2]f32 {
 draw_polyline :: proc(points: [][2]f32, thickness: f32, color: Color) {
     if len(points) < 2 do return
 
-    // The offset either side at each point, along the bisector of its two pieces
-    side :: proc(points: [][2]f32, index: int, half: f32) -> [2]f32 {
-        before := line_normal(points[max(index - 1, 0)], points[index])
-        after := line_normal(points[index], points[min(index + 1, len(points) - 1)])
-        if index == 0 do before = after
-        if index == len(points) - 1 do after = before
-
-        bisector := before + after
-        if linalg.length(bisector) < 1e-6 do return before * half
-
-        bisector = linalg.normalize(bisector)
-        cosine := linalg.dot(bisector, after)
-        return bisector * min(half / max(cosine, 1e-6), 2 * half)
-    }
-
     half := 0.5 * thickness
-    previous := side(points, 0, half)
+    previous := polyline_side(points, 0) * half
     for index in 1 ..< len(points) {
-        offset := side(points, index, half)
+        offset := polyline_side(points, index) * half
         start, end := points[index - 1], points[index]
         push_vertices(
             gpu.white.handle,
@@ -1085,6 +1070,95 @@ draw_polyline :: proc(points: [][2]f32, thickness: f32, color: Color) {
         )
         previous = offset
     }
+}
+
+// A line through the points, fading to clear over feather inside its edges, each point in its own color and
+// both ends round. A pixel's feather smooths a thin line, half the thickness makes a soft glow.
+draw_soft_polyline :: proc(points: [][2]f32, colors: []Color, thickness, feather: f32) {
+    if len(points) == 0 do return
+
+    half := 0.5 * thickness
+    inner := max(half - feather, 0)
+
+    transparent :: proc(color: Color) -> Color {
+        return {color.r, color.g, color.b, 0}
+    }
+
+    // A half disc around center on the outward side, solid out to inner and fading out to half
+    round_end :: proc(center, outward: [2]f32, color: Color, inner, half: f32) {
+        STEPS :: 8
+        across := [2]f32{-outward.y, outward.x}
+        edge := transparent(color)
+        for step in 0 ..< STEPS {
+            angle1 := math.PI * f32(step) / STEPS
+            angle2 := math.PI * f32(step + 1) / STEPS
+            direction1 := across * math.cos(angle1) + outward * math.sin(angle1)
+            direction2 := across * math.cos(angle2) + outward * math.sin(angle2)
+            push_vertices(
+                gpu.white.handle,
+                {
+                    {center, {0, 0}, color},
+                    {center + direction1 * inner, {0, 0}, color},
+                    {center + direction2 * inner, {0, 0}, color},
+                    {center + direction1 * inner, {0, 0}, color},
+                    {center + direction1 * half, {0, 0}, edge},
+                    {center + direction2 * half, {0, 0}, edge},
+                    {center + direction1 * inner, {0, 0}, color},
+                    {center + direction2 * half, {0, 0}, edge},
+                    {center + direction2 * inner, {0, 0}, color},
+                },
+            )
+        }
+    }
+
+    last := len(points) - 1
+    if last == 0 {
+        round_end(points[0], {1, 0}, colors[0], inner, half)
+        round_end(points[0], {-1, 0}, colors[0], inner, half)
+        return
+    }
+
+    // Across the line from one edge to the other, clear, solid, solid and clear
+    rows :: proc(point, side: [2]f32, color: Color, inner, half: f32) -> [4]Vertex {
+        edge := transparent(color)
+        return {
+            {point - side * half, {0, 0}, edge},
+            {point - side * inner, {0, 0}, color},
+            {point + side * inner, {0, 0}, color},
+            {point + side * half, {0, 0}, edge},
+        }
+    }
+
+    previous := rows(points[0], polyline_side(points, 0), colors[0], inner, half)
+    for index in 1 ..= last {
+        current := rows(points[index], polyline_side(points, index), colors[index], inner, half)
+        for band in 0 ..< 3 {
+            push_vertices(
+                gpu.white.handle,
+                {previous[band], current[band], current[band + 1], previous[band], current[band + 1], previous[band + 1]},
+            )
+        }
+        previous = current
+    }
+
+    round_end(points[0], linalg.normalize0(points[0] - points[1]), colors[0], inner, half)
+    round_end(points[last], linalg.normalize0(points[last] - points[last - 1]), colors[last], inner, half)
+}
+
+// The offset either side at a point of a line a half width of one across, along the bisector of its two
+// pieces, a spike's mitre cut at twice the width
+polyline_side :: proc(points: [][2]f32, index: int) -> [2]f32 {
+    before := line_normal(points[max(index - 1, 0)], points[index])
+    after := line_normal(points[index], points[min(index + 1, len(points) - 1)])
+    if index == 0 do before = after
+    if index == len(points) - 1 do after = before
+
+    bisector := before + after
+    if linalg.length(bisector) < 1e-6 do return before
+
+    bisector = linalg.normalize(bisector)
+    cosine := linalg.dot(bisector, after)
+    return bisector * min(1 / max(cosine, 1e-6), 2)
 }
 
 draw_circle :: proc(center: [2]f32, radius: f32, color: Color) {

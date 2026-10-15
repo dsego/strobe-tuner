@@ -428,8 +428,7 @@ draw_spectrum_display :: proc(
         }
 
         // Thinner than the trace's, a spectrum is jagged and the fill under it carries the shape. The glow is
-        // two strips, the narrow one over the wide one for a softer edge, rather than the trace's dots: a
-        // jagged spectrum's would take thousands.
+        // two strips, the narrow one over the wide one for a softer edge.
         GLOW_RADIUS :: 2.5
         LINE_WIDTH :: 1.2
         glow := line_color

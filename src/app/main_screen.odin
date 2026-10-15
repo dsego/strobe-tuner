@@ -121,7 +121,8 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     case .TRACE:
         colors := strobe_colors(config)
         seconds, range := config.trace_seconds, config.trace_range_cents
-        draw_trace_display(&app.trace_display, view, seconds, range, gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color))
+        line_color, band_color, background := gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color)
+        draw_trace_display(&app.trace_display, targets, view, seconds, range, line_color, band_color, background, config.strobe_glow)
 
     case .SPECTRUM:
         lock_in := app.strobe_lock_in

@@ -84,8 +84,3 @@ draw_rounded_rect :: proc(rect: Rect, radius: f32, color: Color) {
 draw_pill :: proc(rect: Rect, color: Color) {
     draw_rounded_rect(rect, rect.height / 2, color)
 }
-
-// The whole circle stretched over rect, e.g. a dot of the trace's pen
-draw_disc :: proc(rect: Rect, color: Color) {
-    draw_texture(shape_texture, {0, 0, SHAPE_SIZE, SHAPE_SIZE}, rect, color)
-}
