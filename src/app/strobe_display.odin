@@ -554,117 +554,49 @@ strobe_tracks :: proc(
     tracks: StrobeTracks,
 ) {
     mode := lock_in.mode
-    curvature_radius := geometry.curvature_radius
-    band_height := geometry.band_height
-    period_count := geometry.period_count
-    density := geometry.density
+    stale := tracks_went_stale(self, lamp, mode)
     tracks.count = len(bands)
-
-    stale := time.duration_seconds(time.tick_since(self.tracks_tick)) > core.STROBE_STALE_S
-    self.tracks_tick = time.tick_now()
-
-    // The lamp's phase isn't the lock-in's, and a vernier track's stripes are packed tighter than a harmonic
-    // one's: the phase drawn before and the average of it don't carry over
-    if lamp != self.tracks_lamp || mode != self.tracks_mode do stale = true
-
-    self.tracks_lamp, self.tracks_mode = lamp, mode
 
     for &band, band_index in bands {
         uniforms := &tracks.uniforms[band_index]
         uniforms^ = shared
 
+        // For concentric circles the radius expands as the bands move from the bottom up. Each vernier track
+        // turns faster, its stripes are packed twice as tight as the one inside it.
+        curvature_radius := geometry.curvature_radius + geometry.band_height * f32(band_index)
+        period_count := geometry.period_count
+        if mode == .VERNIER do period_count *= f32(u32(1) << u32(band_index))
+
         order := len(bands) - 1 - band_index
-
-        // Down to where the arc ends, it drops towards the sides. The inner edge meets the sides of the strobe
-        // on a wide arc, a narrow one like the wheel is a whole ring.
-        band_y := geometry.y + band_height * f32(order)
-        half_width := strobe_rect.width / 2
-        inner_radius := curvature_radius - band_height
-        arc_height := 2 * curvature_radius
-        if inner_radius > half_width {
-            arc_height = curvature_radius - math.sqrt(inner_radius * inner_radius - half_width * half_width)
-        }
-        height := min(strobe_rect.y + strobe_rect.height - band_y, arc_height + 4)
-        if geometry.shape == .FLAT do height = band_height
-
-        uniforms.bounding_rect = {strobe_rect.x, band_y, strobe_rect.width, height}
-
-        // Note, for concentric circles the radius needs to expand as the bands move from the bottom up
+        uniforms.bounding_rect = track_bounds(geometry, strobe_rect, order, curvature_radius)
         uniforms.curvature_radius = curvature_radius
-        curvature_radius += band_height
-
         uniforms.period_count = period_count
         uniforms.time_stretch = band.time_stretch
+        uniforms.norm_freq = band.norm_freq
 
-        // The shader multiplies the phase by the period count, a denser pattern turns slower to drift as
-        // many stripes a second as the desktop's. Drawn as of now, see strobe_phase_ahead. Not the lamp's
-        // tracks, they turn by the screen and the readout's rate isn't theirs, they'd jump back each chunk.
-        ahead := core.strobe_phase_ahead(lock_in, band) if !lamp else 0
-        uniforms.phase = (band.scaled_phase + ahead) / density
-
-        // The persistence smears the stripes and calms a jittery phase like the lamp's screen. Not the lamp's
-        // tracks, their screen smeared already. A pluck starts it over, the plucked note's stripes come in
-        // where they are instead of through dark, as the lamp's loud attack outweighs its faded picture.
         frame_time := min(gfx.frame_time(), STROBE_MAX_FRAME_TIME_S)
-        drawn_phase := &self.band_drawn_phases[band_index]
+        smear: f32
+        uniforms.phase, uniforms.phase_step, smear = track_phase(
+            self,
+            band,
+            band_index,
+            lock_in,
+            lamp,
+            persistence_periods,
+            stale,
+            geometry.density,
+            period_count,
+            frame_time,
+        )
 
-        // The phase wrapped by whole turns, see core.STROBE_PHASE_WRAP, the drawn one goes with it and the
-        // step stays what the stripes moved
-        wrap := core.STROBE_PHASE_WRAP / density
-        drawn_phase^ += wrap * math.round((uniforms.phase - drawn_phase^) / wrap)
-
-        // Coming back to the strobe or turned another way, the stripes start where they are like after a
-        // pluck, not smeared from a phase seconds old or from another one
-        if stale {
-            self.band_phasors[band_index] = 0
-            drawn_phase^ = uniforms.phase
-        }
-
-        smear: f32 = 1
-        if !lamp && persistence_periods > 0 {
-            if band.onset do self.band_phasors[band_index] = 0
-
-            persistence_s := persistence_periods / lock_in.base_freq_hz
-
-            // How far the stripes moved this frame at the readout's rate, the whole frame however long it
-            // took: a hitch moved them all the way
-            expected_step := core.strobe_phase_rate(lock_in, band) * gfx.frame_time() / density
-            smear = strobe_persistence(&self.band_phasors[band_index], &uniforms.phase, drawn_phase^, expected_step, period_count, persistence_s, frame_time)
-        }
-
-        // How far the strobe moved since the previous frame as drawn
-        uniforms.phase_step = uniforms.phase - drawn_phase^
-        drawn_phase^ = uniforms.phase
-
-        // The shader's sine of the phase times the period count, up to 64 turns times it is tens of thousands
-        // of radians on the outer vernier tracks. Within a stripe the same, the GPU's fast sine is accurate
-        // near 0.
-        uniforms.phase = math.mod(uniforms.phase, math.TAU / period_count)
-
-        // Vernier tracks show the first one's measurement. The lamp's tracks are as far off as the lock-in's.
-        gain: f32
-        if mode == .VERNIER {
-            first := bands[0]
-            speed_ratio := band.speed / first.speed if first.speed != 0 else 1
-            gain = narrow_band_gain(first.drift_cents) * vernier_speed_gain(first.drift_cents, speed_ratio)
-        } else {
-            gain = narrow_band_gain(band.drift_cents)
-        }
-
-        // How fast the track's own stripes, a period of the shader's sine, move. By the drift, the phase as
-        // measured, averaged: the readout's rate holds on a weak partial while its phase still moves. Vernier
-        // tracks by the first one's, at their own speed. The lamp's tracks move by the screen, about as fast.
-        drift_cents := bands[0].drift_cents if mode == .VERNIER else band.drift_cents
-        drift_hz := core.freq_at_cents(band.freq_hz, drift_cents) - band.freq_hz
-        phase_per_s := math.TAU * drift_hz * f32(core.strobe_rescale(band.freq_hz)) * band.speed
-        stripes_per_s := period_count * phase_per_s / density / math.TAU
+        gain := track_gain(bands, band_index, mode)
+        stripes_per_s := track_stripes_per_s(bands, band_index, mode, period_count, geometry.density)
 
         // Off the note the edges go soft, the stripes a sine before they fade. Squared, as the gain alone
         // still leaves an edge a few percent of a stripe wide where they're half faded. Smeared they soften
         // and dim the same way.
         uniforms.amp = STROBE_AMP * gain * gain * smear * smear
         uniforms.visibility = update_band_visibility(self, &band, band_index, gain, smear, stripes_per_s, frame_time)
-        uniforms.norm_freq = band.norm_freq
 
         // Without stripes the track looks the same whatever its phase, and doesn't change from frame to frame.
         // The persistence starts over when they show again.
@@ -676,11 +608,130 @@ strobe_tracks :: proc(
         selected := band_index == self.selected_track
         uniforms.highlight = self.selection if selected else 0
         uniforms.dim = 0 if selected else self.selection
-
-        // Each vernier track turns faster, its stripes are packed twice as tight
-        if mode == .VERNIER do period_count *= 2.0
     }
     return
+}
+
+// Whether the phases drawn before and their averages are too old to carry on from, the strobe wasn't drawn
+// for a while or is turned another way now
+tracks_went_stale :: proc(self: ^StrobeDisplay, lamp: bool, mode: core.StrobeMode) -> bool {
+    stale := time.duration_seconds(time.tick_since(self.tracks_tick)) > core.STROBE_STALE_S
+    self.tracks_tick = time.tick_now()
+
+    // The lamp's phase isn't the lock-in's, and a vernier track's stripes are packed tighter than a harmonic
+    // one's: the phase drawn before and the average of it don't carry over
+    if lamp != self.tracks_lamp || mode != self.tracks_mode do stale = true
+
+    self.tracks_lamp, self.tracks_mode = lamp, mode
+    return stale
+}
+
+// The quad a track is drawn in, order counted from the top. Down to where the arc ends, it drops towards the
+// sides. The inner edge meets the sides of the strobe on a wide arc, a narrow one like the wheel is a whole
+// ring.
+track_bounds :: proc(geometry: StrobeGeometry, strobe_rect: gfx.Rect, order: int, curvature_radius: f32) -> [4]f32 {
+    band_height := geometry.band_height
+    band_y := geometry.y + band_height * f32(order)
+    half_width := strobe_rect.width / 2
+    inner_radius := curvature_radius - band_height
+    arc_height := 2 * curvature_radius
+    if inner_radius > half_width {
+        arc_height = curvature_radius - math.sqrt(inner_radius * inner_radius - half_width * half_width)
+    }
+    height := min(strobe_rect.y + strobe_rect.height - band_y, arc_height + 4)
+    if geometry.shape == .FLAT do height = band_height
+
+    return {strobe_rect.x, band_y, strobe_rect.width, height}
+}
+
+// The phase a track is drawn at, how far it moved since the previous frame for the motion blur, and smear the
+// persistence's contrast, 1 without it. Keeps the phase drawn and its average for the next frame.
+track_phase :: proc(
+    self: ^StrobeDisplay,
+    band: core.PhaseBand,
+    band_index: int,
+    lock_in: ^core.StrobeLockIn,
+    lamp: bool,
+    persistence_periods: f32,
+    stale: bool,
+    density: f32,
+    period_count: f32,
+    frame_time: f32,
+) -> (
+    phase: f32,
+    phase_step: f32,
+    smear: f32,
+) {
+    // The shader multiplies the phase by the period count, a denser pattern turns slower to drift as many
+    // stripes a second as the desktop's. Drawn as of now, see strobe_phase_ahead. Not the lamp's tracks, they
+    // turn by the screen and the readout's rate isn't theirs, they'd jump back each chunk.
+    ahead := core.strobe_phase_ahead(lock_in, band) if !lamp else 0
+    phase = (band.scaled_phase + ahead) / density
+
+    // The phase wrapped by whole turns, see core.STROBE_PHASE_WRAP, the drawn one goes with it and the step
+    // stays what the stripes moved
+    drawn_phase := &self.band_drawn_phases[band_index]
+    wrap := core.STROBE_PHASE_WRAP / density
+    drawn_phase^ += wrap * math.round((phase - drawn_phase^) / wrap)
+
+    // Coming back to the strobe or turned another way, the stripes start where they are like after a pluck,
+    // not smeared from a phase seconds old or from another one
+    if stale {
+        self.band_phasors[band_index] = 0
+        drawn_phase^ = phase
+    }
+
+    // The persistence smears the stripes and calms a jittery phase like the lamp's screen. Not the lamp's
+    // tracks, their screen smeared already. A pluck starts it over, the plucked note's stripes come in where
+    // they are instead of through dark, as the lamp's loud attack outweighs its faded picture.
+    smear = 1
+    if !lamp && persistence_periods > 0 {
+        if band.onset do self.band_phasors[band_index] = 0
+
+        persistence_s := persistence_periods / lock_in.base_freq_hz
+
+        // How far the stripes moved this frame at the readout's rate, the whole frame however long it took: a
+        // hitch moved them all the way
+        expected_step := core.strobe_phase_rate(lock_in, band) * gfx.frame_time() / density
+        smear = strobe_persistence(&self.band_phasors[band_index], &phase, drawn_phase^, expected_step, period_count, persistence_s, frame_time)
+    }
+
+    // How far the strobe moved since the previous frame as drawn
+    phase_step = phase - drawn_phase^
+    drawn_phase^ = phase
+
+    // The shader's sine of the phase times the period count, up to 64 turns times it is tens of thousands of
+    // radians on the outer vernier tracks. Within a stripe the same, the GPU's fast sine is accurate near 0.
+    phase = math.mod(phase, math.TAU / period_count)
+    return
+}
+
+// How much of a track's stripes is left off the note. Vernier tracks show the first one's measurement. The
+// lamp's tracks are as far off as the lock-in's.
+track_gain :: proc(bands: []core.PhaseBand, band_index: int, mode: core.StrobeMode) -> f32 {
+    band := bands[band_index]
+    if mode != .VERNIER do return narrow_band_gain(band.drift_cents)
+
+    first := bands[0]
+    speed_ratio := band.speed / first.speed if first.speed != 0 else 1
+    return narrow_band_gain(first.drift_cents) * vernier_speed_gain(first.drift_cents, speed_ratio)
+}
+
+// How fast the track's own stripes, a period of the shader's sine, move. By the drift, the phase as measured,
+// averaged: the readout's rate holds on a weak partial while its phase still moves. Vernier tracks by the
+// first one's, at their own speed. The lamp's tracks move by the screen, about as fast.
+track_stripes_per_s :: proc(
+    bands: []core.PhaseBand,
+    band_index: int,
+    mode: core.StrobeMode,
+    period_count: f32,
+    density: f32,
+) -> f32 {
+    band := bands[band_index]
+    drift_cents := bands[0].drift_cents if mode == .VERNIER else band.drift_cents
+    drift_hz := core.freq_at_cents(band.freq_hz, drift_cents) - band.freq_hz
+    phase_per_s := math.TAU * drift_hz * f32(core.strobe_rescale(band.freq_hz)) * band.speed
+    return period_count * phase_per_s / density / math.TAU
 }
 
 // pane and turned are the strobe's, see strobe_upright
