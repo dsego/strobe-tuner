@@ -776,35 +776,33 @@ gui_stepper_buttons :: proc(
     if gui_button_repeat(touch_area(minus)) do return -1, false
     if gui_button_repeat(touch_area(plus)) do return 1, false
 
+    stepper := &gui.stepper
+
     // Double clicking the value between the buttons puts it back to the default, both clicks on this stepper
+    DOUBLE_CLICK_TIME :: 400 * time.Millisecond
     if gui_button(touch_area({minus.x + minus.width, rect.y, plus.x - minus.x - minus.width, rect.height})) {
         now := time.tick_now()
-        double_click := stepper_click_rect == rect && time.tick_diff(stepper_last_click, now) < 400 * time.Millisecond
-        stepper_last_click = now
-        stepper_click_rect = rect
+        double_click := stepper.click_rect == rect && time.tick_diff(stepper.last_click, now) < DOUBLE_CLICK_TIME
+        stepper.last_click = now
+        stepper.click_rect = rect
         if double_click do return 0, true
     }
 
     // Scrolling over the stepper steps too, trackpads scroll in fractions so add them up to whole steps.
     // Only the stepper under the mouse keeps the fraction, with a few on a sheet.
     if gfx.point_in_rect(gfx.mouse_position(), touch_area(rect)) && gui_takes_input() {
-        if stepper_scroll_rect != rect do stepper_scroll = 0
+        if stepper.scroll_rect != rect do stepper.scroll = 0
 
-        stepper_scroll_rect = rect
-        stepper_scroll += gfx.mouse_wheel()
-        steps = math.trunc(stepper_scroll)
-        stepper_scroll -= steps
-    } else if stepper_scroll_rect == rect {
-        stepper_scroll = 0
+        stepper.scroll_rect = rect
+        stepper.scroll += gfx.mouse_wheel()
+        steps = math.trunc(stepper.scroll)
+        stepper.scroll -= steps
+    } else if stepper.scroll_rect == rect {
+        stepper.scroll = 0
     }
 
     return steps, false
 }
-
-stepper_scroll: f32
-stepper_scroll_rect: gfx.Rect
-stepper_last_click: time.Tick
-stepper_click_rect: gfx.Rect
 
 
 draw_centered_label :: proc(label: cstring, rect: gfx.Rect, color: gfx.Color) {

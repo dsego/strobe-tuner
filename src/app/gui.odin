@@ -34,11 +34,20 @@ Gui :: struct {
     disabled:    bool,      // the controls being drawn ignore input, e.g. the main screen under a sheet
     press_taken: bool,      // a control took this frame's press, one nothing took drags a sheet down
     repeat:      GuiRepeat, // the held repeat button and when it fires again
+    stepper:     GuiStepper, // the scroll and the clicks on a stepper, see gui_stepper_buttons
 }
 
 GuiRepeat :: struct {
     button: gfx.Rect,
     next:   time.Tick,
+}
+
+// Each kept for the one stepper it was on, a few on a sheet
+GuiStepper :: struct {
+    scroll:      f32, // the fraction of a step a trackpad scrolled so far
+    scroll_rect: gfx.Rect,
+    last_click:  time.Tick, // between the buttons, two soon after each other reset it
+    click_rect:  gfx.Rect,
 }
 
 gui: Gui
