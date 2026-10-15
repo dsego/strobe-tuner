@@ -59,8 +59,11 @@ COLORWAY_NAMES :: [StrobeColorway]cstring {
 // The same on the main screen's display button, in caps like the other controls' labels
 DISPLAY_LABELS :: [StrobeDisplayType]cstring{.STROBE = "STROBE", .SCOPE = "SCOPE", .TRACE = "TRACE", .LAMP = "LAMP", .SPECTRUM = "SPECTRUM"}
 
+// A row's stepper or dropdown, on every sheet
+SETTINGS_CONTROL_WIDTH :: 176
+
 // The display dropdown in the settings, as wide as the Concert A stepper over it
-DISPLAY_MENU_WIDTH :: 176
+DISPLAY_MENU_WIDTH :: SETTINGS_CONTROL_WIDTH
 
 // The labels of the steps below that have three
 STEP_LABELS :: []cstring{"Short", "Medium", "Long"}
@@ -143,7 +146,7 @@ gui_settings :: proc(
     row := 0
 
     {
-        rect := settings_row(sheet_layout, row, "Concert A", 176)
+        rect := settings_row(sheet_layout, row, "Concert A", SETTINGS_CONTROL_WIDTH)
         row += 1
         pitch_standard, ok := gui_stepper(
             rect,
@@ -348,56 +351,15 @@ gui_track_settings :: proc(
     close: bool,
     changed: bool,
 ) {
-    // The title, then the note the track follows and its target
-    title := fmt.ctprintf("Track %d", track + 1)
-    in_range := "" if band.in_range else " · too high to show"
-    details := fmt.ctprintf("%s · %.1f Hz%s", core.note_name(band.note), band.freq_hz, in_range)
-    close = draw_sheet_header(sheet_layout, title, details)
+    close = draw_track_header(sheet_layout, track, band)
 
-    slot := track_slot(config, track)
-    if slot < 0 do return
+    slot, ok := track_slot(config, track).?
+    if !ok do return
 
-    // What the track goes back to, the partial of the last preset. A track added on top of it keeps its own.
-    options := INTERVAL_OPTIONS
-    preset := clamp(config.strobe_intervals_index, 0, len(options) - 1)
-    preset_partial := options[preset][slot]
-    if preset_partial < 1 do preset_partial = config.strobe_intervals[slot]
-
+    reset_partial := track_reset_partial(config, slot)
     row := 0
-
-    {
-        rect := settings_row(sheet_layout, row, "Partial", 176)
-        row += 1
-        partial := config.strobe_intervals[slot]
-        steps, reset := gui_stepper_buttons(rect, partial_text(partial), times = true)
-        if reset {
-            partial = preset_partial
-        } else {
-            // A step at a time along TRACK_PARTIALS, a scroll can take a few
-            for _ in 0 ..< abs(int(steps)) do partial = next_partial_above(partial) if steps > 0 else next_partial_below(partial)
-        }
-        if partial != config.strobe_intervals[slot] {
-            config.strobe_intervals[slot] = partial
-            changed = true
-        }
-    }
-
-    {
-        // The track stands still this far off the exact partial, eg a stretched octave
-        rect := settings_row(sheet_layout, row, "Target offset", 176)
-        row += 1
-        offset := config.strobe_offsets_cents[slot]
-
-        // No sign on the exact partial
-        steps, reset := gui_stepper_buttons(rect, offset_cents_text(offset))
-        if reset do offset = 0
-
-        offset = clamp(offset + steps * TRACK_OFFSET_STEP_CENTS, -TRACK_OFFSET_MAX_CENTS, TRACK_OFFSET_MAX_CENTS)
-        if offset != config.strobe_offsets_cents[slot] {
-            config.strobe_offsets_cents[slot] = offset
-            changed = true
-        }
-    }
+    if gui_partial_row(sheet_layout, &row, config, slot, reset_partial) do changed = true
+    if gui_target_offset_row(sheet_layout, &row, config, slot) do changed = true
 
     // On top of the strobe's spin rate, a high partial spins faster than the rest. In percent, × is for partials.
     speed_labels := []cstring{"25%", "50%", "100%", "200%"}
@@ -405,53 +367,119 @@ gui_track_settings :: proc(
         changed = true
     }
 
-    {
-        rect := settings_row(sheet_layout, row, "Reset track", 0)
-        row += 1
-        if gui_small_button(rect.x, rect, "RESET") {
-            config.strobe_intervals[slot] = preset_partial
-            config.strobe_offsets_cents[slot] = 0
-            config.strobe_speeds[slot] = 1
-            changed = true
-        }
+    if gui_reset_track_row(sheet_layout, &row, config, slot, reset_partial) do changed = true
+    if gui_add_remove_track(sheet_layout, config) do changed = true
+
+    return
+}
+
+// The title, then the note the track follows and its target
+draw_track_header :: proc(sheet_layout: SheetLayout, track: int, band: core.PhaseBand) -> (close: bool) {
+    title := fmt.ctprintf("Track %d", track + 1)
+    in_range := "" if band.in_range else " · too high to show"
+    details := fmt.ctprintf("%s · %.1f Hz%s", core.note_name(band.note), band.freq_hz, in_range)
+    return draw_sheet_header(sheet_layout, title, details)
+}
+
+// What the track goes back to, the partial of the last preset. A track added on top of it keeps its own.
+track_reset_partial :: proc(config: ^Config, slot: int) -> f32 {
+    options := INTERVAL_OPTIONS
+    preset := clamp(config.strobe_intervals_index, 0, len(options) - 1)
+    partial := options[preset][slot]
+    return partial if partial >= 1 else config.strobe_intervals[slot]
+}
+
+// A step at a time along TRACK_PARTIALS, a scroll can take a few. Reset goes back to reset_partial.
+gui_partial_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config, slot: int, reset_partial: f32) -> bool {
+    rect := settings_row(sheet_layout, row^, "Partial", SETTINGS_CONTROL_WIDTH)
+    row^ += 1
+
+    partial := config.strobe_intervals[slot]
+    steps, reset := gui_stepper_buttons(rect, partial_text(partial), times = true)
+    if reset {
+        partial = reset_partial
+    } else {
+        for _ in 0 ..< abs(int(steps)) do partial = next_partial_above(partial) if steps > 0 else next_partial_below(partial)
     }
+    if partial == config.strobe_intervals[slot] do return false
 
-    {
-        // Not a row: centred at the bottom of the sheet with no label or line and smaller than the
-        // controls, these change the strobe and not the track above. Added and removed on top, a new track
-        // follows the next whole partial above the one under it, the 1½ fifth is only for picking by hand
-        count, top := 0, 0
-        for interval, index in config.strobe_intervals {
-            if interval < 1 do continue
+    config.strobe_intervals[slot] = partial
+    return true
+}
 
-            count += 1
-            top = index
-        }
-        GAP :: 8
-        height: f32 = 28
-        remove_width := icon_button_width("Remove")
-        width := remove_width + GAP + icon_button_width("Add")
-        pos := [2]f32{sheet_layout.rows.x + math.round((sheet_layout.width - width) / 2), sheet_layout.bottom - height}
+// The track stands still this far off the exact partial, eg a stretched octave. No sign on the exact partial.
+gui_target_offset_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config, slot: int) -> bool {
+    rect := settings_row(sheet_layout, row^, "Target offset", SETTINGS_CONTROL_WIDTH)
+    row^ += 1
 
-        // Not above the highest partial, a track added there would be the top one again
-        partials := TRACK_PARTIALS
-        highest := partials[len(partials) - 1]
-        remove := gui_icon_button(pos, height, ICON_MINUS, "Remove", count > 1)
-        pos.x += remove_width + GAP
-        add := gui_icon_button(pos, height, ICON_PLUS, "Add", top + 1 < core.MAX_BANDS && config.strobe_intervals[top] < highest)
-        if add {
-            config.strobe_intervals[top + 1] = min(math.floor(config.strobe_intervals[top]) + 1, highest)
-            changed = true
-        } else if remove {
-            config.strobe_intervals[top] = 0
+    offset := config.strobe_offsets_cents[slot]
+    steps, reset := gui_stepper_buttons(rect, offset_cents_text(offset))
+    if reset do offset = 0
 
-            // Cleared so a track added there later starts fresh
-            config.strobe_offsets_cents[top] = 0
-            config.strobe_speeds[top] = 1
-            changed = true
-        }
+    offset = clamp(offset + steps * TRACK_OFFSET_STEP_CENTS, -TRACK_OFFSET_MAX_CENTS, TRACK_OFFSET_MAX_CENTS)
+    if offset == config.strobe_offsets_cents[slot] do return false
+
+    config.strobe_offsets_cents[slot] = offset
+    return true
+}
+
+gui_reset_track_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config, slot: int, reset_partial: f32) -> bool {
+    rect := settings_row(sheet_layout, row^, "Reset track", 0)
+    row^ += 1
+    if !gui_small_button(rect.x, rect, "RESET") do return false
+
+    clear_track(config, slot, reset_partial)
+    return true
+}
+
+// On the partial with no target offset, at the strobe's spin rate. On 0 it's removed, cleared so a track
+// added there later starts fresh.
+clear_track :: proc(config: ^Config, slot: int, partial: f32) {
+    config.strobe_intervals[slot] = partial
+    config.strobe_offsets_cents[slot] = 0
+    config.strobe_speeds[slot] = 1
+}
+
+TRACK_BUTTONS_HEIGHT :: 28
+TRACK_BUTTONS_GAP :: 8
+
+// Not a row: centred at the bottom of the sheet with no label or line and smaller than the controls, these
+// change the strobe and not the track above. Added and removed on top, a new track follows the next whole
+// partial above the one under it, the 1½ fifth is only for picking by hand. Not above the highest partial,
+// a track added there would be the top one again.
+gui_add_remove_track :: proc(sheet_layout: SheetLayout, config: ^Config) -> bool {
+    count, top := track_count_and_top(config)
+    partials := TRACK_PARTIALS
+    highest := partials[len(partials) - 1]
+
+    remove_width := icon_button_width("Remove")
+    width := remove_width + TRACK_BUTTONS_GAP + icon_button_width("Add")
+    position := [2]f32{sheet_layout.rows.x + math.round((sheet_layout.width - width) / 2), sheet_layout.bottom - TRACK_BUTTONS_HEIGHT}
+    remove := gui_icon_button(position, TRACK_BUTTONS_HEIGHT, ICON_MINUS, "Remove", count > 1)
+
+    position.x += remove_width + TRACK_BUTTONS_GAP
+    can_add := top + 1 < core.MAX_BANDS && config.strobe_intervals[top] < highest
+    add := gui_icon_button(position, TRACK_BUTTONS_HEIGHT, ICON_PLUS, "Add", can_add)
+
+    if add {
+        config.strobe_intervals[top + 1] = min(math.floor(config.strobe_intervals[top]) + 1, highest)
+        return true
     }
+    if remove {
+        clear_track(config, top, 0)
+        return true
+    }
+    return false
+}
 
+// How many tracks there are and the slot of the top one
+track_count_and_top :: proc(config: ^Config) -> (count, top: int) {
+    for interval, slot in config.strobe_intervals {
+        if interval < 1 do continue
+
+        count += 1
+        top = slot
+    }
     return
 }
 
@@ -548,7 +576,7 @@ gui_audio_input :: proc(
 }
 
 // Where the track's partial, offset and speed are in the config, the tracks are the partials above 0
-track_slot :: proc(config: ^Config, track: int) -> int {
+track_slot :: proc(config: ^Config, track: int) -> Maybe(int) {
     count := 0
     for interval, slot in config.strobe_intervals {
         if interval < 1 do continue
@@ -556,7 +584,7 @@ track_slot :: proc(config: ^Config, track: int) -> int {
 
         count += 1
     }
-    return -1
+    return nil
 }
 
 // The first of TRACK_PARTIALS above the partial, which can be one set in the config file between them. The

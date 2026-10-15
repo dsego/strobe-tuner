@@ -217,7 +217,6 @@ gui_instrument_button :: proc(pos: [2]f32, config: ^Config) -> bool {
 }
 
 INSTRUMENT_WIDTH :: 240 // the dropdown of what's tuned to
-INSTRUMENT_CONTROL_WIDTH :: 176 // the rows' dropdowns and steppers
 
 // The sheet, it covers the window. On top with no label what's tuned to: the built-in instruments and the
 // presets. Under it a preset's instrument, then a stringed instrument's tuning and capo, the
@@ -263,10 +262,10 @@ gui_instrument :: proc(
     close = draw_sheet_header(sheet_layout, "Instrument", details)
 
     if stringed {
-        rect := settings_row(sheet_layout, options_row, "Capo", INSTRUMENT_CONTROL_WIDTH)
+        rect := settings_row(sheet_layout, options_row, "Capo", SETTINGS_CONTROL_WIDTH)
         if gui_capo_row(rect, setup, capo_value) do changed = true
     } else {
-        rect := settings_row(sheet_layout, options_row, "Transpose", INSTRUMENT_CONTROL_WIDTH)
+        rect := settings_row(sheet_layout, options_row, "Transpose", SETTINGS_CONTROL_WIDTH)
         if gui_transpose_row(rect, setup, transpose_value) do changed = true
     }
 
@@ -274,12 +273,12 @@ gui_instrument :: proc(
 
     // The dropdowns from the bottom up, their menus open down over the rows under them
     if tunable {
-        rect := settings_row(sheet_layout, tuning_row, "Tuning", INSTRUMENT_CONTROL_WIDTH)
+        rect := settings_row(sheet_layout, tuning_row, "Tuning", SETTINGS_CONTROL_WIDTH)
         if gui_tuning_dropdown(open, rect, setup.instrument, tuning_index, tuning_value) do changed = true
     }
 
     if is_preset {
-        rect := settings_row(sheet_layout, 1, "Instrument", INSTRUMENT_CONTROL_WIDTH)
+        rect := settings_row(sheet_layout, 1, "Instrument", SETTINGS_CONTROL_WIDTH)
         if gui_preset_instrument_dropdown(open, rect, config, preset) do changed = true
     }
 
