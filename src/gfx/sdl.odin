@@ -817,11 +817,15 @@ scissor_pixels :: proc(scissor: Maybe(Rect), target_size, offset: [2]f32, zoom: 
     rect, ok := scissor.?
     if !ok do return {0, 0, i32(target_size.x), i32(target_size.y)}
 
-    x0 := clamp(math.round((rect.x - offset.x) * zoom), 0, target_size.x)
-    y0 := clamp(math.round((rect.y - offset.y) * zoom), 0, target_size.y)
-    x1 := clamp(math.round((rect.x + rect.width - offset.x) * zoom), x0, target_size.x)
-    y1 := clamp(math.round((rect.y + rect.height - offset.y) * zoom), y0, target_size.y)
-    return {i32(x0), i32(y0), i32(x1 - x0), i32(y1 - y0)}
+    // From the target's top left corner, then from drawing points to its pixels, inside the target and never
+    // inside out
+    start := [2]f32{rect.x, rect.y}
+    end := start + {rect.width, rect.height}
+    top_left := linalg.clamp(linalg.round((start - offset) * zoom), 0, target_size)
+    bottom_right := linalg.clamp(linalg.round((end - offset) * zoom), top_left, target_size)
+
+    size := bottom_right - top_left
+    return {i32(top_left.x), i32(top_left.y), i32(size.x), i32(size.y)}
 }
 
 // The rest of the frame at the limited rate, counted from the start of the frame in should_close.
