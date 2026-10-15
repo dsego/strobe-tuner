@@ -74,84 +74,88 @@ run_nsdf :: proc(self: ^NSDF, samples: []f32) -> (freq: f32, peak: Vec2) {
     assert(len(samples) == len(self.values))
 
     nsdf_autocorrelate(self, samples)
-    normalize(self, samples)
-    peak = find_peak(self)
+    nsdf_normalize(self, samples)
+    highest := nsdf_key_maxima(self)
+    peak = nsdf_choose_peak(self, highest)
     if peak.x > 0 do freq = self.sample_rate / peak.x
 
     return
+}
 
-    // The NSDF through the autocorrelation, the left-hand sum of the squares runs down as the lag grows.
-    // The sum is kept in f64, in f32 thousands of subtractions drift it at the far lags. Past half the window
-    // it's only the energy outside the middle, a click in digital silence leaves it at the FFT's rounding,
-    // about a millionth of the whole, and rounding over rounding isn't bounded by 1.
-    normalize :: proc(self: ^NSDF, samples: []f32) {
-        count := len(samples)
-        copy(self.values, self.autocorr[:count])
+// The NSDF through the autocorrelation, the left-hand sum of the squares runs down as the lag grows.
+// The sum is kept in f64, in f32 thousands of subtractions drift it at the far lags. Past half the window
+// it's only the energy outside the middle, a click in digital silence leaves it at the FFT's rounding,
+// about a millionth of the whole, and rounding over rounding isn't bounded by 1.
+nsdf_normalize :: proc(self: ^NSDF, samples: []f32) {
+    count := len(samples)
+    copy(self.values, self.autocorr[:count])
 
-        squares := 2.0 * f64(self.values[0])
-        least := 1e-5 * squares
-        for lag in 0 ..< count {
-            if squares > least {
-                self.values[lag] *= f32(2.0 / squares)
-                mirrored := samples[count - lag - 1]
-                squares -= f64(samples[lag] * samples[lag]) + f64(mirrored * mirrored)
-            } else {
-                self.values[lag] = 0.0
-            }
+    squares := 2.0 * f64(self.values[0])
+    least := 1e-5 * squares
+    for lag in 0 ..< count {
+        if squares > least {
+            self.values[lag] *= f32(2.0 / squares)
+            mirrored := samples[count - lag - 1]
+            squares -= f64(samples[lag] * samples[lag]) + f64(mirrored * mirrored)
+        } else {
+            self.values[lag] = 0.0
         }
     }
+}
 
-    // The key maxima, the highest between two zero crossings, and the first one close to the highest of them
-    find_peak :: proc(self: ^NSDF) -> Vec2 {
-        clear(&self.peaks)
+// The far lags rest on few samples, their peaks are left out. The last 16th, 256 lags of 4096.
+NSDF_IGNORED_LAGS_FRACTION :: 16
 
-        // The far lags rest on few samples, their peaks are left out. The last 16th, 256 lags of 4096.
-        IGNORED_LAGS_FRACTION :: 16
+// Lower maxima are no period, the NSDF of the zero lag is 1
+NSDF_MIN_PEAK_VALUE :: 0.5
 
-        // The first of the key maxima this close to the highest is the period, not a multiple of it
-        CHOSEN_RATIO :: 0.95
+// The first of the key maxima this close to the highest is the period, not a multiple of it
+NSDF_CHOSEN_RATIO :: 0.95
 
-        // Lower maxima are no period, the NSDF of the zero lag is 1
-        MIN_PEAK_VALUE :: 0.5
+// The key maxima into self.peaks, the highest between two zero crossings, refined between the lags. Returns
+// the highest of them.
+nsdf_key_maxima :: proc(self: ^NSDF) -> (highest_peak: Vec2) {
+    clear(&self.peaks)
+    end := len(self.values) - len(self.values) / NSDF_IGNORED_LAGS_FRACTION
 
-        end := len(self.values) - len(self.values) / IGNORED_LAGS_FRACTION
-        max_peak: Vec2
+    lag := 1
+    for lag < end {
+        // Down the first slope, then past the negative values
+        for lag < end && self.values[lag] > 0.0 do lag += 1
+        for lag < end && self.values[lag] <= 0.0 do lag += 1
 
-        lag := 1
-        for lag < end {
-            // Down the first slope, then past the negative values
-            for lag < end && self.values[lag] > 0.0 do lag += 1
-            for lag < end && self.values[lag] <= 0.0 do lag += 1
-
-            // The highest local maximum while it's positive
-            start := lag
-            highest := lag
-            for lag < end - 1 && self.values[lag] > 0.0 {
-                value := self.values[lag]
-                if value > self.values[highest] && value > self.values[lag + 1] && value > MIN_PEAK_VALUE {
-                    highest = lag
-                }
-                lag += 1
-            }
-
-            if highest > start {
-                offset, value := parabolic(self.values[highest - 1], self.values[highest], self.values[highest + 1])
-                peak := Vec2{f32(highest) + offset, value}
-                append(&self.peaks, peak)
-                if value >= max_peak.y do max_peak = peak
+        // The highest local maximum while it's positive
+        start := lag
+        highest := lag
+        for lag < end - 1 && self.values[lag] > 0.0 {
+            value := self.values[lag]
+            if value > self.values[highest] && value > self.values[lag + 1] && value > NSDF_MIN_PEAK_VALUE {
+                highest = lag
             }
             lag += 1
         }
 
-        self.chosen_peak = -1
-        for peak, index in self.peaks {
-            if peak.y >= CHOSEN_RATIO * max_peak.y {
-                self.chosen_peak = index
-                return peak
-            }
+        if highest > start {
+            offset, value := parabolic(self.values[highest - 1], self.values[highest], self.values[highest + 1])
+            peak := Vec2{f32(highest) + offset, value}
+            append(&self.peaks, peak)
+            if value >= highest_peak.y do highest_peak = peak
         }
-        return {}
+        lag += 1
     }
+    return
+}
+
+// The first of the key maxima close to the highest one, the period and not a multiple of it. None is zero.
+nsdf_choose_peak :: proc(self: ^NSDF, highest_peak: Vec2) -> Vec2 {
+    self.chosen_peak = -1
+    for peak, index in self.peaks {
+        if peak.y >= NSDF_CHOSEN_RATIO * highest_peak.y {
+            self.chosen_peak = index
+            return peak
+        }
+    }
+    return {}
 }
 
 
