@@ -72,19 +72,19 @@ PERSISTENCE_LABELS :: []cstring{"Off", "Short", "Medium", "Long"}
 
 
 // The dropdown whose menu is open, one at a time, on the settings', the input's or the instrument's sheet
-SettingsMenu :: enum {
+Dropdown :: enum {
     NONE,
     DISPLAY,
     INPUT,
-    PICK, // the instrument's sheet, what's tuned to
-    INSTRUMENT,
+    INSTRUMENT, // the instrument's sheet, what's tuned to, a built-in instrument or a preset
+    PRESET_INSTRUMENT,
     TUNING,
 }
 
-// Opens or closes menu's dropdown, the one that's open stays as it is when another closes
+// Opens or closes the dropdown's menu, the one that's open stays as it is when another closes
 gui_settings_dropdown :: proc(
-    open: ^SettingsMenu,
-    menu: SettingsMenu,
+    open: ^Dropdown,
+    dropdown: Dropdown,
     rect: gfx.Rect,
     options: []GuiOption,
     selected: ^int,
@@ -92,9 +92,9 @@ gui_settings_dropdown :: proc(
     down := false,
     dividers: []int = nil,
 ) {
-    if gui_dropdown({rect.x, rect.y}, rect.width, options, selected, open^ == menu, left_pad, rect.height, down, dividers) {
-        open^ = menu
-    } else if open^ == menu {
+    if gui_dropdown({rect.x, rect.y}, rect.width, options, selected, open^ == dropdown, left_pad, rect.height, down, dividers) {
+        open^ = dropdown
+    } else if open^ == dropdown {
         open^ = .NONE
     }
 }
@@ -107,7 +107,7 @@ gui_settings :: proc(
     config: ^Config,
     display_options: ^bool,
     confirm_reset: ^bool,
-    menu: ^SettingsMenu,
+    open: ^Dropdown,
 ) -> (
     close: bool,
     changed: bool,
@@ -195,7 +195,7 @@ gui_settings :: proc(
         for name, type in display_names do options[int(type)] = {i32(type), string(name)}
 
         selected := int(config.strobe_display_type)
-        gui_settings_dropdown(menu, .DISPLAY, display_rect, options[:], &selected, down = true)
+        gui_settings_dropdown(open, .DISPLAY, display_rect, options[:], &selected, down = true)
         config.strobe_display_type = StrobeDisplayType(selected)
     }
     return
@@ -458,7 +458,7 @@ gui_input :: proc(
     stats: InputStats,
     audio_devices: []GuiOption,
     audio_device_index: ^int,
-    menu: ^SettingsMenu,
+    open: ^Dropdown,
 ) -> (
     close: bool,
 ) {
@@ -495,7 +495,7 @@ gui_input :: proc(
 
     when !gfx.MOBILE {
         if len(audio_devices) > 0 {
-            gui_settings_dropdown(menu, .INPUT, picker, audio_devices, audio_device_index, left_pad = 36, down = true)
+            gui_settings_dropdown(open, .INPUT, picker, audio_devices, audio_device_index, left_pad = 36, down = true)
             draw_centered_icon(ICON_MICROPHONE, {picker.x + 12, picker.y, ICON_SIZE, picker.height}, icon_color)
         }
     }

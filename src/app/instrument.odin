@@ -220,7 +220,7 @@ gui_instrument_button :: proc(pos: [2]f32, config: ^Config) -> bool {
 gui_instrument :: proc(
     sheet_layout: SheetLayout,
     config: ^Config,
-    menu: ^SettingsMenu,
+    open: ^Dropdown,
     target: int,
 ) -> (
     close: bool,
@@ -243,9 +243,9 @@ gui_instrument :: proc(
 
     // On top with no label what's tuned to. Under a preset its instrument. Then a stringed instrument's
     // tuning and capo, or the transpose.
-    PICK_WIDTH :: 240
+    INSTRUMENT_WIDTH :: 240
     top_row := settings_row(sheet_layout, 0, "", 0)
-    pick_rect := gfx.Rect{sheet_layout.rows.x, top_row.y, PICK_WIDTH, top_row.height}
+    instrument_rect := gfx.Rect{sheet_layout.rows.x, top_row.y, INSTRUMENT_WIDTH, top_row.height}
 
     // No tuning row with only the standard one, a baritone ukulele's
     tunable := len(TUNINGS[setup.instrument]) > 1
@@ -293,7 +293,7 @@ gui_instrument :: proc(
 
         rect := settings_row(sheet_layout, tuning_row, "Tuning", 176)
         selected := tuning_index
-        gui_settings_dropdown(menu, .TUNING, rect, options, &selected, down = true)
+        gui_settings_dropdown(open, .TUNING, rect, options, &selected, down = true)
         if selected != tuning_index {
             // A preset's string offsets stay with the strings
             tuning_value^ = selected
@@ -305,7 +305,7 @@ gui_instrument :: proc(
         options := instrument_options(0)
         rect := settings_row(sheet_layout, 1, "Instrument", 176)
         selected := int(setup.instrument)
-        gui_settings_dropdown(menu, .INSTRUMENT, rect, options, &selected, down = true)
+        gui_settings_dropdown(open, .PRESET_INSTRUMENT, rect, options, &selected, down = true)
         if selected != int(setup.instrument) {
             // Offsets and a capo are on one instrument, not the next
             config.preset_instruments[preset] = Instrument(selected)
@@ -336,7 +336,7 @@ gui_instrument :: proc(
 
         current := len(Instrument) + preset if preset >= 0 else int(config.instrument)
         selected := current
-        gui_settings_dropdown(menu, .PICK, pick_rect, options, &selected, down = true, dividers = dividers)
+        gui_settings_dropdown(open, .INSTRUMENT, instrument_rect, options, &selected, down = true, dividers = dividers)
         if selected != current {
             if selected >= len(Instrument) {
                 config.preset = selected - len(Instrument)

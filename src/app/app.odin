@@ -68,7 +68,7 @@ App :: struct {
     cents_trace:        Trace,
     spectrum_view:      SpectrumView,
 
-    settings_menu:      SettingsMenu, // the dropdown whose menu is open
+    open_dropdown:      Dropdown, // the dropdown whose menu is open
     settings_sheet:     Sheet,
     display_options:    bool, // the settings sheet shows the display's options, see gui_settings
     reset_confirm:      bool, // RESET on the settings sheet was tapped once and asks
@@ -121,7 +121,6 @@ run_app :: proc(config: ^Config) {
     }
     tuner := &app.tuner
     tuner^ = core.init_tuner(config.target_freq_hz, config.pitch_standard, prevent_octave_jumps = true)
-    configure_tuner(&app)
 
     // Saved for the next start
     defer config.target_freq_hz = tuner.target_note.frequency
@@ -192,7 +191,7 @@ run_app :: proc(config: ^Config) {
     defer delete(app.audio_devices)
     defer delete(app.default_label)
 
-    retune(&app)
+    apply_config(&app)
 
     // The desktop window keeps drawing while it's dragged or zoomed to another size, the loop below is stuck
     // in the OS's own loop meanwhile
@@ -321,22 +320,17 @@ retune :: proc(app: ^App) {
     )
 }
 
-// The tuner's settings from the config, all but the pitch standard, see apply_config
-configure_tuner :: proc(app: ^App) {
-    tuner, config := &app.tuner, app.config
-    tuner.offsets_cents = active_note_offsets(config)
-    core.set_tuner_strings(tuner, tuning_strings(config))
-}
-
-// The pitch detection, the tuner and the strobe brought up to the config. The tracks start over, so only
-// for what they measure: the displays read their colors and options from the config as they draw.
+// The pitch detection, the tuner and the strobe brought up to the config, at the start and after a change. The
+// tracks start over, so only for what they measure: the displays read their colors and options from the config
+// as they draw.
 apply_config :: proc(app: ^App) {
-    config := app.config
+    tuner, config := &app.tuner, app.config
 
     // Same notes, retuned to the pitch standard
     app.pitch_detector.pitch_standard = config.pitch_standard
-    core.set_tuner_pitch_standard(&app.tuner, config.pitch_standard)
-    configure_tuner(app)
+    core.set_tuner_pitch_standard(tuner, config.pitch_standard)
+    tuner.offsets_cents = active_note_offsets(config)
+    core.set_tuner_strings(tuner, tuning_strings(config))
 
     retune(app)
     app.config_changed = false
@@ -1134,7 +1128,7 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
     }
 
     sheet_layout, swiped := begin_sheet(sheet, rows, &app.strobe_display, layout)
-    close, changed := gui_settings(sheet_layout, app.config, &app.display_options, &app.reset_confirm, &app.settings_menu)
+    close, changed := gui_settings(sheet_layout, app.config, &app.display_options, &app.reset_confirm, &app.open_dropdown)
     if changed do app.config_changed = true
 
     grab_sheet(sheet, sheet_layout)
@@ -1160,7 +1154,7 @@ app_sheets :: proc(app: ^App) -> [4]^Sheet {
 // Closed with the dropdown menu that may be open on it
 dismiss_sheet :: proc(app: ^App, sheet: ^Sheet) {
     close_sheet(sheet)
-    app.settings_menu = .NONE
+    app.open_dropdown = .NONE
     exclusive_control_mode = false
 }
 
@@ -1199,7 +1193,7 @@ draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
         app.input_stats,
         app.audio_devices[:],
         &app.audio_device_index,
-        &app.settings_menu,
+        &app.open_dropdown,
     )
     grab_sheet(sheet, sheet_layout)
 
@@ -1243,7 +1237,7 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
     if index, in_range := core.note_index(app.tuner.target_note); in_range {
         target = index
     }
-    close, changed := gui_instrument(sheet_layout, app.config, &app.settings_menu, target)
+    close, changed := gui_instrument(sheet_layout, app.config, &app.open_dropdown, target)
     if changed {
         app.config_changed = true
 
