@@ -28,19 +28,30 @@ import "../core"
 import "../gfx"
 
 
-// an active dropdown menu should not trigger other GUI controls
-exclusive_control_mode := false
+// Who has the input this frame, the controls ask before they take a press
+Gui :: struct {
+    menu_open:   bool,      // a dropdown takes every press until it closes
+    disabled:    bool,      // the controls being drawn ignore input, e.g. the main screen under a sheet
+    press_taken: bool,      // a control took this frame's press, one nothing took drags a sheet down
+    repeat:      GuiRepeat, // the held repeat button and when it fires again
+}
 
-// The controls being drawn don't take input, e.g. the main screen under the settings sheet
-gui_disabled := false
+GuiRepeat :: struct {
+    button: gfx.Rect,
+    next:   time.Tick,
+}
+
+gui: Gui
+
+// Before the frame's controls, nothing has taken a press yet
+gui_begin_frame :: proc() {
+    gui.press_taken = false
+}
 
 // A control takes a press, nothing above it has the input
 gui_takes_input :: proc() -> bool {
-    return !exclusive_control_mode && !gui_disabled
+    return !gui.menu_open && !gui.disabled
 }
-
-// A control took this frame's press, one that nothing took drags a sheet down
-gui_press_taken := false
 
 sheet_bg_color: u32 = 0x40414AFF
 strobe_bg_color: u32 = 0x15161AFF
@@ -124,7 +135,7 @@ partial_text :: proc(partial: f32) -> cstring {
 // Right aligned at position, a track's offset from the exact partial goes before it so it's never hidden.
 // Tapping the track opens its sheet, see strobe_track_at.
 // position is the label's top right, or its middle when centered
-draw_strobe_partial :: proc(position: [2]f32, type: PartialLabelType, band: core.PhaseBand, centered := false) {
+draw_strobe_partial_label :: proc(position: [2]f32, type: PartialLabelType, band: core.PhaseBand, centered := false) {
     text: cstring
     font := pixel_fonts.band_label
 
@@ -280,7 +291,7 @@ ruler_follow_finger :: proc(ruler: ^NoteRuler, rect: gfx.Rect, spacing, highest:
     settle = math.round(ruler.position)
 
     switch {
-    case gui_disabled:
+    case gui.disabled:
         // A sheet opened over it, a swipe on the way lands
         land = swipe.gesture in RULER_MOVING
         if !land do swipe^ = {}
@@ -551,7 +562,7 @@ draw_cents_gauge :: proc(top: [2]f32, cents: f32, lit: bool, semitones: bool, co
 gui_button :: proc(bounds: gfx.Rect) -> bool {
     if !gui_background_pressed(bounds) do return false
 
-    gui_press_taken = true
+    gui.press_taken = true
     return true
 }
 
@@ -567,21 +578,17 @@ gui_button_repeat :: proc(bounds: gfx.Rect) -> bool {
     REPEAT_INTERVAL :: 80 * time.Millisecond
 
     if gui_button(bounds) {
-        repeat_button = bounds
-        repeat_next = time.tick_add(time.tick_now(), REPEAT_DELAY)
+        gui.repeat = {bounds, time.tick_add(time.tick_now(), REPEAT_DELAY)}
         return true
     }
-    if repeat_button != bounds || !gui_button_held(bounds) do return false
+    if gui.repeat.button != bounds || !gui_button_held(bounds) do return false
 
     now := time.tick_now()
-    if time.tick_diff(repeat_next, now) < 0 do return false
+    if time.tick_diff(gui.repeat.next, now) < 0 do return false
 
-    repeat_next = time.tick_add(now, REPEAT_INTERVAL)
+    gui.repeat.next = time.tick_add(now, REPEAT_INTERVAL)
     return true
 }
-
-repeat_button: gfx.Rect
-repeat_next: time.Tick
 
 // Whether the button is being held down, to draw it in its pressed shade
 gui_button_held :: proc(bounds: gfx.Rect) -> bool {
@@ -640,16 +647,16 @@ gui_dropdown :: proc(
     if gfx.mouse_pressed() {
         if edit_mode {
             // An option or clicked outside, either way the menu's
-            gui_press_taken = true
+            gui.press_taken = true
             if !gfx.point_in_rect(mouse_point, menu_bounds) {
                 edit_mode = false
-                exclusive_control_mode = false
+                gui.menu_open = false
             }
         } else {
             if gui_takes_input() && gfx.point_in_rect(mouse_point, btn_bounds) {
                 edit_mode = true
-                exclusive_control_mode = true
-                gui_press_taken = true
+                gui.menu_open = true
+                gui.press_taken = true
             }
         }
     }
@@ -678,7 +685,7 @@ gui_dropdown :: proc(
             hover := gfx.point_in_rect(mouse_point, option_bounds)
             if hover && gfx.mouse_pressed() {
                 edit_mode = false
-                exclusive_control_mode = false
+                gui.menu_open = false
                 selected_idx^ = index
             }
 

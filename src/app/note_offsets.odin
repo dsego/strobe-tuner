@@ -491,12 +491,12 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
 
     // A tap on the popup is its own, the controls under it don't see it. A tap anywhere else puts it away and
     // goes on to what's there, on the other value it opens that one's popup.
-    was_disabled := gui_disabled
+    was_disabled := gui.disabled
     if editing.popup != .NONE {
         if gfx.point_in_rect(gfx.mouse_position(), offset_popup_rect(grid, editing.popup, editing.selected)) {
-            if gfx.mouse_pressed() do gui_press_taken = true
+            if gfx.mouse_pressed() do gui.press_taken = true
 
-            gui_disabled = true
+            gui.disabled = true
         } else if gui_background_pressed(grid.sheet) {
             editing.popup = .NONE
         }
@@ -515,7 +515,7 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
         editing.selected = -1
         editing.popup = .NONE
     }
-    gui_disabled = was_disabled
+    gui.disabled = was_disabled
 
     // The popup, over everything
     if editing.popup != .NONE && gui_offset_popup(rows, grid, editing^) do changed = true

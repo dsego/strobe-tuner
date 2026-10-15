@@ -371,11 +371,11 @@ draw_strobe_display :: proc(
             if config.partial_labels == .NONE do continue
 
             if geometry.shape == .WHEEL {
-                draw_strobe_partial(strobe_pane_point(pane, turned, on_ring), config.partial_labels, band, centered = true)
+                draw_strobe_partial_label(strobe_pane_point(pane, turned, on_ring), config.partial_labels, band, centered = true)
             } else if turned {
-                draw_strobe_partial({label_x, pane.y + 12 + 0.5 * label_height}, config.partial_labels, band, centered = true)
+                draw_strobe_partial_label({label_x, pane.y + 12 + 0.5 * label_height}, config.partial_labels, band, centered = true)
             } else {
-                draw_strobe_partial({rect.x + rect.width - 12, label_y}, config.partial_labels, band)
+                draw_strobe_partial_label({rect.x + rect.width - 12, label_y}, config.partial_labels, band)
             }
         }
     }

@@ -250,18 +250,18 @@ run_frame :: proc(app: ^App) {
 
     gfx.begin_frame(gfx.hex(strobe_bg_color))
     defer gfx.end_frame()
-    gui_press_taken = false
+    gui_begin_frame()
 
     // The sheets slide up over the main screen, which keeps running under them and ignores taps until
     // they're all the way down again. They're drawn at the end of the frame.
     // A sheet all the way up covers the panel, the instrument sheet the strobe too when the panel is under
     // it. A phone's strobe area still shows above that, behind the notch. Not while a sheet is dragged, it
     // may move down later in the frame.
-    gui_disabled = false
+    gui.disabled = false
     panel_covered := false
     for sheet in app_sheets(app) {
         slide_sheet(sheet)
-        if sheet.open || sheet.slide > 0 do gui_disabled = true
+        if sheet.open || sheet.slide > 0 do gui.disabled = true
         if sheet.slide == 1 && !sheet.drag.active do panel_covered = true
     }
 
@@ -612,7 +612,7 @@ app_sheets :: proc(app: ^App) -> [4]^Sheet {
 dismiss_sheet :: proc(app: ^App, sheet: ^Sheet) {
     close_sheet(sheet)
     app.open_dropdown = .NONE
-    exclusive_control_mode = false
+    gui.menu_open = false
 }
 
 // The display after this one, the button and Tab go round them in the settings' order

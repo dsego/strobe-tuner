@@ -173,7 +173,7 @@ begin_sheet :: proc(
     }
 
     // Not the tap that opened it, not while it slides away or follows the finger
-    gui_disabled = !(sheet.was_open && sheet.open) || sheet.drag.active
+    gui.disabled = !(sheet.was_open && sheet.open) || sheet.drag.active
 
     sheet_layout = compute_sheet_layout(gfx.window_size(), gfx.safe_area(), layout, sheet.slide, rows, extra)
     swiped = drag_sheet(sheet, sheet_layout)
@@ -191,7 +191,7 @@ begin_sheet :: proc(
 // After the sheet's controls, a press on the sheet that none of them took starts dragging it
 grab_sheet :: proc(sheet: ^Sheet, sheet_layout: SheetLayout) {
     mouse := gfx.mouse_position()
-    if gui_press_taken || sheet.drag.active || !gui_background_pressed(sheet_layout.sheet) do return
+    if gui.press_taken || sheet.drag.active || !gui_background_pressed(sheet_layout.sheet) do return
 
     sheet.drag = {
         active = true,

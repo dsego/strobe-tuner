@@ -289,7 +289,7 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading) {
     }
 
     lock_toggled := gui_lock_toggle(layout.lock, tuner.locked) || note_tapped
-    if !gui_disabled {
+    if !gui.disabled {
         if gfx.key_pressed(.SPACE) || app.menu == .LOCK_NOTE do lock_toggled = true
         if gfx.key_pressed(.LEFT) do step = -1
         if gfx.key_pressed(.RIGHT) do step = 1
