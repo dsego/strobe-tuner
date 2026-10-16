@@ -37,7 +37,9 @@ NSDF :: struct {
     pffft_setup:    rawptr,
     fft_size:       int,
     sample_rate:    f32, // a lag's frequency
-    spectrum:       []complex64, // the power spectrum once autocorrelated
+    spectrum:       []f32, // the power spectrum over fft_size once autocorrelated, in pffft's own order
+    ordered:        []complex64, // the spectrum in bin order, see nsdf_ordered_spectrum
+    work:           []f32, // pffft's scratch
     autocorr:       []f32,
     values:         []f32, // the NSDF of each lag
     padded_samples: []f32,
@@ -51,8 +53,13 @@ init_nsdf :: proc(fft_size: int, sample_rate: f32) -> (self: NSDF) {
     self.sample_rate = sample_rate
     self.pffft_setup = pffft.new_setup(i32(fft_size), pffft.Transform.REAL)
 
+    // square_unordered_spectrum reads pffft's order with four floats to a SIMD vector, NEON's and SSE's
+    assert(pffft.simd_size() == 4)
+
     // A real transform of fft_size samples has fft_size / 2 complex bins, see nsdf_autocorrelate
-    self.spectrum = runtime.make_aligned([]complex64, fft_size / 2, 16)
+    self.spectrum = runtime.make_aligned([]f32, fft_size, 16)
+    self.ordered = runtime.make_aligned([]complex64, fft_size / 2, 16)
+    self.work = runtime.make_aligned([]f32, fft_size, 16)
     self.autocorr = runtime.make_aligned([]f32, fft_size, 16)
     self.values = make([]f32, fft_size / 2)
     self.padded_samples = runtime.make_aligned([]f32, fft_size, 16)
@@ -62,6 +69,8 @@ init_nsdf :: proc(fft_size: int, sample_rate: f32) -> (self: NSDF) {
 destroy_nsdf :: proc(self: ^NSDF) {
     pffft.destroy_setup(self.pffft_setup)
     delete(self.spectrum)
+    delete(self.ordered)
+    delete(self.work)
     delete(self.autocorr)
     delete(self.values)
     delete(self.padded_samples)
@@ -159,34 +168,56 @@ nsdf_choose_peak :: proc(self: ^NSDF, highest_peak: Vec2) -> Vec2 {
 }
 
 
-// The cyclic autocorrelation of the zero padded samples: the FFT, times its conjugate, and back
+// The cyclic autocorrelation of the zero padded samples: the FFT, times its conjugate, and back. The
+// spectrum stays in pffft's own order, squaring each bin doesn't need them in order, and the inverse
+// transform takes them back in that order.
 nsdf_autocorrelate :: proc(self: ^NSDF, samples: []f32) {
     assert(len(samples) <= self.fft_size / 2)
 
     // Zero padded to twice the length, the cyclic correlation doesn't wrap around onto the samples
-    mem.zero_slice(self.padded_samples)
     copy(self.padded_samples, samples)
+    mem.zero_slice(self.padded_samples[len(samples):])
 
-    pffft.transform_ordered(
+    pffft.transform(
         self.pffft_setup,
         raw_data(self.padded_samples),
-        cast(^f32)raw_data(self.spectrum),
-        nil,
+        raw_data(self.spectrum),
+        raw_data(self.work),
         pffft.Direction.FORWARD,
     )
 
-    square_spectrum(self.spectrum)
+    // pffft doesn't scale the inverse transform, the spectrum is scaled instead
+    square_unordered_spectrum(self.spectrum, 1 / f32(self.fft_size))
 
-    pffft.transform_ordered(
+    pffft.transform(
         self.pffft_setup,
-        cast(^f32)raw_data(self.spectrum),
+        raw_data(self.spectrum),
         raw_data(self.autocorr),
-        nil,
+        raw_data(self.work),
         pffft.Direction.BACKWARD,
     )
+}
 
-    // pffft doesn't scale the inverse transform
-    for &value in self.autocorr do value /= f32(self.fft_size)
+// Times the conjugate and the scale, the power spectrum in place, in pffft's own order out of transform.
+// Every 8 floats are 4 bins, their real parts then their imaginary parts. The first 8 hold the two real
+// bins, DC in float 0 and Nyquist in float 4, each is squared on its own. As pffft_zconvolve_accumulate.
+square_unordered_spectrum :: proc(spectrum: []f32, scale: f32) {
+    dc, nyquist := spectrum[0], spectrum[4]
+    for i := 0; i < len(spectrum); i += 8 {
+        for j in i ..< i + 4 {
+            spectrum[j] = scale * (spectrum[j] * spectrum[j] + spectrum[j + 4] * spectrum[j + 4])
+            spectrum[j + 4] = 0
+        }
+    }
+    spectrum[0] = scale * dc * dc
+    spectrum[4] = scale * nyquist * nyquist
+}
+
+// The power spectrum of the last autocorrelation over fft_size in bin order, the first bin packs DC and
+// Nyquist like square_spectrum's
+nsdf_ordered_spectrum :: proc(self: ^NSDF) -> []complex64 {
+    pffft.zreorder(self.pffft_setup, raw_data(self.spectrum), cast([^]f32)raw_data(self.ordered), pffft.Direction.FORWARD)
+    return self.ordered
 }
 
 // Times the conjugate, the power spectrum in place. pffft packs the two real bins, DC and Nyquist, into the
@@ -226,6 +257,17 @@ test_autocorrelation :: proc(t: ^testing.T) {
         for i in 0 ..< len(samples) - lag do expected += samples[i] * samples[i + lag]
 
         testing.expectf(t, abs(self.autocorr[lag] - expected) < 1e-3, "lag %v: %v, expected %v", lag, self.autocorr[lag], expected)
+    }
+
+    // In bin order it's the ordered transform squared, over the size
+    expected := runtime.make_aligned([]complex64, FFT_SIZE / 2, 16)
+    defer delete(expected)
+    pffft.transform_ordered(self.pffft_setup, raw_data(self.padded_samples), cast([^]f32)raw_data(expected), nil, pffft.Direction.FORWARD)
+    square_spectrum(expected)
+
+    for bin, index in nsdf_ordered_spectrum(&self) {
+        want := expected[index] / FFT_SIZE
+        testing.expectf(t, abs(bin - want) < 1e-4 * abs(expected[0]) / FFT_SIZE, "bin %v: %v, expected %v", index, bin, want)
     }
 }
 

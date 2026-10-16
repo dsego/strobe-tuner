@@ -124,11 +124,12 @@ draw_freq_plot :: proc(rect: gfx.Rect, nsdf: ^core.NSDF, font: gfx.Font) {
     )
     gfx.draw_line({rect.x, rect.y}, {rect.x, rect.y + rect.height}, 0.5, gfx.LIGHTGRAY)
 
+    spectrum := core.nsdf_ordered_spectrum(nsdf)
     magnitudes: [BINS]f32
     for &point, bin in points {
-        // A power, the magnitude squared, see core.square_spectrum: 10 log10 of it over the size squared
-        magnitudes[bin] = abs(nsdf.spectrum[bin])
-        db := 10 * math.log10(magnitudes[bin] / f32(nsdf.fft_size * nsdf.fft_size))
+        // A power over the size, see core.square_unordered_spectrum: 10 log10 of it over the size squared
+        magnitudes[bin] = abs(spectrum[bin])
+        db := 10 * math.log10(magnitudes[bin] / f32(nsdf.fft_size))
         scaled := clamp((db - DB_MIN) / (DB_MAX - DB_MIN), 0, 1)
         point = {rect.x + f32(bin) * bin_width, rect.y + rect.height - scaled * rect.height}
     }

@@ -117,7 +117,7 @@ test_windowed_spectrum :: proc(t: ^testing.T) {
 
     // 20 and a half bins out, where the untapered window's sidelobes peak between its nulls on the even bins
     skirt_db := from_peak(self.spectrum, PEAK_BIN + 41)
-    plain_db := from_peak(nsdf.spectrum, PEAK_BIN + 41)
+    plain_db := from_peak(nsdf_ordered_spectrum(&nsdf), PEAK_BIN + 41)
     testing.expectf(t, skirt_db < -60, "the skirt is %v dB down", skirt_db)
     testing.expectf(t, plain_db > -40 && plain_db < -30, "with no taper the skirt is %v dB down", plain_db)
 }
