@@ -63,7 +63,7 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu: Menu
 
     meter := layout.level_meter + {LEVEL_BAR_OFFSET, 0}
     track := gfx.Rect{meter.x, meter.y, LEVEL_BAR_WIDTH, LEVEL_METER_HEIGHT}
-    gfx.draw_rounded_rect(track, LEVEL_METER_HEIGHT / 2, pill_dark)
+    gfx.draw_rounded_rect(track, LEVEL_METER_HEIGHT / 2, level_track_color)
 
     // Empty until something was measured, e.g. without an input, a reading that isn't one would be 0 dBFS
     if reading.pitch.measured {
@@ -94,9 +94,9 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     app.displays.strobe.selected_track = app.sheets.selected_track
     app.displays.strobe.selection = app.sheets.track.slide
 
-    // The background behind the notch. The strobe's tracks reach up behind it too, the trace and the scope's
-    // views start under it.
-    gfx.draw_rect({strobe.x, strobe.y}, {strobe.width, view.y - strobe.y}, gfx.hex(strobe_bg_color))
+    // The background of the whole area, darker than the panel, the part behind the notch included. The
+    // strobe's tracks reach up behind the notch too, the trace and the scope's views start under it.
+    gfx.draw_rect({strobe.x, strobe.y}, {strobe.width, strobe.height}, gfx.hex(strobe_bg_color))
 
     switch app.config.strobe_display_type {
     case .STROBE:

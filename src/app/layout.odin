@@ -170,7 +170,7 @@ panel_layout :: proc(layout: ^Layout, offsets: bool) {
 
     // The display button picks what the strobe area shows, it sits at the top of the panel on the left, the
     // level meter opposite it on the right. The bar lines up with the button's icon. Both stay under the
-    // strobe like the bottom row in its corners, level with the readout's labels until the readout sinks.
+    // strobe like the bottom row in its corners.
     layout.display = {left, panel.y + 20}
     layout.level_meter = {right - LEVEL_METER_WIDTH, layout.display.y - LEVEL_METER_HEIGHT / 2}
 
@@ -179,45 +179,43 @@ panel_layout :: proc(layout: ^Layout, offsets: bool) {
     layout.settings = {right - SETTINGS_ICON_SIZE, corners - SETTINGS_ICON_SIZE / 2}
     layout.instrument = {left, corners}
 
-    // The readout's labels in the top row, level with the display button and the level meter, its values under
-    // them. The note with the gauge and the lock under it between the readout values and the bottom row.
-    // Offsets from the middle of the ruler.
-    readout_top := layout.display.y - LABEL_SIZE / 2
-    readout_bottom := readout_top + READOUT_VALUE_Y + BASELINE * RULER_SCALE * READOUT_SIZE
-    rows_bottom := corners - BOTTOM_ROW_CLEARANCE
-
-    // The readout, the letter with its octave, the gauge, the lock and the bottom row evenly apart, the gaps
-    // growing with the panel up to MAX_GAP. Past that the room is spare and the group of them, the readout
-    // down to the lock, sinks to the middle of the panel instead of spreading out, the top and the bottom row
-    // staying at the panel's edges. A preset's note offset is a caption under the gauge, the gap to the lock is
-    // under the caption.
+    // The readout with its labels, the letter with its octave, the gauge and the lock, a group centred between
+    // the top and the bottom row. Apart inside and from the rows, the gaps growing with the panel up to
+    // MAX_GAP, past that the spare room splits above and below the group. The readout and the lock stand
+    // further off the ruler, WIDE_GAP times the others. A preset's note offset is a caption under the gauge,
+    // the gap to the lock is under the caption. Offsets from the middle of the ruler.
     OCTAVE_BELOW :: 4 // past the letter's baseline
     MIN_GAP :: 12
-    MAX_GAP :: 32 // a phone's, the desktop window opens with 16
+    MAX_GAP :: 32 // a phone's
+    WIDE_GAP :: 1.5
     CAPTION_GAP :: 6 // from the gauge to the offset
+    ROW_CLEARANCE :: LABEL_SIZE / 2 // from a row's middle to the room the group is centred in
+    readout_height: f32 = READOUT_VALUE_Y + BASELINE * RULER_SCALE * READOUT_SIZE
     caption: f32 = CAPTION_GAP + LABEL_SIZE if offsets else 0
     note_top: f32 = -CAP_HALF * RULER_SCALE * RULER_NOTE_SIZE
     note_bottom := -note_top + RULER_SCALE * OCTAVE_BELOW
-    contents := note_bottom - note_top + GAUGE_HEIGHT + caption + LOCK_BUTTON_HEIGHT
-    slack := rows_bottom - readout_bottom - contents
-    gap := clamp(slack / 4, MIN_GAP, MAX_GAP)
-    spare := max(slack - 4 * gap, 0)
+    contents := readout_height + note_bottom - note_top + GAUGE_HEIGHT + caption + LOCK_BUTTON_HEIGHT
+    rows_top := layout.display.y + ROW_CLEARANCE
+    rows_bottom := corners - ROW_CLEARANCE
+    slack := rows_bottom - rows_top - contents
+    gap := clamp(slack / (3 + 2 * WIDE_GAP), MIN_GAP, MAX_GAP)
+    wide_gap := WIDE_GAP * gap
+
+    // Inside the group a gap under the note and a wide one on either side, the rest of the room the same
+    // above the group as under it
+    readout_top := rows_top + (slack - gap - 2 * wide_gap) / 2
+    readout_bottom := readout_top + readout_height
     gauge_y := note_bottom + gap
     caption_y := gauge_y + GAUGE_HEIGHT + CAPTION_GAP + LABEL_SIZE / 2
-    lock_y := gauge_y + GAUGE_HEIGHT + caption + gap + LOCK_BUTTON_HEIGHT / 2
-    middle := readout_bottom + gap - note_top
-
-    // As far toward the panel's middle as the spare room goes, never up
-    group_middle := (readout_top + middle + lock_y + LOCK_BUTTON_HEIGHT / 2) / 2
-    sink := clamp(panel.y + panel.height / 2 - group_middle, 0, spare)
-    middle += sink
+    lock_y := gauge_y + GAUGE_HEIGHT + caption + wide_gap + LOCK_BUTTON_HEIGHT / 2
+    middle := readout_bottom + wide_gap - note_top
 
     center := (left + right) / 2
 
     // Centred on the notes and stopping above the gauge, a press on the gauge doesn't swipe the notes
     height := min(RULER_SCALE * RULER_HEIGHT, 2 * gauge_y)
     layout.ruler = {left, middle - height / 2, right - left, height}
-    layout.measurements = {center, readout_top + sink}
+    layout.measurements = {center, readout_top}
 
     layout.gauge = {center, middle + gauge_y}
     layout.lock = {center, middle + lock_y}
@@ -233,4 +231,3 @@ panel_content :: proc(panel: gfx.Rect) -> (left, width: f32) {
 }
 
 SETTINGS_ICON_SIZE :: ICON_LARGE_SIZE // the sliders, right aligned on the main screen
-BOTTOM_ROW_CLEARANCE :: 46 // from the middle of the bottom row up to the room the note and the lock are centred in

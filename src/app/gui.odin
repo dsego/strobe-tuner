@@ -62,19 +62,22 @@ gui_takes_input :: proc() -> bool {
     return !gui.menu_open && !gui.disabled
 }
 
-sheet_bg_color: u32 = 0x40414AFF
-strobe_bg_color: u32 = 0x15161AFF
-settings_separator_color := gfx.hex(0x35363EFF)
-note_offset_selected_color := gfx.hex(0x4D4E58FF)
-menu_highlight_color := gfx.hex(0x15141BFF) // a dropdown's option under the finger
+// Cool slate grays, three steps: the strobe darkest, the panel under it, the sheets over it
+sheet_bg_color: u32 = 0x3C4153FF
+panel_bg_color: u32 = 0x212430FF
+strobe_bg_color: u32 = 0x13151CFF
+settings_separator_color := gfx.hex(0x313646FF)
+note_offset_selected_color := gfx.hex(0x494E60FF)
+menu_highlight_color := gfx.hex(0x13141CFF) // a dropdown's option under the finger
+level_track_color := gfx.hex(0x303443FF) // the input level's empty track, a step lighter than the panel
 
-text_color_dark := gfx.hex(0x15141BFF)
-text_color_light := gfx.hex(0xBDBDBDFF)
+text_color_dark := gfx.hex(0x13141CFF)
+text_color_light := gfx.hex(0xB8BDCCFF)
 text_color_white := gfx.hex(0xFBFBFBFF) // the note and readout while there's a pitch, titles
-text_color_muted := gfx.hex(0x7D7E8FFF) // the note and readout without a pitch, the ruler's neighbours
+text_color_muted := gfx.hex(0x7A8096FF) // the note and readout without a pitch, the ruler's neighbours
 text_color_hover := gfx.hex(0xFFFFFFFF) // a dropdown's option under the finger
-text_color_disabled := gfx.hex(0x5C5D6AFF) // a control that does nothing right now, on a dark pill
-icon_color := gfx.hex(0x9A9BAAFF)
+text_color_disabled := gfx.hex(0x595E70FF) // a control that does nothing right now, on a dark pill
+icon_color := gfx.hex(0x979DB0FF)
 accent_color := gfx.hex(0x82E2FFFF) // the input level, the arrows, the partial labels and the note offsets
 warning_color := gfx.hex(0xFFC857FF) // a slow input's warning next to its level
 
@@ -82,7 +85,49 @@ warning_color := gfx.hex(0xFFC857FF) // a slow input's warning next to its level
 pill_gray := text_color_muted
 pill_violet := gfx.hex(0xA277FFFF)
 pill_yellow := gfx.hex(0xFFCA85FF)
-pill_dark := gfx.hex(0x2D2E35FF)
+pill_dark := gfx.hex(0x292D3AFF)
+
+// Hidden, the C key: back and forth between the slate grays above and the neutral ones before them, the panel as
+// dark as the strobe then. Only to compare the two, see handle_keys.
+neutral_grays := false
+
+toggle_neutral_grays :: proc(displays: ^Displays) {
+    neutral_grays = !neutral_grays
+    if neutral_grays {
+        sheet_bg_color = 0x40414AFF
+        panel_bg_color = 0x15161AFF
+        strobe_bg_color = 0x15161AFF
+        settings_separator_color = gfx.hex(0x35363EFF)
+        note_offset_selected_color = gfx.hex(0x4D4E58FF)
+        menu_highlight_color = gfx.hex(0x15141BFF)
+        level_track_color = gfx.hex(0x2D2E35FF)
+        text_color_dark = gfx.hex(0x15141BFF)
+        text_color_light = gfx.hex(0xBDBDBDFF)
+        text_color_muted = gfx.hex(0x7D7E8FFF)
+        text_color_disabled = gfx.hex(0x5C5D6AFF)
+        icon_color = gfx.hex(0x9A9BAAFF)
+        pill_dark = gfx.hex(0x2D2E35FF)
+    } else {
+        sheet_bg_color = 0x3C4153FF
+        panel_bg_color = 0x212430FF
+        strobe_bg_color = 0x13151CFF
+        settings_separator_color = gfx.hex(0x313646FF)
+        note_offset_selected_color = gfx.hex(0x494E60FF)
+        menu_highlight_color = gfx.hex(0x13141CFF)
+        level_track_color = gfx.hex(0x303443FF)
+        text_color_dark = gfx.hex(0x13141CFF)
+        text_color_light = gfx.hex(0xB8BDCCFF)
+        text_color_muted = gfx.hex(0x7A8096FF)
+        text_color_disabled = gfx.hex(0x595E70FF)
+        icon_color = gfx.hex(0x979DB0FF)
+        pill_dark = gfx.hex(0x292D3AFF)
+    }
+    pill_gray = text_color_muted
+
+    // The strobe and the scope keep their background from init
+    displays.strobe.background = gfx.hex(strobe_bg_color)
+    displays.scope.background = gfx.hex(strobe_bg_color)
+}
 
 lerp_color :: proc(from, to: gfx.Color, amount: f32) -> gfx.Color {
     color: gfx.Color
@@ -490,8 +535,14 @@ draw_measurements :: proc(pos: [2]f32, hz, cents: f32, shown: bool, active: bool
 
     draw_text_right(label_font, "Hz", hz_right, pixel_fonts.label.size, 1, text_color_muted)
     draw_text_right(value.font, hz_str, hz_right + {0, VALUE_Y}, value.size, 0, color)
-    width := draw_text_right(value.font, cents_str, cents_right + {0, VALUE_Y}, value.size, 0, color)
-    if signed do draw_text_right(value.font, sign, cents_right + {-width - 2, VALUE_Y}, value.size, 0, color)
+
+    // The dash without a value at the gutter like the Hz one, the readout stays balanced around the middle
+    if cents_shown {
+        width := draw_text_right(value.font, cents_str, cents_right + {0, VALUE_Y}, value.size, 0, color)
+        if signed do draw_text_right(value.font, sign, cents_right + {-width - 2, VALUE_Y}, value.size, 0, color)
+    } else {
+        gfx.draw_text(value.font, cents_str, snap_to_pixels(cents_left + {0, VALUE_Y}), value.size, 0, color)
+    }
 }
 
 // pos is the top right of the text, returns its width

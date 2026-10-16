@@ -214,6 +214,7 @@ scancodes := [Key]sdl.Scancode {
     .SPACE       = .SPACE,
     .COMMA       = .COMMA,
     .ESCAPE      = .ESCAPE,
+    .C           = .C,
     .G           = .G,
     .I           = .I,
     .W           = .W,

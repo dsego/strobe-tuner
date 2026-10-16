@@ -259,7 +259,7 @@ run_frame :: proc(app: ^App) {
     update_pixel_fonts()
     update_menu_checks(app)
 
-    gfx.begin_frame(gfx.hex(strobe_bg_color))
+    gfx.begin_frame(gfx.hex(panel_bg_color))
     defer gfx.end_frame()
     gui_begin_frame()
 
@@ -392,6 +392,8 @@ handle_keys :: proc(app: ^App) -> (menu: MenuCommand) {
     if input >= 0 && input < len(app.input.devices) do app.input.device_index = input
 
     if plain && gfx.key_pressed(.G) do config.strobe_glow = !config.strobe_glow
+
+    if plain && gfx.key_pressed(.C) do toggle_neutral_grays(&app.displays)
 
     if plain && gfx.key_pressed(.TAB) do config.strobe_display_type = next_display(config.strobe_display_type)
 

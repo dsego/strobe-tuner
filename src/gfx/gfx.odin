@@ -61,6 +61,7 @@ Key :: enum {
     SPACE,
     COMMA,
     ESCAPE,
+    C,
     G,
     I,
     W,
