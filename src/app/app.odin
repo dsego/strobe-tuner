@@ -393,8 +393,6 @@ handle_keys :: proc(app: ^App) -> (menu: MenuCommand) {
 
     if plain && gfx.key_pressed(.G) do config.strobe_glow = !config.strobe_glow
 
-    if plain && gfx.key_pressed(.C) do toggle_neutral_grays(&app.displays)
-
     if plain && gfx.key_pressed(.TAB) do config.strobe_display_type = next_display(config.strobe_display_type)
 
     // Or straight to one, in the settings' order
