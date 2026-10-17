@@ -53,10 +53,6 @@ https://www.gnu.org/licenses/gpl-3.0.en.html
 Portable Real-Time Audio Library <br />
 Copyright (c) 1999-2011 Ross Bencina, Phil Burk <br />
 
-- [PFFFT: a pretty fast FFT.](https://bitbucket.org/jpommier/pffft) <br />
-Copyright (c) 2013  Julien Pommier (pommier@modartt.com) <br />
-FFTPACK license <br />
-
 - [The Inter typeface family](https://rsms.me/inter/) <br />
 Copyright (c) 2016 The Inter Project Authors <br />
 SIL Open Font License 1.1 <br />

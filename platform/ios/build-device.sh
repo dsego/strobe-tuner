@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Build the SDL renderer for iPhone and iPad, sign it with the given provisioning profile and package it as an .ipa.
 #
-# The native libraries (SDL3, miniaudio, stb, pffft, pa_ringbuffer) are rebuilt for the device once,
+# The native libraries (SDL3, miniaudio, stb, pa_ringbuffer) are rebuilt for the device once,
 # into external/ios-device. Odin only emits an object file, clang links it into the app bundle.
 #
 #   IOS_PROFILE=<path>        provisioning profile, required, the bundle id and entitlements come from it
@@ -33,12 +33,6 @@ CFLAGS="-O2 -fPIC"
 mkdir -p "$DEPS" "$OUT"
 
 # --- native libraries --------------------------------------------------------------------------
-
-if [ ! -f "$DEPS/libpffft.a" ]; then
-    echo "Building pffft"
-    $CC $CFLAGS -c "$ROOT/external/pffft/pffft.c" -o "$DEPS/pffft.o"
-    ar rcs "$DEPS/libpffft.a" "$DEPS/pffft.o"
-fi
 
 if [ ! -f "$DEPS/libpa_ringbuffer.a" ]; then
     echo "Building pa_ringbuffer"
@@ -106,7 +100,6 @@ echo "Linking"
 mkdir -p "$APP"
 $CC -ObjC \
     "$OUT/app.o" \
-    "$DEPS/libpffft.a" \
     "$DEPS/libpa_ringbuffer.a" \
     "$DEPS/libminiaudio.a" \
     "$DEPS/libstb.a" \

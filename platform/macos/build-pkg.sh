@@ -36,12 +36,6 @@ ODIN_ROOT=$(odin root)
 CC="xcrun clang -target arm64-apple-macos$MIN_MACOS"
 CFLAGS="-O2 -fPIC"
 
-if [ ! -f "$DEPS/libpffft.a" ]; then
-    echo "Building pffft"
-    $CC $CFLAGS -c "$ROOT/external/pffft/pffft.c" -o "$DEPS/pffft.o"
-    ar rcs "$DEPS/libpffft.a" "$DEPS/pffft.o"
-fi
-
 if [ ! -f "$DEPS/libpa_ringbuffer.a" ]; then
     echo "Building pa_ringbuffer"
     $CC $CFLAGS -c "$ROOT/external/portaudio/src/common/pa_ringbuffer.c" -o "$DEPS/pa_ringbuffer.o"
@@ -92,7 +86,6 @@ odin build "$ROOT/src/app" \
 echo "Linking"
 $CC \
     "$OUT/app.o" \
-    "$DEPS/libpffft.a" \
     "$DEPS/libpa_ringbuffer.a" \
     "$DEPS/libminiaudio.a" \
     "$ODIN_ROOT/vendor/stb/lib/darwin/stb_image.a" \

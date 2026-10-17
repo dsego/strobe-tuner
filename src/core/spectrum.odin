@@ -21,7 +21,7 @@ import "core:math"
 import "core:mem"
 import "core:testing"
 
-import pffft "../../external/odin-pffft"
+import fft "../../external/extreme_fft"
 
 
 // The power spectrum of the latest samples under a Hann window, a picture of what's there. The NSDF's own
@@ -31,7 +31,7 @@ import pffft "../../external/odin-pffft"
 // peak's lobe is twice as wide, 4 bins of the window either side. The window is as long as the picture wants
 // its peaks narrow. Zero padded to twice its length like the NSDF's, a bin is half the window's.
 WindowedSpectrum :: struct {
-    pffft_setup: rawptr,
+    plan:        fft.Quad_Plan,
     fft_size:    int, // twice the window
     taper:       []f32, // the Hann window's weights, as long as the samples
     samples:     []f32, // the latest, the newest at the end, see audio_capture_read
@@ -42,7 +42,7 @@ WindowedSpectrum :: struct {
 
 init_windowed_spectrum :: proc(window: int) -> (self: WindowedSpectrum) {
     self.fft_size = 2 * window
-    self.pffft_setup = pffft.new_setup(i32(self.fft_size), pffft.Transform.REAL)
+    self.plan = fft.create_quad_plan(self.fft_size)
     self.taper = make([]f32, window)
     self.samples = make([]f32, window)
     self.padded = runtime.make_aligned([]f32, self.fft_size, 16)
@@ -56,7 +56,7 @@ init_windowed_spectrum :: proc(window: int) -> (self: WindowedSpectrum) {
 }
 
 destroy_windowed_spectrum :: proc(self: ^WindowedSpectrum) {
-    if self.pffft_setup != nil do pffft.destroy_setup(self.pffft_setup)
+    if self.fft_size != 0 do fft.destroy_quad_plan(&self.plan)
 
     delete(self.taper)
     delete(self.samples)
@@ -77,7 +77,7 @@ run_windowed_spectrum :: proc(self: ^WindowedSpectrum) {
     for sample, index in self.samples do self.padded[index] = sample * self.taper[index]
 
     mem.zero_slice(self.padded[len(self.samples):])
-    pffft.transform_ordered(self.pffft_setup, raw_data(self.padded), cast(^f32)raw_data(self.spectrum), nil, pffft.Direction.FORWARD)
+    fft.run_quad(&self.plan, self.padded, self.spectrum)
     square_spectrum(self.spectrum)
 }
 
@@ -117,7 +117,7 @@ test_windowed_spectrum :: proc(t: ^testing.T) {
 
     // 20 and a half bins out, where the untapered window's sidelobes peak between its nulls on the even bins
     skirt_db := from_peak(self.spectrum, PEAK_BIN + 41)
-    plain_db := from_peak(nsdf_ordered_spectrum(&nsdf), PEAK_BIN + 41)
+    plain_db := 10 * math.log10(nsdf.power[PEAK_BIN + 41] / nsdf.power[PEAK_BIN])
     testing.expectf(t, skirt_db < -60, "the skirt is %v dB down", skirt_db)
     testing.expectf(t, plain_db > -40 && plain_db < -30, "with no taper the skirt is %v dB down", plain_db)
 }

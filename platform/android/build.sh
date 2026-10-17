@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Build the SDL renderer for Android as an .apk signed with a debug key, without Gradle.
 #
-# The native libraries (SDL3, miniaudio, pffft, pa_ringbuffer) are built with the NDK once, into external/android.
+# The native libraries (SDL3, miniaudio, pa_ringbuffer) are built with the NDK once, into external/android.
 # Odin only emits an object file, the NDK's clang links it into libmain.so. SDL's Java activity loads it,
 # javac and d8 compile that, aapt2 packages it all.
 #
@@ -52,12 +52,6 @@ export ODIN_ANDROID_NDK="$NDK"
 mkdir -p "$DEPS" "$OUT" "$LIBS"
 
 # --- native libraries --------------------------------------------------------------------------
-
-if [ ! -f "$DEPS/libpffft.a" ]; then
-    echo "Building pffft"
-    $CC $CFLAGS -c "$ROOT/external/pffft/pffft.c" -o "$DEPS/pffft.o"
-    $AR rcs "$DEPS/libpffft.a" "$DEPS/pffft.o"
-fi
 
 if [ ! -f "$DEPS/libpa_ringbuffer.a" ]; then
     echo "Building pa_ringbuffer"
@@ -124,7 +118,6 @@ odin build "$ROOT/src/app" \
 echo "Linking"
 $CC -shared \
     "$OUT/app.o" \
-    "$DEPS/libpffft.a" \
     "$DEPS/libpa_ringbuffer.a" \
     "$DEPS/libminiaudio.a" \
     "$ODIN_ROOT/vendor/stb/lib/stb_image.a" \
