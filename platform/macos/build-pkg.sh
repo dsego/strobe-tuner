@@ -3,9 +3,12 @@
 # for App Store Connect, upload it with the Transporter app.
 #
 # The bundle is assembled in build/macos from the Info.plist, credits and entitlements next to this script, the
-# icon is made from AppIcon.iconset. The bundle is named after CFBundleName in the Info.plist.
+# icon is compiled from platform/Strobie.icon. The bundle is named after CFBundleName in the Info.plist.
 #
-#   MAC_PROFILE=<path>              Mac App Store provisioning profile (.provisionprofile), required,
+# With app as the first argument it stops at the bundle, signed ad hoc to run on this Mac only, no profile
+# or certificates needed, see just app.
+#
+#   MAC_PROFILE=<path>             Mac App Store provisioning profile (.provisionprofile), required,
 #                                   the bundle id and team come from it
 #   MAC_SIGN_IDENTITY=<name>        app signing certificate, defaults to "Apple Distribution"
 #   MAC_INSTALLER_IDENTITY=<name>   installer signing certificate, defaults to "3rd Party Mac Developer Installer"
@@ -22,7 +25,9 @@ MIN_MACOS=11.0
 # Shown after the settings' title, e.g. "2.0 (1)", the About panel reads it from the Info.plist
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/platform/macos/Info.plist") ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$ROOT/platform/macos/Info.plist"))"
 
-if [ -z "${MAC_PROFILE:-}" ] || [ ! -f "$MAC_PROFILE" ]; then
+MODE=${1:-pkg}
+
+if [ "$MODE" = pkg ] && { [ -z "${MAC_PROFILE:-}" ] || [ ! -f "$MAC_PROFILE" ]; }; then
     echo "Set MAC_PROFILE to the Mac App Store provisioning profile (.provisionprofile)"
     exit 1
 fi
@@ -112,8 +117,22 @@ $CC \
 cp "$ROOT/platform/macos/Info.plist" "$APP/Contents/Info.plist"
 cp "$ROOT/platform/macos/Credits.rtf" "$APP/Contents/Resources/"
 cp "$ROOT/assets/Acknowledgements.txt" "$APP/Contents/Resources/"
-# The App Store wants the 1024px icon_512x512@2x.png in the set
-iconutil -c icns "$ROOT/platform/macos/AppIcon.iconset" -o "$APP/Contents/Resources/AppIcon.icns"
+# The icon, actool compiles Icon Composer's file into Assets.car, with an .icns for macOS before 26, and names
+# them in a partial Info.plist. Its report goes to stdout, errors included, shown when it fails.
+if ! xcrun actool "$ROOT/platform/Strobie.icon" --compile "$APP/Contents/Resources" --platform macosx \
+    --minimum-deployment-target $MIN_MACOS --app-icon Strobie --output-partial-info-plist "$OUT/icon-info.plist" > "$OUT/actool.plist"; then
+    cat "$OUT/actool.plist"
+    exit 1
+fi
+/usr/libexec/PlistBuddy -c "Merge $OUT/icon-info.plist" "$APP/Contents/Info.plist"
+
+# For this Mac, the sandbox and the microphone as in the store's build. A new signature each build, macOS may
+# ask for the microphone again.
+if [ "$MODE" = app ]; then
+    codesign --force --sign - --entitlements "$ROOT/platform/macos/app.entitlements" "$APP"
+    echo "Built $APP"
+    exit 0
+fi
 
 # The bundle id and team come from the profile, its application identifier is <team id>.<bundle id>
 security cms -D -i "$MAC_PROFILE" > "$OUT/profile.plist"

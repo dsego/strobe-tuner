@@ -99,6 +99,7 @@ The first run clones and compiles the dependencies into `external/`, later runs 
 | `just ipa` | Signed build for iPhone, see `platform/ios/build-device.sh`, needs Xcode and a provisioning profile |
 | `just apk` | Debug signed build for Android, see [Android](#android) |
 | `just build` | Optimized build for this machine |
+| `just app` | The Mac app as `build/macos/Strobie.app`, signed ad hoc to run on this Mac, needs Xcode for the icon |
 | `just pkg` | Signed build for the Mac App Store, see `platform/macos/build-pkg.sh`, links SDL in statically |
 | `just test` | Unit tests of the pitch detection and strobe code |
 | `just accuracy` | Generated tones with and without noise through the tuner, checks the note and the readout within 1¢, `just accuracy full` for every note and three concert pitches |
@@ -108,7 +109,7 @@ Debug builds also have <kbd>Cmd</kbd><kbd>,</kbd> to open the config file and <k
 
 #### Linux
 
-Not tried yet. It draws with Vulkan, `just dev` compiles the shaders with `glslc`, and needs SDL3 and a Vulkan driver. The audio libraries (PulseAudio, PipeWire through its PulseAudio server, or ALSA) are loaded at runtime. The first `just dev` also compiles Odin's vendored stb and miniaudio into the Odin folder, which has to be writable, the Linux install leaves them uncompiled.
+For development only, no release is planned, so there's no package and no icon. Not tried yet. It draws with Vulkan, `just dev` compiles the shaders with `glslc`, and needs SDL3 and a Vulkan driver. The audio libraries (PulseAudio, PipeWire through its PulseAudio server, or ALSA) are loaded at runtime. The first `just dev` also compiles Odin's vendored stb and miniaudio into the Odin folder, which has to be writable, the Linux install leaves them uncompiled.
 
 ```sh
 sudo apt install clang git libsdl3-dev glslc  # Debian, Ubuntu
@@ -120,7 +121,7 @@ The config is saved to `$XDG_CONFIG_HOME/Strobie/config.ini`, or `~/.config/Stro
 
 #### Android
 
-`just apk` builds a debug signed `build/android/Strobie.apk`, see `platform/android/build.sh`. No Android Studio or Gradle, only the command line SDK, adb and a JDK for SDL's Java classes and the build tools. The first build compiles SDL into `external/android`, and stb into the Odin folder with the NDK, where Odin's bindings look for it.
+For development only, no release is planned, the launcher icon is the iOS one scaled down. `just apk` builds a debug signed `build/android/Strobie.apk`, see `platform/android/build.sh`. No Android Studio or Gradle, only the command line SDK, adb and a JDK for SDL's Java classes and the build tools. The first build compiles SDL into `external/android`, and stb into the Odin folder with the NDK, where Odin's bindings look for it.
 
 ```sh
 brew install --cask android-platform-tools android-commandlinetools

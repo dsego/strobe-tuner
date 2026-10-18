@@ -6,8 +6,6 @@
 	<string>Strobie</string>
 	<key>CFBundleExecutable</key>
 	<string>app.bin</string>
-	<key>CFBundleIconFile</key>
-	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>app.strobie</string>
 	<key>CFBundlePackageType</key>

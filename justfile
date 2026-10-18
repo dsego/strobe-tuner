@@ -62,6 +62,10 @@ ipa: setup
 apk: setup
     sh platform/android/build.sh
 
+# The Mac app in build/macos, signed ad hoc for this Mac, with its icon and About panel
+app: setup
+    sh platform/macos/build-pkg.sh app
+
 # Signed .pkg for the Mac App Store: MAC_PROFILE=path/to/profile.provisionprofile just pkg
 pkg: setup
     sh platform/macos/build-pkg.sh

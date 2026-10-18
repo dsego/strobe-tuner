@@ -142,9 +142,9 @@ javac -nowarn -Xlint:-options -source 8 -target 8 \
 # --- package -----------------------------------------------------------------------------------
 
 echo "Packaging"
-# The launcher icon from the iOS one, for now
+# The launcher icon, the iOS one flattened to a full bleed 1024px PNG
 mkdir -p "$OUT/res/mipmap-xxxhdpi"
-sips -z 192 192 "$ROOT/platform/ios/Assets.xcassets/AppIcon.appiconset/AppIcon.png" \
+sips -z 192 192 "$ROOT/platform/android/icon.png" \
     --out "$OUT/res/mipmap-xxxhdpi/ic_launcher.png" > /dev/null
 "$BUILD_TOOLS/aapt2" compile --dir "$OUT/res" -o "$OUT/res.zip"
 "$BUILD_TOOLS/aapt2" link \
