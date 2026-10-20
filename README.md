@@ -9,7 +9,7 @@ A simple stroboscopic instrument tuner.
 </div>
 
 
-Strobie is coming to the App Store for Mac and iPhone. The source is here to read and build yourself, see [Development](#development).
+Strobie is coming to the App Store for Mac and iPhone. [Try it in your browser](https://strobie.app/try/), or read the source and build it yourself, see [Development](#development).
 
 ### Features
 
