@@ -49,7 +49,7 @@ https://www.gnu.org/licenses/gpl-3.0.en.html
 ### Third-Party Resources
 
 
-- [PortAudio](https://portaudio.com/) ring buffer <br />
+- [PortAudio](https://portaudio.com/) ring buffer, ported to Odin <br />
 Portable Real-Time Audio Library <br />
 Copyright (c) 1999-2011 Ross Bencina, Phil Burk <br />
 

@@ -41,12 +41,6 @@ ODIN_ROOT=$(odin root)
 CC="xcrun clang -target arm64-apple-macos$MIN_MACOS"
 CFLAGS="-O2 -fPIC"
 
-if [ ! -f "$DEPS/libpa_ringbuffer.a" ]; then
-    echo "Building pa_ringbuffer"
-    $CC $CFLAGS -c "$ROOT/external/portaudio/src/common/pa_ringbuffer.c" -o "$DEPS/pa_ringbuffer.o"
-    ar rcs "$DEPS/libpa_ringbuffer.a" "$DEPS/pa_ringbuffer.o"
-fi
-
 if [ ! -f "$DEPS/libminiaudio.a" ]; then
     echo "Building miniaudio"
     mkdir -p "$DEPS/miniaudio"
@@ -91,7 +85,6 @@ odin build "$ROOT/src/app" \
 echo "Linking"
 $CC \
     "$OUT/app.o" \
-    "$DEPS/libpa_ringbuffer.a" \
     "$DEPS/libminiaudio.a" \
     "$ODIN_ROOT/vendor/stb/lib/darwin/stb_image.a" \
     "$ODIN_ROOT/vendor/stb/lib/darwin/stb_truetype.a" \

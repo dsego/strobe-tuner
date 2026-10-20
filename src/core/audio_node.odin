@@ -34,7 +34,6 @@ AudioCaptureNode :: struct {
     sample_rate:     f32,
     // Holds 0.74 s at the fastest rate after the decimation, 88.2 kHz, see init_audio_capture_node
     ringbuffer:      RingBuffer,
-    ringbuffer_data: []u8,
     // Samples that didn't fit, the main loop stalled for longer than the ring buffer holds. Written by the
     // audio thread, see audio_capture_skip_stale.
     dropped:         i64,
@@ -47,9 +46,9 @@ AudioCaptureNode :: struct {
 init_audio_capture_node :: proc(self: ^AudioCaptureNode, sample_rate: f32) {
     self.sample_rate = sample_rate
 
-    // A power of 2 for the PortAudio ring buffer. In samples whatever the rate, the audio thread may be
-    // writing while the rate changes.
-    self.ringbuffer, self.ringbuffer_data = init_ringbuffer(65536)
+    // A power of 2 for the ring buffer. In samples whatever the rate, the audio thread may be writing while
+    // the rate changes.
+    self.ringbuffer = init_ringbuffer(65536)
 }
 
 // Only while the input is closed, the audio thread doesn't write
@@ -59,7 +58,7 @@ flush_audio_capture_ringbuffer :: proc(self: ^AudioCaptureNode) {
 }
 
 destroy_audio_capture_node :: proc(self: ^AudioCaptureNode) {
-    delete(self.ringbuffer_data)
+    destroy_ringbuffer(&self.ringbuffer)
 }
 
 // From the audio thread, or a test feeding the samples

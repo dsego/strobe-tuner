@@ -13,18 +13,7 @@ setup:
     clone() {
         [ -d "$(basename "$1")" ] || git clone --depth 1 "$1"
     }
-    clone https://github.com/PortAudio/portaudio # only for its ring buffer
-    clone https://github.com/dsego/odin-pa_ringbuffer
     clone https://github.com/dsego/extreme_fft
-
-    # static_lib <source.c> <library.a>, the object file stays next to the source
-    static_lib() {
-        [ -f "$2" ] && return
-        echo "Building $2"
-        clang -c -O2 -fPIC "$1" -o "${1%.c}.o"
-        ar rcs "$2" "${1%.c}.o"
-    }
-    static_lib portaudio/src/common/pa_ringbuffer.c odin-pa_ringbuffer/pa_ringbuffer.a
 
     # Odin's vendored stb and miniaudio ship compiled for macOS, on Linux they're built into the Odin install once
     if [ "$(uname -s)" = Linux ]; then
