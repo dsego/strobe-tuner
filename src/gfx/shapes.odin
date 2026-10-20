@@ -87,6 +87,14 @@ draw_pill :: proc(rect: Rect, color: Color) {
     draw_rounded_rect(rect, rect.height / 2, color)
 }
 
+// A disc the size of the square rect, its left half in one color and its right half in the other
+draw_split_disc :: proc(rect: Rect, left, right: Color) {
+    half: f32 = SHAPE_SIZE / 2
+    middle := rect.x + rect.width / 2
+    draw_texture(shape_texture, {0, 0, half, SHAPE_SIZE}, {rect.x, rect.y, rect.width / 2, rect.height}, left)
+    draw_texture(shape_texture, {half, 0, half, SHAPE_SIZE}, {middle, rect.y, rect.width / 2, rect.height}, right)
+}
+
 draw_rect :: proc(position: [2]f32, size: [2]f32, color: Color) {
     push_quad(gpu.white.handle, {position.x, position.y, size.x, size.y}, {0, 0}, {1, 1}, color)
 }

@@ -18,7 +18,6 @@ package app
 
 import "core:fmt"
 import "core:math"
-import "core:slice"
 import "core:time"
 
 import "../audio"
@@ -39,8 +38,14 @@ settings_rows :: proc() -> int {
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
 DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 8, .SCOPE = 3, .TRACE = 2, .LAMP = 3, .SPECTRUM = 4}
 
-// For the longer labels of the display's options, three of them as wide as the four colors
+// For the longer labels of the display's options
 WIDE_SEGMENT_WIDTH :: 80
+
+// The swatches of the Colors row, small discs one in each square of the row's height, the picked one
+// ringed in white like on the website, a gap of the sheet's color between the ring and the swatch
+SWATCH_DIAMETER :: 16
+SWATCH_RING_GAP :: 2
+SWATCH_RING_WIDTH :: 1.5
 
 // On the settings and in the View menu
 DISPLAY_NAMES :: [StrobeDisplayType]cstring {
@@ -50,6 +55,8 @@ DISPLAY_NAMES :: [StrobeDisplayType]cstring {
     .LAMP     = "Lamp",
     .SPECTRUM = "Spectrum",
 }
+
+// In the View menu, the settings show the colors themselves, see gui_colorway_row
 COLORWAY_NAMES :: [StrobeColorway]cstring {
     .VIBRANT_RED = "Red",
     .MINTY       = "Mint",
@@ -130,8 +137,7 @@ gui_settings :: proc(
     display_rect := gui_display_row(sheet_layout, &row, display_options)
 
     // The displays read the colors and the glow from the config as they draw, nothing to retune
-    colorway_names := COLORWAY_NAMES
-    gui_settings_segmented(sheet_layout, &row, "Colors", slice.enumerated_array(&colorway_names), &config.strobe_colorway)
+    gui_colorway_row(sheet_layout, &row, config)
 
     // Lights the stripes like a lamp behind the disc, in the hue of the colors above
     gui_settings_segmented(sheet_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow)
@@ -212,6 +218,39 @@ gui_display_row :: proc(sheet_layout: SheetLayout, row: ^int, display_options: ^
     if gui_button(touch_area({right, rect.y, sheet_right - right, rect.height})) do display_options^ = true
 
     return rect
+}
+
+// The colors as swatches like the website's picker under its strobe: a disc per colorway, its lit stripes
+// on the left and the dark ones on the right, the picked one ringed. Each tap area is a square of the row's
+// height around its swatch, the first swatch starts and the last ends where a pill would.
+gui_colorway_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config) {
+    colorways := COLORWAYS
+    pitch := sheet_layout.row_height
+    rect := settings_row(sheet_layout, row^, "Colors", f32(len(colorways) - 1) * pitch + SWATCH_DIAMETER)
+    row^ += 1
+
+    for colors, colorway in colorways {
+        center_x := rect.x + f32(int(colorway)) * pitch + SWATCH_DIAMETER / 2
+        top := rect.y + (rect.height - SWATCH_DIAMETER) / 2
+        swatch := gfx.Rect{center_x - SWATCH_DIAMETER / 2, top, SWATCH_DIAMETER, SWATCH_DIAMETER}
+        if colorway == config.strobe_colorway {
+            draw_swatch_ring(swatch)
+        } else if gui_button(touch_area({center_x - pitch / 2, rect.y, pitch, rect.height})) {
+            config.strobe_colorway = colorway
+        }
+        gfx.draw_split_disc(swatch, gfx.hex(colors.x), gfx.hex(colors.y))
+    }
+}
+
+// The white ring around the picked swatch, the sheet's color in the gap between them so the ring doesn't
+// run into the mono swatch's white half
+draw_swatch_ring :: proc(swatch: gfx.Rect) {
+    around :: proc(rect: gfx.Rect, by: f32) -> gfx.Rect {
+        return {rect.x - by, rect.y - by, rect.width + 2 * by, rect.height + 2 * by}
+    }
+
+    gfx.draw_pill(around(swatch, SWATCH_RING_GAP + SWATCH_RING_WIDTH), text_color_white)
+    gfx.draw_pill(around(swatch, SWATCH_RING_GAP), gfx.hex(sheet_bg_color))
 }
 
 // Everything back to the defaults, the presets stay. The first tap asks, the second resets, a tap anywhere
