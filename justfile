@@ -66,10 +66,10 @@ web: setup
     python3 platform/web/serve.py
 
 # The web build into the website's try/app/, the page and its scripts, odin.js and strobie.wasm, replacing
-# what's there: just web-site [../strobe-tuner-website]
+# what's there. Its build date is its version, after the settings' title: just web-site [../strobe-tuner-website]
 web-site site="../strobe-tuner-website": setup
     mkdir -p build/web "{{site}}/try/app"
-    odin build src/app -target:js_wasm32 -target-features:simd128 -o:speed -vet -out:build/web/strobie.wasm
+    odin build src/app -target:js_wasm32 -target-features:simd128 -o:speed -vet -define:VERSION="$(date +%Y-%m-%d)" -out:build/web/strobie.wasm
     cp platform/web/index.html platform/web/strobie.js platform/web/capture-worklet.js build/web/strobie.wasm "$(odin root)/core/sys/wasm/js/odin.js" "{{site}}/try/app/"
 
 # Runs the unit tests in core
