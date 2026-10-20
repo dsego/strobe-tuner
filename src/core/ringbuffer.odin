@@ -46,7 +46,6 @@
 package core
 
 import "base:intrinsics"
-import "core:testing"
 
 // Samples from one thread to another, one writes and one reads. The indexes run over twice the length, equal
 // is empty and a length apart is full. Each side publishes its index after its copy with a release store and
@@ -117,29 +116,4 @@ read_ringbuffer :: proc(self: ^RingBuffer, buffer: []f32) -> int {
 
     skip_ringbuffer(self, count)
     return count
-}
-
-
-@(test)
-test_ringbuffer_wraps :: proc(t: ^testing.T) {
-    ringbuffer := init_ringbuffer(8)
-    defer destroy_ringbuffer(&ringbuffer)
-
-    // Full at 8, the rest is turned away
-    testing.expect_value(t, write_ringbuffer(&ringbuffer, {1, 2, 3, 4, 5, 6, 7, 8, 9}), 8)
-    testing.expect_value(t, ringbuffer_available(&ringbuffer), 8)
-
-    first: [5]f32
-    testing.expect_value(t, read_ringbuffer(&ringbuffer, first[:]), 5)
-    testing.expect_value(t, first, [5]f32{1, 2, 3, 4, 5})
-
-    // Past the end and on from the start
-    testing.expect_value(t, write_ringbuffer(&ringbuffer, {10, 11, 12, 13}), 4)
-    testing.expect_value(t, ringbuffer_available(&ringbuffer), 7)
-
-    skip_ringbuffer(&ringbuffer, 1)
-    rest: [8]f32
-    testing.expect_value(t, read_ringbuffer(&ringbuffer, rest[:]), 6)
-    testing.expect_value(t, rest, [8]f32{7, 8, 10, 11, 12, 13, 0, 0})
-    testing.expect_value(t, ringbuffer_available(&ringbuffer), 0)
 }

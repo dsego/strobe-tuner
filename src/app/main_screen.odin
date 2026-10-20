@@ -177,6 +177,9 @@ no_input_reason :: proc(app: ^App) -> (title, hint: cstring, missing: bool) {
     if len(app.input.devices) == 0 do return "No input found", "Connect one and tap to look again", true
     if audio.input_failed(app.input.capture) do return "The input didn't open", "Tap to try again", true
 
+    when gfx.WEB {
+        if audio.waiting_for_tap() do return "Tap to listen", "The browser starts the microphone after a tap", true
+    }
     return
 }
 
@@ -197,6 +200,9 @@ gui_no_input_message :: proc(app: ^App, strobe: gfx.Rect, title, hint: cstring) 
 
 // The strobe area says why there's no input instead, see draw_strobe_area
 input_missing :: proc(app: ^App) -> bool {
+    when gfx.WEB {
+        if audio.waiting_for_tap() do return true
+    }
     return audio.microphone_denied() || audio.input_failed(app.input.capture)
 }
 

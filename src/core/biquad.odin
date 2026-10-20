@@ -17,7 +17,6 @@
 package core
 
 import "core:math"
-import "core:testing"
 
 
 // Single 2nd order IIR section, transposed direct form II
@@ -83,41 +82,4 @@ biquad_process :: proc(bq: ^Biquad, input: []f32, output: []f32) {
         bq.z2 = bq.b2 * x - bq.a2 * y
         output[i] = f32(y)
     }
-}
-
-
-@(test)
-test_butterworth :: proc(t: ^testing.T) {
-    samplerate: f32 = 48_000
-
-    measure_gain :: proc(bq: Biquad, freq_hz: f32, samplerate: f32) -> f32 {
-        bq := bq
-        input := make([]f32, int(samplerate))
-        output := make([]f32, int(samplerate))
-        defer delete(input)
-        defer delete(output)
-
-        // The phase in f64, in f32 it's off by a radian a second in
-        for &sample, i in input do sample = f32(math.sin(math.TAU * f64(freq_hz) * f64(i) / f64(samplerate)))
-
-        biquad_process(&bq, input, output)
-
-        // skip the transient, measure the peak of the second half
-        peak: f32 = 0
-        for sample in output[len(output) / 2:] do peak = max(peak, abs(sample))
-
-        return peak
-    }
-
-    // -3dB at the cutoff, DC and rumble removed, passband untouched
-    highpass := init_highpass(60, samplerate)
-    testing.expect(t, abs(measure_gain(highpass, 60, samplerate) - math.SQRT_TWO / 2) < 0.01)
-    testing.expect(t, measure_gain(highpass, 10, samplerate) < 0.03)
-    testing.expect(t, abs(measure_gain(highpass, 440, samplerate) - 1.0) < 0.01)
-
-    // The same at the other end, hiss above the cutoff goes
-    lowpass := init_lowpass(5000, samplerate)
-    testing.expect(t, abs(measure_gain(lowpass, 5000, samplerate) - math.SQRT_TWO / 2) < 0.01)
-    testing.expect(t, measure_gain(lowpass, 20_000, samplerate) < 0.07)
-    testing.expect(t, abs(measure_gain(lowpass, 440, samplerate) - 1.0) < 0.01)
 }

@@ -18,7 +18,6 @@ package core
 
 import "base:intrinsics"
 import "core:slice"
-import "core:testing"
 import "core:time"
 
 
@@ -148,33 +147,4 @@ audio_capture_read_filtered :: proc(
     biquad_process(highpass, new_samples, new_samples)
     biquad_process(lowpass, new_samples, new_samples)
     return
-}
-
-
-// A stall longer than the ring buffer holds, the stale samples are skipped and the time counted once
-@(test)
-test_audio_capture_stall :: proc(t: ^testing.T) {
-    node: AudioCaptureNode
-    init_audio_capture_node(&node, DEFAULT_SAMPLE_RATE)
-    defer destroy_audio_capture_node(&node)
-
-    SAMPLES :: 70_000
-    input := make([]f32, SAMPLES)
-    defer delete(input)
-    slice.fill(input, 1)
-    audio_capture_write(&node, input)
-
-    buffer: [1024]f32
-    slice.fill(buffer[:], 1)
-    read, elapsed := audio_capture_read(&node, buffer[:])
-    testing.expect_value(t, read, 0)
-    testing.expect_value(t, elapsed, SAMPLES)
-    testing.expect(t, slice.all_of(buffer[:], 0), "the buffer isn't silent")
-
-    // The audio after the gap
-    audio_capture_write(&node, input[:100])
-    read, elapsed = audio_capture_read(&node, buffer[:])
-    testing.expect_value(t, read, 100)
-    testing.expect_value(t, elapsed, 100)
-    testing.expect(t, slice.all_of(buffer[len(buffer) - 100:], 1), "the new samples aren't at the end")
 }

@@ -105,37 +105,10 @@ HeldReadout :: struct {
 
 
 run_app :: proc(config: ^Config) {
-    app := App {
-        config = config,
-        measurement = {readout_track = -1, traced_track = -1},
-    }
-    // Saved for the next start
-    defer config.target_freq_hz = app.measurement.note_target.target_note.frequency
+    app := new_app(config)
+    if !start_app(&app) do return
 
-    size, min_size, position := window_placement(config)
-    if !gfx.init(size.x, size.y, APP_NAME, min_size, position) do return
-
-    defer gfx.shutdown()
-
-    setup_menu_bar(&app)
-
-    // Loaded each frame for the screen's scale, see update_pixel_fonts
-    defer unload_pixel_fonts()
-
-    gfx.load_shapes()
-    defer gfx.unload_shapes()
-
-    init_measurement(&app.measurement, config)
-    defer destroy_measurement(&app.measurement)
-
-    init_displays(&app.displays)
-    defer destroy_displays(&app.displays)
-
-    // Opened or not, the strobe area says why there's no input, see draw_strobe_area
-    open_audio_input(&app)
-    defer close_audio_input(&app)
-
-    apply_config(&app)
+    defer stop_app(&app)
 
     // The desktop window keeps drawing while it's dragged or zoomed to another size, the main loop is stuck
     // in the OS's own loop meanwhile
@@ -147,6 +120,44 @@ run_app :: proc(config: ^Config) {
     }
 
     run_main_loop(&app)
+}
+
+// Nothing measured yet, no track followed
+new_app :: proc(config: ^Config) -> App {
+    return {config = config, measurement = {readout_track = -1, traced_track = -1}}
+}
+
+// The window, the measurements, the displays and the input, everything a frame needs. False without a
+// window, nothing else is made then.
+start_app :: proc(app: ^App) -> bool {
+    size, min_size, position := window_placement(app.config)
+    if !gfx.init(size.x, size.y, APP_NAME, min_size, position) do return false
+
+    setup_menu_bar(app)
+    gfx.load_shapes()
+    init_measurement(&app.measurement, app.config)
+    init_displays(&app.displays)
+
+    // Opened or not, the strobe area says why there's no input, see draw_strobe_area
+    open_audio_input(app)
+
+    apply_config(app)
+    return true
+}
+
+// What start_app made, in reverse, with the note saved for the next start
+stop_app :: proc(app: ^App) {
+    app.config.target_freq_hz = app.measurement.note_target.target_note.frequency
+
+    close_audio_input(app)
+    destroy_displays(&app.displays)
+    destroy_measurement(&app.measurement)
+    gfx.unload_shapes()
+
+    // Loaded each frame for the screen's scale, see update_pixel_fonts
+    unload_pixel_fonts()
+
+    gfx.shutdown()
 }
 
 // The note target from the last run's note, the strobe's lock-in, the pitch detector and the scope's samples
@@ -244,7 +255,7 @@ run_frame :: proc(app: ^App) {
         // A tablet draws in larger points than its own, see ui_scale
         points := gfx.window_points()
         gfx.set_ui_scale(ui_scale(points / gfx.content_scale(), gfx.ui_scale()))
-        when !gfx.MOBILE do follow_window_size(config, points)
+        when !gfx.MOBILE && !gfx.WEB do follow_window_size(config, points)
     }
 
     window, safe := gfx.window_size(), gfx.safe_area()

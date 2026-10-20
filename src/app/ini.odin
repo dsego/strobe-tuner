@@ -17,48 +17,17 @@ package app
 import "base:runtime"
 import "core:encoding/ini"
 import "core:fmt"
+import "core:io"
 import "core:math"
-import "core:os"
-import "core:path/filepath"
 import "core:reflect"
 import "core:slice"
 import "core:strconv"
 import "core:strings"
-import "core:testing"
 
 import "../core"
 
-// Only used on Android, required so a -vet build elsewhere doesn't count them as unused
-@(require) import sdl "vendor:sdl3"
-@(require) import "../gfx"
-
-CONFIG_NAME :: "config.ini"
-
-create_app_directory :: proc() -> Maybe(string) {
-    dir_path := config_directory(APP_NAME)
-
-    if os.exists(dir_path) do return dir_path
-
-    // With the folders above it, an iOS app's container has no Application Support until it's made
-    err := os.make_directory_all(dir_path)
-    if err != nil {
-        delete(dir_path)
-        return nil
-    }
-
-    return dir_path
-}
-
-config_path :: proc() -> string {
-    dir_path := config_directory(APP_NAME)
-    defer delete(dir_path)
-
-    path, _ := filepath.join({dir_path, CONFIG_NAME})
-    return path
-}
-
 // From the standard OS path, e.g. ~/Library/Application Support/<APP_NAME>/config.ini on macOS, see
-// config_directory. Each field as save_config writes it, see read_value. A few values are then held in
+// config_directory in ini_file.odin, the page's storage in a browser, see web.odin. Each field as save_config writes it, see read_value. A few values are then held in
 // range, see the end.
 load_config :: proc() -> Config {
     config := config_defaults
@@ -253,156 +222,20 @@ save_config :: proc(config: Config) {
     save_ini(ini_map)
 }
 
-load_ini :: proc() -> (ini.Map, bool) {
-    // In a standard location based on the OS, see config_directory
-    ini_path := config_path()
-    defer delete(ini_path)
+// The pairs sorted by key, the order stays the same from one save to the next
+write_ini_pairs :: proc(stream: io.Stream, ini_map: ini.Map) -> bool {
+    section := ini_map[""]
 
-    if os.exists(ini_path) {
-        fmt.println("Loading config from", ini_path)
-    } else {
-        fmt.println("No config file at", ini_path)
-        return nil, false
+    keys, keys_err := slice.map_keys(section)
+    if keys_err != nil do return false
+
+    defer delete(keys)
+
+    // Keep order the same in the ini file
+    slice.sort(keys)
+
+    for key in keys {
+        if _, write_err := ini.write_pair(stream, key, section[key]); write_err != .None do return false
     }
-
-    ini_map, err, ok := ini.load_map_from_path(ini_path, allocator = context.allocator)
-
-    if !ok {
-        fmt.println("Failed to load config file", ini_path, err)
-        return nil, false
-    }
-
-    return ini_map, true
-}
-
-save_ini :: proc(ini_map: ini.Map) {
-    // The pairs sorted by key, the order stays the same. On the disk when it returns, not in a buffer.
-    write_ini :: proc(path: string, ini_map: ini.Map) -> bool {
-        // Truncate so a shorter config doesn't leave stale bytes at the end of the file
-        file, err := os.open(path, {.Write, .Create, .Trunc})
-        if err != nil do return false
-
-        defer os.close(file)
-
-        // The stream wraps the file handle, which is closed above
-        stream := os.to_stream(file)
-
-        section := ini_map[""]
-
-        keys, keys_err := slice.map_keys(section)
-        if keys_err != nil do return false
-
-        defer delete(keys)
-
-        // Keep order the same in the ini file
-        slice.sort(keys)
-
-        for key in keys {
-            if _, write_err := ini.write_pair(stream, key, section[key]); write_err != .None do return false
-        }
-        return os.sync(file) == nil
-    }
-
-    dir_path, dir_ok := create_app_directory().?
-    defer delete(dir_path)
-
-    // Without it the path would be relative, the file would land wherever the app was started from
-    if !dir_ok {
-        fmt.println("Failed to create the config directory")
-        return
-    }
-
-    ini_path := config_path()
-    defer delete(ini_path)
-
-    // Written next to it and renamed over it, a rename is all or nothing: the app ended halfway, by iOS or
-    // a crash, leaves the last config, not half of one
-    temp_path := strings.concatenate({ini_path, ".tmp"})
-    defer delete(temp_path)
-
-    fmt.println("Saving config to", ini_path)
-
-    if !write_ini(temp_path, ini_map) {
-        fmt.println("Failed to save the config file", temp_path)
-        return
-    }
-    if err := os.rename(temp_path, ini_path); err != nil {
-        fmt.println("Failed to replace the config file", ini_path, err)
-    }
-}
-
-config_directory :: proc(app_name: string) -> string {
-    when ODIN_OS == .Darwin {
-        // macOS: ~/Library/Application Support
-        home := os.get_env("HOME", context.allocator)
-        defer delete(home)
-
-        path, _ := filepath.join({home, "Library", "Application Support", app_name})
-        return path
-    } else when gfx.ANDROID {
-        // No HOME, the app's own folder in the internal storage, the system removes it with the app
-        return strings.clone(string(sdl.GetAndroidInternalStoragePath()))
-    } else {
-        // Linux/Unix: ~/.config or XDG_CONFIG_HOME
-        config_home := os.get_env("XDG_CONFIG_HOME", context.allocator)
-        defer delete(config_home)
-
-        if config_home == "" {
-            home := os.get_env("HOME", context.allocator)
-            defer delete(home)
-
-            config_home, _ = filepath.join({home, ".config"})
-        }
-        path, _ := filepath.join({config_home, app_name})
-        return path
-    }
-}
-
-
-// What save_config writes reads back the same, and a config from before the names still loads
-@(test)
-test_read_value :: proc(t: ^testing.T) {
-    read :: proc(field: ^$T, text: string) {
-        read_value(field, type_info_of(T), text)
-    }
-
-    // The values the names stand for, the rows of the offsets each in its own row however long they are
-    config := config_defaults
-    read(&config.preset_instruments, "[3, 1, 0, 9]")
-    testing.expect_value(t, config.preset_instruments, [PRESET_SLOTS]Instrument{.BASS, .GUITAR, .CHROMATIC, .CHROMATIC})
-    read(&config.instrument_capos, "[0, 2, 0, 1]")
-    testing.expect_value(t, config.instrument_capos[.GUITAR], 2)
-    testing.expect_value(t, config.instrument_capos[.BASS], 1)
-    read(&config.note_offset_notes, "[[1, 2], [3]]")
-    testing.expect_value(t, config.note_offset_notes[0][1], 2)
-    testing.expect_value(t, config.note_offset_notes[0][2], 0)
-    testing.expect_value(t, config.note_offset_notes[1][0], 3)
-
-    // A preset's number or none, a config from before none reads -1, see selected_preset
-    read(&config.preset, "2")
-    testing.expect_value(t, config.preset, 2)
-    read(&config.preset, "nil")
-    testing.expect_value(t, config.preset, nil)
-    read(&config.preset, "-1")
-    testing.expect_value(t, selected_preset(&config), nil)
-
-    // Written as save_config does and read back
-    saved := config_defaults
-    saved.preset_instruments = {.UKULELE, .BASS, .SEVEN_STRING, .GUITAR}
-    saved.instrument_tunings[.BARITONE_UKULELE] = 3
-    saved.note_offset_cents[2] = {-1.5, 2.25, 0, 0, 0, 0, 0, 0, 0, 7}
-    saved.strobe_mode = .VERNIER
-    saved.preset = 3
-
-    loaded := config_defaults
-    read(&loaded.preset_instruments, fmt.tprintf("%v", saved.preset_instruments))
-    read(&loaded.instrument_tunings, fmt.tprintf("%v", saved.instrument_tunings))
-    read(&loaded.note_offset_cents, fmt.tprintf("%v", saved.note_offset_cents))
-    read(&loaded.strobe_mode, fmt.tprintf("%v", saved.strobe_mode))
-    read(&loaded.preset, fmt.tprintf("%v", saved.preset))
-    testing.expect_value(t, loaded.preset_instruments, saved.preset_instruments)
-    testing.expect_value(t, loaded.instrument_tunings, saved.instrument_tunings)
-    testing.expect_value(t, loaded.note_offset_cents, saved.note_offset_cents)
-    testing.expect_value(t, loaded.strobe_mode, saved.strobe_mode)
-    testing.expect_value(t, loaded.preset, saved.preset)
+    return true
 }

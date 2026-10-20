@@ -59,6 +59,12 @@ app: setup
 pkg: setup
     sh platform/macos/build-pkg.sh
 
+# The web build in build/web, served on http://localhost:8000 by platform/web/serve.py
+web: setup
+    mkdir -p build/web
+    odin build src/app -target:js_wasm32 -target-features:simd128 -o:speed -vet -out:build/web/strobie.wasm
+    python3 platform/web/serve.py
+
 # Runs the unit tests in core
 test:
     mkdir -p build

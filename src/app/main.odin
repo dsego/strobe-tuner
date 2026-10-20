@@ -31,6 +31,9 @@ main :: proc() {
     when gfx.IOS {
         // UIKit owns the main thread, SDL starts the app from its application delegate
         sdl.RunApp(c.int(len(runtime.args__)), raw_data(runtime.args__), ios_main, nil)
+    } else when gfx.WEB {
+        // The browser asks for each frame, see step in web.odin
+        start_web_app()
     } else {
         // On Android SDL's Java activity loads libmain.so and calls its C main on a thread of its own,
         // see platform/android/StrobieActivity.java

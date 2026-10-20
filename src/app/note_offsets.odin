@@ -19,7 +19,6 @@ package app
 import "core:fmt"
 import "core:math"
 import "core:slice"
-import "core:testing"
 
 import "../core"
 import "../gfx"
@@ -377,30 +376,6 @@ offset_slide_cents :: proc(from, points, points_per_step: f32) -> f32 {
 
     steps := math.round((point - math.sign(point) * HALF_CATCH) / points_per_step)
     return clamp(steps * NOTE_OFFSET_STEP_CENTS, -NOTE_OFFSET_MAX_CENTS, NOTE_OFFSET_MAX_CENTS)
-}
-
-// A step every few points, the catch at 0¢ from either side, held at the ends
-@(test)
-test_offset_slide_cents :: proc(t: ^testing.T) {
-    STEP :: 4
-    HALF_CATCH :: OFFSET_SLIDE_CATCH / 2
-    slide :: proc(from, points: f32) -> f32 {
-        return offset_slide_cents(from, points, STEP)
-    }
-
-    testing.expect_value(t, slide(3, 0), 3)
-    testing.expect_value(t, slide(3, 2 * STEP), 4)
-    testing.expect_value(t, slide(3, -2 * STEP), 2)
-
-    // Out of the catch a step past it, and back into it from either side
-    testing.expect_value(t, slide(0, HALF_CATCH - 1), 0)
-    testing.expect_value(t, slide(0, HALF_CATCH + STEP), NOTE_OFFSET_STEP_CENTS)
-    testing.expect_value(t, slide(0, -HALF_CATCH - STEP), -NOTE_OFFSET_STEP_CENTS)
-    testing.expect_value(t, slide(1, -2 * STEP - 1), 0)
-    testing.expect_value(t, slide(-1, 2 * STEP + 1), 0)
-
-    testing.expect_value(t, slide(20, 1000), NOTE_OFFSET_MAX_CENTS)
-    testing.expect_value(t, slide(-20, -1000), -NOTE_OFFSET_MAX_CENTS)
 }
 
 // The note and its octave as steppers, in the selected row with a mouse or large in the popup

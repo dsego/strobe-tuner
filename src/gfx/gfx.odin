@@ -19,7 +19,8 @@ package gfx
 import "core:math/linalg"
 
 // Rendering and input on SDL3 GPU: Metal shaders in src/shaders/metal/ on macOS and iOS, Vulkan shaders in
-// src/shaders/vulkan/ on Linux and Android.
+// src/shaders/vulkan/ on Linux and Android. In a browser on WebGL2 with the Vulkan shaders made GLSL ES, see
+// web.odin.
 
 
 // Building for iOS, see platform/ios/build-sim.sh
@@ -30,6 +31,9 @@ ANDROID :: ODIN_PLATFORM_SUBTARGET == .Android
 
 // A phone: touch sized controls, portrait, suspended in the background, the system picks the input
 MOBILE :: IOS || ANDROID
+
+// In a browser's canvas, the page is the window and the browser runs the frames, see web.odin
+WEB :: ODIN_OS == .JS
 
 
 Rect :: struct {

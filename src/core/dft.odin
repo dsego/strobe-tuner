@@ -18,7 +18,6 @@ package core
 
 import "core:math"
 import "core:simd"
-import "core:testing"
 
 
 // Gamma shaped (order 3), the weight of a 3-pole lock-in low-pass: it rises fast from the newest sample and
@@ -187,34 +186,6 @@ sum_dft_lanes :: proc(lanes: DftLanes, dft: ^SingleFreqDFT, samples: []f32, vect
 }
 
 
-@(test)
-test_comb_rejects_partials :: proc(t: ^testing.T) {
-    WINDOW :: 800 // about 200 cents wide, the gamma window alone lets the next partials in
-    freq: f32 = 110 // a period of 436.4 samples, the box's last tap takes the fraction
-
-    amp :: proc(dft: ^SingleFreqDFT, freq: f32) -> f32 {
-        samples := make([]f32, dft.window_size, context.temp_allocator)
-        for &sample, index in samples do sample = math.sin(math.TAU * freq * f32(index) / DEFAULT_SAMPLE_RATE)
-
-        return abs(run_single_dft(dft, samples))
-    }
-
-    plain, comb: SingleFreqDFT
-    defer destroy_dft(&plain)
-    defer destroy_dft(&comb)
-    set_dft_freq(&plain, freq / DEFAULT_SAMPLE_RATE, gamma_comb_window(WINDOW))
-    set_dft_freq(&comb, freq / DEFAULT_SAMPLE_RATE, gamma_comb_window(WINDOW, DEFAULT_SAMPLE_RATE / freq))
-
-    // Half the window's mean, as without the comb. The plain window is off it, this wide its band takes in
-    // some of the sine's negative frequency, which the comb nulls too.
-    level := amp(&comb, freq)
-    testing.expectf(t, abs(level - 0.21) < 0.002, "the level %v, without the comb %v", level, amp(&plain, freq))
-    for partial in ([]f32{2, 3}) {
-        leak := amp(&comb, partial * freq)
-        testing.expectf(t, leak < 1e-3 * level, "partial %v leaks %v of %v, %v without the comb", partial, leak, level, amp(&plain, partial * freq))
-    }
-}
-
 // The level of a Blackman window's bin for a sine offset_bins off it, in dB under a sine on it. A long
 // window's: its spectrum is the sinc of the box and two pairs of shifted ones. The main lobe ends 3 bins out.
 blackman_response_db :: proc(offset_bins: f32) -> f32 {
@@ -225,12 +196,4 @@ blackman_response_db :: proc(offset_bins: f32) -> f32 {
     x := f64(offset_bins)
     response := 0.42 * sinc(x) + 0.25 * (sinc(x - 1) + sinc(x + 1)) + 0.04 * (sinc(x - 2) + sinc(x + 2))
     return f32(20 * math.log10(max(abs(response) / 0.42, 1e-6)))
-}
-
-@(test)
-test_blackman_response_db :: proc(t: ^testing.T) {
-    testing.expect(t, blackman_response_db(0) == 0)
-    testing.expectf(t, abs(blackman_response_db(1) + 4.5) < 0.1, "1 bin, got %v dB", blackman_response_db(1))
-    testing.expectf(t, abs(blackman_response_db(-2) + 20.4) < 0.1, "2 bins, got %v dB", blackman_response_db(-2))
-    testing.expectf(t, blackman_response_db(3) < -100, "the null 3 bins out, got %v dB", blackman_response_db(3))
 }

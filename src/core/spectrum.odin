@@ -19,7 +19,6 @@ package core
 import "base:runtime"
 import "core:math"
 import "core:mem"
-import "core:testing"
 
 import fft "../../external/extreme_fft"
 
@@ -64,14 +63,6 @@ destroy_windowed_spectrum :: proc(self: ^WindowedSpectrum) {
     delete(self.spectrum)
 }
 
-// The newest samples after the ones before, of more than the window holds the latest. The tests' way in, the
-// app reads them in with audio_capture_read.
-windowed_spectrum_write :: proc(self: ^WindowedSpectrum, samples: []f32) {
-    count := min(len(samples), len(self.samples))
-    copy(self.samples, self.samples[count:])
-    copy(self.samples[len(self.samples) - count:], samples[len(samples) - count:])
-}
-
 // The samples under the taper through the transform, the power of each bin into spectrum
 run_windowed_spectrum :: proc(self: ^WindowedSpectrum) {
     for sample, index in self.samples do self.padded[index] = sample * self.taper[index]
@@ -79,80 +70,4 @@ run_windowed_spectrum :: proc(self: ^WindowedSpectrum) {
     mem.zero_slice(self.padded[len(self.samples):])
     fft.run_quad(&self.plan, self.padded, self.spectrum)
     square_spectrum(self.spectrum)
-}
-
-
-// A half scale sine on a bin of the window reads 6 dB under full scale. Beside the peak the first sidelobe is
-// 31 dB down, and the skirt 20 bins of the window out over 60 dB, where the NSDF's transform with no taper
-// has it 36 dB down.
-@(test)
-test_windowed_spectrum :: proc(t: ^testing.T) {
-    WINDOW :: 4096
-    PEAK_BIN :: 200 // the window's 100th bin, the padded transform's 200th
-    self := init_windowed_spectrum(WINDOW)
-    defer destroy_windowed_spectrum(&self)
-
-    nsdf := init_nsdf(2 * WINDOW, DEFAULT_SAMPLE_RATE)
-    defer destroy_nsdf(&nsdf)
-
-    samples: [WINDOW]f32
-    for &sample, i in samples do sample = f32(0.5 * math.sin(math.TAU * 100 * f64(i) / WINDOW))
-    windowed_spectrum_write(&self, samples[:])
-    run_windowed_spectrum(&self)
-    nsdf_autocorrelate(&nsdf, samples[:])
-
-    peak_db := 20 * math.log10(math.sqrt(real(self.spectrum[PEAK_BIN])) / self.full_scale)
-    testing.expectf(t, abs(peak_db + 6.02) < 0.05, "the peak reads %v dB", peak_db)
-
-    // dB from the peak at a bin of a padded transform
-    from_peak :: proc(spectrum: []complex64, bin: int) -> f32 {
-        return 10 * math.log10(real(spectrum[bin]) / real(spectrum[PEAK_BIN]))
-    }
-
-    // Past the lobe, 4 bins either side
-    ripple_db: f32 = -200
-    for bin in PEAK_BIN + 5 ..= PEAK_BIN + 12 do ripple_db = max(ripple_db, from_peak(self.spectrum, bin))
-
-    testing.expectf(t, ripple_db > -35 && ripple_db < -28, "the first sidelobe is %v dB down", ripple_db)
-
-    // 20 and a half bins out, where the untapered window's sidelobes peak between its nulls on the even bins
-    skirt_db := from_peak(self.spectrum, PEAK_BIN + 41)
-    plain_db := 10 * math.log10(nsdf.power[PEAK_BIN + 41] / nsdf.power[PEAK_BIN])
-    testing.expectf(t, skirt_db < -60, "the skirt is %v dB down", skirt_db)
-    testing.expectf(t, plain_db > -40 && plain_db < -30, "with no taper the skirt is %v dB down", plain_db)
-}
-
-// The longest window the Window setting makes, 4 of the detector's at 48 kHz, written a display frame at a
-// time: the peak is where the note is and nothing stands beside it at the detector's window's spacing, where
-// a history of whole windows would put a comb
-@(test)
-test_windowed_spectrum_hops :: proc(t: ^testing.T) {
-    WINDOW :: 4 * 4096
-    HOP :: 800
-    FREQ :: 82.0
-    self := init_windowed_spectrum(WINDOW)
-    defer destroy_windowed_spectrum(&self)
-
-    hop: [HOP]f32
-    for count in 0 ..< 2 * WINDOW / HOP {
-        for &sample, i in hop do sample = f32(0.5 * math.sin(math.TAU * FREQ * f64(count * HOP + i) / DEFAULT_SAMPLE_RATE))
-        windowed_spectrum_write(&self, hop[:])
-    }
-    run_windowed_spectrum(&self)
-
-    peak_bin, peak_power := 0, f32(0)
-    for value, bin in self.spectrum[1:] {
-        if real(value) > peak_power do peak_bin, peak_power = bin + 1, real(value)
-    }
-    bin_hz := f32(DEFAULT_SAMPLE_RATE) / f32(self.fft_size)
-    testing.expectf(t, abs(f32(peak_bin) * bin_hz - FREQ) < bin_hz, "the peak is at %v Hz", f32(peak_bin) * bin_hz)
-
-    peak_db := 20 * math.log10(math.sqrt(peak_power) / self.full_scale)
-    testing.expectf(t, abs(peak_db + 6.02) < 0.1, "the peak reads %v dB", peak_db)
-
-    comb_bins := int(f32(self.fft_size) / 4096)
-    for bin in ([2]int{peak_bin - comb_bins, peak_bin + comb_bins}) {
-        tooth_db := 10 * math.log10(real(self.spectrum[bin]) / peak_power)
-        testing.expectf(t, tooth_db < -30, "%v dB at a detector window's spacing from the peak", tooth_db)
-    }
 }

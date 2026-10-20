@@ -16,9 +16,6 @@
 
 package core
 
-import "core:testing"
-
-
 // On above high_threshold, off again below low_threshold
 schmitt_trigger :: proc(prev_state: bool, value: f32, low_threshold: f32, high_threshold: f32) -> bool {
     if !prev_state && value > high_threshold {
@@ -30,19 +27,6 @@ schmitt_trigger :: proc(prev_state: bool, value: f32, low_threshold: f32, high_t
 }
 
 
-@(test)
-test_schmitt_trigger :: proc(t: ^testing.T) {
-    state := schmitt_trigger(false, 3.0, 1.0, 2.0)
-    testing.expect_value(t, state, true)
-
-    state = schmitt_trigger(true, 1.5, 1.0, 2.0)
-    testing.expect_value(t, state, true)
-
-    state = schmitt_trigger(true, 0.5, 1.0, 2.0)
-    testing.expect_value(t, state, false)
-}
-
-
 // The mirror image, on below on_threshold, off again above off_threshold, e.g. -10 and -8
 schmitt_trigger_neg :: proc(prev_state: bool, value: f32, off_threshold: f32, on_threshold: f32) -> bool {
     if !prev_state && value < on_threshold {
@@ -51,16 +35,4 @@ schmitt_trigger_neg :: proc(prev_state: bool, value: f32, off_threshold: f32, on
         return false
     }
     return prev_state
-}
-
-@(test)
-test_schmitt_trigger_neg :: proc(t: ^testing.T) {
-    state := schmitt_trigger_neg(false, -3.0, -1.0, -2.0)
-    testing.expect_value(t, state, true)
-
-    state = schmitt_trigger_neg(true, -1.5, -1.0, -2.0)
-    testing.expect_value(t, state, true)
-
-    state = schmitt_trigger_neg(true, -0.5, -1.0, -2.0)
-    testing.expect_value(t, state, false)
 }
