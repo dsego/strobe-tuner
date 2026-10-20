@@ -187,7 +187,8 @@ draw_strobe_partial_label :: proc(position: [2]f32, type: PartialLabelType, band
 // tick is as far off the note as the pitch, flat on the left like the lower notes on the ruler. It's a map,
 // the strobe does the fine tuning: it steps tick to tick, glides over, and holds while there's no pitch.
 // Each tick out from the middle is a wider range of cents than the one before, up to half a semitone where
-// the next note takes over. A string is tuned up from further away, its ticks go on a semitone each.
+// the next note takes over. A string or a locked note is tuned up from further away, its ticks go on a
+// semitone each.
 GAUGE_CENTS :: [?]f32{0, 5, 10, 20, 35, 50} // the distances in ticks from the middle outwards
 GAUGE_SEMITONE_TICKS :: 3
 GAUGE_SPACING :: 13 // between the ticks, it grows with the ruler

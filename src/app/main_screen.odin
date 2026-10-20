@@ -210,10 +210,9 @@ input_missing :: proc(app: ^App) -> bool {
 // to tune up, like higher notes are to the right on the ruler
 draw_tuning_arrows :: proc(displays: ^Displays, note_target: ^core.NoteTarget, layout: Layout, reading: Reading) {
     // Only the strong readings, a fading note drifts and would flash the arrows. The strobe's close to the
-    // note, like the readout. On another note than the locked one, as far as the notes are apart.
+    // note, like the readout.
     cents := core.target_cents_off(note_target, note_target.last_good_pitch.detected_freq)
     if reading.strobe_readout do cents = reading.steady.err_cents
-    if reading.out_of_range do cents = core.out_of_range_cents(note_target)
 
     distance := abs(cents)
     measures_target := core.measures_target(note_target)
@@ -284,22 +283,23 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading, menu: Me
     }
     step, note_tapped, swiping := gui_note_ruler(layout.ruler, ruler_notes, target, note_target.active)
 
-    // Within half a semitone of the note, or a few semitones of a string. Another note than a locked one
-    // pins it at the end on that side.
+    // Within half a semitone of the note, or a few semitones of a string or a locked note
     cents := reading.steady.err_cents
-    lit := note_target.active && (reading.steady.measured || reading.out_of_range)
+    lit := note_target.active && reading.steady.measured
+    measures_target := core.measures_target(note_target)
 
-    if reading.out_of_range do cents = 1200 * core.out_of_range_side(note_target)
-
-    // Further than the gauge reaches from any string, e.g. a guitar's low E on a ukulele, it says so instead
-    // of the gauge stuck at its end, and which way
-    if string_mode && lit && abs(cents) > 100 * GAUGE_SEMITONE_TICKS {
-        label: cstring = "TOO FLAT" if cents < 0 else "TOO SHARP"
+    // Further than the gauge reaches from a string or a locked note, e.g. a guitar's low E on a ukulele, it says
+    // so instead of the gauge stuck at its end, the note played and which way. Named like the ruler's notes.
+    if measures_target && lit && abs(cents) > 100 * GAUGE_SEMITONE_TICKS {
+        played := core.freq_to_note(reading.steady.detected_freq, shown_note.pitch_standard)
+        played = core.cents_to_note(f32(played.cents + 100 * transpose), shown_note.pitch_standard)
+        side := "FLAT" if cents < 0 else "SHARP"
+        label := fmt.ctprintf("%s · TOO %s", core.note_name(played), side)
         width := measure_label(pixel_fonts.label, label, 1).x
         label_y := layout.gauge.y + (GAUGE_HEIGHT - LABEL_SIZE) / 2
         draw_label(pixel_fonts.label, label, {layout.gauge.x - width / 2, label_y}, text_color_light, 1)
     } else {
-        draw_cents_gauge(layout.gauge, cents, lit, string_mode, gfx.hex(strobe_colors(config).x))
+        draw_cents_gauge(layout.gauge, cents, lit, measures_target, gfx.hex(strobe_colors(config).x))
     }
 
     lock_toggled := gui_lock_toggle(layout.lock, note_target.locked) || note_tapped

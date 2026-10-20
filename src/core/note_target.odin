@@ -22,7 +22,7 @@ import "core:math"
 // The note the strobe is tuned to, picked from the notes recognized in the pitch detections, and the readout
 // measured from it.
 //
-// A locked note stays, another note played is out of range.
+// A locked note stays, another note played is measured from it like a string, see out_of_range.
 NoteTarget :: struct {
     target_note:          Note, // what the strobe is tuned to
     detected_note:        Maybe(Note), // the last confirmed detection, none before the first
@@ -110,12 +110,13 @@ follow_detected_note :: proc(self: ^NoteTarget, detected: Note) -> (retune: bool
     return true
 }
 
-// Whether a strong detection of the note moves the readout. A locked note's readout only follows that note,
-// a stray detection an octave or a fifth off would swing it from one side to the other. An unlocked string's
+// Whether a strong detection of the note moves the readout. A locked note's readout only follows the
+// confirmed note, a stray detection an octave or a fifth off would swing it from one side to the other.
+// Another note held long enough is measured against the locked one, like a string. An unlocked string's
 // only follows that string, another string's note is measured once it's held long enough to be the target,
 // not against the string before. A locked string follows every note, it's tuned from wherever it starts.
 readout_follows :: proc(self: ^NoteTarget, note: Note) -> bool {
-    if locked_note(self) do return note.cents == self.target_note.cents
+    if locked_note(self) do return holds_note(self.detected_note, note)
     if self.string_count > 0 && !self.locked do return nearest_string(self, note) == self.string_index
 
     return true
@@ -264,25 +265,14 @@ target_freq :: proc(self: ^NoteTarget) -> f32 {
     return freq_at_cents(self.target_note.frequency, note_offset_cents(self, self.target_note))
 }
 
-// Another note is played than the target, a locked note's neighbour. The strobe and the readout have
-// nothing to measure, the gauge points the way, see out_of_range_side. A string is measured from
-// however far off it is.
+// Another note is played than a locked one. The gauge measures it from the locked note like a string, the
+// strobe's tracks have nothing to measure: one still fitted on the locked note would read it as it was. A
+// string's readout carries on however far off it is.
 out_of_range :: proc(self: ^NoteTarget) -> bool {
     detected, has_detected := self.detected_note.?
     if self.string_count > 0 || !has_detected do return false
 
     return detected.cents != self.target_note.cents
-}
-
-// How far the played note is from the target while out of range, in cents, a whole number of semitones
-out_of_range_cents :: proc(self: ^NoteTarget) -> f32 {
-    detected := self.detected_note.? or_else self.target_note
-    return f32(detected.cents - self.target_note.cents)
-}
-
-// Which way the played note is from the target while out of range, -1 below and 1 above
-out_of_range_side :: proc(self: ^NoteTarget) -> f32 {
-    return -1 if out_of_range_cents(self) < 0 else 1
 }
 
 // A locked note or a string, measured from the target instead of the nearest note

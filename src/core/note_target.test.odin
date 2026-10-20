@@ -93,7 +93,8 @@ test_note_target_strobe_keeps_note_lit :: proc(t: ^testing.T) {
     testing.expect(t, !target.active)
 }
 
-// A locked note stays, its octave too. Another note is out of range, the gauge points down to it.
+// A locked note stays, its octave too. Another note is out of range, measured from the locked one like a
+// string.
 @(test)
 test_note_target_note_lock :: proc(t: ^testing.T) {
     target := init_note_target(E2_HZ, 440, false, 0)
@@ -103,16 +104,20 @@ test_note_target_note_lock :: proc(t: ^testing.T) {
     update_note_target(&target, test_detection(E2_HZ / 2))
     testing.expect_value(t, target.target_note.octave, 2)
     testing.expect(t, out_of_range(&target))
-    testing.expect_value(t, out_of_range_side(&target), -1)
-    testing.expect_value(t, out_of_range_cents(&target), -1200)
+    steady := readout_pitch(&target)
+    testing.expect(t, abs(steady.err_cents + 1200) < 0.1)
     update_note_target(&target, test_detection(A3_HZ))
     testing.expect_value(t, target.target_note.name, 'E')
-    testing.expect_value(t, out_of_range_side(&target), 1)
+    steady = readout_pitch(&target)
+    testing.expect(t, abs(steady.err_cents - 1700) < 0.1)
 
-    // Its readout doesn't follow a stray detection of another note
-    update_note_target(&target, test_detection(E2_HZ))
-    update_note_target(&target, test_detection(2 * E2_HZ))
-    steady := readout_pitch(&target)
+    // Its readout doesn't follow a stray detection of another note, only one that's confirmed. 0.1 s is 3
+    // detections 0.05 s apart.
+    stray := init_note_target(E2_HZ, 440, false, 0.1)
+    for _ in 0 ..< 3 do update_note_target(&stray, test_detection(E2_HZ))
+    toggle_note_lock(&stray)
+    update_note_target(&stray, test_detection(2 * E2_HZ))
+    steady = readout_pitch(&stray)
     testing.expect(t, abs(steady.err_cents) < 0.1) // E2 is 82.407 Hz
 
     // Unlocking goes back to the detected note

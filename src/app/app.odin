@@ -92,7 +92,6 @@ Displays :: struct {
 Reading :: struct {
     pitch:          core.PitchInfo, // the latest detection
     steady:         core.PitchInfo, // the readout, the strong detections averaged
-    out_of_range:   bool, // another note than a locked one is played, see core.out_of_range
     strobe_readout: bool, // the readout is the strobe track's, none without one, see measure
 }
 
@@ -495,7 +494,7 @@ measure :: proc(app: ^App) -> (reading: Reading) {
         ready = false
     }
 
-    reading.out_of_range = core.out_of_range(note_target)
+    out_of_range := core.out_of_range(note_target)
     reading.steady = core.readout_pitch(note_target)
 
     // The readout is the strobe's, 0 where the fundamental's track stands still, none until a track has settled
@@ -503,7 +502,7 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     // are a little sharp and pull it a few cents off the track you see. The Hz move along with the cents. A
     // fading note keeps its track's last reading, also once the note target lets go of it.
     steady := &reading.steady
-    reading.strobe_readout = ready && !reading.out_of_range
+    reading.strobe_readout = ready && !out_of_range
     reading.strobe_readout &&= abs(lock_in.bands[measurement.readout_track].err_cents) <= core.READOUT_RANGE_CENTS
 
     if reading.strobe_readout {
@@ -519,10 +518,12 @@ measure :: proc(app: ^App) -> (reading: Reading) {
 
     // Lit, the readout is the track's as it measures. Dark, it keeps the last one shown: the track goes on
     // measuring whatever passes through its band, the room's noise would read as a wandering pitch. Another
-    // note starts over, see retune.
+    // note starts over, see retune, and so does another note than a locked one, the reading is of that note
+    // no more.
     held := &measurement.held_readout
     if note_target.active {
         if reading.strobe_readout do held^ = {true, steady.detected_freq, steady.err_cents}
+        if out_of_range do held^ = {}
     } else {
         reading.strobe_readout = held.shown
         steady.detected_freq, steady.err_cents = held.freq, held.cents
@@ -537,7 +538,7 @@ measure :: proc(app: ^App) -> (reading: Reading) {
         light = math.smoothstep(fade[0], fade[1], band.snr_db)
         if light == 0 || !band.in_range do measurement.traced_track = -1
 
-        if measurement.traced_track >= 0 && !reading.out_of_range && abs(band.err_cents) <= core.READOUT_RANGE_CENTS {
+        if measurement.traced_track >= 0 && !out_of_range && abs(band.err_cents) <= core.READOUT_RANGE_CENTS {
             traced_cents = band.err_cents
         }
     }
