@@ -66,8 +66,8 @@ SCOPE_CHUNK_SIZE :: 4096
 SCOPE_MAX_BEAM_DOTS :: 256 // between two samples
 SCOPE_MAX_FADE_GAIN :: 1e15 // divided back into the cells at this, far under an f32's range, see sweep_samples
 
-// Auto's level is the peak of the last sweep, kept as the peaks of this many blocks of it
-SCOPE_SWEEP_BLOCKS :: 16
+// Fill's level is the peak of what the screen shows, kept as the peaks of this many blocks of it
+SCOPE_PEAK_BLOCKS :: 16
 SCOPE_MIN_LEVEL :: 0.001 // -60 dBFS, digital silence isn't scaled up to the full height
 // 26 dB, the level stays this far above the background noise's RMS while there's no note, and lets go of it
 // as a note comes out of the noise, see sweep_samples
@@ -102,7 +102,7 @@ SCOPE_CIRCLE_RING :: 0.2
 
 // How the screen's height follows the input's level
 ScopeGain :: enum {
-    FILL, // the peak of the last sweep, every note fills the screen until it fades into the noise
+    FILL, // the peak of what the screen shows, every note fills the screen until it fades into the noise
     DECAY, // the loudest peak since the reference changed, a fading note shrinks and shows its decay
 }
 
@@ -141,9 +141,9 @@ Scope :: struct {
     beam_restart:        bool, // recent is from before a gap, the beam starts over on the next sample
     level:               f32, // peak level of the input
 
-    // Auto's, see follow_sweep_peak
-    block_peaks:         [SCOPE_SWEEP_BLOCKS]f32,
-    sweep_peak:          f32, // of the blocks
+    // Fill's, see follow_screen_peak
+    block_peaks:         [SCOPE_PEAK_BLOCKS]f32,
+    screen_peak:         f32, // of the blocks
     block_peak:          f32, // of the newest block as far as it came in
     block_samples:       int, // of the newest block, it's done at block_length
     block_length:        int,
@@ -204,9 +204,6 @@ set_scope_freq :: proc(self: ^Scope, freq_hz: f64) {
     self.freq_hz = freq_hz
     self.step = freq_hz / (f64(self.sample_rate) * SCOPE_PERIODS)
 
-    sweep := 1 / self.step if freq_hz > 0 else 1
-    self.block_length = max(int(math.round(sweep / SCOPE_SWEEP_BLOCKS)), 1)
-
     length := f64(self.sample_rate) / (freq_hz * SCOPE_LOWPASS_HARMONIC) if freq_hz > 0 else 1
     self.lowpass_filter.length = clamp(int(math.round(length)), 1, SCOPE_LOWPASS_MAX_LENGTH)
     self.lowpass_filter.primed = false
@@ -231,7 +228,7 @@ reset_scope :: proc(self: ^Scope) {
     clear_scope(self)
     self.coupling = {}
     self.level = 0
-    self.block_peaks, self.sweep_peak, self.block_peak = {}, 0, 0
+    self.block_peaks, self.screen_peak, self.block_peak = {}, 0, 0
     self.beam_restart = true
 }
 
@@ -317,6 +314,10 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
     decay: f64 = 1
     if self.persistence_seconds > 0 do decay = math.exp(-1 / (self.persistence_seconds * f64(self.sample_rate)))
 
+    // Fill's window, what the screen shows: the persistence, and a sweep without it
+    window := max(1 / self.step, self.persistence_seconds * f64(self.sample_rate))
+    self.block_length = max(int(math.round(window / SCOPE_PEAK_BLOCKS)), 1)
+
     // The low-pass's output is the input this many samples before
     clock := self.sample_clock - i64(len(samples))
     if self.lowpass do clock -= i64(self.lowpass_filter.length - 1)
@@ -332,7 +333,7 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
         if self.gain == .DECAY {
             self.level = max(abs(sample), self.level, min_level)
         } else {
-            self.level = max(follow_sweep_peak(self, abs(sample)), min_level)
+            self.level = max(follow_screen_peak(self, abs(sample)), min_level)
         }
         self.fade_gain /= decay
 
@@ -347,19 +348,21 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
     }
 }
 
-// The peak of the last sweep, two periods, with the newest sample. A peak decaying back would sag between the
-// wave's crests and stretch the rest of the period, this one is the same all through a sweep and lets an
-// attack go a sweep later. Kept in blocks, the window is a sweep and up to a block more.
-follow_sweep_peak :: proc(self: ^Scope, magnitude: f32) -> f32 {
+// The peak of what the screen shows, with the newest sample. A note's peak isn't the same from period to
+// period, its partials slide against each other and a string beats, scaled to each sweep's own the copies
+// on the screen would be drawn at different sizes and vibrate. A peak decaying back would sag between the
+// wave's crests and stretch the rest of the period, this one holds and lets an attack go a window later.
+// Kept in blocks, the window is block_length * SCOPE_PEAK_BLOCKS and up to a block more.
+follow_screen_peak :: proc(self: ^Scope, magnitude: f32) -> f32 {
     self.block_peak = max(self.block_peak, magnitude)
     self.block_samples += 1
     if self.block_samples >= self.block_length {
         self.block_peaks[self.next_block] = self.block_peak
-        self.next_block = (self.next_block + 1) % SCOPE_SWEEP_BLOCKS
-        self.sweep_peak = slice.max(self.block_peaks[:])
+        self.next_block = (self.next_block + 1) % SCOPE_PEAK_BLOCKS
+        self.screen_peak = slice.max(self.block_peaks[:])
         self.block_peak, self.block_samples = 0, 0
     }
-    return max(self.sweep_peak, self.block_peak)
+    return max(self.screen_peak, self.block_peak)
 }
 
 // The samples through the low-pass, in place. A running average adds the newest sample to its sum and

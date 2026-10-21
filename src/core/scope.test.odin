@@ -388,7 +388,7 @@ test_scope_gain :: proc(t: ^testing.T) {
         return scope.level
     }
 
-    // Fill is at the quieter note's peak a sweep later, decay keeps the loud one's
+    // Without persistence fill is at the quieter note's peak a sweep later, decay keeps the loud one's
     filled := level_after_decay(.FILL)
     testing.expectf(t, abs(filled - 0.1) < 0.002, "fill: level %v", filled)
     decayed := level_after_decay(.DECAY)
@@ -403,4 +403,27 @@ test_scope_gain :: proc(t: ^testing.T) {
     sweep_samples(&scope, samples[:])
     set_scope_freq(&scope, 2 * FREQ)
     testing.expectf(t, scope.level == SCOPE_MIN_LEVEL, "after another note: level %v", scope.level)
+}
+
+@(test)
+test_scope_fill_holds_over_the_screen :: proc(t: ^testing.T) {
+    FREQ :: 220.0
+    BEAT_PERIODS :: 4 // loud for as many periods, then as many 20% quieter
+
+    // A note whose peak beats, under the persistence of 11 periods. Every copy on the screen is drawn at the
+    // same size, the level doesn't follow the quieter periods down.
+    scope := scope_test_init(FREQ)
+    defer destroy_scope(&scope)
+    scope.persistence_seconds = 0.05
+
+    samples: [SCOPE_TEST_FRAME]f32
+    for frame in 0 ..< 30 {
+        scope_test_sine(samples[:], FREQ, scope.sample_clock)
+        for &sample, index in samples {
+            period := (scope.sample_clock + i64(index)) * i64(FREQ) / DEFAULT_SAMPLE_RATE
+            if period / BEAT_PERIODS % 2 == 1 do sample *= 0.8
+        }
+        sweep_samples(&scope, samples[:])
+        if frame > 0 do testing.expectf(t, scope.level > 0.99, "frame %v: level %v", frame, scope.level)
+    }
 }
