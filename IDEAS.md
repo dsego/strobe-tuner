@@ -278,3 +278,25 @@ spectrum flips it, like the scope's X-Y. Asked for in the same review, as a wate
 - The spectrum's own transform already runs, the spectrogram keeps its frames in a texture, a column
   a frame, on the same log axis. SNR or dBFS as the spectrum's scale says.
 - The 170 ms window blurs fast changes, the 340 ms one more so. Fine for decays, not attacks.
+
+## Phone landscape
+
+The phone is portrait only, decided against on 2026-10-11 when the panel beside the strobe needed two
+halves of `PANEL_MIN_WIDTH`. Looked at again on 2026-10-21, the main screen is cheap: a column the
+phone's width beside the turned strobe is the portrait panel's box, 367 by 372 on a 16 Pro against
+393 by 380 upright, so its rows lay out unchanged.
+
+- The rule: beside when wider than tall, the halves equal with the panel at least `STROBE_MIN_WIDTH`.
+  367 each on a 15 or 16 Pro, 416 on a Pro Max, an SE's panel 360 with a 307 strobe. A desktop window
+  720 to 848 wide and wider than tall goes beside too.
+- The strobe shows about the same share of its arcs as upright, 58% against 65%.
+- The sheets are the work, 393 tall and they don't scroll. The settings, a track's and the input's
+  fit, the Strobe options' 8 rows are about 40 over and fit with rows shrunk to 38.
+- The instrument sheet with a preset's note offsets runs about 100 past the bottom for a guitar's six,
+  more for ten. Across the whole window in two columns, as it covers the window upright: the
+  instrument, tuning and capo on the left, the offsets on the right with their header level with the
+  title, ten of them at about 30 points.
+- Scrolling would fit any sheet but fights the swipe down that closes it and the offset bars' sideways
+  slide, and hides offsets below the fold.
+- The plist's phone key adds the two landscapes, upside down stays off.
+- Checked in the simulator or on the phone, the desktop window doesn't go under 620 tall.
