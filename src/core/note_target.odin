@@ -49,6 +49,10 @@ NoteTarget :: struct {
 
 MAX_STRINGS :: 8 // an 8-string guitar, the built-in tunings go up to 7
 
+// The note confirmed holds this far, 10 cents past halfway to the next, and the next one held holds as far
+// back, see update_note_target
+NOTE_HOLD_CENTS :: 60
+
 init_note_target :: proc(
     target_freq_hz, pitch_standard: f32,
     prevent_octave_jumps: bool,
@@ -68,6 +72,17 @@ init_note_target :: proc(
 // the room's noise for the pitch detection while the strobe's narrow tracks still hear it and its
 // overtones, settled or still swinging from the attack. The note and the stripes go dark together.
 update_note_target :: proc(self: ^NoteTarget, pitch: PitchInfo, strobe_hears := false) -> (retune: bool) {
+    // Between two notes, the one confirmed holds until the pitch is NOTE_HOLD_CENTS from it, like a Schmitt
+    // trigger. Rounded to the nearest, a pitch wavering round halfway, a hum or a string tuned up from
+    // a semitone flat, flipped from one to the other and the strobe's tracks and the scope started over.
+    pitch := pitch
+    if held, has_held := self.detected_note.?; has_held && !pitch.is_weak_pitch && !holds_note(held, pitch.detected_note) {
+        held_freq := freq_at_cents(held.frequency, note_offset_cents(self, held))
+        if abs(cents_deviation(pitch.detected_freq, held_freq)) <= NOTE_HOLD_CENTS {
+            pitch.detected_note = held
+            pitch.err_cents = cents_deviation(pitch.detected_freq, held.frequency)
+        }
+    }
     self.pitch = pitch
 
     strong, confirmed := recognize_note(&self.recognition, pitch)

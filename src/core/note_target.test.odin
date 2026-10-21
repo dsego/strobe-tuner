@@ -43,6 +43,40 @@ test_note_target_switches_note :: proc(t: ^testing.T) {
 
 // Medium clarity detections follow a note once they've held steady, not before
 @(test)
+test_note_target_holds_between_notes :: proc(t: ^testing.T) {
+    // A hum wavering round halfway from A2 to B♭2: A holds to 60 cents past it, then B♭ holds as far back,
+    // to 40 cents over A
+    hum :: proc(target: ^NoteTarget, cents: f32) -> (retuned: bool) {
+        for _ in 0 ..< 4 do retuned ||= update_note_target(target, test_detection(freq_at_cents(A2_HZ, cents)))
+        return
+    }
+
+    // In semitones from A4
+    A :: -24
+    B_FLAT :: -23
+
+    target := init_note_target(E2_HZ, 440, true, 0.1)
+    hum(&target, 0)
+    testing.expect_value(t, target.target_note.cents, A * 100)
+
+    for cents in ([]f32{45, 55, 59, 52, 58}) {
+        testing.expectf(t, !hum(&target, cents), "%v cents over A: retuned", cents)
+        testing.expect_value(t, target.target_note.cents, A * 100)
+    }
+
+    testing.expect(t, hum(&target, 61))
+    testing.expect_value(t, target.target_note.cents, B_FLAT * 100)
+
+    for cents in ([]f32{55, 45, 41, 48}) {
+        testing.expectf(t, !hum(&target, cents), "%v cents over A: retuned", cents)
+        testing.expect_value(t, target.target_note.cents, B_FLAT * 100)
+    }
+
+    testing.expect(t, hum(&target, 39))
+    testing.expect_value(t, target.target_note.cents, A * 100)
+}
+
+@(test)
 test_note_target_steady_run :: proc(t: ^testing.T) {
     target := init_note_target(E2_HZ, 440, true, 0.1)
     update_note_target(&target, test_medium_detection(A2_HZ))
