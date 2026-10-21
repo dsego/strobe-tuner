@@ -21,9 +21,10 @@ import "core:math"
 // The readout follows a track this loud, where its stripes are fully there
 READOUT_MIN_SNR_DB :: STROBE_FADE_SNR_DB[1]
 READOUT_WEAK_FUNDAMENTAL_DB :: 20 // this far under the loudest partial the fundamental gives way to it
-// The track's own reading this far off its partial, as far as the tracks were measured to read, see
-// sandbox/accuracy and sandbox/recordings. Further out the readout has none.
-READOUT_RANGE_CENTS :: 50
+// The track's own reading this far off its partial, as far as a note holds past halfway to the next one
+// (NOTE_HOLD_CENTS) and the tracks were measured to read, see sandbox/accuracy and sandbox/recordings. Further
+// out the readout has none.
+READOUT_RANGE_CENTS :: NOTE_HOLD_CENTS
 READOUT_SETTLE_S :: 0.05 // the track's fit since the pluck before the readout follows it
 
 // The track the readout follows, the fundamental. A weak or missing fundamental gives way to the loudest

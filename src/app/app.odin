@@ -607,8 +607,14 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
         }
     }
 
-    // The lamp and its tracks take the wave as it comes
-    scope.lowpass = config.scope_lowpass && config.strobe_display_type == .SCOPE
+    // The lamp and its tracks take the wave as it comes. Turned on or off, the average starts over: the sweeps
+    // in it went through the low-pass or didn't, and are placed by its delay or not, the next ones stepped
+    // from them.
+    lowpass := config.scope_lowpass && config.strobe_display_type == .SCOPE
+    if scope.lowpass != lowpass {
+        scope.lowpass = lowpass
+        core.clear_scope(scope)
+    }
 
     scope.noise_floor = measurement.pitch_detector.noise_floor.level
     scope.snr_db = measurement.pitch_detector.snr_db

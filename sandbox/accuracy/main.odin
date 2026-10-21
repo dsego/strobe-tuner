@@ -34,9 +34,11 @@ LEAD_IN_S :: 2
 TONE_S :: 2.5
 MEASURE_S :: 1.0
 
-// Out to nearly half a semitone the readout reads too, see core.READOUT_RANGE_CENTS. Half way the note shown is a
-// coin toss.
-OFFSETS_CENTS :: [?]f32{0, 0.5, -0.5, 5, -5, 20, -20, 28, -28, 35, -35, 40, -40, 45, -45}
+// Out to past half a semitone the readout reads too, see core.READOUT_RANGE_CENTS. From halfway the tone starts
+// on its note in tune and switches to the offset, the note held, see core.NOTE_HOLD_CENTS. From silence it's
+// the nearer one. A low sine in noise is detected a few cents either side, at 59 its runs past 60 switch it.
+OFFSETS_CENTS :: [?]f32{0, 0.5, -0.5, 5, -5, 20, -20, 28, -28, 35, -35, 40, -40, 45, -45, 50, -50, 55, -55}
+HELD_FROM_CENTS :: 50
 
 // A lit track drifting the other way than the tone this fast, its stripes turn the wrong way
 WRONG_WAY_MIN_HZ :: 1
@@ -99,7 +101,8 @@ main :: proc() {
                     if waveform == .WEAK_FUNDAMENTAL && note_semitones > WEAK_FUNDAMENTAL_HIGHEST do break
 
                     for offset_cents in OFFSETS_CENTS {
-                        append(&results, run_case({waveform, note_semitones, offset_cents, pitch_standard, noise_snr_db, nil}))
+                        before: Maybe(int) = note_semitones if abs(offset_cents) >= HELD_FROM_CENTS else nil
+                        append(&results, run_case({waveform, note_semitones, offset_cents, pitch_standard, noise_snr_db, before}))
                     }
                 }
             }

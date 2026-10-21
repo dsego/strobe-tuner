@@ -217,8 +217,8 @@ draw_tuning_arrows :: proc(displays: ^Displays, note_target: ^core.NoteTarget, l
     distance := abs(cents)
     measures_target := core.measures_target(note_target)
 
-    // Without a lock or a string, further than half a semitone is a neighbouring note that isn't confirmed yet
-    if !note_target.active || (!measures_target && distance > 50) do return
+    // Without a lock or a string, further than the note holds is a neighbouring note that isn't confirmed yet
+    if !note_target.active || (!measures_target && distance > core.NOTE_HOLD_CENTS) do return
 
     displays.flat_arrow = core.schmitt_trigger_neg(displays.flat_arrow, cents, -8, -10)
     displays.sharp_arrow = core.schmitt_trigger(displays.sharp_arrow, cents, 8, 10)
