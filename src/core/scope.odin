@@ -51,7 +51,8 @@
     X-Y: the reference drives the beam across instead of the sweep, a cosine at its frequency. With the
     wave up and down that's a Lissajous figure, the way pitch was compared on an oscilloscope. An in tune
     note draws a still ellipse, a detuned one rolls it open and shut by the phase it slips, a line, a
-    circle, a line the other way. The figure is square, as wide as the screen is high, on its left.
+    circle, a line the other way. The figure is square, as wide as the screen is high, on its left. Its
+    sweep is one reference period, the figure once round.
 
     Circle: the sweep goes round instead of across, the same two reference periods a turn, anticlockwise
     from the top, the wave out from a ring halfway at its zero, its crests to the outside and its troughs
@@ -69,7 +70,7 @@ import "core:math"
 import "core:slice"
 
 
-SCOPE_PERIODS :: 2 // reference periods across the screen
+SCOPE_PERIODS :: 2 // reference periods across the screen, and round the circle, see scope_sweep_periods
 SCOPE_FILL :: 0.9 // how much of the height a full scale sample takes
 SCOPE_CHUNK_SIZE :: 4096
 SCOPE_MAX_BEAM_DOTS :: 256 // between two samples
@@ -168,6 +169,7 @@ Scope :: struct {
     average_bins:        int,
     average_gain:        f64,
     averaged_clock:      i64, // the samples before it are in the average, see average_samples
+    restart_average:     bool, // it starts over with the samples that come in next
     averaged_sweep:      i64, // the one the newest of them is in
     autoset_samples:     i64, // left until the averaged scope's scale is held, see autoset_scope
     columns:             int,
@@ -245,7 +247,7 @@ destroy_scope :: proc(self: ^Scope) {
 // Starts with a dark screen at the new reference frequency
 set_scope_freq :: proc(self: ^Scope, freq_hz: f64) {
     self.freq_hz = freq_hz
-    self.step = freq_hz / (f64(self.sample_rate) * SCOPE_PERIODS)
+    self.step = freq_hz / (f64(self.sample_rate) * scope_sweep_periods(self))
 
     length := f64(self.sample_rate) / (freq_hz * SCOPE_LOWPASS_HARMONIC) if freq_hz > 0 else 1
     self.lowpass_filter.length = clamp(int(math.round(length)), 1, SCOPE_LOWPASS_MAX_LENGTH)
@@ -291,6 +293,7 @@ clear_scope :: proc(self: ^Scope) {
     slice.zero(self.average_sums[:self.average_bins])
     slice.zero(self.average_weights[:self.average_bins])
     self.average_gain = 1
+    self.restart_average = true
 }
 
 clear_screen :: proc(self: ^Scope) {
@@ -306,10 +309,16 @@ restart_beam :: proc(self: ^Scope) {
     self.history_count = 0
 }
 
-// Starts with a dark screen, the old figure would linger under the new one
+// Starts with a dark screen, the old figure would linger under the new one, and a sweep as long as the new
+// one's
 set_scope_sweep :: proc(self: ^Scope, sweep: ScopeSweep) {
     self.sweep = sweep
-    clear_scope(self)
+    set_scope_freq(self, self.freq_hz)
+}
+
+// How many reference periods a sweep is. The Lissajous figure's is one, a second would draw it over itself.
+scope_sweep_periods :: proc(self: ^Scope) -> f64 {
+    return 1 if self.sweep == .XY else SCOPE_PERIODS
 }
 
 // How many columns of the screen the beam draws in, X-Y and the circle are square
@@ -427,10 +436,28 @@ average_samples :: proc(self: ^Scope, samples: []f32) {
 
     keep_samples(self, samples)
 
-    // Up to where the sweep the newest sample is in started, from the oldest sample kept
+    // The clock of the first sample in a sweep
+    first_in :: proc(self: ^Scope, sweep: f64) -> i64 {
+        return i64(math.ceil(sweep / self.step))
+    }
+
+    // Started over, from these samples once the low-pass has filled again, it started over with the
+    // reference. The ones kept from before went through it at the old reference and are placed by its delay
+    // then, the sweep they were in stepped where they end.
+    if self.restart_average {
+        self.restart_average = false
+        settle := 2 * i64(self.lowpass_filter.length) if self.lowpass else 0
+        self.averaged_clock = clock + settle
+    }
+
+    // Up to where the sweep the newest sample is in started, from the oldest sample kept. From where a sweep
+    // starts too: where the average left off is partway into a sweep after the reference changed, and so is
+    // the oldest sample kept after a gap. Started there, the bins before it stayed empty and the ones after
+    // it had a part of a sweep more, the line stepped there.
     newest := clock + i64(len(samples)) - 1
-    sweep_start := i64(math.ceil(math.floor(f64(newest) * self.step) / self.step))
+    sweep_start := first_in(self, math.floor(f64(newest) * self.step))
     from := max(self.averaged_clock, newest - i64(self.history_count) + 1)
+    if first_in(self, math.floor(f64(from) * self.step)) < from do from = first_in(self, math.floor(f64(from) * self.step) + 1)
     self.averaged_clock = max(self.averaged_clock, sweep_start)
 
     // Of one sweep. All of a sweep's samples weigh the same: faded by the sample, its end weighed more than
@@ -592,10 +619,21 @@ trace_average :: proc(self: ^Scope, points: ^[dynamic][2]f32) {
         seam = {gap = start[0] - end_value, slope = start_slope - end_slope, bins = bins / 4}
     }
 
+    // Over time the line ends at the screen's edges, the bins don't wrap round to the sweep's other end, the
+    // one past an edge carries the two before it on (a straight line). Wrapped, the last piece ran on to the
+    // start's height and drew the step between them at the edge.
+    beside :: proc(self: ^Scope, bin: int, seam: Seam) -> f32 {
+        bins := self.average_bins
+        if self.sweep == .TIME && bin < 0 do return 2 * average(self, 0, seam) - average(self, 1, seam)
+        if self.sweep == .TIME && bin >= bins do return 2 * average(self, bins - 1, seam) - average(self, bins - 2, seam)
+        return average(self, bin + bins, seam)
+    }
+
     dots := trace_dots(self)
-    for bin in 0 ..< bins {
-        before := average(self, bin + bins - 1, seam)
-        from, to, after := average(self, bin, seam), average(self, bin + 1, seam), average(self, bin + 2, seam)
+    pieces := bins - 1 if self.sweep == .TIME else bins
+    for bin in 0 ..< pieces {
+        before, from := beside(self, bin - 1, seam), average(self, bin, seam)
+        to, after := beside(self, bin + 1, seam), beside(self, bin + 2, seam)
         for dot in 0 ..< dots {
             progress := f32(dot) / f32(dots)
             value := catmull_rom(before, from, to, after, progress)
@@ -604,11 +642,10 @@ trace_average :: proc(self: ^Scope, points: ^[dynamic][2]f32) {
         }
     }
 
-    // Back to where it started, the circle and the figure close
-    if self.sweep != .TIME {
-        point := sweep_point(self, 1, average(self, 0, seam))
-        append(points, [2]f32{f32(point.x), f32(point.y)})
-    }
+    // The last bin over time, back to where it started round the circle and the figure, they close
+    last := bins - 1 if self.sweep == .TIME else bins
+    point := sweep_point(self, f64(last) / f64(bins), average(self, last, seam))
+    append(points, [2]f32{f32(point.x), f32(point.y)})
 }
 
 // The newest sweep's samples in the history: where they start in the ring, how many with the curve's
@@ -638,7 +675,7 @@ begin_samples :: proc(self: ^Scope, samples: []f32) -> (clock: i64, min_level: f
     if self.step <= 0 || len(samples) == 0 do return
 
     // Fill's window, what the screen shows: the persistence, and at least SCOPE_FILL_MIN_PERIODS
-    window := max(SCOPE_FILL_MIN_PERIODS / SCOPE_PERIODS / self.step, self.persistence_seconds * f64(self.sample_rate))
+    window := max(SCOPE_FILL_MIN_PERIODS / scope_sweep_periods(self) / self.step, self.persistence_seconds * f64(self.sample_rate))
     self.block_length = max(int(math.round(window / SCOPE_PEAK_BLOCKS)), 1)
     self.fill_release = f32(math.exp(-1 / (SCOPE_FILL_RELEASE_S * f64(self.sample_rate))))
 
@@ -766,7 +803,7 @@ trace_dots :: proc(self: ^Scope) -> int {
 // moves it fastest through the middle, and the circle on its outside
 sweep_cells :: proc(self: ^Scope) -> f64 {
     width := f64(scope_width(self))
-    if self.sweep == .XY do return math.TAU * SCOPE_PERIODS * self.step * 0.5 * SCOPE_FILL * width
+    if self.sweep == .XY do return math.TAU * self.step * 0.5 * SCOPE_FILL * width
     if self.sweep == .CIRCLE do return math.TAU * self.step * SCOPE_CIRCLE_REACH * width
     return self.step * f64(self.columns)
 }
@@ -803,7 +840,7 @@ sweep_point :: proc(self: ^Scope, position: f64, value: f32) -> [2]f64 {
     across := position - math.floor(position)
 
     // The reference at the sample, a cosine with the same reach as the wave
-    if self.sweep == .XY do across = 0.5 + 0.5 * SCOPE_FILL * math.cos(math.TAU * SCOPE_PERIODS * position)
+    if self.sweep == .XY do across = 0.5 + 0.5 * SCOPE_FILL * math.cos(math.TAU * position)
 
     // The averaged scope's line runs off the screen, a note grown louder than its scale or the circle's crests
     // up and down, see SCOPE_MAX_OVERSHOOT. The lamp's cells keep a crest over the level in the top row.

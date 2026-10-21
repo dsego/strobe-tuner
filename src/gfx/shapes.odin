@@ -124,14 +124,15 @@ line_normal :: proc(start, end: [2]f32) -> [2]f32 {
 }
 
 // A wide line through the points in one strip, the pieces meet on a mitred joint without overlapping, a
-// translucent line is as even at the joints as along them. A spike's mitre is cut at twice the width.
-draw_polyline :: proc(points: [][2]f32, thickness: f32, color: Color) {
+// translucent line is as even at the joints as along them. A spike's mitre is cut at twice the width. Closed,
+// the last point is the first again and they meet on a joint too.
+draw_polyline :: proc(points: [][2]f32, thickness: f32, color: Color, closed := false) {
     if len(points) < 2 do return
 
     half := 0.5 * thickness
-    previous := polyline_side(points, 0) * half
+    previous := polyline_side(points, 0, closed) * half
     for index in 1 ..< len(points) {
-        offset := polyline_side(points, index) * half
+        offset := polyline_side(points, index, closed) * half
         start, end := points[index - 1], points[index]
         push_vertices(
             gpu.white.handle,
@@ -149,8 +150,10 @@ draw_polyline :: proc(points: [][2]f32, thickness: f32, color: Color) {
 }
 
 // A line through the points, fading to clear over feather inside its edges, each point in its own color and
-// both ends round. A pixel's feather smooths a thin line, half the thickness makes a soft glow.
-draw_soft_polyline :: proc(points: [][2]f32, colors: []Color, thickness, feather: f32) {
+// both ends round. A pixel's feather smooths a thin line, half the thickness makes a soft glow. Closed, the
+// last point is the first again and they meet on a joint like the others: two round ends there would lie
+// over each other, their faded edges and a glow adding up to a brighter spot.
+draw_soft_polyline :: proc(points: [][2]f32, colors: []Color, thickness, feather: f32, closed := false) {
     if len(points) == 0 do return
 
     half := 0.5 * thickness
@@ -205,9 +208,9 @@ draw_soft_polyline :: proc(points: [][2]f32, colors: []Color, thickness, feather
         }
     }
 
-    previous := rows(points[0], polyline_side(points, 0), colors[0], inner, half)
+    previous := rows(points[0], polyline_side(points, 0, closed), colors[0], inner, half)
     for index in 1 ..= last {
-        current := rows(points[index], polyline_side(points, index), colors[index], inner, half)
+        current := rows(points[index], polyline_side(points, index, closed), colors[index], inner, half)
         for band in 0 ..< 3 {
             push_vertices(
                 gpu.white.handle,
@@ -216,18 +219,26 @@ draw_soft_polyline :: proc(points: [][2]f32, colors: []Color, thickness, feather
         }
         previous = current
     }
+    if closed do return
 
     round_end(points[0], linalg.normalize0(points[0] - points[1]), colors[0], inner, half)
     round_end(points[last], linalg.normalize0(points[last] - points[last - 1]), colors[last], inner, half)
 }
 
 // The offset either side at a point of a line a half width of one across, along the bisector of its two
-// pieces, a spike's mitre cut at twice the width
-polyline_side :: proc(points: [][2]f32, index: int) -> [2]f32 {
+// pieces, a spike's mitre cut at twice the width. Closed, the ends are the same point, the piece before the
+// first is the last one and the piece after the last is the first.
+polyline_side :: proc(points: [][2]f32, index: int, closed := false) -> [2]f32 {
+    last := len(points) - 1
     before := line_normal(points[max(index - 1, 0)], points[index])
-    after := line_normal(points[index], points[min(index + 1, len(points) - 1)])
-    if index == 0 do before = after
-    if index == len(points) - 1 do after = before
+    after := line_normal(points[index], points[min(index + 1, last)])
+    if closed && last >= 2 {
+        if index == 0 do before = line_normal(points[last - 1], points[0])
+        if index == last do after = line_normal(points[last], points[1])
+    } else {
+        if index == 0 do before = after
+        if index == last do after = before
+    }
 
     bisector := before + after
     if linalg.length(bisector) < 1e-6 do return before

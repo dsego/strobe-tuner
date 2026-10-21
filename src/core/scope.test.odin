@@ -361,6 +361,41 @@ test_scope_xy_in_tune_stands_still :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_scope_xy_average_goes_round_once :: proc(t: ^testing.T) {
+    // An in tune sine averaged against the reference's cosine, its line is the figure once round: from the
+    // right, across and back, it turns back once on the left. Over two periods it went round twice, drawn
+    // over itself, and turned back three times.
+    FREQ :: 220.0
+
+    scope := scope_test_init(FREQ)
+    defer destroy_scope(&scope)
+    set_scope_sweep(&scope, .XY)
+    scope.persistence_seconds = 18 / FREQ
+    scope.average_sweeps = true
+
+    samples: [SCOPE_TEST_FRAME]f32
+    for _ in 0 ..< 30 {
+        scope_test_sine(samples[:], FREQ, scope.sample_clock)
+        audio_capture_write(&scope, samples[:])
+        update_scope(&scope)
+    }
+
+    points: [dynamic][2]f32
+    defer delete(points)
+    scope_trace(&scope, &points)
+
+    turns := 0
+    heading: f32 = 0
+    for index in 1 ..< len(points) {
+        across := points[index].x - points[index - 1].x
+        if across == 0 do continue
+        if heading != 0 && (across > 0) != (heading > 0) do turns += 1
+        heading = across
+    }
+    testing.expectf(t, turns == 1, "turns back %v times", turns)
+}
+
+@(test)
 test_scope_trace :: proc(t: ^testing.T) {
     // A sine's line reaches SCOPE_FILL's height both ways and spans the screen, its points no further apart
     // across than a cell except where the sweep starts over, once, and as long apart in time
@@ -570,6 +605,129 @@ test_scope_circle_closes :: proc(t: ^testing.T) {
 
     in_tune, detuned := sharpest_bend(0), sharpest_bend(4)
     testing.expectf(t, detuned < 1.2 * in_tune, "detuned bends %v, in tune %v", detuned, in_tune)
+}
+
+@(test)
+test_scope_average_starts_over_on_a_whole_sweep :: proc(t: ^testing.T) {
+    // A note between C3 and C♯3, the strobe's reference flips from one to the other and the average starts
+    // over at the new one. Every frame after, the bins all have a sweep or none yet: one started over
+    // partway into a sweep left the bins before it empty, drawn at zero, and stepped where it began.
+    NOTE :: 134.6
+    freqs := [2]f64{130.81, 138.59}
+
+    scope := scope_test_init(freqs[0])
+    defer destroy_scope(&scope)
+    scope.persistence_seconds = 18 / freqs[0]
+    scope.average_sweeps = true
+    scope.lowpass = true
+
+    samples: [SCOPE_TEST_FRAME]f32
+    for frame in 0 ..< 40 {
+        // Flips every 7 frames, a frame's samples aren't a whole number of sweeps of either
+        if frame % 7 == 6 do set_scope_freq(&scope, freqs[(frame / 7 + 1) % 2])
+
+        scope_test_sine(samples[:], NOTE, scope.sample_clock)
+        audio_capture_write(&scope, samples[:])
+        update_scope(&scope)
+
+        empty := 0
+        for weight in scope.average_weights[:scope.average_bins] {
+            if weight == 0 do empty += 1
+        }
+        testing.expectf(
+            t,
+            empty == 0 || empty == scope.average_bins,
+            "frame %v: %v of %v bins empty",
+            frame,
+            empty,
+            scope.average_bins,
+        )
+        if empty > 0 do continue
+
+        // A sine moves by under a twentieth of its peak from one bin to the next, the first bin aside, it
+        // takes from both sides of where the sweeps meet
+        step, peak: f32
+        for bin in 1 ..< scope.average_bins - 1 {
+            value := scope.average_sums[bin] / scope.average_weights[bin]
+            next := scope.average_sums[bin + 1] / scope.average_weights[bin + 1]
+            step = max(step, abs(next - value))
+            peak = max(peak, abs(value))
+        }
+        testing.expectf(t, step < 0.05 * peak, "frame %v: steps %.2f of the peak", frame, step / peak)
+    }
+}
+
+@(test)
+test_scope_circle_closes_on_a_string :: proc(t: ^testing.T) {
+    // A plucked string a little sharp, its partials sharper the higher (inharmonic), each decaying at its own
+    // rate, in a little noise, through the low-pass: every frame, the circle's line bends at the top, where
+    // the sweeps meet, about as sharply as the wave does round it. A kink would bend it hundreds of times
+    // as sharply.
+    FREQ :: 220.0
+    OFF_HZ :: 1.0
+    PARTIALS :: 8
+    INHARMONICITY :: 1e-4 // a wound string's
+    NOISE :: 0.02 // peak, uniform
+
+    scope := scope_test_init(FREQ)
+    defer destroy_scope(&scope)
+    set_scope_sweep(&scope, .CIRCLE)
+    scope.persistence_seconds = 18 / FREQ
+    scope.average_sweeps = true
+    scope.lowpass = true
+
+    points: [dynamic][2]f32
+    defer delete(points)
+
+    // xorshift, the same noise every run
+    state: u32 = 1
+    samples: [SCOPE_TEST_FRAME]f32
+    worst: f32 = 0
+    for frame in 0 ..< 60 {
+        for &sample, i in samples {
+            time := f64(scope.sample_clock + i64(i)) / DEFAULT_SAMPLE_RATE
+            value: f64 = 0
+            for n in 1 ..= PARTIALS {
+                partial := f64(n)
+                freq := partial * (FREQ + OFF_HZ) * math.sqrt(1 + INHARMONICITY * partial * partial)
+                value += math.exp(-time * (0.5 + 0.4 * partial)) / partial * math.sin(math.TAU * freq * time + partial)
+            }
+            state ~= state << 13
+            state ~= state >> 17
+            state ~= state << 5
+            sample = 0.5 * f32(value) + NOISE * (2 * f32(state) / f32(max(u32)) - 1)
+        }
+        audio_capture_write(&scope, samples[:])
+        update_scope(&scope)
+
+        // Once the average has a few sweeps
+        if frame < 10 do continue
+
+        // How far each point is out from the middle, in rows, round the line once, the closing point is the
+        // first one again
+        scope_trace(&scope, &points)
+        count := len(points) - 1
+        radii := make([]f32, count)
+        defer delete(radii)
+        for &radius, index in radii {
+            x, y := points[index].x - 0.5, points[index].y - 0.5
+            radius = math.sqrt(x * x + y * y) * f32(scope.rows)
+        }
+
+        // A kink bends the radius both ways, sharply, at the top within a couple of bins of the join
+        near := 2 * trace_dots(&scope)
+        at_top, elsewhere: f32
+        for index in 0 ..< count {
+            bend := abs(radii[(index + 1) % count] - 2 * radii[index] + radii[(index + count - 1) % count])
+            if index < near || index >= count - near {
+                at_top = max(at_top, bend)
+            } else {
+                elsewhere = max(elsewhere, bend)
+            }
+        }
+        worst = max(worst, at_top / elsewhere)
+    }
+    testing.expectf(t, worst < 1.5, "bends %.2f times as sharply at the top", worst)
 }
 
 @(test)

@@ -143,7 +143,7 @@ draw_scope_screen :: proc(
             angle := math.TAU * f32(index) / RING_POINTS
             point = center + radius * [2]f32{math.cos(angle), math.sin(angle)}
         }
-        gfx.draw_polyline(points[:], SCOPE_GRID_THICKNESS, grid_color)
+        gfx.draw_polyline(points[:], SCOPE_GRID_THICKNESS, grid_color, closed = true)
     } else {
         // Through zero, and where the second period starts or the reference's zero
         gfx.draw_rect({rect.x, rect.y + (rect.height - SCOPE_GRID_THICKNESS) / 2}, {rect.width, SCOPE_GRID_THICKNESS}, grid_color)
@@ -158,13 +158,16 @@ draw_scope_screen :: proc(
 // analog oscilloscope's: the points are as long apart in time, where they're further apart the beam moves
 // faster and is dimmer, the steep edges fade and the crests stay lit. A wide faint line under it glows.
 draw_scope_trace :: proc(self: ^ScopeDisplay, rect: gfx.Rect, scope: ^core.Scope, beam: ScopeBeam, beam_color: gfx.Color) {
-    // In pieces where the sweep over time starts over on the left
+    // In pieces where the sweep over time starts over on the left. A line that ends where it started, the
+    // circle and the figure through the sweeps' average, is closed.
     draw_pieces :: proc(self: ^ScopeDisplay, rect: gfx.Rect, thickness, feather: f32) {
         piece := 0
         for index in 1 ..= len(self.trace) {
             if index < len(self.trace) && !wraps(self, rect, index - 1, index) do continue
 
-            gfx.draw_soft_polyline(self.trace[piece:index], self.trace_colors[piece:index], thickness, feather)
+            gap := self.trace[index - 1] - self.trace[piece]
+            closed := piece == 0 && index == len(self.trace) && abs(gap.x) + abs(gap.y) < 0.01
+            gfx.draw_soft_polyline(self.trace[piece:index], self.trace_colors[piece:index], thickness, feather, closed)
             piece = index
         }
     }
@@ -192,7 +195,7 @@ draw_scope_trace :: proc(self: ^ScopeDisplay, rect: gfx.Rect, scope: ^core.Scope
     // How far the beam goes from one point to the next on a flat line, a sweep's way at the wave's zero
     way := rect.width
     if scope.sweep == .CIRCLE do way = math.TAU * core.SCOPE_CIRCLE_REACH * core.SCOPE_CIRCLE_RING * rect.width
-    if scope.sweep == .XY do way = 2 * core.SCOPE_PERIODS * core.SCOPE_FILL * rect.width
+    if scope.sweep == .XY do way = 2 * core.SCOPE_FILL * rect.width
     flat := way / f32(len(self.trace) - 1)
 
     // Each point as far as the beam goes to the next one, or from the one before where it starts over
