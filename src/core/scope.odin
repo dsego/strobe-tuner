@@ -40,6 +40,10 @@
     note draws a still ellipse, a detuned one rolls it open and shut by the phase it slips, a line, a
     circle, a line the other way. The figure is square, as wide as the screen is high, on its left.
 
+    Circle: the sweep goes round instead of across, one reference period a turn, anticlockwise from the
+    top, the wave out from a ring at its zero. An in tune note draws a still loop in the wave's shape, a
+    detuned one spins by the phase it slips, clockwise when sharp like the wheel. Square like X-Y.
+
  -------------------------------------------------------------------------------------------------*/
 
 
@@ -74,8 +78,13 @@ ScopeShape :: enum {
 // What moves the beam across the screen
 ScopeSweep :: enum {
     TIME, // two reference periods across, the wave over time
+    CIRCLE, // round, a reference period a turn
     XY, // the reference's cosine, a Lissajous figure
 }
+
+// The circle's ring at the wave's zero, from its middle to its outside. A full scale sample reaches the
+// outside, its trough as far inside the ring.
+SCOPE_CIRCLE_RING :: 0.6
 
 // How the screen's height follows the input's level
 ScopeGain :: enum {
@@ -193,9 +202,9 @@ set_scope_sweep :: proc(self: ^Scope, sweep: ScopeSweep) {
     clear_scope(self)
 }
 
-// How many columns of the screen the beam draws in, X-Y is square
+// How many columns of the screen the beam draws in, X-Y and the circle are square
 scope_width :: proc(self: ^Scope) -> int {
-    return min(self.rows, self.columns) if self.sweep == .XY else self.columns
+    return self.columns if self.sweep == .TIME else min(self.rows, self.columns)
 }
 
 // Draws what came in since the previous frame
@@ -303,8 +312,8 @@ move_beam :: proc(self: ^Scope, position: f64, sample: f32, brightness: f64) {
 
     columns := self.step * f64(self.columns)
 
-    // The cosine moves the beam fastest through the middle
-    if self.sweep == .XY do columns = math.TAU * SCOPE_PERIODS * self.step * 0.5 * SCOPE_FILL * f64(scope_width(self))
+    // The cosine moves the beam fastest through the middle, and the circle on its outside
+    if self.sweep != .TIME do columns = math.TAU * SCOPE_PERIODS * self.step * 0.5 * SCOPE_FILL * f64(scope_width(self))
 
     rows := f64(abs(to - from) / self.level) * 0.5 * SCOPE_FILL * f64(self.rows)
     dots := clamp(int(math.ceil(max(columns, rows))), 1, SCOPE_MAX_BEAM_DOTS)
@@ -337,6 +346,14 @@ beam_dot :: proc(self: ^Scope, position: f64, value: f32, brightness: f64) {
     // In cells, from the middle of the first column and of the top row
     x := across * f64(scope_width(self)) - 0.5
     y := (0.5 - 0.5 * SCOPE_FILL * height) * f64(self.rows) - 0.5
+
+    // Round from the top, anticlockwise with the screen's rows running down
+    if self.sweep == .CIRCLE {
+        angle := math.TAU * SCOPE_PERIODS * position
+        radius := 0.5 * SCOPE_FILL * (SCOPE_CIRCLE_RING + (1 - SCOPE_CIRCLE_RING) * height)
+        x = (0.5 - radius * math.sin(angle)) * f64(scope_width(self)) - 0.5
+        y = (0.5 - radius * math.cos(angle)) * f64(self.rows) - 0.5
+    }
 
     left := int(math.floor(x))
     top := int(math.floor(y))

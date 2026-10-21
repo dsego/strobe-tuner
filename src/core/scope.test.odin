@@ -269,6 +269,57 @@ test_scope_xy_in_tune_stands_still :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_scope_circle_spins_clockwise_when_sharp :: proc(t: ^testing.T) {
+    // 8 periods a frame, a part of the loop drawn twice would pull the bulge its way
+    FREQ :: 480.0
+    OFF_HZ :: 1.0
+
+    // Which way the loop bulges out of its ring, the angle anticlockwise on the screen from the right.
+    // A sine's crest is outside the ring and its trough inside on the other side, both point the same way.
+    bulge_angle :: proc(scope: ^Scope) -> f64 {
+        width := scope_width(scope)
+        ring := 0.5 * SCOPE_FILL * SCOPE_CIRCLE_RING * f64(width)
+        bulge: [2]f64
+        for cell, i in scope.screen {
+            if cell == 0 do continue
+
+            x := f64(i % scope.columns) + 0.5 - 0.5 * f64(width)
+            y := f64(i / scope.columns) + 0.5 - 0.5 * f64(scope.rows)
+            radius := math.sqrt(x * x + y * y)
+            bulge += f64(cell) * (radius - ring) * [2]f64{x, -y} / radius
+        }
+        return math.atan2(bulge.y, bulge.x)
+    }
+
+    sweep_frame :: proc(scope: ^Scope, freq_hz: f64) {
+        samples: [SCOPE_TEST_FRAME]f32
+        scope_test_sine(samples[:], freq_hz, scope.sample_clock)
+        clear_scope(scope)
+        sweep_samples(scope, samples[:])
+    }
+
+    scope := scope_test_init(FREQ)
+    defer destroy_scope(&scope)
+    set_scope_sweep(&scope, .CIRCLE)
+
+    sweep_frame(&scope, FREQ)
+    still := bulge_angle(&scope)
+    for frame in 0 ..< 60 {
+        sweep_frame(&scope, FREQ)
+        angle := bulge_angle(&scope)
+        testing.expectf(t, abs(wrap_phase(angle - still)) < 0.02, "frame %v: turned %v", frame, angle - still)
+    }
+
+    // Sharp, a quarter of a turn clockwise in a quarter of a second
+    sweep_frame(&scope, FREQ + OFF_HZ)
+    start := bulge_angle(&scope)
+    for _ in 0 ..< 15 do sweep_frame(&scope, FREQ + OFF_HZ)
+
+    turned := wrap_phase(bulge_angle(&scope) - start)
+    testing.expectf(t, abs(turned + math.PI / 2) < 0.05, "turned %v, expected %v", turned, -math.PI / 2)
+}
+
+@(test)
 test_scope_gain :: proc(t: ^testing.T) {
     FREQ :: 220.0
 

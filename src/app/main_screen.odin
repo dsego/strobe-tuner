@@ -156,15 +156,15 @@ strobe_track_hz :: proc(lock_in: ^core.StrobeLockIn) -> []f32 {
     return track_hz
 }
 
-// The scope or the lamp. Tapped, the scope flips between the wave over time and the Lissajous figure, the
-// lamp between the one lamp and the split one, its two halves.
+// The scope or the lamp. Tapped, the scope goes on from the wave over time to the circle and the Lissajous
+// figure, the lamp flips between the one lamp and the split one, its two halves.
 draw_scope_area :: proc(app: ^App, strobe, view: gfx.Rect) {
     config, measurement := app.config, &app.measurement
     draw_scope_display(&app.displays.scope, &app.displays.glow_targets, &measurement.scope, view, config, measurement.pitch_detector.snr_db)
     if input_missing(app) || !gui_button(strobe) do return
 
     if config.strobe_display_type == .SCOPE {
-        config.scope_sweep = .XY if config.scope_sweep == .TIME else .TIME
+        config.scope_sweep = core.ScopeSweep((int(config.scope_sweep) + 1) % len(core.ScopeSweep))
     } else {
         config.lamp_shape = .HALF_RECTIFIED if config.lamp_shape == .SPLIT else .SPLIT
     }

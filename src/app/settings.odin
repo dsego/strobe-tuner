@@ -321,7 +321,7 @@ gui_scope_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
     row := 0
 
     // Tapping the scope flips it too
-    gui_settings_segmented(sheet_layout, &row, "Sweep", {"Time", "X-Y"}, &config.scope_sweep)
+    gui_settings_segmented(sheet_layout, &row, "Sweep", {"Time", "Circle", "X-Y"}, &config.scope_sweep)
     gui_screen_options(sheet_layout, &row, config)
 }
 

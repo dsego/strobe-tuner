@@ -25,10 +25,11 @@ import "../gfx"
 //   scope   - its screen
 //   lamp   - its screen from above, stripes as bright as the wave is high, the lamp of a mechanical strobe
 //
-// Two periods of the strobe's frequency across. An in tune note stands still, a detuned one drifts. The
-// scope runs left to right like an oscilloscope, a sawtooth leans the way it's generated and a sharp note
-// drifts left. The lamp is mirrored to move like the strobe tracks, flat to the left and sharp to the right.
-// Tapped, the scope draws the wave against the strobe's frequency instead, a Lissajous figure that
+// Two periods of the strobe's frequency across. An in tune note stands still, a detuned one drifts. Both
+// are mirrored to move like the strobe tracks, flat to the left and sharp to the right: the scope runs
+// right to left, time the other way from an oscilloscope's, so a sawtooth leans the other way too.
+// Tapped, the wave goes round a circle, a loop that stands still in tune and spins clockwise when sharp.
+// Tapped again, the scope draws the wave against the strobe's frequency instead, a Lissajous figure that
 // stands still in tune and rolls open and shut when it isn't.
 
 // The cells of the screen, about one a point at the desktop size
@@ -112,17 +113,30 @@ draw_scope_display :: proc(
 // to a thicker and brighter beam, drawn by the scope shader from the screen as a texture, a byte a cell.
 // The beam dims with the display's visibility, 1 is full.
 draw_scope_screen :: proc(self: ^ScopeDisplay, rect: gfx.Rect, scope: ^core.Scope, beam_color, grid_color: gfx.Color) {
-    // The Lissajous figure is round, on a square in the middle
+    // The Lissajous figure and the circle are round, on a square in the middle
     width := core.scope_width(scope)
     rect := rect
-    if scope.sweep == .XY {
+    if scope.sweep != .TIME {
         side := min(rect.width, rect.height)
         rect = {rect.x + (rect.width - side) / 2, rect.y + (rect.height - side) / 2, side, side}
     }
 
-    // Through zero, and where the second period starts or the reference's zero
-    gfx.draw_rect({rect.x, rect.y + (rect.height - SCOPE_GRID_THICKNESS) / 2}, {rect.width, SCOPE_GRID_THICKNESS}, grid_color)
-    gfx.draw_rect({rect.x + (rect.width - SCOPE_GRID_THICKNESS) / 2, rect.y}, {SCOPE_GRID_THICKNESS, rect.height}, grid_color)
+    if scope.sweep == .CIRCLE {
+        // The ring at the wave's zero
+        RING_POINTS :: 96
+        center := [2]f32{rect.x + rect.width / 2, rect.y + rect.height / 2}
+        radius := 0.5 * core.SCOPE_FILL * core.SCOPE_CIRCLE_RING * rect.width
+        points: [RING_POINTS + 1][2]f32
+        for &point, index in points {
+            angle := math.TAU * f32(index) / RING_POINTS
+            point = center + radius * [2]f32{math.cos(angle), math.sin(angle)}
+        }
+        gfx.draw_polyline(points[:], SCOPE_GRID_THICKNESS, grid_color)
+    } else {
+        // Through zero, and where the second period starts or the reference's zero
+        gfx.draw_rect({rect.x, rect.y + (rect.height - SCOPE_GRID_THICKNESS) / 2}, {rect.width, SCOPE_GRID_THICKNESS}, grid_color)
+        gfx.draw_rect({rect.x + (rect.width - SCOPE_GRID_THICKNESS) / 2, rect.y}, {SCOPE_GRID_THICKNESS, rect.height}, grid_color)
+    }
 
     // Against the dwell of a steady trace one cell thick, so a smeared trace is dimmer instead of being
     // scaled back up
@@ -162,7 +176,12 @@ draw_scope_screen :: proc(self: ^ScopeDisplay, rect: gfx.Rect, scope: ^core.Scop
     defer gfx.end_shader()
 
     gfx.set_shader_uniforms(.SCOPE, &uniforms)
-    gfx.draw_texture(self.texture, {0, 0, f32(width), f32(rows)}, rect)
+
+    // Over time it runs right to left, like the lamp, see the top of the file
+    source := gfx.Rect{0, 0, f32(width), f32(rows)}
+    if scope.sweep == .TIME do source.width = -source.width
+
+    gfx.draw_texture(self.texture, source, rect)
 }
 
 // Stripes as bright as the beam is high, the lamp of a mechanical strobe and the first version of this
