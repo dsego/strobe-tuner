@@ -25,7 +25,7 @@ Strobie is coming to the App Store for Mac and iPhone. [Try it in your browser](
 - Five displays, a button under the strobe cycles through them, see [Displays](#displays):
   - Strobe: curved tracks, a wheel or flat tracks, turned by a lock-in on each partial or by the lamp.
   - Lamp: the mechanical strobe, stripes lit by the wave.
-  - Scope: the waveform synced to the strobe's frequency, tap it for a Lissajous figure.
+  - Scope: the waveform synced to the strobe's frequency, tap it for petals on a circle or a Lissajous figure.
   - Trace: the cents over time.
   - Spectrum: the spectrum of what the pitch detection hears, the loudest peaks named.
 - Note offsets: tune a note up to ±25 cents off pitch, the strobe stands still at the offset note.
@@ -156,7 +156,7 @@ The first four show the same thing, how the note's phase slips against a referen
   - **Lock-in** (the default): each track measures its own partial with a single-bin DFT, see [Stroboscopic effect](#stroboscopic-effect). Smooth, with each partial measured on its own.
   - **Lamp**: each track turns by its partial on the lamp's screen, a DFT bin of it. That's the strobe the other way round, from the picture to the tracks, with its quirks: a pluck or a weak partial can make the stripes jump.
 - **Lamp**: the disc of a mechanical strobe lit by a lamp that flashes with the wave. Every sample is folded onto two periods of the reference, the stripes are as bright as the wave is high there. A detuned note drifts, a fast drift smears the stripes to gray, like the eye does with a real one.
-- **Scope**: the same folded screen as it is, an oscilloscope with its sweep synced to the reference. Tapped, it draws the wave against the reference's cosine instead, a Lissajous figure that stands still in tune and rolls open and shut when it isn't.
+- **Scope**: the same folded screen as it is, an oscilloscope with its sweep synced to the reference. Tapped, the sweep goes round, two periods a turn out from a small ring at the wave's zero and through the middle, so a sine draws four petals and every partial more, spinning clockwise when sharp. Tapped again, it draws the wave against the reference's cosine, a Lissajous figure that stands still in tune and rolls open and shut when it isn't. Its own low-pass, two running averages over a twelfth of the reference period, keeps the first few partials and drops the fine wiggles above them, delayed the same for every partial so the shape stays. The height is scaled to the peak of the last sweep, so every note fills the screen until it fades into the noise, or to the note's loudest, so its decay shows.
 - **Trace**: the cents of the readout over the last few seconds, to see a vibrato or a drift.
 - **Spectrum**: the power spectrum of what the pitch detection hears, the loudest peaks named by their note. Not a way to tune, its peaks are about 12 Hz wide: it shows what's there and how far it stands over the noise, e.g. a fridge's hum louder than the string.
 
@@ -164,7 +164,7 @@ The cents readout and the trace come from the lock-in in every display.
 
 #### Pitch detection
 
-The pitch detection algorithm uses autocorrelation via FFT, following the method described in _"A Smarter Way to Find Pitch" (Philip McLeod, Geoff Wyvill)_. It analyzes the newest 4096 samples every display frame to accurately identify the fundamental frequency, even in the presence of strong harmonics. Only this path is filtered: a 60 Hz high-pass takes out DC and low frequency rumble, which would lift the NSDF between periods, and a 5 kHz low-pass takes out hiss above the highest note, which blurs the period. A built-in clarity measure provides a confidence score for each detected pitch. Clarity and SNR (signal-to-noise ratio) help determine whether the pitch is strong or weak.
+The pitch detection algorithm uses autocorrelation via FFT, following the method described in _"A Smarter Way to Find Pitch" (Philip McLeod, Geoff Wyvill)_. It analyzes the newest 4096 samples every display frame to accurately identify the fundamental frequency, even in the presence of strong harmonics. Only this path and the scope view are filtered. Here a 60 Hz high-pass takes out DC and low frequency rumble, which would lift the NSDF between periods, and a 5 kHz low-pass takes out hiss above the highest note, which blurs the period. A built-in clarity measure provides a confidence score for each detected pitch. Clarity and SNR (signal-to-noise ratio) help determine whether the pitch is strong or weak.
 
 A newly detected note has to hold for 50 ms before the strobe switches to it, as a strong detection or a run of detections steady to a few cents, so a single noisy detection of a decaying note doesn't reset the display.
 
