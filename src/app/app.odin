@@ -591,6 +591,14 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
         core.autoset_scope(scope)
     }
 
+    // Starts over, the sweeps averaged so far are at the other gain
+    uniform_gain := config.scope_gain == .UNIFORM
+    if scope.uniform_gain != uniform_gain {
+        scope.uniform_gain = uniform_gain
+        core.clear_scope(scope)
+        core.autoset_scope(scope)
+    }
+
     // A pluck sets the scope's scale again
     for band in measurement.strobe_lock_in.bands {
         if band.onset && band.in_range {

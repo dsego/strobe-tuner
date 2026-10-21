@@ -36,7 +36,7 @@ settings_rows :: proc() -> int {
 }
 
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
-DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 8, .SCOPE = 3, .TRACE = 2, .LAMP = 2, .SPECTRUM = 4}
+DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 8, .SCOPE = 4, .TRACE = 2, .LAMP = 2, .SPECTRUM = 4}
 
 // For the longer labels of the display's options
 WIDE_SEGMENT_WIDTH :: 80
@@ -348,6 +348,9 @@ gui_scope_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
     // The sweeps averaged over the lamp's persistence, a solid line or an analog scope's phosphor, bright where
     // the beam lingers
     gui_settings_segmented(sheet_layout, &row, "Beam", {"Solid", "Phosphor"}, &config.scope_beam, WIDE_SEGMENT_WIDTH)
+
+    // Set by every new note and held so the note decays on the screen, or every sweep as loud
+    gui_settings_segmented(sheet_layout, &row, "Gain", {"Autoset", "Uniform"}, &config.scope_gain, WIDE_SEGMENT_WIDTH)
 }
 
 gui_trace_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {

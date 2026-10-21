@@ -164,6 +164,10 @@ Scope :: struct {
     // average_samples. A bin as wide as a sample moves, the sum of the samples there and of their weights,
     // scaled up by average_gain like the screen's cells by fade_gain.
     average_sweeps:      bool,
+    // Every sweep as loud, divided by its RMS: a tremolo or a decaying note stays the same size, see
+    // average_samples
+    uniform_gain:        bool,
+    sweep_scale:         f32, // the sweep being averaged's
     average_sums:        []f32,
     average_weights:     []f32,
     average_bins:        int,
@@ -294,6 +298,7 @@ clear_scope :: proc(self: ^Scope) {
     slice.zero(self.average_weights[:self.average_bins])
     self.average_gain = 1
     self.restart_average = true
+    self.averaged_sweep = min(i64) // the next one is new, its uniform gain worked out too
 }
 
 clear_screen :: proc(self: ^Scope) {
@@ -441,6 +446,12 @@ average_samples :: proc(self: ^Scope, samples: []f32) {
         return i64(math.ceil(sweep / self.step))
     }
 
+    // The sample kept at a clock, the newest one's is newest
+    kept :: proc(self: ^Scope, newest, sample_clock: i64) -> f32 {
+        before_newest := int(newest - sample_clock)
+        return self.history[(self.history_next - 1 - before_newest + 2 * len(self.history)) % len(self.history)]
+    }
+
     // Started over, from these samples once the low-pass has filled again, it started over with the
     // reference. The ones kept from before went through it at the old reference and are placed by its delay
     // then, the sweep they were in stepped where they end.
@@ -466,15 +477,29 @@ average_samples :: proc(self: ^Scope, samples: []f32) {
 
     bins := self.average_bins
     for sample_clock in from ..< sweep_start {
-        before_newest := int(newest - sample_clock)
-        sample := self.history[(self.history_next - 1 - before_newest + 2 * len(self.history)) % len(self.history)]
+        sample := kept(self, newest, sample_clock)
 
         position := f64(sample_clock) * self.step
         sweep := i64(math.floor(position))
         if sweep != self.averaged_sweep {
             self.averaged_sweep = sweep
             self.average_gain /= decay
+
+            // Uniform, the sweep divided by its RMS, never by less than the noise's floor: silence and the room's
+            // hiss stay small. The RMS is the partials' loudness, as they slide against each other the wave's
+            // peak moves and it doesn't, the picture doesn't vibrate.
+            if self.uniform_gain {
+                end := first_in(self, f64(sweep + 1))
+                total: f64 = 0
+                for clock_in in sample_clock ..< end {
+                    value := f64(kept(self, newest, clock_in))
+                    total += value * value
+                }
+                rms := f32(math.sqrt(total / f64(max(end - sample_clock, 1))))
+                self.sweep_scale = 1 / max(rms, min_level)
+            }
         }
+        if self.uniform_gain do sample *= self.sweep_scale
 
         // Divided back in as soon as it's too large, see sweep_samples
         if self.average_gain > SCOPE_MAX_FADE_GAIN {
@@ -502,7 +527,9 @@ average_samples :: proc(self: ^Scope, samples: []f32) {
         self.level = peak
         self.autoset_samples -= i64(len(samples))
     }
-    self.level = max(self.level, min_level)
+
+    // Uniform, the average is in RMS, a note's peak is at least 1, the noise under its floor stays small
+    self.level = max(self.level, 1 if self.uniform_gain else min_level)
 }
 
 // Keeps the samples for redraw_newest_sweep instead of drawing them, with the level followed the same

@@ -96,6 +96,12 @@ TRACE_RANGE_STEPS_CENTS :: [2]f32{25, 50}
 // together come apart and a pluck takes longer to show, the power is averaged over as long.
 SPECTRUM_WINDOW_STEPS :: [3]f32{1, 2, 4}
 
+// The scope's height, see core.autoset_scope
+ScopeGain :: enum {
+    AUTOSET, // set by every new note and held, the note decays and shrinks into the noise
+    UNIFORM, // every sweep as loud, a tremolo or a decaying note stays the same size until the noise
+}
+
 // The scope's beam, see draw_scope_screen
 ScopeBeam :: enum {
     SOLID, // one line through the sweeps averaged over the screen's persistence
@@ -205,6 +211,8 @@ Config :: struct {
     // the scope's beam through the sweeps averaged over the screen's persistence, a solid line or an analog
     // scope's phosphor, as bright as the beam stays
     scope_beam:                   ScopeBeam,
+    // the scope's height set by every new note and held, or every sweep as loud
+    scope_gain:                   ScopeGain,
 
     // Trace display: how many seconds it shows, and how many cents from the middle to its edges
     trace_seconds:                f32,
@@ -267,6 +275,7 @@ config_defaults :: Config {
     scope_sweep                  = .TIME,
     scope_lowpass                = true,
     scope_beam                   = .SOLID,
+    scope_gain                   = .AUTOSET,
     trace_seconds                = 2,
     trace_range_cents            = 25,
     spectrum_windows             = 2,

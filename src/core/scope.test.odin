@@ -568,6 +568,49 @@ test_scope_autoset :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_scope_uniform_gain :: proc(t: ^testing.T) {
+    // Half a second of a note and half a second of it 20 dB quieter, uniform: the quieter part is as tall,
+    // with no pluck to set the scale again. Under the noise's floor it stays small.
+    FREQ :: 220.0
+
+    scope := scope_test_init(FREQ)
+    defer destroy_scope(&scope)
+    scope.persistence_seconds = 18 / FREQ
+    scope.average_sweeps = true
+    scope.uniform_gain = true
+
+    play :: proc(scope: ^Scope, amp: f32, frames: int) {
+        samples: [SCOPE_TEST_FRAME]f32
+        for _ in 0 ..< frames {
+            scope_test_sine(samples[:], FREQ, scope.sample_clock)
+            for &sample in samples do sample *= amp
+
+            audio_capture_write(scope, samples[:])
+            update_scope(scope)
+        }
+    }
+
+    // How tall the average is on the screen, 1 is full
+    height :: proc(scope: ^Scope) -> f32 {
+        peak: f32 = 0
+        for weight, bin in scope.average_weights[:scope.average_bins] {
+            if weight > 0 do peak = max(peak, abs(scope.average_sums[bin] / weight))
+        }
+        return peak / scope.level
+    }
+
+    play(&scope, 1, 30)
+    testing.expectf(t, abs(height(&scope) - 1) < 0.02, "note: %v tall", height(&scope))
+
+    play(&scope, 0.1, 30)
+    testing.expectf(t, abs(height(&scope) - 1) < 0.02, "quieter: %v tall", height(&scope))
+
+    // A tenth of the floor, SCOPE_MIN_LEVEL here
+    play(&scope, 0.0001, 30)
+    testing.expectf(t, height(&scope) < 0.2, "under the floor: %v tall", height(&scope))
+}
+
+@(test)
 test_scope_circle_closes :: proc(t: ^testing.T) {
     // A note 31 cents sharp drifts from one sweep to the next, the circle's line still closes at the top
     // without a step: it bends no more sharply anywhere than an in tune note's does
