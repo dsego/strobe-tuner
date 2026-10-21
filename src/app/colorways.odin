@@ -45,7 +45,9 @@ COLORWAYS :: [StrobeColorway][2]u32 {
 // D orange, E yellow and green, blue and violet up to B.
 NOTE_HUE_C :: #config(NOTE_HUE_C, 23) // degrees
 NOTE_LIGHTNESS :: #config(NOTE_LIGHTNESS, 0.76)
-NOTE_CHROMA :: #config(NOTE_CHROMA, 0.135)
+// As rich as orange, yellow and pink go, the hues the screen can't show that rich at this lightness, the
+// blue and the greens, stay at the most it can, see oklch_color
+NOTE_CHROMA :: #config(NOTE_CHROMA, 0.2)
 // The dark stripes, the same hue dimmed like the colorways' dark ones
 NOTE_DARK_LIGHTNESS :: 0.4
 NOTE_DARK_CHROMA :: 0.05
