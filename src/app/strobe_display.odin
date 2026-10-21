@@ -214,11 +214,28 @@ glow_filter :: proc(color: u32) -> [3]f32 {
     return filter * filter
 }
 
+// The share of the lamp's light the dark stripes pass, as in the strobe shader
+GLOW_DARK_TRANSMISSION :: 0.3
+
+// The filter that lands the lamp on a color in the middle of its light: the shader's exposure curve,
+// 1 - exp(-lamp * filter), run backwards per channel. Toward the hotspot it's a little paler and toward the
+// edges darker, the lamp's light and shade over the color. By note's, every note's hue lands on its own
+// instead of the curve washing them all toward pale.
+landing_filter :: proc(color: u32, lamp: f32) -> [3]f32 {
+    MIDDLE_LAMP :: 0.8 // between the edges' 0.6 and the hotspot's 1, see the strobe shader
+    MAX_CHANNEL :: 0.97 // a full channel would need an endless filter
+
+    filter: [3]f32
+    for channel, index in gfx.normalize_color(gfx.hex(color)).rgb {
+        filter[index] = -math.ln(1 - min(channel, MAX_CHANNEL)) / (MIDDLE_LAMP * lamp)
+    }
+    return filter
+}
+
 // Lift the background a little, as if some lamp light scatters behind the whole disc.
 // Based on the darkest stripe, the dark stripes of the outer band away from the hotspot,
 // mirrors the light model in the strobe shader.
 glow_background :: proc(background: gfx.Color, glow: GlowParams) -> gfx.Color {
-    DARK_TRANSMISSION :: 0.3
     MIN_LAMP :: 0.6
     BACKGROUND_LIFT :: 0.25
 
@@ -226,7 +243,7 @@ glow_background :: proc(background: gfx.Color, glow: GlowParams) -> gfx.Color {
 
     darkest: [3]f32
     for channel, index in filter {
-        darkest[index] = 1 - math.exp(-DARK_TRANSMISSION * MIN_LAMP * glow.exposure * channel)
+        darkest[index] = 1 - math.exp(-GLOW_DARK_TRANSMISSION * MIN_LAMP * glow.exposure * channel)
     }
 
     luma := darkest.r * 0.299 + darkest.g * 0.587 + darkest.b * 0.114
@@ -276,8 +293,13 @@ draw_strobe_display :: proc(
         min_radius      = geometry.curvature_radius - band_height,
         max_radius      = geometry.curvature_radius + band_height * f32(len(bands) - 1),
     }
-    uniforms.glow_filter.rgb = glow_filter(glow.color)
-    uniforms.glow_dark_filter.rgb = glow_filter(glow.dark_color) * glow.dark_level
+    if config.strobe_colorway == .BY_NOTE {
+        uniforms.glow_filter.rgb = landing_filter(colors.x, glow.exposure)
+        uniforms.glow_dark_filter.rgb = landing_filter(colors.y, GLOW_DARK_TRANSMISSION * glow.exposure)
+    } else {
+        uniforms.glow_filter.rgb = glow_filter(glow.color)
+        uniforms.glow_dark_filter.rgb = glow_filter(glow.dark_color) * glow.dark_level
+    }
     uniforms.highlight_color = gfx.normalize_color(accent_color)
     tracks := strobe_tracks(self, upright, bands, lock_in, config, uniforms, geometry)
 

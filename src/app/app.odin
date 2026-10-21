@@ -249,6 +249,7 @@ run_frame :: proc(app: ^App) {
 
     reading := measure(app)
     update_in_tune_tap(app, reading)
+    follow_note_colors(app, reading)
 
     when !DEBUG_STATS {
         // A tablet draws in larger points than its own, see ui_scale

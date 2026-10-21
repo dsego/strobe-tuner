@@ -34,6 +34,7 @@ MenuCommand :: enum {
     COLORS_MINT,
     COLORS_AMBER,
     COLORS_MONO,
+    COLORS_BY_NOTE,
     RETRO_GLOW,
     LOCK_NOTE,
     DEFAULT_SIZE,
@@ -57,6 +58,7 @@ COLORWAY_COMMANDS :: [StrobeColorway]MenuCommand {
     .MINTY       = .COLORS_MINT,
     .AMBER       = .COLORS_AMBER,
     .MONO        = .COLORS_MONO,
+    .BY_NOTE     = .COLORS_BY_NOTE,
 }
 
 // SDL's app menu gets Settings…, the View menu the displays, the colors, the glow and the lock, the Input

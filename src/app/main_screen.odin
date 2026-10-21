@@ -252,15 +252,20 @@ draw_tuning_arrows :: proc(displays: ^Displays, note_target: ^core.NoteTarget, l
 
 // The target note on the ruler with the gauge under it, the lock, and the note's offset. The lock button (or
 // space, or tapping the note) locks the note, tapping another note on the ruler locks that one instead.
+// The semitones the shown notes are moved by. A transposing instrument reads the written note, only what's
+// shown moves, the steps are relative and work the same either way. With a capo the strings sound higher and
+// keep the names of the open strings, like the chord shapes played over it.
+shown_transpose :: proc(config: ^Config) -> int {
+    setup := current_setup(config)
+    return -capo_fret(setup) if setup.instrument != .CHROMATIC else transpose_key(setup)
+}
+
 draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading, menu: MenuCommand) {
     config, note_target := app.config, &app.measurement.note_target
     setup := current_setup(config)
     string_mode := setup.instrument != .CHROMATIC
 
-    // A transposing instrument reads the written note, only what's shown moves, the steps are relative and
-    // work the same either way. With a capo the strings sound higher and keep the names of the open strings,
-    // like the chord shapes played over it.
-    transpose := -capo_fret(setup) if string_mode else transpose_key(setup)
+    transpose := shown_transpose(config)
     shown_cents := note_target.target_note.cents
     shown_note := core.cents_to_note(f32(shown_cents + 100 * transpose), note_target.target_note.pitch_standard)
 

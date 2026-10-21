@@ -62,6 +62,7 @@ COLORWAY_NAMES :: [StrobeColorway]cstring {
     .MINTY       = "Mint",
     .AMBER       = "Amber",
     .MONO        = "Mono",
+    .BY_NOTE     = "By note",
 }
 
 // The same on the main screen's display button, in caps like the other controls' labels
@@ -238,8 +239,29 @@ gui_colorway_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config) 
         } else if gui_button(touch_area({center_x - pitch / 2, rect.y, pitch, rect.height})) {
             config.strobe_colorway = colorway
         }
-        gfx.draw_split_disc(swatch, gfx.hex(colors.x), gfx.hex(colors.y))
+
+        if colorway == .BY_NOTE {
+            draw_note_wheel(swatch)
+        } else {
+            gfx.draw_split_disc(swatch, gfx.hex(colors.x), gfx.hex(colors.y))
+        }
     }
+}
+
+// The By note swatch, the notes' hues round a disc: a ring as thick as the radius, round half of it
+draw_note_wheel :: proc(swatch: gfx.Rect) {
+    STEPS :: 28
+    center := [2]f32{swatch.x + swatch.width / 2, swatch.y + swatch.height / 2}
+    radius := swatch.width / 2
+    points: [STEPS + 1][2]f32
+    colors: [STEPS + 1]gfx.Color
+    for &point, index in points {
+        place := 7 * f32(index) / STEPS
+        angle := math.TAU * f32(index) / STEPS
+        point = center + 0.5 * radius * [2]f32{math.sin(angle), -math.cos(angle)}
+        colors[index] = gfx.hex(oklch_color(NOTE_LIGHTNESS, NOTE_CHROMA, NOTE_HUE_C + place * 360 / 7))
+    }
+    gfx.draw_soft_polyline(points[:], colors[:], radius, 0.75)
 }
 
 // The white ring around the picked swatch, the sheet's color in the gap between them so the ring doesn't
