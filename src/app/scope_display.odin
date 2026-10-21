@@ -28,7 +28,7 @@ import "../gfx"
 // Two periods of the strobe's frequency across. An in tune note stands still, a detuned one drifts. Both
 // are mirrored to move like the strobe tracks, flat to the left and sharp to the right: the scope runs
 // right to left, time the other way from an oscilloscope's, so a sawtooth leans the other way too.
-// Tapped, the wave goes round a circle, a loop that stands still in tune and spins clockwise when sharp.
+// Tapped, the wave goes round a circle, petals that stand still in tune and spin clockwise when sharp.
 // Tapped again, the scope draws the wave against the strobe's frequency instead, a Lissajous figure that
 // stands still in tune and rolls open and shut when it isn't.
 

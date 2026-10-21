@@ -581,7 +581,12 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
     // In periods of the strobe's frequency, the smear and the waver per cent look the same on every note
     scope.persistence_seconds = f64(config.persistence_periods) / strobe_hz
     scope.gain = config.scope_gain
+
+    // The lamp and its tracks take the wave as it comes
+    scope.lowpass = config.scope_lowpass && config.strobe_display_type == .SCOPE
+
     scope.noise_floor = measurement.pitch_detector.noise_floor.level
+    scope.snr_db = measurement.pitch_detector.snr_db
     core.update_scope(scope)
 }
 

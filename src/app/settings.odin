@@ -36,7 +36,7 @@ settings_rows :: proc() -> int {
 }
 
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
-DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 8, .SCOPE = 3, .TRACE = 2, .LAMP = 3, .SPECTRUM = 4}
+DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 8, .SCOPE = 4, .TRACE = 2, .LAMP = 3, .SPECTRUM = 4}
 
 // For the longer labels of the display's options
 WIDE_SEGMENT_WIDTH :: 80
@@ -322,6 +322,7 @@ gui_scope_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
 
     // Tapping the scope flips it too
     gui_settings_segmented(sheet_layout, &row, "Sweep", {"Time", "Circle", "X-Y"}, &config.scope_sweep)
+    gui_settings_segmented(sheet_layout, &row, "Low-pass", {"Off", "On"}, &config.scope_lowpass)
     gui_screen_options(sheet_layout, &row, config)
 }
 
@@ -348,11 +349,11 @@ gui_spectrum_display_options :: proc(sheet_layout: SheetLayout, config: ^Config)
     gui_settings_segmented(sheet_layout, &row, "Peak level", {"Off", "On"}, &config.spectrum_peak_level)
 }
 
-// The scope's and the lamp's screen. Held, a note's decay shows, the wave shrinks and the stripes dim like a
-// mechanical strobe's lamp. Auto keeps a fading note filling the screen.
+// The scope's and the lamp's screen. Fill keeps a fading note filling the screen. Decay scales it to the
+// note's loudest, the wave shrinks and the stripes dim like a mechanical strobe's lamp.
 gui_screen_options :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config) {
     gui_persistence_row(sheet_layout, row, config, PERSISTENCE_LABEL)
-    gui_settings_segmented(sheet_layout, row, "Gain", {"Auto", "Hold"}, &config.scope_gain)
+    gui_settings_segmented(sheet_layout, row, "Gain", {"Fill", "Decay"}, &config.scope_gain)
 }
 
 // The screens' persistence, the same row on the strobe's, the scope's and the lamp's options under its label

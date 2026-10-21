@@ -35,14 +35,21 @@
     top of a square wave and bend a sawtooth. Only the DC is taken out, like the AC coupling of an
     oscilloscope.
 
+    The low-pass of the scope view: two running averages, each over a twelfth of the reference period,
+    take out the fine wiggles of the high partials and the hiss and keep the first few partials. Every
+    partial is delayed the same, the shape stays, and the beam is drawn as much earlier, so the picture
+    doesn't move when it's turned on. It cancels the 12th partial and its multiples exactly, the 3rd keeps
+    81% and the 6th 41%. The lamp and its tracks take the wave as it comes.
+
     X-Y: the reference drives the beam across instead of the sweep, a cosine at its frequency. With the
     wave up and down that's a Lissajous figure, the way pitch was compared on an oscilloscope. An in tune
     note draws a still ellipse, a detuned one rolls it open and shut by the phase it slips, a line, a
     circle, a line the other way. The figure is square, as wide as the screen is high, on its left.
 
-    Circle: the sweep goes round instead of across, one reference period a turn, anticlockwise from the
-    top, the wave out from a ring at its zero. An in tune note draws a still loop in the wave's shape, a
-    detuned one spins by the phase it slips, clockwise when sharp like the wheel. Square like X-Y.
+    Circle: the sweep goes round instead of across, the same two reference periods a turn, anticlockwise
+    from the top, the wave out from a small ring at its zero and through the middle to the other side. A
+    sine draws four petals, every partial more. An in tune note stands still, a detuned one spins by half
+    the phase it slips, clockwise when sharp like the wheel. Square like X-Y.
 
  -------------------------------------------------------------------------------------------------*/
 
@@ -59,13 +66,19 @@ SCOPE_CHUNK_SIZE :: 4096
 SCOPE_MAX_BEAM_DOTS :: 256 // between two samples
 SCOPE_MAX_FADE_GAIN :: 1e15 // divided back into the cells at this, far under an f32's range, see sweep_samples
 
-// The level follows the peaks at once and falls back this slowly, the wave is drawn against it
-SCOPE_LEVEL_RELEASE_SECONDS :: 1.0
+// Auto's level is the peak of the last sweep, kept as the peaks of this many blocks of it
+SCOPE_SWEEP_BLOCKS :: 16
 SCOPE_MIN_LEVEL :: 0.001 // -60 dBFS, digital silence isn't scaled up to the full height
-SCOPE_NOISE_HEADROOM :: 20 // 26 dB, the level stays this far above the background noise's RMS
+// 26 dB, the level stays this far above the background noise's RMS while there's no note, and lets go of it
+// as a note comes out of the noise, see sweep_samples
+SCOPE_NOISE_HEADROOM :: 20
 
 // The corner of the AC coupling, the flat top of an A4 square wave sags under 2%, a low E's under 10%
 SCOPE_AC_COUPLING_HZ :: 2
+
+// The low-pass's averages are over the reference period over this, the first partial it cancels
+SCOPE_LOWPASS_HARMONIC :: #config(SCOPE_LOWPASS_HARMONIC, 12)
+SCOPE_LOWPASS_MAX_LENGTH :: 1024 // samples, a twelfth of the period of a 16 Hz note at 192 kHz
 
 
 // What the screen from above shows of the beam's height
@@ -83,13 +96,23 @@ ScopeSweep :: enum {
 }
 
 // The circle's ring at the wave's zero, from its middle to its outside. A full scale sample reaches the
-// outside, its trough as far inside the ring.
-SCOPE_CIRCLE_RING :: 0.6
+// outside, its trough goes through the middle and as far out on the other side less the ring twice. Small,
+// silence is a circle and a note petals through the middle instead of bumps on the ring.
+SCOPE_CIRCLE_RING :: 0.2
 
 // How the screen's height follows the input's level
 ScopeGain :: enum {
-    AUTO, // the peak, falling back over SCOPE_LEVEL_RELEASE_SECONDS, a fading note still fills the screen
-    HOLD, // the loudest peak since the reference changed, a fading note shrinks and shows its decay
+    FILL, // the peak of the last sweep, every note fills the screen until it fades into the noise
+    DECAY, // the loudest peak since the reference changed, a fading note shrinks and shows its decay
+}
+
+// Two running averages one after the other, see the top of the file
+ScopeLowpass :: struct {
+    length:  int, // of each average, in samples
+    primed:  bool, // the averages hold the input, otherwise they start over filled with the next sample
+    oldest:  int, // where in the history the sample leaving the averages is
+    history: [2][SCOPE_LOWPASS_MAX_LENGTH]f32,
+    sums:    [2]f64,
 }
 
 
@@ -98,6 +121,8 @@ Scope :: struct {
     freq_hz:             f64,
     sweep:               ScopeSweep,
     gain:                ScopeGain,
+    lowpass:             bool, // the scope view's, see the top of the file
+    lowpass_filter:      ScopeLowpass,
 
     // How long the beam stays on the screen, the time constant of its decay. 0 keeps only what came
     // in since the previous frame.
@@ -115,8 +140,18 @@ Scope :: struct {
     recent:              [3]f32, // the samples before the newest, the beam is drawn through them
     beam_restart:        bool, // recent is from before a gap, the beam starts over on the next sample
     level:               f32, // peak level of the input
-    // The RMS of the background noise, the room's hiss stays low on the screen instead of filling it
+
+    // Auto's, see follow_sweep_peak
+    block_peaks:         [SCOPE_SWEEP_BLOCKS]f32,
+    sweep_peak:          f32, // of the blocks
+    block_peak:          f32, // of the newest block as far as it came in
+    block_samples:       int, // of the newest block, it's done at block_length
+    block_length:        int,
+    next_block:          int,
+    // The RMS of the background noise, the room's hiss stays low on the screen instead of filling it, and
+    // how far the input is over it
     noise_floor:         f32,
+    snr_db:              f32,
     chunk:               []f32,
     coupling:            [2]f32, // the previous input and output of the AC coupling
     skipping:            bool, // nothing shows the screen, see skip_scope
@@ -168,8 +203,16 @@ destroy_scope :: proc(self: ^Scope) {
 set_scope_freq :: proc(self: ^Scope, freq_hz: f64) {
     self.freq_hz = freq_hz
     self.step = freq_hz / (f64(self.sample_rate) * SCOPE_PERIODS)
+
+    sweep := 1 / self.step if freq_hz > 0 else 1
+    self.block_length = max(int(math.round(sweep / SCOPE_SWEEP_BLOCKS)), 1)
+
+    length := f64(self.sample_rate) / (freq_hz * SCOPE_LOWPASS_HARMONIC) if freq_hz > 0 else 1
+    self.lowpass_filter.length = clamp(int(math.round(length)), 1, SCOPE_LOWPASS_MAX_LENGTH)
+    self.lowpass_filter.primed = false
+
     clear_scope(self)
-    if self.gain == .HOLD do self.level = SCOPE_MIN_LEVEL
+    if self.gain == .DECAY do self.level = SCOPE_MIN_LEVEL
 }
 
 // The input opened at another rate, the beam moves across by its samples. It starts over on a dark screen,
@@ -188,6 +231,7 @@ reset_scope :: proc(self: ^Scope) {
     clear_scope(self)
     self.coupling = {}
     self.level = 0
+    self.block_peaks, self.sweep_peak, self.block_peak = {}, 0, 0
     self.beam_restart = true
 }
 
@@ -235,6 +279,11 @@ update_scope :: proc(self: ^Scope) {
             sample = input - self.coupling[0] + pole * self.coupling[1]
             self.coupling = {input, sample}
         }
+
+        // Starts over with the beam, and when it's turned on
+        if self.beam_restart || !self.lowpass do self.lowpass_filter.primed = false
+        if self.lowpass do lowpass_samples(&self.lowpass_filter, self.chunk[:count])
+
         sweep_samples(self, self.chunk[:count])
         available -= count
     }
@@ -265,16 +314,26 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
     if self.step <= 0 || len(samples) == 0 do return
 
     // Of one sample
-    sample_rate := f64(self.sample_rate)
     decay: f64 = 1
-    if self.persistence_seconds > 0 do decay = math.exp(-1 / (self.persistence_seconds * sample_rate))
+    if self.persistence_seconds > 0 do decay = math.exp(-1 / (self.persistence_seconds * f64(self.sample_rate)))
 
-    release: f32 = 1 if self.gain == .HOLD else f32(math.exp(-1 / (SCOPE_LEVEL_RELEASE_SECONDS * sample_rate)))
+    // The low-pass's output is the input this many samples before
     clock := self.sample_clock - i64(len(samples))
-    min_level := max(self.noise_floor * SCOPE_NOISE_HEADROOM, SCOPE_MIN_LEVEL)
+    if self.lowpass do clock -= i64(self.lowpass_filter.length - 1)
+
+    // Over the noise by the headroom while there's no note, the room's hiss stays small. A note lets go of it
+    // as it comes out of the noise, the beam fades in over the same SNR, and a fading note fills the screen
+    // until it fades into the noise.
+    fade := STROBE_FADE_SNR_DB
+    headroom := math.pow(f32(SCOPE_NOISE_HEADROOM), 1 - math.smoothstep(fade[0], fade[1], self.snr_db))
+    min_level := max(self.noise_floor * headroom, SCOPE_MIN_LEVEL)
 
     for sample, index in samples {
-        self.level = max(abs(sample), self.level * release, min_level)
+        if self.gain == .DECAY {
+            self.level = max(abs(sample), self.level, min_level)
+        } else {
+            self.level = max(follow_sweep_peak(self, abs(sample)), min_level)
+        }
         self.fade_gain /= decay
 
         // Divided back in as soon as it's too large, a chunk long against a short persistence would outgrow
@@ -285,6 +344,46 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
             self.fade_gain = 1
         }
         move_beam(self, f64(clock + i64(index)) * self.step, sample, self.fade_gain)
+    }
+}
+
+// The peak of the last sweep, two periods, with the newest sample. A peak decaying back would sag between the
+// wave's crests and stretch the rest of the period, this one is the same all through a sweep and lets an
+// attack go a sweep later. Kept in blocks, the window is a sweep and up to a block more.
+follow_sweep_peak :: proc(self: ^Scope, magnitude: f32) -> f32 {
+    self.block_peak = max(self.block_peak, magnitude)
+    self.block_samples += 1
+    if self.block_samples >= self.block_length {
+        self.block_peaks[self.next_block] = self.block_peak
+        self.next_block = (self.next_block + 1) % SCOPE_SWEEP_BLOCKS
+        self.sweep_peak = slice.max(self.block_peaks[:])
+        self.block_peak, self.block_samples = 0, 0
+    }
+    return max(self.sweep_peak, self.block_peak)
+}
+
+// The samples through the low-pass, in place. A running average adds the newest sample to its sum and
+// takes the oldest out, as cheap over a long period as over a short one.
+lowpass_samples :: proc(self: ^ScopeLowpass, samples: []f32) {
+    if self.length <= 1 do return
+
+    for &sample in samples {
+        // Filled with the wave where it is, not with a streak up from zero
+        if !self.primed {
+            for stage in 0 ..< 2 {
+                slice.fill(self.history[stage][:self.length], sample)
+                self.sums[stage] = f64(sample) * f64(self.length)
+            }
+            self.oldest = 0
+            self.primed = true
+        }
+
+        for stage in 0 ..< 2 {
+            self.sums[stage] += f64(sample) - f64(self.history[stage][self.oldest])
+            self.history[stage][self.oldest] = sample
+            sample = f32(self.sums[stage] / f64(self.length))
+        }
+        self.oldest = (self.oldest + 1) % self.length
     }
 }
 
@@ -313,7 +412,9 @@ move_beam :: proc(self: ^Scope, position: f64, sample: f32, brightness: f64) {
     columns := self.step * f64(self.columns)
 
     // The cosine moves the beam fastest through the middle, and the circle on its outside
-    if self.sweep != .TIME do columns = math.TAU * SCOPE_PERIODS * self.step * 0.5 * SCOPE_FILL * f64(scope_width(self))
+    radius := 0.5 * SCOPE_FILL * f64(scope_width(self))
+    if self.sweep == .XY do columns = math.TAU * SCOPE_PERIODS * self.step * radius
+    if self.sweep == .CIRCLE do columns = math.TAU * self.step * radius
 
     rows := f64(abs(to - from) / self.level) * 0.5 * SCOPE_FILL * f64(self.rows)
     dots := clamp(int(math.ceil(max(columns, rows))), 1, SCOPE_MAX_BEAM_DOTS)
@@ -347,9 +448,10 @@ beam_dot :: proc(self: ^Scope, position: f64, value: f32, brightness: f64) {
     x := across * f64(scope_width(self)) - 0.5
     y := (0.5 - 0.5 * SCOPE_FILL * height) * f64(self.rows) - 0.5
 
-    // Round from the top, anticlockwise with the screen's rows running down
+    // Round from the top, anticlockwise with the screen's rows running down. A radius under zero is on the
+    // other side of the middle.
     if self.sweep == .CIRCLE {
-        angle := math.TAU * SCOPE_PERIODS * position
+        angle := math.TAU * position
         radius := 0.5 * SCOPE_FILL * (SCOPE_CIRCLE_RING + (1 - SCOPE_CIRCLE_RING) * height)
         x = (0.5 - radius * math.sin(angle)) * f64(scope_width(self)) - 0.5
         y = (0.5 - radius * math.cos(angle)) * f64(self.rows) - 0.5

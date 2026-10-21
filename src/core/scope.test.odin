@@ -176,23 +176,69 @@ test_scope_noise_stays_low :: proc(t: ^testing.T) {
     FREQ :: 220.0
     NOISE :: 0.01 // peak, as loud as the room
 
-    scope := scope_test_init(FREQ)
-    defer destroy_scope(&scope)
-    scope.noise_floor = NOISE / math.SQRT_TWO
+    // Longer than the level takes to fall back after a note
+    amp_over_noise :: proc(snr_db: f32) -> f64 {
+        scope := scope_test_init(FREQ)
+        defer destroy_scope(&scope)
+        scope.noise_floor = NOISE / math.SQRT_TWO
+        scope.snr_db = snr_db
 
-    // Longer than the level takes to fall back after a note, as small as it is over the noise
-    samples: [SCOPE_TEST_FRAME]f32
-    for _ in 0 ..< 120 {
-        scope_test_sine(samples[:], FREQ, scope.sample_clock)
-        for &sample in samples do sample *= NOISE
+        samples: [SCOPE_TEST_FRAME]f32
+        for _ in 0 ..< 120 {
+            scope_test_sine(samples[:], FREQ, scope.sample_clock)
+            for &sample in samples do sample *= NOISE
 
-        clear_scope(&scope)
-        sweep_samples(&scope, samples[:])
+            clear_scope(&scope)
+            sweep_samples(&scope, samples[:])
+        }
+        heights, _ := scope_from_above(&scope, .RAW_WAVEFORM)
+        _, amp := scope_test_fundamental(heights)
+        return amp
     }
-    heights, _ := scope_from_above(&scope, .RAW_WAVEFORM)
-    _, amp := scope_test_fundamental(heights)
+
+    // No note, as small as it is over the noise
+    amp := amp_over_noise(0)
     expected := math.SQRT_TWO / SCOPE_NOISE_HEADROOM
     testing.expectf(t, abs(amp - expected) < 0.02, "amp %v, expected %v", amp, expected)
+
+    // Out of the noise, a note as quiet fills the screen
+    amp = amp_over_noise(STROBE_FADE_SNR_DB[1])
+    testing.expectf(t, amp > 0.95, "note: amp %v", amp)
+}
+
+@(test)
+test_scope_lowpass :: proc(t: ^testing.T) {
+    // 16 samples a twelfth of a period exactly, the averages cancel the 12th partial
+    FREQ :: 250.0
+
+    // The fundamental and the 12th partial of a wave with both, the 12th half as high
+    sweep_partials :: proc(lowpass: bool) -> (partials: [2]ScopePartial) {
+        scope := scope_test_init(FREQ)
+        defer destroy_scope(&scope)
+        scope.lowpass = lowpass
+
+        samples, partial: [SCOPE_TEST_FRAME]f32
+        for _ in 0 ..< 30 {
+            scope_test_sine(samples[:], FREQ, scope.sample_clock)
+            scope_test_sine(partial[:], 12 * FREQ, scope.sample_clock)
+            for &sample, index in samples do sample += 0.5 * partial[index]
+            if lowpass do lowpass_samples(&scope.lowpass_filter, samples[:])
+
+            clear_scope(&scope)
+            sweep_samples(&scope, samples[:])
+        }
+        scope_partials(&scope, []int{SCOPE_PERIODS, 12 * SCOPE_PERIODS}, partials[:])
+        return
+    }
+
+    off := sweep_partials(false)
+    on := sweep_partials(true)
+    testing.expectf(t, off[1].level / off[0].level > 0.2, "off: 12th partial %v", off[1].level / off[0].level)
+    testing.expectf(t, on[1].level / on[0].level < 0.02, "on: 12th partial %v", on[1].level / on[0].level)
+
+    // Drawn as much earlier as it's delayed, the fundamental stays where it was
+    moved := wrap_phase(on[0].phase - off[0].phase)
+    testing.expectf(t, abs(moved) < 0.02, "the fundamental moved %v", moved)
 }
 
 @(test)
@@ -270,25 +316,26 @@ test_scope_xy_in_tune_stands_still :: proc(t: ^testing.T) {
 
 @(test)
 test_scope_circle_spins_clockwise_when_sharp :: proc(t: ^testing.T) {
-    // 8 periods a frame, a part of the loop drawn twice would pull the bulge its way
+    // 8 periods a frame, four turns, a part of the petals drawn twice would pull them its way
     FREQ :: 480.0
     OFF_HZ :: 1.0
 
-    // Which way the loop bulges out of its ring, the angle anticlockwise on the screen from the right.
-    // A sine's crest is outside the ring and its trough inside on the other side, both point the same way.
-    bulge_angle :: proc(scope: ^Scope) -> f64 {
+    // Which way the petals point out of the ring, twice the angle anticlockwise on the screen from the
+    // right. A sine's two petals are half a turn apart, at twice their angle they point the same way.
+    petals_angle :: proc(scope: ^Scope) -> f64 {
         width := scope_width(scope)
         ring := 0.5 * SCOPE_FILL * SCOPE_CIRCLE_RING * f64(width)
-        bulge: [2]f64
+        petals: [2]f64
         for cell, i in scope.screen {
             if cell == 0 do continue
 
             x := f64(i % scope.columns) + 0.5 - 0.5 * f64(width)
             y := f64(i / scope.columns) + 0.5 - 0.5 * f64(scope.rows)
             radius := math.sqrt(x * x + y * y)
-            bulge += f64(cell) * (radius - ring) * [2]f64{x, -y} / radius
+            angle := math.atan2(-y, x)
+            petals += f64(cell) * (radius - ring) * [2]f64{math.cos(2 * angle), math.sin(2 * angle)}
         }
-        return math.atan2(bulge.y, bulge.x)
+        return math.atan2(petals.y, petals.x)
     }
 
     sweep_frame :: proc(scope: ^Scope, freq_hz: f64) {
@@ -302,20 +349,22 @@ test_scope_circle_spins_clockwise_when_sharp :: proc(t: ^testing.T) {
     defer destroy_scope(&scope)
     set_scope_sweep(&scope, .CIRCLE)
 
-    sweep_frame(&scope, FREQ)
-    still := bulge_angle(&scope)
+    // The level starts from nothing, the first frame's first samples are clipped
+    for _ in 0 ..< 2 do sweep_frame(&scope, FREQ)
+    still := petals_angle(&scope)
     for frame in 0 ..< 60 {
         sweep_frame(&scope, FREQ)
-        angle := bulge_angle(&scope)
+        angle := petals_angle(&scope)
         testing.expectf(t, abs(wrap_phase(angle - still)) < 0.02, "frame %v: turned %v", frame, angle - still)
     }
 
-    // Sharp, a quarter of a turn clockwise in a quarter of a second
+    // Sharp, an eighth of a turn clockwise in a quarter of a second, half the quarter period it slipped.
+    // Twice that at twice the angle.
     sweep_frame(&scope, FREQ + OFF_HZ)
-    start := bulge_angle(&scope)
+    start := petals_angle(&scope)
     for _ in 0 ..< 15 do sweep_frame(&scope, FREQ + OFF_HZ)
 
-    turned := wrap_phase(bulge_angle(&scope) - start)
+    turned := wrap_phase(petals_angle(&scope) - start)
     testing.expectf(t, abs(turned + math.PI / 2) < 0.05, "turned %v, expected %v", turned, -math.PI / 2)
 }
 
@@ -323,14 +372,14 @@ test_scope_circle_spins_clockwise_when_sharp :: proc(t: ^testing.T) {
 test_scope_gain :: proc(t: ^testing.T) {
     FREQ :: 220.0
 
-    // The level after a second of a loud note and two seconds of it 20 dB quieter
+    // The level after a second of a loud note and three frames, 11 periods, of it 20 dB quieter
     level_after_decay :: proc(gain: ScopeGain) -> f32 {
         scope := scope_test_init(FREQ)
         defer destroy_scope(&scope)
         scope.gain = gain
 
         samples: [SCOPE_TEST_FRAME]f32
-        for frame in 0 ..< 180 {
+        for frame in 0 ..< 63 {
             scope_test_sine(samples[:], FREQ, scope.sample_clock)
             if frame >= 60 do for &sample in samples do sample *= 0.1
 
@@ -339,16 +388,16 @@ test_scope_gain :: proc(t: ^testing.T) {
         return scope.level
     }
 
-    // Auto follows the quieter note down to its peak, hold keeps the loud one's
-    auto := level_after_decay(.AUTO)
-    testing.expectf(t, auto < 0.15, "auto: level %v", auto)
-    held := level_after_decay(.HOLD)
-    testing.expectf(t, held > 0.99, "hold: level %v", held)
+    // Fill is at the quieter note's peak a sweep later, decay keeps the loud one's
+    filled := level_after_decay(.FILL)
+    testing.expectf(t, abs(filled - 0.1) < 0.002, "fill: level %v", filled)
+    decayed := level_after_decay(.DECAY)
+    testing.expectf(t, decayed > 0.99, "decay: level %v", decayed)
 
-    // Another note lets the held level go
+    // Another note lets the loudest peak go
     scope := scope_test_init(FREQ)
     defer destroy_scope(&scope)
-    scope.gain = .HOLD
+    scope.gain = .DECAY
     samples: [SCOPE_TEST_FRAME]f32
     scope_test_sine(samples[:], FREQ, scope.sample_clock)
     sweep_samples(&scope, samples[:])

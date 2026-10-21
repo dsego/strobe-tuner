@@ -193,8 +193,10 @@ Config :: struct {
     lamp_shape:                   core.ScopeShape,
     // the scope over time or as a Lissajous figure against the strobe's frequency, tapping it flips them
     scope_sweep:                  core.ScopeSweep,
-    // the screen's height follows the level, or holds the note's loudest to show its decay
+    // the screen's height fills with every note, or is scaled to the note's loudest to show its decay
     scope_gain:                   core.ScopeGain,
+    // the scope view keeps the first few partials of the wave and drops the fine wiggles above them
+    scope_lowpass:                bool,
 
     // Trace display: how many seconds it shows, and how many cents from the middle to its edges
     trace_seconds:                f32,
@@ -254,7 +256,8 @@ config_defaults :: Config {
     persistence_periods          = 18,
     lamp_shape                   = .HALF_RECTIFIED,
     scope_sweep                  = .TIME,
-    scope_gain                   = .AUTO,
+    scope_gain                   = .FILL,
+    scope_lowpass                = true,
     trace_seconds                = 2,
     trace_range_cents            = 25,
     spectrum_windows             = 2,
