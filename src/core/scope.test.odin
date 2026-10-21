@@ -461,8 +461,7 @@ test_scope_average :: proc(t: ^testing.T) {
     // Scaled to what's drawn: the newest sweep to the noisy input's peak, the average to its own, the sine's
     // and a little of the noise left
     testing.expectf(t, newest.level > AMP + 0.25, "newest sweep: level %v", newest.level)
-    peak := averaged.level * SCOPE_AUTOSET_OVERSHOOT
-    testing.expectf(t, peak > AMP && peak < AMP + 0.1, "averaged: peak %v", peak)
+    testing.expectf(t, averaged.level > AMP && averaged.level < AMP + 0.1, "averaged: level %v", averaged.level)
 }
 
 @(test)
@@ -494,7 +493,7 @@ test_scope_average_lowpass :: proc(t: ^testing.T) {
     // In rows, the AC coupling leads by about one
     worst: f64 = 0
     for point in points {
-        expected := 0.5 - 0.5 * SCOPE_FILL * SCOPE_AUTOSET_OVERSHOOT * math.sin(math.TAU * SCOPE_PERIODS * f64(point.x))
+        expected := 0.5 - 0.5 * SCOPE_FILL * math.sin(math.TAU * SCOPE_PERIODS * f64(point.x))
         worst = max(worst, abs(f64(point.y) - expected) * f64(scope.rows))
     }
     testing.expectf(t, worst < 2, "%v rows off the sine", worst)
@@ -503,7 +502,7 @@ test_scope_average_lowpass :: proc(t: ^testing.T) {
 @(test)
 test_scope_autoset :: proc(t: ^testing.T) {
     // Half a second of a note and half a second of it 20 dB quieter: the scale is held at the note's and
-    // the quieter part shrinks, until a pluck sets it again. The note's peak overshoots the full height.
+    // the quieter part shrinks, until a pluck sets it again
     FREQ :: 220.0
 
     scope := scope_test_init(FREQ)
@@ -523,17 +522,54 @@ test_scope_autoset :: proc(t: ^testing.T) {
     }
 
     play(&scope, 1, 30)
-    peak := scope.level * SCOPE_AUTOSET_OVERSHOOT
-    testing.expectf(t, abs(peak - 1) < 0.01, "note: peak %v", peak)
+    testing.expectf(t, abs(scope.level - 1) < 0.01, "note: level %v", scope.level)
 
     play(&scope, 0.1, 30)
-    peak = scope.level * SCOPE_AUTOSET_OVERSHOOT
-    testing.expectf(t, abs(peak - 1) < 0.01, "quieter: peak %v", peak)
+    testing.expectf(t, abs(scope.level - 1) < 0.01, "quieter: level %v", scope.level)
 
     autoset_scope(&scope)
     play(&scope, 0.1, 30)
-    peak = scope.level * SCOPE_AUTOSET_OVERSHOOT
-    testing.expectf(t, abs(peak - 0.1) < 0.01, "plucked: peak %v", peak)
+    testing.expectf(t, abs(scope.level - 0.1) < 0.01, "plucked: level %v", scope.level)
+}
+
+@(test)
+test_scope_circle_closes :: proc(t: ^testing.T) {
+    // A note 31 cents sharp drifts from one sweep to the next, the circle's line still closes at the top
+    // without a step: it bends no more sharply anywhere than an in tune note's does
+    FREQ :: 220.0
+
+    // Of the line all the way round, the top where its last point is the first again too
+    sharpest_bend :: proc(off_hz: f64) -> f32 {
+        bend :: proc(before, point, after: [2]f32) -> f32 {
+            delta := after - 2 * point + before
+            return math.sqrt(delta.x * delta.x + delta.y * delta.y)
+        }
+
+        scope := scope_test_init(FREQ)
+        defer destroy_scope(&scope)
+        set_scope_sweep(&scope, .CIRCLE)
+        scope.persistence_seconds = 18 / FREQ
+        scope.average_sweeps = true
+
+        samples: [SCOPE_TEST_FRAME]f32
+        for _ in 0 ..< 30 {
+            scope_test_sine(samples[:], FREQ + off_hz, scope.sample_clock)
+            audio_capture_write(&scope, samples[:])
+            update_scope(&scope)
+        }
+
+        points: [dynamic][2]f32
+        defer delete(points)
+        scope_trace(&scope, &points)
+
+        last := len(points) - 1
+        sharpest := bend(points[last - 1], points[0], points[1])
+        for index in 1 ..< last do sharpest = max(sharpest, bend(points[index - 1], points[index], points[index + 1]))
+        return sharpest
+    }
+
+    in_tune, detuned := sharpest_bend(0), sharpest_bend(4)
+    testing.expectf(t, detuned < 1.2 * in_tune, "detuned bends %v, in tune %v", detuned, in_tune)
 }
 
 @(test)
