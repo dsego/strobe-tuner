@@ -61,7 +61,8 @@ load_config :: proc() -> Config {
 
     // 0 is off, a sliver of a period would fade the screen to nothing between two samples. The W key's longest
     // is about 70 periods.
-    if config.persistence_periods != 0 do config.persistence_periods = clamp(config.persistence_periods, 1, 1000)
+    if config.strobe_persistence_periods != 0 do config.strobe_persistence_periods = clamp(config.strobe_persistence_periods, 1, 1000)
+    if config.screen_persistence_periods != 0 do config.screen_persistence_periods = clamp(config.screen_persistence_periods, 1, 1000)
 
     // A spectrum window of 0 would have nothing to transform
     window_steps := SPECTRUM_WINDOW_STEPS

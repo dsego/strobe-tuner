@@ -36,7 +36,7 @@ settings_rows :: proc() -> int {
 }
 
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
-DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 8, .SCOPE = 4, .TRACE = 2, .LAMP = 3, .SPECTRUM = 4}
+DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 8, .SCOPE = 3, .TRACE = 2, .LAMP = 2, .SPECTRUM = 4}
 
 // For the longer labels of the display's options
 WIDE_SEGMENT_WIDTH :: 80
@@ -75,8 +75,8 @@ DISPLAY_MENU_WIDTH :: SETTINGS_CONTROL_WIDTH
 
 // The labels of the steps below that have three
 STEP_LABELS :: []cstring{"Short", "Medium", "Long"}
-// The screens' persistence, see PERSISTENCE_STEPS_PERIODS: the scope's word on the scope's and the lamp's
-// options, what it does to the stripes on the strobe's
+// The lamp's persistence and the strobe's stripes' average, see PERSISTENCE_STEPS_PERIODS, each its own
+// setting under its own word
 PERSISTENCE_LABEL: cstring : "Persistence"
 SMOOTHING_LABEL: cstring : "Motion smoothing"
 PERSISTENCE_LABELS :: []cstring{"Off", "Short", "Medium", "Long"}
@@ -306,9 +306,8 @@ gui_strobe_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -
         changed = true
     }
 
-    // The stripes smear and calm down on an unsteady note like the lamp's, the same setting as the scope's and
-    // the lamp's screen, see strobe_persistence
-    gui_persistence_row(sheet_layout, &row, config, SMOOTHING_LABEL)
+    // The stripes smear and calm down on an unsteady note like the lamp's, see strobe_persistence
+    gui_persistence_row(sheet_layout, &row, SMOOTHING_LABEL, &config.strobe_persistence_periods)
 
     // The labels on the tracks: the partial, and how far off it is
     harmonic := config.strobe_mode == .HARMONIC
@@ -323,7 +322,10 @@ gui_scope_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
     // Tapping the scope flips it too
     gui_settings_segmented(sheet_layout, &row, "Sweep", {"Time", "Circle", "X-Y"}, &config.scope_sweep)
     gui_settings_segmented(sheet_layout, &row, "Low-pass", {"Off", "On"}, &config.scope_lowpass)
-    gui_screen_options(sheet_layout, &row, config)
+
+    // The sweeps averaged over the lamp's persistence, a solid line or an analog scope's phosphor, bright where
+    // the beam lingers
+    gui_settings_segmented(sheet_layout, &row, "Beam", {"Solid", "Phosphor"}, &config.scope_beam, WIDE_SEGMENT_WIDTH)
 }
 
 gui_trace_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
@@ -338,7 +340,7 @@ gui_lamp_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
     // The positive half of the wave like a mechanical strobe's lamp, the wave as it is, or both halves split.
     // Tapping the lamp flips it too.
     gui_settings_segmented(sheet_layout, &row, "Rectifier", {"Half", "None", "Split"}, &config.lamp_shape)
-    gui_screen_options(sheet_layout, &row, config)
+    gui_persistence_row(sheet_layout, &row, PERSISTENCE_LABEL, &config.screen_persistence_periods)
 }
 
 gui_spectrum_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
@@ -349,21 +351,14 @@ gui_spectrum_display_options :: proc(sheet_layout: SheetLayout, config: ^Config)
     gui_settings_segmented(sheet_layout, &row, "Peak level", {"Off", "On"}, &config.spectrum_peak_level)
 }
 
-// The scope's and the lamp's screen. Fill keeps a fading note filling the screen. Decay scales it to the
-// note's loudest, the wave shrinks and the stripes dim like a mechanical strobe's lamp.
-gui_screen_options :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config) {
-    gui_persistence_row(sheet_layout, row, config, PERSISTENCE_LABEL)
-    gui_settings_segmented(sheet_layout, row, "Gain", {"Fill", "Decay"}, &config.scope_gain)
-}
-
-// The screens' persistence, the same row on the strobe's, the scope's and the lamp's options under its label
-// for each. A long label leaves less room on a narrow phone, the segments shrink to fit beside it.
-gui_persistence_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config, label: cstring) {
+// The lamp's persistence and the strobe's motion smoothing, the same steps of periods under each one's word.
+// A long label leaves less room on a narrow phone, the segments shrink to fit beside it.
+gui_persistence_row :: proc(sheet_layout: SheetLayout, row: ^int, label: cstring, periods: ^f32) {
     LABEL_GAP :: 12
     labels := PERSISTENCE_LABELS
     room := sheet_layout.width - sheet_layout.end_inset - measure_label(pixel_fonts.label, label, 1).x - LABEL_GAP
     segment_width := min(SEGMENT_WIDTH, room / f32(len(labels)))
-    gui_steps(sheet_layout, row, label, labels, &config.persistence_periods, PERSISTENCE_STEPS_PERIODS, segment_width)
+    gui_steps(sheet_layout, row, label, labels, periods, PERSISTENCE_STEPS_PERIODS, segment_width)
 }
 
 // A settings row of a value that's one of a few steps, a label each. None is picked for a value set in the

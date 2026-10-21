@@ -96,6 +96,12 @@ TRACE_RANGE_STEPS_CENTS :: [2]f32{25, 50}
 // together come apart and a pluck takes longer to show, the power is averaged over as long.
 SPECTRUM_WINDOW_STEPS :: [3]f32{1, 2, 4}
 
+// The scope's beam, see draw_scope_screen
+ScopeBeam :: enum {
+    SOLID, // one line through the sweeps averaged over the screen's persistence
+    PHOSPHOR, // the same line as bright as the beam stays, dim where it moves fast like an analog scope's
+}
+
 // The spectrum's height, see src/app/spectrum_display.odin
 SpectrumScale :: enum {
     SNR, // each bin over the noise around it, the room flat along the bottom
@@ -184,19 +190,21 @@ Config :: struct {
     // How far off each track's partial is, next to the track
     show_band_cents:              bool,
 
-    // How long the screens remember, in periods of the strobe's frequency: the scope's and the lamp's beam,
-    // and the strobe's stripes, which smear and calm down like the lamp's, see strobe_persistence. 0 is off,
-    // the screens show only what came in since the previous frame.
-    persistence_periods:          f32,
+    // How long the strobe's stripes average, in periods of the strobe's frequency: they smear and calm down
+    // on an unsteady note like a lamp's, see strobe_persistence. 0 is off.
+    strobe_persistence_periods:   f32,
+    // how long the scope's phosphor and the lamp remember, in the same periods, 0 keeps the newest sweep only
+    screen_persistence_periods:   f32,
     // what the lamp shows, the positive half of the wave like a lamp, the wave as it is, or the two halves
     // split, tapping it flips between the first and the split
     lamp_shape:                   core.ScopeShape,
     // the scope over time or as a Lissajous figure against the strobe's frequency, tapping it flips them
     scope_sweep:                  core.ScopeSweep,
-    // the screen's height fills with every note, or is scaled to the note's loudest to show its decay
-    scope_gain:                   core.ScopeGain,
     // the scope view keeps the first few partials of the wave and drops the fine wiggles above them
     scope_lowpass:                bool,
+    // the scope's beam through the sweeps averaged over the screen's persistence, a solid line or an analog
+    // scope's phosphor, as bright as the beam stays
+    scope_beam:                   ScopeBeam,
 
     // Trace display: how many seconds it shows, and how many cents from the middle to its edges
     trace_seconds:                f32,
@@ -253,11 +261,12 @@ config_defaults :: Config {
     strobe_glow                  = true,
     partial_labels               = .MULTIPLES,
     show_band_cents              = false,
-    persistence_periods          = 18,
+    strobe_persistence_periods   = 18,
+    screen_persistence_periods   = 18,
     lamp_shape                   = .HALF_RECTIFIED,
     scope_sweep                  = .TIME,
-    scope_gain                   = .FILL,
     scope_lowpass                = true,
+    scope_beam                   = .SOLID,
     trace_seconds                = 2,
     trace_range_cents            = 25,
     spectrum_windows             = 2,

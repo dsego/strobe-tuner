@@ -269,6 +269,48 @@ test_scope_persistence :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_scope_newest_sweep :: proc(t: ^testing.T) {
+    // E2, two periods are 1165 samples and a frame 800. Without persistence a frame alone would leave a part
+    // of the screen dark, the newest sweep is whole once there's one.
+    FREQ :: 82.4
+
+    dark_columns :: proc(dwell: []f32) -> (count: int) {
+        for time in dwell {
+            if time == 0 do count += 1
+        }
+        return
+    }
+
+    scope := scope_test_init(FREQ)
+    defer destroy_scope(&scope)
+
+    samples: [SCOPE_TEST_FRAME]f32
+    scope_test_sine(samples[:], FREQ, 0)
+    audio_capture_write(&scope, samples[:])
+    update_scope(&scope)
+    heights, dwell := scope_from_above(&scope, .RAW_WAVEFORM)
+    testing.expectf(t, dark_columns(dwell) > 100, "first frame: %v dark columns", dark_columns(dwell))
+
+    // The next frame completes it: lit all across, in tune, and exactly one sweep of the samples drawn
+    scope_test_sine(samples[:], FREQ, SCOPE_TEST_FRAME)
+    audio_capture_write(&scope, samples[:])
+    update_scope(&scope)
+    heights, dwell = scope_from_above(&scope, .RAW_WAVEFORM)
+    testing.expectf(t, dark_columns(dwell) == 0, "second frame: %v dark columns", dark_columns(dwell))
+
+    // The AC coupling leads by a degree or so at a low note
+    phase, amp := scope_test_fundamental(heights)
+    testing.expectf(t, abs(phase) < 0.05, "phase %v", phase)
+    testing.expectf(t, amp > 0.95, "amp %v", amp)
+
+    // Every sample leaves one of light on the screen
+    light: f32 = 0
+    for cell in scope.screen do light += cell
+    sweep := f32(math.ceil(1 / scope.step))
+    testing.expectf(t, abs(light - sweep) <= 1, "light %v, a sweep is %v samples", light, sweep)
+}
+
+@(test)
 test_scope_xy_in_tune_stands_still :: proc(t: ^testing.T) {
     FREQ :: 440.0
     OFF_HZ :: 1.0
@@ -294,7 +336,11 @@ test_scope_xy_in_tune_stands_still :: proc(t: ^testing.T) {
     defer destroy_scope(&scope)
     set_scope_sweep(&scope, .XY)
 
+    // The level starts from nothing, the first frame's first samples are clipped
     samples: [SCOPE_TEST_FRAME]f32
+    scope_test_sine(samples[:], FREQ, scope.sample_clock)
+    sweep_samples(&scope, samples[:])
+
     for frame in 0 ..< 60 {
         scope_test_sine(samples[:], FREQ, scope.sample_clock)
         clear_scope(&scope)
@@ -315,6 +361,223 @@ test_scope_xy_in_tune_stands_still :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_scope_trace :: proc(t: ^testing.T) {
+    // A sine's line reaches SCOPE_FILL's height both ways and spans the screen, its points no further apart
+    // across than a cell except where the sweep starts over, once, and as long apart in time
+    FREQ :: 250.0
+
+    scope := scope_test_init(FREQ)
+    defer destroy_scope(&scope)
+
+    samples: [SCOPE_TEST_FRAME]f32
+    for _ in 0 ..< 2 {
+        scope_test_sine(samples[:], FREQ, scope.sample_clock)
+        audio_capture_write(&scope, samples[:])
+        update_scope(&scope)
+    }
+
+    points: [dynamic][2]f32
+    defer delete(points)
+    scope_trace(&scope, &points)
+    testing.expectf(t, len(points) >= int(1 / scope.step), "%v points", len(points))
+
+    top, bottom, left, right: f32 = 1, 0, 1, 0
+    for point in points {
+        top, bottom = min(top, point.y), max(bottom, point.y)
+        left, right = min(left, point.x), max(right, point.x)
+    }
+    testing.expectf(t, abs(top - 0.05) < 0.01 && abs(bottom - 0.95) < 0.01, "top %v, bottom %v", top, bottom)
+    testing.expectf(t, left < 0.01 && right > 0.99, "left %v, right %v", left, right)
+
+    wraps, uneven := 0, 0
+    first_across := (points[1].x - points[0].x) * f32(scope.columns)
+    for index in 1 ..< len(points) {
+        across := (points[index].x - points[index - 1].x) * f32(scope.columns)
+        if abs(across) > f32(scope.columns) / 2 {
+            wraps += 1
+        } else if across > 1 || abs(across - first_across) > 0.01 {
+            uneven += 1
+        }
+    }
+    testing.expectf(t, wraps == 1 && uneven == 0, "%v wraps, %v steps uneven", wraps, uneven)
+}
+
+@(test)
+test_scope_average :: proc(t: ^testing.T) {
+    // A sine in noise as loud as a third of it: the newest sweep's line is as noisy, the sweeps averaged over
+    // 18 periods take out most of it
+    FREQ :: 220.0
+    AMP :: 0.5
+    NOISE :: 0.3 // peak, uniform
+
+    // How far the line is from the sine, the RMS of its points in samples
+    off_sine :: proc(scope: ^Scope, points: [][2]f32) -> f64 {
+        total: f64 = 0
+        for point in points {
+            value := (0.5 - f64(point.y)) / (0.5 * SCOPE_FILL) * f64(scope.level)
+            sine := AMP * math.sin(math.TAU * SCOPE_PERIODS * f64(point.x))
+            total += (value - sine) * (value - sine)
+        }
+        return math.sqrt(total / f64(len(points)))
+    }
+
+    newest := scope_test_init(FREQ)
+    defer destroy_scope(&newest)
+
+    averaged := scope_test_init(FREQ)
+    defer destroy_scope(&averaged)
+    averaged.persistence_seconds = 18 / FREQ
+    averaged.average_sweeps = true
+
+    // xorshift, the same noise every run
+    state: u32 = 1
+    samples: [SCOPE_TEST_FRAME]f32
+    for frame in 0 ..< 60 {
+        // A pluck once the average has settled, the scale is set from it
+        if frame == 40 do autoset_scope(&averaged)
+
+        scope_test_sine(samples[:], FREQ, newest.sample_clock)
+        for &sample in samples {
+            state ~= state << 13
+            state ~= state >> 17
+            state ~= state << 5
+            sample = AMP * sample + NOISE * (2 * f32(state) / f32(max(u32)) - 1)
+        }
+        for scope in ([]^Scope{&newest, &averaged}) {
+            audio_capture_write(scope, samples[:])
+            update_scope(scope)
+        }
+    }
+
+    points: [dynamic][2]f32
+    defer delete(points)
+    scope_trace(&newest, &points)
+    noisy := off_sine(&newest, points[:])
+    scope_trace(&averaged, &points)
+    clean := off_sine(&averaged, points[:])
+    testing.expectf(t, noisy > 0.1, "newest sweep: %v off the sine", noisy)
+    testing.expectf(t, clean < 0.04, "averaged: %v off the sine", clean)
+
+    // Scaled to what's drawn: the newest sweep to the noisy input's peak, the average to its own, the sine's
+    // and a little of the noise left
+    testing.expectf(t, newest.level > AMP + 0.25, "newest sweep: level %v", newest.level)
+    peak := averaged.level * SCOPE_AUTOSET_OVERSHOOT
+    testing.expectf(t, peak > AMP && peak < AMP + 0.1, "averaged: peak %v", peak)
+}
+
+@(test)
+test_scope_average_lowpass :: proc(t: ^testing.T) {
+    // An in tune sine through the low-pass, averaged: the line is the sine where it is, scaled to its peak. The
+    // low-pass started over with every chunk once and dented it where each one began.
+    FREQ :: 250.0
+
+    scope := scope_test_init(FREQ)
+    defer destroy_scope(&scope)
+    scope.persistence_seconds = 18 / FREQ
+    scope.average_sweeps = true
+    scope.lowpass = true
+
+    // Like after the input opened
+    restart_beam(&scope)
+
+    samples: [SCOPE_TEST_FRAME]f32
+    for _ in 0 ..< 60 {
+        scope_test_sine(samples[:], FREQ, scope.sample_clock)
+        audio_capture_write(&scope, samples[:])
+        update_scope(&scope)
+    }
+
+    points: [dynamic][2]f32
+    defer delete(points)
+    scope_trace(&scope, &points)
+
+    // In rows, the AC coupling leads by about one
+    worst: f64 = 0
+    for point in points {
+        expected := 0.5 - 0.5 * SCOPE_FILL * SCOPE_AUTOSET_OVERSHOOT * math.sin(math.TAU * SCOPE_PERIODS * f64(point.x))
+        worst = max(worst, abs(f64(point.y) - expected) * f64(scope.rows))
+    }
+    testing.expectf(t, worst < 2, "%v rows off the sine", worst)
+}
+
+@(test)
+test_scope_autoset :: proc(t: ^testing.T) {
+    // Half a second of a note and half a second of it 20 dB quieter: the scale is held at the note's and
+    // the quieter part shrinks, until a pluck sets it again. The note's peak overshoots the full height.
+    FREQ :: 220.0
+
+    scope := scope_test_init(FREQ)
+    defer destroy_scope(&scope)
+    scope.persistence_seconds = 18 / FREQ
+    scope.average_sweeps = true
+
+    play :: proc(scope: ^Scope, amp: f32, frames: int) {
+        samples: [SCOPE_TEST_FRAME]f32
+        for _ in 0 ..< frames {
+            scope_test_sine(samples[:], FREQ, scope.sample_clock)
+            for &sample in samples do sample *= amp
+
+            audio_capture_write(scope, samples[:])
+            update_scope(scope)
+        }
+    }
+
+    play(&scope, 1, 30)
+    peak := scope.level * SCOPE_AUTOSET_OVERSHOOT
+    testing.expectf(t, abs(peak - 1) < 0.01, "note: peak %v", peak)
+
+    play(&scope, 0.1, 30)
+    peak = scope.level * SCOPE_AUTOSET_OVERSHOOT
+    testing.expectf(t, abs(peak - 1) < 0.01, "quieter: peak %v", peak)
+
+    autoset_scope(&scope)
+    play(&scope, 0.1, 30)
+    peak = scope.level * SCOPE_AUTOSET_OVERSHOOT
+    testing.expectf(t, abs(peak - 0.1) < 0.01, "plucked: peak %v", peak)
+}
+
+@(test)
+test_scope_average_has_no_seam :: proc(t: ^testing.T) {
+    // A sine in noise through the low-pass, the noise left in the average is smooth too. Taken as they came,
+    // the bins behind the newest sample stepped from the ones ahead of it.
+    FREQ :: 220.0
+    NOISE :: 0.3 // peak, uniform
+
+    scope := scope_test_init(FREQ)
+    defer destroy_scope(&scope)
+    scope.persistence_seconds = 18 / FREQ
+    scope.average_sweeps = true
+    scope.lowpass = true
+
+    // xorshift, the same noise every run
+    state: u32 = 1
+    samples: [SCOPE_TEST_FRAME]f32
+    for _ in 0 ..< 60 {
+        scope_test_sine(samples[:], FREQ, scope.sample_clock)
+        for &sample in samples {
+            state ~= state << 13
+            state ~= state >> 17
+            state ~= state << 5
+            sample = 0.5 * sample + NOISE * (2 * f32(state) / f32(max(u32)) - 1)
+        }
+        audio_capture_write(&scope, samples[:])
+        update_scope(&scope)
+    }
+
+    points: [dynamic][2]f32
+    defer delete(points)
+    scope_trace(&scope, &points)
+
+    // How sharply the line bends from one point to the next, in rows, a step bends it both ways
+    sharpest: f32 = 0
+    for index in 1 ..< len(points) - 1 {
+        bend := points[index + 1].y - 2 * points[index].y + points[index - 1].y
+        sharpest = max(sharpest, abs(bend) * f32(scope.rows))
+    }
+    testing.expectf(t, sharpest < 0.15, "bends %v rows", sharpest)
+}
+
+@(test)
 test_scope_circle_spins_clockwise_when_sharp :: proc(t: ^testing.T) {
     // 8 periods a frame, four turns, a part of the petals drawn twice would pull them its way
     FREQ :: 480.0
@@ -322,18 +585,18 @@ test_scope_circle_spins_clockwise_when_sharp :: proc(t: ^testing.T) {
 
     // Which way the petals point out of the ring, twice the angle anticlockwise on the screen from the
     // right. A sine's two petals are half a turn apart, at twice their angle they point the same way.
+    // From the newest sweep's line, its points as long apart in time
     petals_angle :: proc(scope: ^Scope) -> f64 {
-        width := scope_width(scope)
-        ring := 0.5 * SCOPE_FILL * SCOPE_CIRCLE_RING * f64(width)
-        petals: [2]f64
-        for cell, i in scope.screen {
-            if cell == 0 do continue
+        points: [dynamic][2]f32
+        defer delete(points)
+        scope_trace(scope, &points)
 
-            x := f64(i % scope.columns) + 0.5 - 0.5 * f64(width)
-            y := f64(i / scope.columns) + 0.5 - 0.5 * f64(scope.rows)
+        petals: [2]f64
+        for point in points {
+            x, y := f64(point.x) - 0.5, f64(point.y) - 0.5
             radius := math.sqrt(x * x + y * y)
             angle := math.atan2(-y, x)
-            petals += f64(cell) * (radius - ring) * [2]f64{math.cos(2 * angle), math.sin(2 * angle)}
+            petals += (radius - SCOPE_CIRCLE_REACH * SCOPE_CIRCLE_RING) * [2]f64{math.cos(2 * angle), math.sin(2 * angle)}
         }
         return math.atan2(petals.y, petals.x)
     }
@@ -341,8 +604,8 @@ test_scope_circle_spins_clockwise_when_sharp :: proc(t: ^testing.T) {
     sweep_frame :: proc(scope: ^Scope, freq_hz: f64) {
         samples: [SCOPE_TEST_FRAME]f32
         scope_test_sine(samples[:], freq_hz, scope.sample_clock)
-        clear_scope(scope)
-        sweep_samples(scope, samples[:])
+        audio_capture_write(scope, samples[:])
+        update_scope(scope)
     }
 
     scope := scope_test_init(FREQ)
@@ -372,37 +635,19 @@ test_scope_circle_spins_clockwise_when_sharp :: proc(t: ^testing.T) {
 test_scope_gain :: proc(t: ^testing.T) {
     FREQ :: 220.0
 
-    // The level after a second of a loud note and three frames, 11 periods, of it 20 dB quieter
-    level_after_decay :: proc(gain: ScopeGain) -> f32 {
-        scope := scope_test_init(FREQ)
-        defer destroy_scope(&scope)
-        scope.gain = gain
-
-        samples: [SCOPE_TEST_FRAME]f32
-        for frame in 0 ..< 63 {
-            scope_test_sine(samples[:], FREQ, scope.sample_clock)
-            if frame >= 60 do for &sample in samples do sample *= 0.1
-
-            sweep_samples(&scope, samples[:])
-        }
-        return scope.level
-    }
-
-    // Without persistence fill is at the quieter note's peak a sweep later, decay keeps the loud one's
-    filled := level_after_decay(.FILL)
-    testing.expectf(t, abs(filled - 0.1) < 0.002, "fill: level %v", filled)
-    decayed := level_after_decay(.DECAY)
-    testing.expectf(t, decayed > 0.99, "decay: level %v", decayed)
-
-    // Another note lets the loudest peak go
+    // A second of a loud note and 0.4 s of it 20 dB quieter: the level is down at the quieter note's peak once
+    // the loud one left its SCOPE_FILL_MIN_PERIODS and the level glided down over a few SCOPE_FILL_RELEASE_S
     scope := scope_test_init(FREQ)
     defer destroy_scope(&scope)
-    scope.gain = .DECAY
+
     samples: [SCOPE_TEST_FRAME]f32
-    scope_test_sine(samples[:], FREQ, scope.sample_clock)
-    sweep_samples(&scope, samples[:])
-    set_scope_freq(&scope, 2 * FREQ)
-    testing.expectf(t, scope.level == SCOPE_MIN_LEVEL, "after another note: level %v", scope.level)
+    for frame in 0 ..< 84 {
+        scope_test_sine(samples[:], FREQ, scope.sample_clock)
+        if frame >= 60 do for &sample in samples do sample *= 0.1
+
+        sweep_samples(&scope, samples[:])
+    }
+    testing.expectf(t, abs(scope.level - 0.1) < 0.01, "level %v", scope.level)
 }
 
 @(test)

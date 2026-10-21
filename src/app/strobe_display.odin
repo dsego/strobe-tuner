@@ -553,7 +553,7 @@ strobe_tracks :: proc(
 ) -> (
     tracks: StrobeTracks,
 ) {
-    lamp, persistence_periods := config.strobe_source == .LAMP, config.persistence_periods
+    lamp, persistence_periods := config.strobe_source == .LAMP, config.strobe_persistence_periods
     mode := lock_in.mode
     stale := tracks_went_stale(self, lamp, mode)
     tracks.count = len(bands)

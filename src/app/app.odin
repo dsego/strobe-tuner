@@ -433,8 +433,8 @@ handle_keys :: proc(app: ^App) -> (menu: MenuCommand) {
     if plain && gfx.key_pressed(.W) {
         lock_in := app.measurement.strobe_lock_in
         lock_in.band_cents = lock_in.band_cents / 2 if lock_in.band_cents > 25 else core.DFT_RESOLUTION_CENTS
-        config.persistence_periods = 1 / (math.pow(f32(2), f32(lock_in.band_cents) / 1200) - 1)
-        fmt.printfln("Strobe band: %d cents, persistence %.0f periods", lock_in.band_cents, config.persistence_periods)
+        config.strobe_persistence_periods = 1 / (math.pow(f32(2), f32(lock_in.band_cents) / 1200) - 1)
+        fmt.printfln("Strobe band: %d cents, persistence %.0f periods", lock_in.band_cents, config.strobe_persistence_periods)
         retune(&app.measurement, config)
     }
 
@@ -578,9 +578,25 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
     sweep := config.scope_sweep if config.strobe_display_type == .SCOPE else .TIME
     if scope.sweep != sweep do core.set_scope_sweep(scope, sweep)
 
-    // In periods of the strobe's frequency, the smear and the waver per cent look the same on every note
-    scope.persistence_seconds = f64(config.persistence_periods) / strobe_hz
-    scope.gain = config.scope_gain
+    // In periods of the strobe's frequency, the smear and the waver per cent look the same on every note. The
+    // scope view is the sweeps averaged over it, the lamp's screen fades over it.
+    scope.persistence_seconds = f64(config.screen_persistence_periods) / strobe_hz
+
+    // Starts over, the average stopped while the screen faded and the other way round
+    average_sweeps := config.strobe_display_type == .SCOPE
+    if scope.average_sweeps != average_sweeps {
+        scope.average_sweeps = average_sweeps
+        core.clear_scope(scope)
+        core.autoset_scope(scope)
+    }
+
+    // A pluck sets the scope's scale again
+    for band in measurement.strobe_lock_in.bands {
+        if band.onset && band.in_range {
+            core.autoset_scope(scope)
+            break
+        }
+    }
 
     // The lamp and its tracks take the wave as it comes
     scope.lowpass = config.scope_lowpass && config.strobe_display_type == .SCOPE

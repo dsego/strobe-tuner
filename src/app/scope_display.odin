@@ -28,33 +28,41 @@ import "../gfx"
 // Two periods of the strobe's frequency across. An in tune note stands still, a detuned one drifts. Both
 // are mirrored to move like the strobe tracks, flat to the left and sharp to the right: the scope runs
 // right to left, time the other way from an oscilloscope's, so a sawtooth leans the other way too.
-// Tapped, the wave goes round a circle, petals that stand still in tune and spin clockwise when sharp.
+// Tapped, the wave goes round a circle, lobes that stand still in tune and spin clockwise when sharp.
 // Tapped again, the scope draws the wave against the strobe's frequency instead, a Lissajous figure that
 // stands still in tune and rolls open and shut when it isn't.
 
 // The cells of the screen, about one a point at the desktop size
 SCOPE_COLUMNS :: STROBE_WIDTH
 SCOPE_ROWS :: 240
-SCOPE_BEAM_RADIUS :: 1.25 // points
 SCOPE_GRID_THICKNESS :: 2
 
-// Over the background noise the beam dims to this, the room's hiss stays in the same cells and would
-// be as bright as a note
+// The beam's line, smooth at a feather of about a pixel
+SCOPE_TRACE_THICKNESS :: 2.5 // points
+SCOPE_TRACE_FEATHER :: 0.75
+
+// Over the background noise the beam dims to this, the line at rest stays
 SCOPE_NOISE_BRIGHTNESS :: 0.3
+
+// The phosphor is as bright as a flat line where the beam moves no more than this many times as fast, like
+// the cells of the screen it was drawn from
+SCOPE_PHOSPHOR_EXPOSURE :: #config(SCOPE_PHOSPHOR_EXPOSURE, 3)
+// and glows in a wide line under it, this bright
+SCOPE_GLOW :: #config(SCOPE_GLOW, 0.25)
+SCOPE_GLOW_THICKNESS :: 10 // points
 
 // The beam is a thin line and its bloom is spread thin, it's added this many times over
 SCOPE_BLOOM_PASSES :: 3
 
 // What the scope's and the lamp's views keep from one frame to the next
 ScopeDisplay :: struct {
-    background: gfx.Color,
+    background:   gfx.Color,
     // the scope beam's visibility, see draw_scope_display
-    visibility: f32,
-    // the scope's screen for its shader, a byte a cell, see draw_scope_screen
-    texture:    gfx.Texture,
-    pixels:     []u8,
-    // each column's brightness on the lamp as last lit, its top and its split bottom, see draw_lamp
-    lamp_held:  [SCOPE_COLUMNS][2]f32,
+    visibility:   f32,
+    // the beam's line, a color a point for it and the phosphor's light, see draw_scope_trace
+    trace:        [dynamic][2]f32,
+    trace_colors: [dynamic]gfx.Color,
+    trace_light:  [dynamic]f32,
 }
 
 init_scope_display :: proc(background: u32) -> (self: ScopeDisplay) {
@@ -63,8 +71,9 @@ init_scope_display :: proc(background: u32) -> (self: ScopeDisplay) {
 }
 
 destroy_scope_display :: proc(self: ^ScopeDisplay) {
-    gfx.unload_texture(self.texture)
-    delete(self.pixels)
+    delete(self.trace)
+    delete(self.trace_colors)
+    delete(self.trace_light)
 }
 
 // The scope or the lamp. With the retro glow on the scope's beam glows like the strobe, through the
@@ -88,7 +97,7 @@ draw_scope_display :: proc(
 
     if config.strobe_display_type == .SCOPE && config.strobe_glow {
         begin_glow(targets, rect, self.background)
-        draw_scope_screen(self, rect, scope, beam_color, dark_color)
+        draw_scope_screen(self, rect, scope, config.scope_beam, beam_color, dark_color)
         end_glow(targets, rect, SCOPE_BLOOM_PASSES)
         return
     }
@@ -101,20 +110,23 @@ draw_scope_display :: proc(
 
     if config.strobe_display_type == .LAMP {
         heights, dwell := core.scope_from_above(scope, config.lamp_shape)
-        draw_lamp(self, rect, heights, scope.depths, dwell, config.lamp_shape, beam_color, dark_color)
+        draw_lamp(rect, heights, scope.depths, dwell, config.lamp_shape, beam_color, dark_color)
     } else {
-        draw_scope_screen(self, rect, scope, beam_color, dark_color)
+        draw_scope_screen(self, rect, scope, config.scope_beam, beam_color, dark_color)
     }
 }
 
-// The screen of an analog oscilloscope, as bright as the beam stayed long. The beam in the colorway's lit
-// color, the lines through the middle in its second color.
-// Every lit cell is a round dot wider than the cell, the dots of neighbouring cells overlap and add up
-// to a thicker and brighter beam, drawn by the scope shader from the screen as a texture, a byte a cell.
-// The beam dims with the display's visibility, 1 is full.
-draw_scope_screen :: proc(self: ^ScopeDisplay, rect: gfx.Rect, scope: ^core.Scope, beam_color, grid_color: gfx.Color) {
+// The scope's screen, the beam in the colorway's lit color and the lines through the middle in its second
+// color. The beam is a line through the sweeps' average or the newest sweep, see draw_scope_trace. It dims
+// with the display's visibility, 1 is full.
+draw_scope_screen :: proc(
+    self: ^ScopeDisplay,
+    rect: gfx.Rect,
+    scope: ^core.Scope,
+    beam: ScopeBeam,
+    beam_color, grid_color: gfx.Color,
+) {
     // The Lissajous figure and the circle are round, on a square in the middle
-    width := core.scope_width(scope)
     rect := rect
     if scope.sweep != .TIME {
         side := min(rect.width, rect.height)
@@ -125,7 +137,7 @@ draw_scope_screen :: proc(self: ^ScopeDisplay, rect: gfx.Rect, scope: ^core.Scop
         // The ring at the wave's zero
         RING_POINTS :: 96
         center := [2]f32{rect.x + rect.width / 2, rect.y + rect.height / 2}
-        radius := 0.5 * core.SCOPE_FILL * core.SCOPE_CIRCLE_RING * rect.width
+        radius := core.SCOPE_CIRCLE_REACH * core.SCOPE_CIRCLE_RING * rect.width
         points: [RING_POINTS + 1][2]f32
         for &point, index in points {
             angle := math.TAU * f32(index) / RING_POINTS
@@ -138,61 +150,79 @@ draw_scope_screen :: proc(self: ^ScopeDisplay, rect: gfx.Rect, scope: ^core.Scop
         gfx.draw_rect({rect.x + (rect.width - SCOPE_GRID_THICKNESS) / 2, rect.y}, {SCOPE_GRID_THICKNESS, rect.height}, grid_color)
     }
 
-    // Against the dwell of a steady trace one cell thick, so a smeared trace is dimmer instead of being
-    // scaled back up
-    total: f32 = 0
-    for dwell in scope.screen do total += dwell
-    if total == 0 do return
+    draw_scope_trace(self, rect, scope, beam, beam_color)
+}
 
-    full := total / f32(width)
+// The beam, a line through the points of core.scope_trace. Over time it runs right to left, like the lamp,
+// see the top of the file. Solid, it's as bright all along. Phosphor, it's as bright as the beam stays like an
+// analog oscilloscope's: the points are as long apart in time, where they're further apart the beam moves
+// faster and is dimmer, the steep edges fade and the crests stay lit. A wide faint line under it glows.
+draw_scope_trace :: proc(self: ^ScopeDisplay, rect: gfx.Rect, scope: ^core.Scope, beam: ScopeBeam, beam_color: gfx.Color) {
+    // In pieces where the sweep over time starts over on the left
+    draw_pieces :: proc(self: ^ScopeDisplay, rect: gfx.Rect, thickness, feather: f32) {
+        piece := 0
+        for index in 1 ..= len(self.trace) {
+            if index < len(self.trace) && !wraps(self, rect, index - 1, index) do continue
 
-    columns, rows := i32(scope.columns), i32(scope.rows)
-    if self.texture.width != columns || self.texture.height != rows {
-        gfx.unload_texture(self.texture)
-        self.texture = gfx.create_gray_texture(columns, rows)
-        delete(self.pixels)
-        self.pixels = make([]u8, scope.columns * scope.rows)
+            gfx.draw_soft_polyline(self.trace[piece:index], self.trace_colors[piece:index], thickness, feather)
+            piece = index
+        }
     }
 
-    // A steady beam is shared by a few cells of its column, more where the wave is steep. A third of
-    // the column's dwell is full brightness.
-    EXPOSURE :: 3
-    DARK :: 0.02
-    for dwell, cell in scope.screen {
-        intensity := min(EXPOSURE * dwell / full, 1)
-        self.pixels[cell] = u8(255 * intensity + 0.5) if intensity >= DARK else 0
+    wraps :: proc(self: ^ScopeDisplay, rect: gfx.Rect, from, to: int) -> bool {
+        return abs(self.trace[to].x - self.trace[from].x) >= rect.width / 2
     }
-    gfx.update_texture(self.texture, self.pixels)
 
-    color := gfx.normalize_color(beam_color)
-    color.a = self.visibility
-    uniforms := gfx.ScopeUniforms {
-        color     = color,
-        cells     = {f32(columns), f32(rows)},
-        cell_size = {rect.width / f32(width), rect.height / f32(rows)},
-        radius    = SCOPE_BEAM_RADIUS,
+    core.scope_trace(scope, &self.trace)
+    if len(self.trace) < 2 do return
+
+    for &point in self.trace {
+        if scope.sweep == .TIME do point.x = 1 - point.x
+
+        point = {rect.x + point.x * rect.width, rect.y + point.y * rect.height}
     }
-    gfx.begin_shader(.SCOPE)
-    defer gfx.end_shader()
+    resize(&self.trace_colors, len(self.trace))
 
-    gfx.set_shader_uniforms(.SCOPE, &uniforms)
+    if beam == .SOLID {
+        slice.fill(self.trace_colors[:], lerp_color(self.background, beam_color, self.visibility))
+        draw_pieces(self, rect, SCOPE_TRACE_THICKNESS, SCOPE_TRACE_FEATHER)
+        return
+    }
 
-    // Over time it runs right to left, like the lamp, see the top of the file
-    source := gfx.Rect{0, 0, f32(width), f32(rows)}
-    if scope.sweep == .TIME do source.width = -source.width
+    // How far the beam goes from one point to the next on a flat line, a sweep's way at the wave's zero
+    way := rect.width
+    if scope.sweep == .CIRCLE do way = math.TAU * core.SCOPE_CIRCLE_REACH * core.SCOPE_CIRCLE_RING * rect.width
+    if scope.sweep == .XY do way = 2 * core.SCOPE_PERIODS * core.SCOPE_FILL * rect.width
+    flat := way / f32(len(self.trace) - 1)
 
-    gfx.draw_texture(self.texture, source, rect)
+    // Each point as far as the beam goes to the next one, or from the one before where it starts over
+    resize(&self.trace_light, len(self.trace))
+    for &light, index in self.trace_light {
+        next := index + 1
+        if next == len(self.trace) || wraps(self, rect, index, next) do next = max(index - 1, 0)
+
+        delta := self.trace[next] - self.trace[index]
+        distance := math.sqrt(delta.x * delta.x + delta.y * delta.y)
+        light = min(SCOPE_PHOSPHOR_EXPOSURE * flat / max(distance, 1e-6), 1)
+    }
+
+    for &color, index in self.trace_colors {
+        color = lerp_color(self.background, beam_color, self.visibility * self.trace_light[index] * SCOPE_GLOW)
+    }
+    draw_pieces(self, rect, SCOPE_GLOW_THICKNESS, 0.5 * SCOPE_GLOW_THICKNESS)
+
+    for &color, index in self.trace_colors {
+        color = lerp_color(self.background, beam_color, self.visibility * self.trace_light[index])
+    }
+    draw_pieces(self, rect, SCOPE_TRACE_THICKNESS, SCOPE_TRACE_FEATHER)
 }
 
 // Stripes as bright as the beam is high, the lamp of a mechanical strobe and the first version of this
 // one. heights is the beam's height in every column, 1 is the peak level, dwell is 0 where the beam
 // hasn't been. A smeared beam is gray, its height is the middle of the smear. Split, the top half is lit
-// by the heights and the bottom half by the depths, the negative half of the wave.
-// A column the beam wasn't in keeps its brightness as last lit, like the eye holds a lamp's flash. Without
-// persistence the screen is only the frame's samples, rarely a whole number of sweeps and a third of one
-// on a low note, the rest would show a dark gap walking across. A screen dark all over stays dark.
+// by the heights and the bottom half by the depths, the negative half of the wave. A screen dark all over
+// stays dark.
 draw_lamp :: proc(
-    self: ^ScopeDisplay,
     rect: gfx.Rect,
     heights, depths, dwell: []f32,
     shape: core.ScopeShape,
@@ -204,19 +234,15 @@ draw_lamp :: proc(
     lamp_height := rect.height / 2 if shape == .SPLIT else rect.height
 
     for height, column in heights {
-        held := &self.lamp_held[column]
-        if dwell[column] > 0 {
-            // The wave as it is goes below zero, zero is halfway
-            held[0] = 0.5 + 0.5 * height if shape == .RAW_WAVEFORM else height
-            held[1] = depths[column]
-        }
+        // The wave as it is goes below zero, zero is halfway
+        lit := 0.5 + 0.5 * height if shape == .RAW_WAVEFORM else height
 
         x := rect.x + rect.width - f32(column + 1) * column_width
-        color := lerp_color(dark_color, bright_color, clamp(held[0], 0, 1))
+        color := lerp_color(dark_color, bright_color, clamp(lit, 0, 1))
         gfx.draw_rect({x, rect.y}, {column_width, lamp_height}, color)
 
         if shape == .SPLIT {
-            color = lerp_color(dark_color, bright_color, clamp(held[1], 0, 1))
+            color = lerp_color(dark_color, bright_color, clamp(depths[column], 0, 1))
             gfx.draw_rect({x, rect.y + lamp_height}, {column_width, lamp_height}, color)
         }
     }
