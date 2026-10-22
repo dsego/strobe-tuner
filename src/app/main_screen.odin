@@ -164,7 +164,7 @@ draw_scope_area :: proc(app: ^App, strobe, view: gfx.Rect) {
     if input_missing(app) || !gui_button(strobe) do return
 
     if config.strobe_display_type == .SCOPE {
-        config.scope_sweep = core.ScopeSweep((int(config.scope_sweep) + 1) % len(core.ScopeSweep))
+        config.scope_sweep = .TIME if config.scope_sweep == .CIRCLE else .CIRCLE
     } else {
         config.lamp_shape = .HALF_RECTIFIED if config.lamp_shape == .SPLIT else .SPLIT
     }

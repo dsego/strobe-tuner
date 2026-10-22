@@ -93,7 +93,6 @@ UNIFORM_BLOCKS :: [Program]string {
     .STROBE = "StrobeUniforms",
     .BLOOM  = "BloomUniforms",
     .SHADOW = "ShadowUniforms",
-    .SCOPE  = "ScopeUniforms",
 }
 
 UNIFORM_BINDING :: 0
@@ -126,7 +125,6 @@ fragment_shader_code := [Program]string {
     .STROBE = #load("../shaders/vulkan/strobe.frag", string),
     .BLOOM  = #load("../shaders/vulkan/bloom.frag", string),
     .SHADOW = #load("../shaders/vulkan/shadow.frag", string),
-    .SCOPE  = #load("../shaders/vulkan/scope.frag", string),
 }
 
 gpu:     Gpu
@@ -177,8 +175,6 @@ init_gpu :: proc() -> bool {
     gl.VertexAttribPointer(1, 2, gl.FLOAT, false, size_of(Vertex), offset_of(Vertex, uv))
     gl.VertexAttribPointer(2, 4, gl.UNSIGNED_BYTE, true, size_of(Vertex), offset_of(Vertex, color))
 
-    // The gray textures' rows are as long as they are wide, not padded to 4 bytes
-    gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
     gl.Enable(gl.SCISSOR_TEST)
 
     // What the solid shapes sample, the sprite shader always takes a texture and their color tints it
@@ -377,32 +373,11 @@ resizing :: proc() -> bool {
     return false
 }
 
-// Uploads the frame's textures and vertices, draws the render targets, then the canvas
+// Uploads the frame's vertices, draws the render targets, then the canvas
 end_frame :: proc() {
-    upload_textures()
     upload_vertices()
     draw_render_targets()
     draw_window()
-}
-
-upload_textures :: proc() {
-    for upload in gpu.frame.texture_uploads {
-        texture := upload.texture
-        size := int(texture.width * texture.height)
-        gl.BindTexture(gl.TEXTURE_2D, texture.handle)
-        gl.TexSubImage2D(
-            gl.TEXTURE_2D,
-            0,
-            0,
-            0,
-            texture.width,
-            texture.height,
-            gl.RED,
-            gl.UNSIGNED_BYTE,
-            size,
-            &gpu.frame.texture_pixels[upload.offset],
-        )
-    }
 }
 
 upload_vertices :: proc() {
@@ -562,14 +537,6 @@ has_haptics :: proc() -> bool {
 }
 
 haptic_tap :: proc() {}
-
-// One byte a texel, read as the red channel, for pixels the CPU redraws every frame with update_texture.
-// Starts out undefined.
-create_gray_texture :: proc(width, height: i32) -> Texture {
-    handle := create_gl_texture()
-    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.R8, width, height, 0, gl.RED, gl.UNSIGNED_BYTE, 0, nil)
-    return {handle, width, height}
-}
 
 // At once, not after the frame: WebGL keeps it until the draws already issued are done
 unload_texture :: proc(texture: Texture) {

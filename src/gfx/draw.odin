@@ -29,12 +29,6 @@ Texture :: struct {
     width, height: i32,
 }
 
-// A texture's new pixels, from offset in this frame's texture_pixels
-TextureUpload :: struct {
-    texture: Texture,
-    offset:  int,
-}
-
 RenderTarget :: struct {
     texture: Texture,
 }
@@ -47,7 +41,6 @@ Program :: enum {
     STROBE,
     BLOOM,
     SHADOW,
-    SCOPE,
 }
 
 // The textures each program's fragment shader samples, the strobe and the shadow draw theirs from uniforms
@@ -56,7 +49,6 @@ PROGRAM_SAMPLERS :: [Program]u32 {
     .STROBE = 0,
     .BLOOM  = 1,
     .SHADOW = 0,
-    .SCOPE  = 1,
 }
 
 Vertex :: struct {
@@ -91,12 +83,10 @@ Pass :: struct {
 
 // What the frame draws, filled by the draw calls and sent to the GPU by end_frame
 GpuFrame :: struct {
-    vertices:        [dynamic]Vertex,
-    commands:        [dynamic]DrawCommand,
-    passes:          [dynamic]Pass,
-    uniform_data:    [dynamic]u8,
-    texture_pixels:  [dynamic]u8, // the textures updated this frame, see update_texture
-    texture_uploads: [dynamic]TextureUpload,
+    vertices:     [dynamic]Vertex,
+    commands:     [dynamic]DrawCommand,
+    passes:       [dynamic]Pass,
+    uniform_data: [dynamic]u8,
 }
 
 // What the next draw call is drawn with
@@ -136,8 +126,6 @@ begin_frame :: proc(clear: Color) {
     clear_dynamic_array(&gpu.frame.commands)
     clear_dynamic_array(&gpu.frame.passes)
     clear_dynamic_array(&gpu.frame.uniform_data)
-    clear_dynamic_array(&gpu.frame.texture_pixels)
-    clear_dynamic_array(&gpu.frame.texture_uploads)
     gpu.drawing = {
         program = .SPRITE,
         blend   = .ALPHA,
@@ -153,8 +141,6 @@ delete_frame :: proc() {
     delete(gpu.frame.commands)
     delete(gpu.frame.passes)
     delete(gpu.frame.uniform_data)
-    delete(gpu.frame.texture_pixels)
-    delete(gpu.frame.texture_uploads)
 }
 
 // The draw commands recorded between this pass's start and the next one's
@@ -228,20 +214,6 @@ touch_input :: proc() -> bool {
 
 mouse_wheel :: proc() -> f32 {
     return input.wheel
-}
-
-// New pixels for a create_gray_texture texture, uploaded before this frame draws. The draws earlier in the
-// frame see them too.
-update_texture :: proc(texture: Texture, pixels: []u8) {
-    if texture.handle == {} do return
-
-    assert(len(pixels) == int(texture.width * texture.height))
-
-    // Each texture's pixels start on a 16 byte boundary, as copies from a buffer want it
-    offset := (len(gpu.frame.texture_pixels) + 15) &~ 15
-    resize(&gpu.frame.texture_pixels, offset)
-    append(&gpu.frame.texture_pixels, ..pixels)
-    append(&gpu.frame.texture_uploads, TextureUpload{texture, offset})
 }
 
 draw_texture :: proc(texture: Texture, source: Rect, dest: Rect, tint := WHITE) {

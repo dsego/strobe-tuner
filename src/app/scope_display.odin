@@ -157,7 +157,7 @@ draw_scope_screen :: proc(
 // faster and is dimmer, the steep edges fade and the crests stay lit. A wide faint line under it glows.
 draw_scope_trace :: proc(self: ^ScopeDisplay, rect: gfx.Rect, scope: ^core.Scope, beam: ScopeBeam, beam_color: gfx.Color) {
     // In pieces where the sweep over time starts over on the left. A line that ends where it started, the
-    // circle and the figure through the sweeps' average, is closed.
+    // circle through the sweeps' average, is closed.
     draw_pieces :: proc(self: ^ScopeDisplay, rect: gfx.Rect, thickness, feather: f32) {
         piece := 0
         for index in 1 ..= len(self.trace) {

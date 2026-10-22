@@ -307,7 +307,7 @@ restart_beam :: proc(self: ^Scope) {
     self.history_count = 0
 }
 
-// Starts with a dark screen, the old figure would linger under the new one, and a sweep as long as the new
+// Starts with a dark screen, the old picture would linger under the new one, and a sweep as long as the new
 // one's
 set_scope_sweep :: proc(self: ^Scope, sweep: ScopeSweep) {
     self.sweep = sweep

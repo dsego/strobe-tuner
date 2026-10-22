@@ -128,13 +128,6 @@ ShadowUniforms :: struct #align (16) {
     size:  [2]f32, // the quad, in points
 }
 
-ScopeUniforms :: struct #align (16) {
-    color:     [4]f32, // the beam's, its alpha the brightness
-    cells:     [2]f32, // the screen's columns and rows, the texture's size
-    cell_size: [2]f32, // of a cell, in points
-    radius:    f32, // of the beam's dot round each cell, in points
-}
-
 
 hex :: proc "contextless" (value: u32) -> Color {
     return {u8(value >> 24), u8(value >> 16), u8(value >> 8), u8(value)}
