@@ -204,7 +204,7 @@ Config :: struct {
     // what the lamp shows, the positive half of the wave like a lamp, the wave as it is, or the two halves
     // split, tapping it flips between the first and the split
     lamp_shape:                   core.ScopeShape,
-    // the scope over time or as a Lissajous figure against the strobe's frequency, tapping it flips them
+    // the scope over time or round a circle, tapping it flips them
     scope_sweep:                  core.ScopeSweep,
     // the scope view keeps the first few partials of the wave and drops the fine wiggles above them
     scope_lowpass:                bool,

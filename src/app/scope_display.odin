@@ -29,8 +29,6 @@ import "../gfx"
 // are mirrored to move like the strobe tracks, flat to the left and sharp to the right: the scope runs
 // right to left, time the other way from an oscilloscope's, so a sawtooth leans the other way too.
 // Tapped, the wave goes round a circle, lobes that stand still in tune and spin clockwise when sharp.
-// Tapped again, the scope draws the wave against the strobe's frequency instead, a Lissajous figure that
-// stands still in tune and rolls open and shut when it isn't.
 
 // The cells of the screen, about one a point at the desktop size
 SCOPE_COLUMNS :: STROBE_WIDTH
@@ -126,7 +124,7 @@ draw_scope_screen :: proc(
     beam: ScopeBeam,
     beam_color, grid_color: gfx.Color,
 ) {
-    // The Lissajous figure and the circle are round, on a square in the middle
+    // The circle is round, on a square in the middle
     rect := rect
     if scope.sweep != .TIME {
         side := min(rect.width, rect.height)
@@ -195,7 +193,6 @@ draw_scope_trace :: proc(self: ^ScopeDisplay, rect: gfx.Rect, scope: ^core.Scope
     // How far the beam goes from one point to the next on a flat line, a sweep's way at the wave's zero
     way := rect.width
     if scope.sweep == .CIRCLE do way = math.TAU * core.SCOPE_CIRCLE_REACH * core.SCOPE_CIRCLE_RING * rect.width
-    if scope.sweep == .XY do way = 2 * core.SCOPE_FILL * rect.width
     flat := way / f32(len(self.trace) - 1)
 
     // Each point as far as the beam goes to the next one, or from the one before where it starts over

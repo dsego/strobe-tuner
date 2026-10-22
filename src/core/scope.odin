@@ -48,18 +48,12 @@
     doesn't move when it's turned on. It cancels the 12th partial and its multiples exactly, the 3rd keeps
     81% and the 6th 41%. The lamp and its tracks take the wave as it comes.
 
-    X-Y: the reference drives the beam across instead of the sweep, a cosine at its frequency. With the
-    wave up and down that's a Lissajous figure, the way pitch was compared on an oscilloscope. An in tune
-    note draws a still ellipse, a detuned one rolls it open and shut by the phase it slips, a line, a
-    circle, a line the other way. The figure is square, as wide as the screen is high, on its left. Its
-    sweep is one reference period, the figure once round.
-
     Circle: the sweep goes round instead of across, the same two reference periods a turn, anticlockwise
     from the top, the wave out from a ring halfway at its zero, its crests to the outside and its troughs
     in to the middle. A sine draws two lobes that meet in the middle, every partial bumps and dips them.
     It's the line over time bent round, narrower the nearer the middle. An in tune note stands still, a
-    detuned one spins by half the phase it slips, clockwise when sharp like the wheel. Square like X-Y,
-    the crests reach out past the square to the screen's sides.
+    detuned one spins by half the phase it slips, clockwise when sharp like the wheel. It's square,
+    as wide as the screen is high, the crests reach out past the square to the screen's sides.
 
  -------------------------------------------------------------------------------------------------*/
 
@@ -70,7 +64,7 @@ import "core:math"
 import "core:slice"
 
 
-SCOPE_PERIODS :: 2 // reference periods across the screen, and round the circle, see scope_sweep_periods
+SCOPE_PERIODS :: 2 // reference periods across the screen, and round the circle
 SCOPE_FILL :: 0.9 // how much of the height a full scale sample takes
 SCOPE_CHUNK_SIZE :: 4096
 SCOPE_MAX_BEAM_DOTS :: 256 // between two samples
@@ -117,7 +111,6 @@ ScopeShape :: enum {
 ScopeSweep :: enum {
     TIME, // two reference periods across, the wave over time
     CIRCLE, // round, two reference periods a turn
-    XY, // the reference's cosine, a Lissajous figure
 }
 
 // The circle's ring at the wave's zero, from its middle to its outside. Halfway, a full scale sample reaches
@@ -251,7 +244,7 @@ destroy_scope :: proc(self: ^Scope) {
 // Starts with a dark screen at the new reference frequency
 set_scope_freq :: proc(self: ^Scope, freq_hz: f64) {
     self.freq_hz = freq_hz
-    self.step = freq_hz / (f64(self.sample_rate) * scope_sweep_periods(self))
+    self.step = freq_hz / (f64(self.sample_rate) * SCOPE_PERIODS)
 
     length := f64(self.sample_rate) / (freq_hz * SCOPE_LOWPASS_HARMONIC) if freq_hz > 0 else 1
     self.lowpass_filter.length = clamp(int(math.round(length)), 1, SCOPE_LOWPASS_MAX_LENGTH)
@@ -321,12 +314,7 @@ set_scope_sweep :: proc(self: ^Scope, sweep: ScopeSweep) {
     set_scope_freq(self, self.freq_hz)
 }
 
-// How many reference periods a sweep is. The Lissajous figure's is one, a second would draw it over itself.
-scope_sweep_periods :: proc(self: ^Scope) -> f64 {
-    return 1 if self.sweep == .XY else SCOPE_PERIODS
-}
-
-// How many columns of the screen the beam draws in, X-Y and the circle are square
+// How many columns of the screen the beam draws in, the circle's are square
 scope_width :: proc(self: ^Scope) -> int {
     return self.columns if self.sweep == .TIME else min(self.rows, self.columns)
 }
@@ -599,7 +587,7 @@ scope_trace :: proc(self: ^Scope, points: ^[dynamic][2]f32) {
 // The average round the sweep once from its start, where the sweeps it took meet. Over time that's the
 // screen's edge, the line ends there.
 trace_average :: proc(self: ^Scope, points: ^[dynamic][2]f32) {
-    // The circle and the figure close on themselves. The sweep's end runs on into the next one's start, not
+    // The circle closes on itself. The sweep's end runs on into the next one's start, not
     // into its own: a note that changes from one sweep to the next, detuned, wobbling or fading, leaves a gap
     // as wide as it changed, and arrives at another slope. Over the sweep's last quarter the line bends
     // smoothly into its start instead (a Hermite blend of both), there's no step or corner at the top.
@@ -669,7 +657,7 @@ trace_average :: proc(self: ^Scope, points: ^[dynamic][2]f32) {
         }
     }
 
-    // The last bin over time, back to where it started round the circle and the figure, they close
+    // The last bin over time, back to where it started round the circle, it closes
     last := bins - 1 if self.sweep == .TIME else bins
     point := sweep_point(self, f64(last) / f64(bins), average(self, last, seam))
     append(points, [2]f32{f32(point.x), f32(point.y)})
@@ -702,7 +690,7 @@ begin_samples :: proc(self: ^Scope, samples: []f32) -> (clock: i64, min_level: f
     if self.step <= 0 || len(samples) == 0 do return
 
     // Fill's window, what the screen shows: the persistence, and at least SCOPE_FILL_MIN_PERIODS
-    window := max(SCOPE_FILL_MIN_PERIODS / scope_sweep_periods(self) / self.step, self.persistence_seconds * f64(self.sample_rate))
+    window := max(SCOPE_FILL_MIN_PERIODS / SCOPE_PERIODS / self.step, self.persistence_seconds * f64(self.sample_rate))
     self.block_length = max(int(math.round(window / SCOPE_PEAK_BLOCKS)), 1)
     self.fill_release = f32(math.exp(-1 / (SCOPE_FILL_RELEASE_S * f64(self.sample_rate))))
 
@@ -826,11 +814,10 @@ trace_dots :: proc(self: ^Scope) -> int {
     return clamp(int(math.ceil(sweep_cells(self))), 1, SCOPE_MAX_BEAM_DOTS)
 }
 
-// How far the sweep moves the beam across from one sample to the next, in cells, at its fastest: the cosine
-// moves it fastest through the middle, and the circle on its outside
+// How far the sweep moves the beam across from one sample to the next, in cells, at its fastest: the circle
+// moves it fastest on its outside
 sweep_cells :: proc(self: ^Scope) -> f64 {
     width := f64(scope_width(self))
-    if self.sweep == .XY do return math.TAU * self.step * 0.5 * SCOPE_FILL * width
     if self.sweep == .CIRCLE do return math.TAU * self.step * SCOPE_CIRCLE_REACH * width
     return self.step * f64(self.columns)
 }
@@ -865,9 +852,6 @@ beam_dot :: proc(self: ^Scope, position: f64, value: f32, brightness: f64) {
 // width and height from its top left corner
 sweep_point :: proc(self: ^Scope, position: f64, value: f32) -> [2]f64 {
     across := position - math.floor(position)
-
-    // The reference at the sample, a cosine with the same reach as the wave
-    if self.sweep == .XY do across = 0.5 + 0.5 * SCOPE_FILL * math.cos(math.TAU * position)
 
     // The averaged scope's line runs off the screen, a note grown louder than its scale or the circle's crests
     // up and down, see SCOPE_MAX_OVERSHOOT. The lamp's cells keep a crest over the level in the top row.

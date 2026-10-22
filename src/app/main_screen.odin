@@ -156,8 +156,8 @@ strobe_track_hz :: proc(lock_in: ^core.StrobeLockIn) -> []f32 {
     return track_hz
 }
 
-// The scope or the lamp. Tapped, the scope goes on from the wave over time to the circle and the Lissajous
-// figure, the lamp flips between the one lamp and the split one, its two halves.
+// The scope or the lamp. Tapped, the scope flips between the wave over time and the circle, the lamp
+// between the one lamp and the split one, its two halves.
 draw_scope_area :: proc(app: ^App, strobe, view: gfx.Rect) {
     config, measurement := app.config, &app.measurement
     draw_scope_display(&app.displays.scope, &app.displays.glow_targets, &measurement.scope, view, config, measurement.pitch_detector.snr_db)

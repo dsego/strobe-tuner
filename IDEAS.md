@@ -242,7 +242,7 @@ desktop only, iOS and Android only have "Microphone".
 
 ## Piano keys under the spectrum
 
-Tapping the spectrum flips it to a bar per piano key, A0 to C8, like the scope's X-Y and the lamp's
+Tapping the spectrum flips it to a bar per piano key, A0 to C8, like the scope's circle and the lamp's
 split. A bar is the spectrum's level over its semitone, the note named by where it stands.
 
 - A bar per key, not the 12 note names folded over the octaves. Folded, an A's partials land on A, E
@@ -271,7 +271,7 @@ its last pluck, in dB from the loudest.
 ## Spectrogram
 
 The spectrum over time, scrolling, its level as brightness. Another display type, or a tap on the
-spectrum flips it, like the scope's X-Y. Asked for in the same review, as a waterfall.
+spectrum flips it, like the scope's circle. Asked for in the same review, as a waterfall.
 
 - What it shows: partials dying away at their own rates, a wolf note or a dead spot as a partial
   that drops out fast, two partials beating.
