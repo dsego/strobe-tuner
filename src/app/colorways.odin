@@ -32,27 +32,28 @@ COLORWAYS :: [StrobeColorway][2]u32 {
     // Black and white, the most contrast and no hue to tell apart
     .MONO        = {0xF2F1ECFF, 0x55565EFF},
     // Until the first frame follows the note, A's, see by_note_colors
-    .BY_NOTE     = {0x8687E1FF, 0x322B34FF},
+    .BY_NOTE     = {0x8B8CE7FF, 0x463050FF},
 }
 
 // By note: every note its own color, from the painter's twelve-color wheel, C on its red and each semitone a
 // color on round to B, the wheel's teal swapped for a cerulean G. The color flips with the shown note instead
 // of blending between notes, a new color is a new note at a glance. The note's name stays on the screen, the
 // color is a second cue. The lit colors are evened out toward one lightness so the blues and violets aren't
-// dim. The dark stripes are a warm charcoal leaning a little toward plum, the contrast is in the lightness.
+// dim. The dark stripes are the note's hue darkened, leaning a little toward plum, colorful enough to stay the
+// note's color against the background the glow lights in their hue.
 NOTE_COLORS :: [12][2]u32 {
-    {0xFF675EFF, 0x372A2BFF}, // C
-    {0xFF8958FF, 0x372A29FF}, // C#
-    {0xFF9746FF, 0x372A28FF}, // D
-    {0xF9B102FF, 0x372B26FF}, // D#
-    {0xE1D300FF, 0x362B24FF}, // E
-    {0x94CD49FF, 0x332D22FF}, // F
-    {0x3DCB6AFF, 0x2E2E2BFF}, // F#
-    {0x47B4F8FF, 0x2D2C37FF}, // G
-    {0x5A92FDFF, 0x302B36FF}, // G#
-    {0x8687E1FF, 0x322B34FF}, // A
-    {0xAF78D8FF, 0x342A32FF}, // A#
-    {0xE36BC4FF, 0x362A2FFF}, // B
+    {0xFF6F66FF, 0x552D31FF}, // C
+    {0xFF8C5DFF, 0x562D2CFF}, // C#
+    {0xFF994AFF, 0x562E27FF}, // D
+    {0xF8B000FF, 0x54301FFF}, // D#
+    {0xDFD100FF, 0x503316FF}, // E
+    {0x94CE4AFF, 0x473813FF}, // F
+    {0x40CD6DFF, 0x3A3C32FF}, // F#
+    {0x4AB7FBFF, 0x363659FF}, // G
+    {0x6198FFFF, 0x403355FF}, // G#
+    {0x8B8CE7FF, 0x463050FF}, // A
+    {0xB57DDDFF, 0x4D2E49FF}, // A#
+    {0xE76FC8FF, 0x512D40FF}, // B
 }
 
 // The shown note's, set every frame, see follow_note_colors
@@ -96,10 +97,16 @@ GLOWS :: [StrobeColorway]GlowParams {
     .BY_NOTE     = {dark_level = 1.0, exposure = 3.5, saturation = 1.0},
 }
 
+// By note's background lit in the dark stripes' hue like the other colorways, or in the lit stripes'
+BY_NOTE_GLOW_FROM_DARK :: #config(BY_NOTE_GLOW_FROM_DARK, true)
+
 glow_params :: proc(config: ^Config) -> GlowParams {
     glows := GLOWS
     glow := glows[config.strobe_colorway]
-    if config.strobe_colorway == .BY_NOTE do glow.color, glow.dark_color = by_note_colors.x, by_note_colors.x
+    if config.strobe_colorway == .BY_NOTE {
+        glow.color, glow.dark_color = by_note_colors.x, by_note_colors.x
+        if BY_NOTE_GLOW_FROM_DARK do glow.dark_color = by_note_colors.y
+    }
     return glow
 }
 
