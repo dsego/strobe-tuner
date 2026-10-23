@@ -33,7 +33,7 @@ Strobie is coming to the App Store for Mac and iPhone. [Try it in your browser](
 - Guitar, bass and ukulele tunings with an optional capo, the ruler shows only their strings.
 - Concert A from 400 to 480 Hz.
 - Hertz/Cents display.
-- Four colorways (red, mint, amber, mono), and By note, every note its own hue round the color wheel at one lightness, blending by the cents between notes. An optional retro lamp glow.
+- Four colorways (red, mint, amber, mono), and By note, each of the twelve notes its own color. An optional retro lamp glow.
 
 
 

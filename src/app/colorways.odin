@@ -16,8 +16,6 @@
 
 package app
 
-import "core:math"
-
 StrobeColorway :: enum {
     VIBRANT_RED,
     MINTY,
@@ -33,90 +31,42 @@ COLORWAYS :: [StrobeColorway][2]u32 {
     .AMBER       = {0xFF9A4DFF, 0x6B4A38FF},
     // Black and white, the most contrast and no hue to tell apart
     .MONO        = {0xF2F1ECFF, 0x55565EFF},
-    // Until the first frame follows the note, see by_note_colors
-    .BY_NOTE     = {0xFF6767FF, 0x6B4949FF},
+    // Until the first frame follows the note, A's, see by_note_colors
+    .BY_NOTE     = {0x8687E1FF, 0x322B34FF},
 }
 
-// By note: every note its own hue. The seven naturals are spread evenly round the hue wheel in pitch order,
-// C at NOTE_HUE_C, a sharp halfway between its neighbours and B on round to C, so a pitch between two notes
-// gets the hue between theirs. All at one lightness in OKLCH, the lightness the eye sees, so only the hue
-// tells the notes apart and every note's stripes are as bright. The note's name stays on the screen, the
-// color is a second cue. C has the coral's hue, the wheel runs on like the colors of music teaching, C red,
-// D orange, E yellow and green, blue and violet up to B.
-NOTE_HUE_C :: #config(NOTE_HUE_C, 23) // degrees
-NOTE_LIGHTNESS :: #config(NOTE_LIGHTNESS, 0.76)
-// As rich as orange, yellow and pink go, the hues the screen can't show that rich at this lightness, the
-// blue and the greens, stay at the most it can, see oklch_color
-NOTE_CHROMA :: #config(NOTE_CHROMA, 0.2)
-// The dark stripes, the same hue dimmed like the colorways' dark ones
-NOTE_DARK_LIGHTNESS :: 0.4
-NOTE_DARK_CHROMA :: 0.05
-
-// Where each semitone from C sits among the naturals, C is 0 and the next C 7
-NATURAL_PLACES :: [13]f32{0, 0.5, 1, 1.5, 2, 3, 3.5, 4, 4.5, 5, 5.5, 6, 7}
+// By note: every note its own color, from the painter's twelve-color wheel, C on its red and each semitone a
+// color on round to B, the wheel's teal swapped for a cerulean G. The color flips with the shown note instead
+// of blending between notes, a new color is a new note at a glance. The note's name stays on the screen, the
+// color is a second cue. The lit colors are evened out toward one lightness so the blues and violets aren't
+// dim. The dark stripes are a warm charcoal leaning a little toward plum, the contrast is in the lightness.
+NOTE_COLORS :: [12][2]u32 {
+    {0xFF675EFF, 0x372A2BFF}, // C
+    {0xFF8958FF, 0x372A29FF}, // C#
+    {0xFF9746FF, 0x372A28FF}, // D
+    {0xF9B102FF, 0x372B26FF}, // D#
+    {0xE1D300FF, 0x362B24FF}, // E
+    {0x94CD49FF, 0x332D22FF}, // F
+    {0x3DCB6AFF, 0x2E2E2BFF}, // F#
+    {0x47B4F8FF, 0x2D2C37FF}, // G
+    {0x5A92FDFF, 0x302B36FF}, // G#
+    {0x8687E1FF, 0x322B34FF}, // A
+    {0xAF78D8FF, 0x342A32FF}, // A#
+    {0xE36BC4FF, 0x362A2FFF}, // B
+}
 
 // The shown note's, set every frame, see follow_note_colors
 by_note_colors := COLORWAYS[.BY_NOTE]
 
-// The lit and the dark color at a pitch, in cents from A4
-note_colors :: proc(cents: f32) -> [2]u32 {
-    from_c := cents / 100 + 9
-    semitone := math.floor(from_c)
-    index := int(semitone) %% 12
-    places := NATURAL_PLACES
-    hue := NOTE_HUE_C + math.lerp(places[index], places[index + 1], from_c - semitone) * 360 / 7
-    return {oklch_color(NOTE_LIGHTNESS, NOTE_CHROMA, hue), oklch_color(NOTE_DARK_LIGHTNESS, NOTE_DARK_CHROMA, hue)}
+// The lit and the dark color of a note, in whole semitones of cents from A4
+note_colors :: proc(cents: int) -> [2]u32 {
+    colors := NOTE_COLORS
+    return colors[(cents / 100 + 9) %% 12]
 }
 
-// The note as it's shown, a transposing instrument's written note or a capo's open string, with the
-// readout's cents, the note alone while there's no readout
-follow_note_colors :: proc(app: ^App, reading: Reading) {
-    note_target := &app.measurement.note_target
-    cents := f32(note_target.target_note.cents + 100 * shown_transpose(app.config))
-    if note_target.active && reading.steady.measured do cents += reading.steady.err_cents
-
-    by_note_colors = note_colors(cents)
-}
-
-// An OKLCH color (Björn Ottosson's OKLab as lightness, chroma and hue in degrees) as RGBA. A chroma the screen
-// can't show at that lightness and hue is pulled in until it can.
-oklch_color :: proc(lightness, chroma, hue: f32) -> u32 {
-    linear_rgb :: proc(lightness, chroma, hue: f32) -> [3]f32 {
-        a := chroma * math.cos(math.to_radians(hue))
-        b := chroma * math.sin(math.to_radians(hue))
-        l := math.pow(lightness + 0.3963377774 * a + 0.2158037573 * b, 3)
-        m := math.pow(lightness - 0.1055613458 * a - 0.0638541728 * b, 3)
-        s := math.pow(lightness - 0.0894841775 * a - 1.291485548 * b, 3)
-        return {
-            4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-            -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-            -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
-        }
-    }
-
-    on_screen :: proc(rgb: [3]f32) -> bool {
-        return min(rgb.r, rgb.g, rgb.b) >= -1e-4 && max(rgb.r, rgb.g, rgb.b) <= 1 + 1e-4
-    }
-
-    // Halving the range of chromas that fit and the ones that don't
-    fitted := chroma
-    if !on_screen(linear_rgb(lightness, chroma, hue)) {
-        low, high: f32 = 0, chroma
-        for _ in 0 ..< 16 {
-            middle := (low + high) / 2
-            if on_screen(linear_rgb(lightness, middle, hue)) do low = middle
-            else do high = middle
-        }
-        fitted = low
-    }
-
-    color: u32 = 0xFF
-    for channel, index in linear_rgb(lightness, fitted, hue) {
-        value := clamp(channel, 0, 1)
-        gamma := 12.92 * value if value <= 0.0031308 else 1.055 * math.pow(value, 1 / 2.4) - 0.055
-        color |= u32(math.round(255 * gamma)) << u32(24 - 8 * index)
-    }
-    return color
+// The note as it's shown, a transposing instrument's written note or a capo's open string
+follow_note_colors :: proc(app: ^App) {
+    by_note_colors = note_colors(app.measurement.note_target.target_note.cents + 100 * shown_transpose(app.config))
 }
 
 

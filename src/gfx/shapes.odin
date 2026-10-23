@@ -248,6 +248,36 @@ polyline_side :: proc(points: [][2]f32, index: int, closed := false) -> [2]f32 {
     return bisector * min(1 / max(cosine, 1e-6), 2)
 }
 
+// A disc in equal slices, one per color, the first from the top and the rest clockwise. The rim fades out
+// over the feather, the slices meet on a hard edge.
+draw_sector_disc :: proc(center: [2]f32, radius: f32, colors: []Color, feather: f32) {
+    STEPS :: 6 // per slice, enough for a round rim
+    inner := max(radius - feather, 0)
+    for color, slice in colors {
+        edge := Color{color.r, color.g, color.b, 0}
+        for step in 0 ..< STEPS {
+            angle1 := math.TAU * (f32(slice) + f32(step) / STEPS) / f32(len(colors))
+            angle2 := math.TAU * (f32(slice) + f32(step + 1) / STEPS) / f32(len(colors))
+            direction1 := [2]f32{math.sin(angle1), -math.cos(angle1)}
+            direction2 := [2]f32{math.sin(angle2), -math.cos(angle2)}
+            push_vertices(
+                gpu.white.handle,
+                {
+                    {center, {0, 0}, color},
+                    {center + direction1 * inner, {0, 0}, color},
+                    {center + direction2 * inner, {0, 0}, color},
+                    {center + direction1 * inner, {0, 0}, color},
+                    {center + direction1 * radius, {0, 0}, edge},
+                    {center + direction2 * radius, {0, 0}, edge},
+                    {center + direction1 * inner, {0, 0}, color},
+                    {center + direction2 * radius, {0, 0}, edge},
+                    {center + direction2 * inner, {0, 0}, color},
+                },
+            )
+        }
+    }
+}
+
 draw_circle :: proc(center: [2]f32, radius: f32, color: Color) {
     SEGMENTS :: 24
     for i in 0 ..< SEGMENTS {
