@@ -155,8 +155,9 @@ strobe_geometry :: proc(shape: StrobeShape, rect: gfx.Rect, scale: f32, band_cou
     case .WHEEL:
         geometry.curvature_radius = 90 * scale
         geometry.band_height = 26 * scale
+        // Fewer periods turn faster, the wheel drifts as many stripes a second as the tracks
         geometry.period_count = 4
-        geometry.density = 1
+        geometry.density = geometry.period_count / DESKTOP_TRACKS_PERIODS
         return
     case .CURVED:
         geometry.y += 32 * scale
