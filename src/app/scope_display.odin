@@ -36,7 +36,7 @@ SCOPE_ROWS :: 240
 SCOPE_GRID_THICKNESS :: 2
 
 // The beam's line, smooth at a feather of about a pixel
-SCOPE_TRACE_THICKNESS :: 2.5 // points
+SCOPE_TRACE_THICKNESS :: #config(SCOPE_TRACE_THICKNESS, 3.5) // points
 SCOPE_TRACE_FEATHER :: 0.75
 
 // Over the background noise the beam dims to this, the line at rest stays
@@ -47,10 +47,10 @@ SCOPE_NOISE_BRIGHTNESS :: 0.3
 SCOPE_PHOSPHOR_EXPOSURE :: #config(SCOPE_PHOSPHOR_EXPOSURE, 3)
 // and glows in a wide line under it, this bright
 SCOPE_GLOW :: #config(SCOPE_GLOW, 0.25)
-SCOPE_GLOW_THICKNESS :: 10 // points
+SCOPE_GLOW_THICKNESS :: 4 * SCOPE_TRACE_THICKNESS // points
 
 // The beam is a thin line and its bloom is spread thin, it's added this many times over
-SCOPE_BLOOM_PASSES :: 3
+SCOPE_BLOOM_PASSES :: #config(SCOPE_BLOOM_PASSES, 3)
 
 // What the scope's and the lamp's views keep from one frame to the next
 ScopeDisplay :: struct {
