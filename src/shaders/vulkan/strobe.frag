@@ -148,6 +148,33 @@ float draw_curved_track(float thickness, float outer_radius, float feathering, f
     return outer_circle - inner_circle;
 }
 
+// Emulate a lamp shining through a strobe disc, like the old mechanical strobe tuners
+vec3 glow_color(float signal_value, float radial_position, float angle)
+{
+    // Stripes drawn in color_a are the lit ones
+    float lit = 1.0 - signal_value;
+
+    // Lamp hotspot, sits behind the inner band at the top centre of the arcs.
+    // The outer bands fall off in brightness, so each band gets its own tone.
+    float radial_t = (radial_position - u.min_radius) / max(u.max_radius - u.min_radius, 1.0);
+    float angle_offset = (angle - 0.25 * TAU) / u.lamp_spread;
+    float hotspot = exp(-angle_offset * angle_offset - 2.0 * radial_t * radial_t);
+
+    // Light model: the lamp shines through a colored filter, the stripes modulate how much gets through.
+    // Dark stripes still pass some light, so they read as deep saturated color rather than an opaque surface.
+    float lamp = mix(0.6, 1.0, hotspot) * u.glow_exposure;
+
+    // Exposure curve per channel, bright light rolls off from saturated color towards pale gold/white,
+    // dim light stays deep and saturated. Only the fully lit and fully dark colors go through the curve,
+    // in between is a linear blend. Otherwise the mid tones (soft stripe edges, a weak strobe fading out)
+    // pick up the curve's most saturated color and show up as red fringes.
+    vec3 lit_rgb = 1.0 - exp(-lamp * u.glow_filter.rgb);
+    vec3 dark_rgb = 1.0 - exp(-DARK_TRANSMISSION * lamp * u.glow_dark_filter.rgb);
+    vec3 rgb = mix(dark_rgb, lit_rgb, lit);
+
+    return mix(vec3(dot(rgb, vec3(0.299, 0.587, 0.114))), rgb, u.glow_saturation);
+}
+
 
 void main()
 {
@@ -203,35 +230,14 @@ void main()
         u.strobe_blur > 0
     );
 
-    // Blend colors
-    vec3 rgb = mix(u.color_a.rgb, u.color_b.rgb, signal_value);
-    float alpha = curved_track;
-
+    // Blend colors, or light the stripes with the lamp
+    vec3 rgb;
     if (u.glow > 0) {
-        // Emulate a lamp shining through a strobe disc, like the old mechanical strobe tuners
-
-        // Stripes drawn in color_a are the lit ones
-        float lit = 1.0 - signal_value;
-
-        // Lamp hotspot, sits behind the inner band at the top centre of the arcs.
-        // The outer bands fall off in brightness, so each band gets its own tone.
-        float radial_t = (radial_position - u.min_radius) / max(u.max_radius - u.min_radius, 1.0);
-        float angle_offset = (angle - 0.25 * TAU) / u.lamp_spread;
-        float hotspot = exp(-angle_offset * angle_offset - 2.0 * radial_t * radial_t);
-
-        // Light model: the lamp shines through a colored filter, the stripes modulate how much gets through.
-        // Dark stripes still pass some light, so they read as deep saturated color rather than an opaque surface.
-        float lamp = mix(0.6, 1.0, hotspot) * u.glow_exposure;
-
-        // Exposure curve per channel, bright light rolls off from saturated color towards pale gold/white,
-        // dim light stays deep and saturated. Only the fully lit and fully dark colors go through the curve,
-        // in between is a linear blend. Otherwise the mid tones (soft stripe edges, a weak strobe fading out)
-        // pick up the curve's most saturated color and show up as red fringes.
-        vec3 lit_rgb = 1.0 - exp(-lamp * u.glow_filter.rgb);
-        vec3 dark_rgb = 1.0 - exp(-DARK_TRANSMISSION * lamp * u.glow_dark_filter.rgb);
-        rgb = mix(dark_rgb, lit_rgb, lit);
-        rgb = mix(vec3(dot(rgb, vec3(0.299, 0.587, 0.114))), rgb, u.glow_saturation);
+        rgb = glow_color(signal_value, radial_position, angle);
+    } else {
+        rgb = mix(u.color_a.rgb, u.color_b.rgb, signal_value);
     }
+    float alpha = curved_track;
 
     // The outline follows the arc, the distance to the nearer edge of the track. The edges are where the
     // feathering is halfway, the outer one fades inside the radius and the inner one outside it.
