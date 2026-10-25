@@ -35,7 +35,7 @@ TRACKS_PERIODS :: 12 // DESKTOP_TRACKS_PERIODS, the fundamental's stripes across
 HARMONICS :: 3
 INTERVALS :: [HARMONICS]f32{1, 2, 3}
 PERSISTENCES_MS :: [?]f64{0, 40, 100, 200}
-BAND_WIDTHS_CENTS :: [?]int{core.DFT_RESOLUTION_CENTS, 50, 25} // the app's first, see W in the app
+BAND_WIDTHS_CENTS :: [?]int{core.DFT_RESOLUTION_CENTS, 50, 25} // the app's first
 
 // Listed as they happen, a frame's advance of a harmonic over this, at the app's default persistence
 APP_PERSISTENCE_MS :: 40

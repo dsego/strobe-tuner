@@ -80,8 +80,8 @@ is_octave_track :: proc(band: PhaseBand) -> bool {
     return band.interval > 0 && abs(octaves - math.round(octaves)) < 0.01
 }
 
-// A track hears its note while it drifts less than its window is wide, band_cents, a semitone unless the W
-// key narrowed it. Further out it's another note leaking in.
+// A track hears its note while it drifts less than its window is wide, band_cents, a semitone. Further out
+// it's another note leaking in.
 hears_note :: proc(band: PhaseBand, band_cents: int) -> bool {
     return band.in_range && band.drift_cents <= f32(band_cents)
 }

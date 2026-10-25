@@ -50,14 +50,7 @@ StrobeSource :: enum {
     LAMP, // the lamp's screen, a DFT bin of it for each track's partial, see core.strobe_lamp_bands
 }
 
-// The track presets the I key steps through
-INTERVAL_OPTIONS: [3][core.MAX_BANDS]f32 : {
-    {1, 2, 4, 0, 0},
-    {1, 1.5, 2, 0, 0},
-    {1, 2, 3, 0, 0},
-}
-
-// The partials a track can follow, 1½ is the fifth above the fundamental like in the 1 1½ 2 preset
+// The partials a track can follow, 1½ is the fifth above the fundamental
 TRACK_PARTIALS :: [?]f32{1, 1.5, 2, 3, 4, 5, 6, 7, 8}
 TRACK_OFFSET_MAX_CENTS :: 50
 TRACK_OFFSET_STEP_CENTS :: 0.5
@@ -166,7 +159,6 @@ Config :: struct {
 
     // The partial of each track, harmonic mode, the tracks are the ones of 1 and more, 0 is no track
     strobe_intervals:             [core.MAX_BANDS]f32,
-    strobe_intervals_index:       int, // the last of INTERVAL_OPTIONS picked with the I key
     // per track, harmonic mode: the target this many cents off the exact partial, eg a stretched octave
     strobe_offsets_cents:         [core.MAX_BANDS]f32,
     // per track, harmonic mode: on top of strobe_speed, 1 leaves it as is
@@ -254,8 +246,7 @@ config_defaults :: Config {
     // --- Strobe ---
     strobe_mode                  = .HARMONIC,
     strobe_source                = .LOCK_IN,
-    strobe_intervals             = INTERVAL_OPTIONS[0],
-    strobe_intervals_index       = 0,
+    strobe_intervals             = {1, 2, 4, 0, 0},
     strobe_offsets_cents         = {0, 0, 0, 0, 0},
     strobe_speeds                = {1, 1, 1, 1, 1},
     strobe_fast                  = false,

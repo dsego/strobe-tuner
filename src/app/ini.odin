@@ -59,8 +59,7 @@ load_config :: proc() -> Config {
     }
     for &cents in config.strobe_offsets_cents do cents = clamp(cents, -TRACK_OFFSET_MAX_CENTS, TRACK_OFFSET_MAX_CENTS)
 
-    // 0 is off, a sliver of a period would fade the screen to nothing between two samples. The W key's longest
-    // is about 70 periods.
+    // 0 is off, a sliver of a period would fade the screen to nothing between two samples
     if config.strobe_persistence_periods != 0 do config.strobe_persistence_periods = clamp(config.strobe_persistence_periods, 1, 1000)
     if config.screen_persistence_periods != 0 do config.screen_persistence_periods = clamp(config.screen_persistence_periods, 1, 1000)
 
@@ -68,13 +67,11 @@ load_config :: proc() -> Config {
     window_steps := SPECTRUM_WINDOW_STEPS
     config.spectrum_windows = clamp(config.spectrum_windows, window_steps[0], window_steps[len(window_steps) - 1])
 
-    // The strobe needs a track, and the I key steps on from a preset that exists
+    // The strobe needs a track
     defaults := config_defaults
     has_track := false
     for interval in config.strobe_intervals do has_track ||= interval >= 1
     if !has_track do config.strobe_intervals = defaults.strobe_intervals
-
-    config.strobe_intervals_index = clamp(config.strobe_intervals_index, 0, len(INTERVAL_OPTIONS) - 1)
 
     // Hand edited smaller than the window goes, it opens at the strobe's size
     min_size := WINDOW_MIN_SIZE

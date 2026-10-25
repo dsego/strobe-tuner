@@ -443,11 +443,10 @@ draw_track_header :: proc(sheet_layout: SheetLayout, track: int, band: core.Phas
     return draw_sheet_header(sheet_layout, title, details)
 }
 
-// What the track goes back to, the partial of the last preset. A track added on top of it keeps its own.
+// What the track goes back to, its default partial. A track added on top of the defaults keeps its own.
 track_reset_partial :: proc(config: ^Config, slot: int) -> f32 {
-    options := INTERVAL_OPTIONS
-    preset := clamp(config.strobe_intervals_index, 0, len(options) - 1)
-    partial := options[preset][slot]
+    defaults := config_defaults
+    partial := defaults.strobe_intervals[slot]
     return partial if partial >= 1 else config.strobe_intervals[slot]
 }
 

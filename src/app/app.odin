@@ -16,7 +16,6 @@
 
 package app
 
-import "core:fmt"
 import "core:math"
 
 import "../audio"
@@ -416,27 +415,6 @@ handle_keys :: proc(app: ^App) -> (menu: MenuCommand) {
     }
     for key, type in DISPLAY_KEYS {
         if plain && gfx.key_pressed(key) do config.strobe_display_type = type
-    }
-
-    // The next preset of the tracks, it replaces the partials and clears what was set on each track
-    if plain && gfx.key_pressed(.I) && config.strobe_mode == .HARMONIC {
-        options, defaults := INTERVAL_OPTIONS, config_defaults
-        config.strobe_intervals_index = (config.strobe_intervals_index + 1) % len(options)
-        config.strobe_intervals = options[config.strobe_intervals_index]
-        config.strobe_offsets_cents = defaults.strobe_offsets_cents
-        config.strobe_speeds = defaults.strobe_speeds
-        retune(&app.measurement, config)
-    }
-
-    // Hidden, the tracks' band a semitone, a half or a quarter wide: each half has half the noise and twice the lag.
-    // The screens' persistence follows, as many periods as the band's window, so the lamp's tracks narrow along
-    // with the lock-in's and the two can be compared like for like.
-    if plain && gfx.key_pressed(.W) {
-        lock_in := app.measurement.strobe_lock_in
-        lock_in.band_cents = lock_in.band_cents / 2 if lock_in.band_cents > 25 else core.DFT_RESOLUTION_CENTS
-        config.strobe_persistence_periods = 1 / (math.pow(f32(2), f32(lock_in.band_cents) / 1200) - 1)
-        fmt.printfln("Strobe band: %d cents, persistence %.0f periods", lock_in.band_cents, config.strobe_persistence_periods)
-        retune(&app.measurement, config)
     }
 
     // Without a menu bar Ctrl+, opens the settings and Ctrl+0 puts the window back to the strobe's size, see
