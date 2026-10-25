@@ -247,7 +247,7 @@ test_scope_persistence :: proc(t: ^testing.T) {
 
     scope := scope_test_init(FREQ)
     defer destroy_scope(&scope)
-    scope.persistence_seconds = 0.05
+    scope.persistence_s = 0.05
 
     // A note, then silence: from above the lit half fades with the persistence instead of going dark
     samples: [SCOPE_TEST_FRAME]f32
@@ -376,7 +376,7 @@ test_scope_average :: proc(t: ^testing.T) {
 
     averaged := scope_test_init(FREQ)
     defer destroy_scope(&averaged)
-    averaged.persistence_seconds = 18 / FREQ
+    averaged.persistence_s = 18 / FREQ
     averaged.average_sweeps = true
 
     // xorshift, the same noise every run
@@ -422,7 +422,7 @@ test_scope_average_lowpass :: proc(t: ^testing.T) {
 
     scope := scope_test_init(FREQ)
     defer destroy_scope(&scope)
-    scope.persistence_seconds = 18 / FREQ
+    scope.persistence_s = 18 / FREQ
     scope.average_sweeps = true
     scope.lowpass = true
 
@@ -457,7 +457,7 @@ test_scope_autoset :: proc(t: ^testing.T) {
 
     scope := scope_test_init(FREQ)
     defer destroy_scope(&scope)
-    scope.persistence_seconds = 18 / FREQ
+    scope.persistence_s = 18 / FREQ
     scope.average_sweeps = true
 
     play :: proc(scope: ^Scope, amp: f32, frames: int) {
@@ -490,7 +490,7 @@ test_scope_uniform_gain :: proc(t: ^testing.T) {
 
     scope := scope_test_init(FREQ)
     defer destroy_scope(&scope)
-    scope.persistence_seconds = 18 / FREQ
+    scope.persistence_s = 18 / FREQ
     scope.average_sweeps = true
     scope.uniform_gain = true
 
@@ -541,7 +541,7 @@ test_scope_circle_closes :: proc(t: ^testing.T) {
         scope := scope_test_init(FREQ)
         defer destroy_scope(&scope)
         set_scope_sweep(&scope, .CIRCLE)
-        scope.persistence_seconds = 18 / FREQ
+        scope.persistence_s = 18 / FREQ
         scope.average_sweeps = true
 
         samples: [SCOPE_TEST_FRAME]f32
@@ -575,7 +575,7 @@ test_scope_average_starts_over_on_a_whole_sweep :: proc(t: ^testing.T) {
 
     scope := scope_test_init(freqs[0])
     defer destroy_scope(&scope)
-    scope.persistence_seconds = 18 / freqs[0]
+    scope.persistence_s = 18 / freqs[0]
     scope.average_sweeps = true
     scope.lowpass = true
 
@@ -630,7 +630,7 @@ test_scope_circle_closes_on_a_string :: proc(t: ^testing.T) {
     scope := scope_test_init(FREQ)
     defer destroy_scope(&scope)
     set_scope_sweep(&scope, .CIRCLE)
-    scope.persistence_seconds = 18 / FREQ
+    scope.persistence_s = 18 / FREQ
     scope.average_sweeps = true
     scope.lowpass = true
 
@@ -697,7 +697,7 @@ test_scope_average_has_no_seam :: proc(t: ^testing.T) {
 
     scope := scope_test_init(FREQ)
     defer destroy_scope(&scope)
-    scope.persistence_seconds = 18 / FREQ
+    scope.persistence_s = 18 / FREQ
     scope.average_sweeps = true
     scope.lowpass = true
 
@@ -811,7 +811,7 @@ test_scope_fill_holds_over_the_screen :: proc(t: ^testing.T) {
     // same size, the level doesn't follow the quieter periods down.
     scope := scope_test_init(FREQ)
     defer destroy_scope(&scope)
-    scope.persistence_seconds = 0.05
+    scope.persistence_s = 0.05
 
     samples: [SCOPE_TEST_FRAME]f32
     for frame in 0 ..< 30 {

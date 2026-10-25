@@ -132,7 +132,7 @@ main :: proc() {
         scope := core.init_scope(SCOPE_COLUMNS, SCOPE_ROWS)
         defer core.destroy_scope(&scope)
         core.set_scope_freq(&scope, note.freq_hz)
-        scope.persistence_seconds = 18 / note.freq_hz // the app's default 18 periods
+        scope.persistence_s = 18 / note.freq_hz // the app's default 18 periods
 
         played_hz := note.freq_hz * math.pow(2, note.cents / 1200)
         chunk: [SCOPE_FRAME]f32

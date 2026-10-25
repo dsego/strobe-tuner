@@ -29,8 +29,8 @@ import "../gfx"
 // range, how many cents from the middle to the top and bottom, are in the config, further is clamped to
 // the edge.
 TRACE_CAPACITY :: 1024
-TRACE_MIN_SECONDS :: 0.5
-TRACE_MAX_SECONDS :: 8 // fits TRACE_CAPACITY at MAX_FPS
+TRACE_MIN_S :: 0.5
+TRACE_MAX_S :: 8 // fits TRACE_CAPACITY at MAX_FPS
 TRACE_BAND :: 5 // cents either side of in tune, marked with faint lines
 TRACE_CURVE_STEPS :: 8 // pieces of the curve between two readings
 
@@ -124,7 +124,7 @@ draw_trace_display :: proc(self: ^TraceDisplay, targets: ^GlowTargets, rect: gfx
     line_color, band_color, background := gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color)
 
     // As the config file has them, none or longer than the readings kept is as far as they go
-    span := clamp(config.trace_seconds, TRACE_MIN_SECONDS, TRACE_MAX_SECONDS)
+    span := clamp(config.trace_seconds, TRACE_MIN_S, TRACE_MAX_S)
     cents_range := max(config.trace_range_cents, TRACE_BAND)
 
     PADDING :: 28

@@ -137,7 +137,7 @@ main :: proc() {
     lamps: [len(persistences)]Lamp
     for &lamp, index in lamps {
         lamp.scope = core.init_scope(SCOPE_COLUMNS, SCOPE_ROWS)
-        lamp.scope.persistence_seconds = persistences[index] / 1000
+        lamp.scope.persistence_s = persistences[index] / 1000
     }
     defer for &lamp in lamps do core.destroy_scope(&lamp.scope)
 

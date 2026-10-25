@@ -140,7 +140,7 @@ Scope :: struct {
 
     // How long the beam stays on the screen, the time constant of its decay. 0 keeps the newest sweep
     // only, drawn over again every frame, see redraw_newest_sweep.
-    persistence_seconds: f64,
+    persistence_s: f64,
 
     // Absolute index of the next sample
     sample_clock:        i64,
@@ -350,7 +350,7 @@ update_scope :: proc(self: ^Scope) {
         if self.beam_restart || !self.lowpass do self.lowpass_filter.primed = false
         if self.lowpass do lowpass_samples(&self.lowpass_filter, self.chunk[:count])
 
-        if self.persistence_seconds <= 0 {
+        if self.persistence_s <= 0 {
             record_samples(self, self.chunk[:count])
         } else if self.average_sweeps {
             average_samples(self, self.chunk[:count])
@@ -360,7 +360,7 @@ update_scope :: proc(self: ^Scope) {
         available -= count
     }
 
-    if self.persistence_seconds <= 0 do redraw_newest_sweep(self)
+    if self.persistence_s <= 0 do redraw_newest_sweep(self)
 }
 
 // Instead of update_scope while nothing shows the screen, drawing the beam costs more than the strobe's
@@ -388,7 +388,7 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
 
     // Of one sample
     decay: f64 = 1
-    if self.persistence_seconds > 0 do decay = math.exp(-1 / (self.persistence_seconds * f64(self.sample_rate)))
+    if self.persistence_s > 0 do decay = math.exp(-1 / (self.persistence_s * f64(self.sample_rate)))
 
     for sample, index in samples {
         follow_level(self, sample, min_level)
@@ -461,7 +461,7 @@ average_samples :: proc(self: ^Scope, samples: []f32) {
 
     // Of one sweep. All of a sweep's samples weigh the same: faded by the sample, its end weighed more than
     // its start, and the first bin, which takes from both, was bent toward the end.
-    decay := math.exp(-1 / (self.step * self.persistence_seconds * f64(self.sample_rate)))
+    decay := math.exp(-1 / (self.step * self.persistence_s * f64(self.sample_rate)))
 
     bins := self.average_bins
     for sample_clock in from ..< sweep_start {
@@ -560,7 +560,7 @@ redraw_newest_sweep :: proc(self: ^Scope) {
 // the sweep starts over on the left, the x jumps back where it does.
 scope_trace :: proc(self: ^Scope, points: ^[dynamic][2]f32) {
     clear(points)
-    if self.average_sweeps && self.persistence_seconds > 0 {
+    if self.average_sweeps && self.persistence_s > 0 {
         trace_average(self, points)
         return
     }
@@ -690,7 +690,7 @@ begin_samples :: proc(self: ^Scope, samples: []f32) -> (clock: i64, min_level: f
     if self.step <= 0 || len(samples) == 0 do return
 
     // Fill's window, what the screen shows: the persistence, and at least SCOPE_FILL_MIN_PERIODS
-    window := max(SCOPE_FILL_MIN_PERIODS / SCOPE_PERIODS / self.step, self.persistence_seconds * f64(self.sample_rate))
+    window := max(SCOPE_FILL_MIN_PERIODS / SCOPE_PERIODS / self.step, self.persistence_s * f64(self.sample_rate))
     self.block_length = max(int(math.round(window / SCOPE_PEAK_BLOCKS)), 1)
     self.fill_release = f32(math.exp(-1 / (SCOPE_FILL_RELEASE_S * f64(self.sample_rate))))
 
