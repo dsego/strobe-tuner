@@ -236,12 +236,12 @@ run_frame :: proc(app: ^App) {
     panel_covered := false
     for sheet in all_sheets(&app.sheets) {
         slide_sheet(sheet)
-        if sheet.open || sheet.slide > 0 do gui.disabled = true
-        if sheet.slide == 1 && !sheet.drag.active do panel_covered = true
+        if sheet.open || sheet.slide > SHEET_DOWN do gui.disabled = true
+        if sheet.slide == SHEET_UP && !sheet.drag.active do panel_covered = true
     }
 
     instrument_sheet := app.sheets.instrument
-    covered := !layout.beside && instrument_sheet.slide == 1 && !instrument_sheet.drag.active
+    covered := !layout.beside && instrument_sheet.slide == SHEET_UP && !instrument_sheet.drag.active
     strobe_shows := !covered || safe.y > 0
 
     feed_scope(app, strobe_shows)
@@ -439,7 +439,7 @@ limit_frame_rate :: proc(app: ^App) {
     touched := gfx.mouse_down() || gfx.mouse_pressed() || gfx.mouse_wheel() != 0
     sliding := note_ruler.swipe.gesture == .COASTING
     for sheet in all_sheets(&app.sheets) {
-        if sheet.slide != f32(int(sheet.open)) do sliding = true
+        if sheet.slide != slide_target(sheet^) do sliding = true
     }
 
     if signal || touched || sliding {

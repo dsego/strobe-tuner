@@ -70,7 +70,7 @@ draw_sheets :: proc(app: ^App, layout: Layout, reading: Reading) {
     // Android's back button is Escape. It closes a sheet, with none up it leaves the app as anywhere else.
     when gfx.ANDROID {
         sheets_down := true
-        for sheet in all_sheets(&app.sheets) do sheets_down &&= sheet.slide == 0
+        for sheet in all_sheets(&app.sheets) do sheets_down &&= sheet.slide == SHEET_DOWN
         if gfx.key_pressed(.ESCAPE) && sheets_down do gfx.system_back()
     }
 
@@ -83,7 +83,7 @@ draw_sheets :: proc(app: ^App, layout: Layout, reading: Reading) {
 draw_settings_sheet :: proc(app: ^App, layout: Layout) {
     sheets := &app.sheets
     sheet := &sheets.settings
-    if sheet.slide == 0 do return
+    if sheet.slide == SHEET_DOWN do return
 
     // The display's options page has rows of its own, the strobe's more than the settings
     rows := settings_rows()
@@ -109,7 +109,7 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
 draw_track_sheet :: proc(app: ^App, layout: Layout) {
     sheets := &app.sheets
     sheet := &sheets.track
-    if sheet.slide == 0 do return
+    if sheet.slide == SHEET_DOWN do return
 
     config := app.config
     bands := app.measurement.strobe_lock_in.bands[:]
@@ -133,7 +133,7 @@ draw_track_sheet :: proc(app: ^App, layout: Layout) {
 draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
     sheets := &app.sheets
     sheet := &sheets.instrument
-    if sheet.slide == 0 do return
+    if sheet.slide == SHEET_DOWN do return
 
     // Over the whole window, room for every note offset of a preset
     sheet_layout, swiped := begin_sheet(sheet, 0, layout, gfx.window_size().y)
@@ -161,7 +161,7 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
 draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
     sheets := &app.sheets
     sheet := &sheets.input
-    if sheet.slide == 0 do return
+    if sheet.slide == SHEET_DOWN do return
 
     // A few times a second, the latest detection's
     input := &app.input

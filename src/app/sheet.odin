@@ -97,7 +97,7 @@ compute_sheet_layout :: proc(
 
 Sheet :: struct {
     open:     bool,
-    slide:    f32, // how far up it is, 0 is hidden and 1 all the way, it follows open
+    slide:    f32, // how far up it is, from SHEET_DOWN to SHEET_UP, it follows open
     was_open: bool, // at the start of the frame, the tap that opens the sheet doesn't reach it
     drag:     SheetDrag,
 }
@@ -110,8 +110,16 @@ SheetDrag :: struct {
     velocity: f32, // points per second, down is positive
 }
 
-// Per second, how quickly a sheet closes the distance, like the ruler
+// A sheet's slide, hidden under the window and all the way up
+SHEET_DOWN :: 0
+SHEET_UP :: 1
+
+// Per second, how quickly a sheet closes the distance, like the ruler. This close it snaps the last bit.
 SHEET_SLIDE_SPEED :: 14
+SHEET_SNAP_SLIDE :: 0.002
+
+// How much of a frame's speed a dragged sheet's velocity takes on
+SHEET_VELOCITY_SMOOTHING :: 0.5
 
 // Released this far down, or flicked down this fast, the sheet closes, otherwise it slides back up
 SHEET_DISMISS_SLIDE :: 0.7
@@ -121,16 +129,21 @@ SHEET_DISMISS_VELOCITY :: 600
 // the way off it closes, it isn't there to see the finger let go. While it's dragged it stays where the
 // finger left it, the frame the finger lets go draws it there and not eased back up a bit.
 slide_sheet :: proc(sheet: ^Sheet) {
-    if sheet.drag.active && sheet.slide == 0 do close_sheet(sheet)
+    if sheet.drag.active && sheet.slide == SHEET_DOWN do close_sheet(sheet)
 
     sheet.was_open = sheet.open
-    if !sheet.drag.active do slide_toward(&sheet.slide, f32(int(sheet.open)))
+    if !sheet.drag.active do slide_toward(&sheet.slide, slide_target(sheet^))
+}
+
+// Where open puts the sheet, all the way up or down
+slide_target :: proc(sheet: Sheet) -> f32 {
+    return SHEET_UP if sheet.open else SHEET_DOWN
 }
 
 // Eases slide towards target at a sheet's pace and snaps the last bit
 slide_toward :: proc(slide: ^f32, target: f32) {
     slide^ += (target - slide^) * min(1, SHEET_SLIDE_SPEED * gfx.frame_time())
-    if abs(target - slide^) < 0.002 do slide^ = target
+    if abs(target - slide^) < SHEET_SNAP_SLIDE do slide^ = target
 }
 
 close_sheet :: proc(sheet: ^Sheet) {
@@ -164,12 +177,12 @@ begin_sheet :: proc(
 
         // Smoothed, a finger stops for a frame or two before it lets go
         if dt := gfx.frame_time(); dt > 0 {
-            drag.velocity += ((mouse.y - drag.last_y) / dt - drag.velocity) * 0.5
+            drag.velocity += ((mouse.y - drag.last_y) / dt - drag.velocity) * SHEET_VELOCITY_SMOOTHING
         }
         drag.last_y = mouse.y
 
         window := gfx.window_size()
-        sheet.slide = clamp((window.y - (mouse.y - drag.grab)) / sheet_layout.sheet.height, 0, 1)
+        sheet.slide = clamp((window.y - (mouse.y - drag.grab)) / sheet_layout.sheet.height, SHEET_DOWN, SHEET_UP)
         return false
     }
 
