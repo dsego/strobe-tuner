@@ -1,15 +1,14 @@
 #!/usr/bin/env sh
 # Build the SDL renderer for iPhone and iPad, sign it with the given provisioning profile and package it as an .ipa.
 #
-# The native libraries (SDL3, miniaudio, stb) are rebuilt for the device once,
-# into external/ios-device. Odin only emits an object file, clang links it into the app bundle.
+# The native libraries (miniaudio, stb) are rebuilt for the device once, into external/ios-device, SDL3 is
+# built there by just sdl ios-device. Odin only emits an object file, clang links it into the app bundle.
 #
 #   IOS_PROFILE=<path>        provisioning profile, required, the bundle id and entitlements come from it
 #   IOS_SIGN_IDENTITY=<name>  signing certificate, defaults to the one in the keychain the profile was made for,
 #                             else "Apple Development" for a development profile (e.g. a free Personal Team)
 #                             and "Apple Distribution" for an Ad Hoc one
 #   IOS_DEVICE=<name or udid> installs and launches the app on this iPhone or iPad, needs Developer Mode on it
-#   SDL_VERSION=3.2.x         SDL release to build, defaults to the brew installed version
 #
 # An Ad Hoc .ipa also installs without Developer Mode, by dragging it onto the iPhone in Finder.
 # An App Store profile makes an .ipa for App Store Connect, upload it with the Transporter app.
@@ -53,27 +52,9 @@ if [ ! -f "$DEPS/libstb.a" ]; then
     ar rcs "$DEPS/libstb.a" "$DEPS"/stb/*.o
 fi
 
-if [ ! -d "$DEPS/SDL" ]; then
-    # Match the desktop SDL, the Odin bindings are written against it
-    SDL_VERSION=${SDL_VERSION:-$(brew list --versions sdl3 | awk '{print $2}')}
-    git clone --depth 1 --branch "release-$SDL_VERSION" https://github.com/libsdl-org/SDL "$DEPS/SDL"
-fi
-
 if [ ! -f "$DEPS/sdl3/lib/libSDL3.a" ]; then
-    echo "Building SDL"
-    cmake -S "$DEPS/SDL" -B "$DEPS/SDL/build" \
-        -DCMAKE_SYSTEM_NAME=iOS \
-        -DCMAKE_OSX_SYSROOT=iphoneos \
-        -DCMAKE_OSX_ARCHITECTURES=arm64 \
-        -DCMAKE_OSX_DEPLOYMENT_TARGET=$MIN_IOS \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="$DEPS/sdl3" \
-        -DSDL_SHARED=OFF \
-        -DSDL_STATIC=ON \
-        -DSDL_TEST_LIBRARY=OFF \
-        -DSDL_EXAMPLES=OFF
-    cmake --build "$DEPS/SDL/build" --config Release --parallel
-    cmake --install "$DEPS/SDL/build" --config Release
+    echo "No SDL in $DEPS/sdl3, build it with just sdl ios-device"
+    exit 1
 fi
 
 # --- app ---------------------------------------------------------------------------------------

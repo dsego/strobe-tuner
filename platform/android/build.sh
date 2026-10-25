@@ -1,14 +1,13 @@
 #!/usr/bin/env sh
 # Build the SDL renderer for Android as an .apk signed with a debug key, without Gradle.
 #
-# The native libraries (SDL3, miniaudio) are built with the NDK once, into external/android.
-# Odin only emits an object file, the NDK's clang links it into libmain.so. SDL's Java activity loads it,
-# javac and d8 compile that, aapt2 packages it all.
+# miniaudio is built with the NDK once, into external/android, SDL3 and its Java activity are built there by
+# just sdl android. Odin only emits an object file, the NDK's clang links it into libmain.so. SDL's Java
+# activity loads it, javac and d8 compile that, aapt2 packages it all.
 #
 #   ANDROID_HOME=<path>      the SDK, defaults to Homebrew's android-commandlinetools
 #   ANDROID_DEVICE=<serial>  installs and launches the app on this phone, "usb" for the one plugged in,
 #                            needs USB debugging on it
-#   SDL_VERSION=3.4.x        SDL release to build, defaults to the brew installed version
 #   JAVA_HOME=<path>         defaults to Homebrew's openjdk@17
 #
 # SDL's logs: adb logcat -s SDL, the app's own prints go nowhere on Android
@@ -68,29 +67,11 @@ if [ ! -f "$ODIN_ROOT/vendor/stb/lib/stb_image.a" ]; then
     CC="$CC" AR="$AR" sh "$ODIN_ROOT/vendor/stb/src/build_stb.sh" unix
 fi
 
-if [ ! -d "$DEPS/SDL" ]; then
-    # Match the desktop SDL, the Odin bindings are written against it
-    SDL_VERSION=${SDL_VERSION:-$(brew list --versions sdl3 | awk '{print $2}')}
-    git -c advice.detachedHead=false clone --depth 1 --branch "release-$SDL_VERSION" https://github.com/libsdl-org/SDL "$DEPS/SDL"
+if [ ! -f "$DEPS/sdl3/lib/libSDL3.so" ]; then
+    echo "No SDL in $DEPS/sdl3, build it with just sdl android"
+    exit 1
 fi
-
-# libSDL3.so is built straight into the .apk's files, again if they're gone
-if [ ! -f "$DEPS/SDL/build/CMakeCache.txt" ]; then
-    cmake -S "$DEPS/SDL" -B "$DEPS/SDL/build" \
-        -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
-        -DANDROID_ABI=arm64-v8a \
-        -DANDROID_PLATFORM=$MIN_SDK \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_SHARED_LINKER_FLAGS=-Wl,--strip-all \
-        -DCMAKE_LIBRARY_OUTPUT_DIRECTORY="$LIBS" \
-        -DSDL_SHARED=ON \
-        -DSDL_STATIC=OFF \
-        -DSDL_TEST_LIBRARY=OFF \
-        -DSDL_EXAMPLES=OFF \
-        -DSDL_ANDROID_JAR=OFF
-fi
-echo "Building SDL"
-cmake --build "$DEPS/SDL/build" --config Release --parallel > /dev/null
+cp "$DEPS/sdl3/lib/libSDL3.so" "$LIBS/"
 
 # --- app ---------------------------------------------------------------------------------------
 
@@ -127,7 +108,7 @@ mkdir -p "$OUT/classes"
 javac -nowarn -Xlint:-options -source 8 -target 8 \
     -bootclasspath "$PLATFORM_JAR" \
     -d "$OUT/classes" \
-    "$DEPS"/SDL/android-project/app/src/main/java/org/libsdl/app/*.java \
+    "$DEPS"/sdl3/java/*.java \
     "$ROOT/platform/android/StrobieActivity.java"
 "$BUILD_TOOLS/d8" --release --min-api $MIN_SDK --lib "$PLATFORM_JAR" --output "$STAGE" \
     $(find "$OUT/classes" -name '*.class')

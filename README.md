@@ -89,7 +89,7 @@ cd strobe-tuner
 just dev
 ```
 
-The first run clones and compiles the dependencies into `external/`, later runs skip that.
+The first run clones and compiles the dependencies into `external/`, later runs skip that. The iOS, Mac app and Android builds link SDL in from `external/<platform>/sdl3`, built from source once with `just sdl macos`, `ios-device`, `ios-sim` or `android`, and again to update it.
 
 | Command | What it does |
 | --- | --- |
@@ -121,7 +121,7 @@ The config is saved to `$XDG_CONFIG_HOME/Strobie/config.ini`, or `~/.config/Stro
 
 #### Android
 
-For development only, no release is planned, the launcher icon is the iOS one scaled down. `just apk` builds a debug signed `build/android/Strobie.apk`, see `platform/android/build.sh`. No Android Studio or Gradle, only the command line SDK, adb and a JDK for SDL's Java classes and the build tools. The first build compiles SDL into `external/android`, and stb into the Odin folder with the NDK, where Odin's bindings look for it.
+For development only, no release is planned, the launcher icon is the iOS one scaled down. `just apk` builds a debug signed `build/android/Strobie.apk`, see `platform/android/build.sh`. No Android Studio or Gradle, only the command line SDK, adb and a JDK for SDL's Java classes and the build tools. `just sdl android` compiles SDL into `external/android` first. The first build compiles stb into the Odin folder with the NDK, where Odin's bindings look for it.
 
 ```sh
 brew install --cask android-platform-tools android-commandlinetools

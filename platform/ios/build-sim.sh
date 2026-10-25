@@ -1,12 +1,12 @@
 #!/usr/bin/env sh
 # Build the SDL renderer for the iOS simulator, install it on a simulator and run it with the console attached.
 #
-# The native libraries (SDL3, miniaudio, stb) are rebuilt for the simulator once,
-# into external/ios-sim. Odin only emits an object file, clang links it into the app bundle.
+# The native libraries (miniaudio, stb) are rebuilt for the simulator once, into external/ios-sim, SDL3 is
+# built there, patched for the simulator, by just sdl ios-sim. Odin only emits an object file, clang links it
+# into the app bundle.
 #
 #   IOS_SIM=<udid or name>   simulator to use, defaults to the booted one or the first available iPhone
 #   IOS_SIM_FAMILY=iPad      the first available iPad instead, booted or not, see just dev ipad
-#   SDL_VERSION=3.2.x        SDL release to build, defaults to the brew installed version
 
 set -eu
 
@@ -47,42 +47,9 @@ if [ ! -f "$DEPS/libstb.a" ]; then
     ar rcs "$DEPS/libstb.a" "$DEPS"/stb/*.o
 fi
 
-if [ ! -d "$DEPS/SDL" ]; then
-    # Match the desktop SDL, the Odin bindings are written against it
-    SDL_VERSION=${SDL_VERSION:-$(brew list --versions sdl3 | awk '{print $2}')}
-    git clone --depth 1 --branch "release-$SDL_VERSION" https://github.com/libsdl-org/SDL "$DEPS/SDL"
-fi
-
-# Local patch: SDL_GPU requires the Apple3 GPU family on iOS, the simulator only reports Apple2
-SDL_METAL="$DEPS/SDL/src/gpu/metal/SDL_gpu_metal.m"
-if ! grep -q 'MTLGPUFamilyApple3\] || TARGET_OS_SIMULATOR' "$SDL_METAL"; then
-    echo "Patching SDL_GPU Metal to allow the simulator"
-    sed -i '' 's/\[device supportsFamily:MTLGPUFamilyApple3\];/[device supportsFamily:MTLGPUFamilyApple3] || TARGET_OS_SIMULATOR;/' "$SDL_METAL"
-fi
-
-# Local patch: the simulator doesn't support depth clip mode, skip it like on visionOS
-if ! grep -q 'SDL_PLATFORM_VISIONOS) && !TARGET_OS_SIMULATOR' "$SDL_METAL"; then
-    echo "Patching SDL_GPU Metal to skip depth clip mode on the simulator"
-    # Only the #ifndef directly above a setDepthClipMode call
-    sed -i '' '/^#ifndef SDL_PLATFORM_VISIONOS$/{N;/setDepthClipMode/s/^#ifndef SDL_PLATFORM_VISIONOS/#if !defined(SDL_PLATFORM_VISIONOS) \&\& !TARGET_OS_SIMULATOR/;}' "$SDL_METAL"
-fi
-
-# Rebuild when the source was patched after the last build
-if [ ! -f "$DEPS/sdl3/lib/libSDL3.a" ] || [ "$SDL_METAL" -nt "$DEPS/SDL/build/libSDL3.a" ]; then
-    echo "Building SDL"
-    cmake -S "$DEPS/SDL" -B "$DEPS/SDL/build" \
-        -DCMAKE_SYSTEM_NAME=iOS \
-        -DCMAKE_OSX_SYSROOT=iphonesimulator \
-        -DCMAKE_OSX_ARCHITECTURES=arm64 \
-        -DCMAKE_OSX_DEPLOYMENT_TARGET=$MIN_IOS \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="$DEPS/sdl3" \
-        -DSDL_SHARED=OFF \
-        -DSDL_STATIC=ON \
-        -DSDL_TEST_LIBRARY=OFF \
-        -DSDL_EXAMPLES=OFF
-    cmake --build "$DEPS/SDL/build" --config Release --parallel
-    cmake --install "$DEPS/SDL/build" --config Release
+if [ ! -f "$DEPS/sdl3/lib/libSDL3.a" ]; then
+    echo "No SDL in $DEPS/sdl3, build it with just sdl ios-sim"
+    exit 1
 fi
 
 # --- app ---------------------------------------------------------------------------------------

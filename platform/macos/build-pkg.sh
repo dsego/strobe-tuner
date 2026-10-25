@@ -36,7 +36,7 @@ mkdir -p "$DEPS" "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 # The native libraries are built once into external/macos for the oldest macOS the app runs on, the ones
 # `just setup` and Odin ship are built for the Mac they were built on. SDL is linked in statically,
-# Homebrew's isn't on the Macs the app runs on.
+# Homebrew's isn't on the Macs the app runs on, just sdl macos builds it.
 ODIN_ROOT=$(odin root)
 CC="xcrun clang -target arm64-apple-macos$MIN_MACOS"
 CFLAGS="-O2 -fPIC"
@@ -50,24 +50,9 @@ if [ ! -f "$DEPS/libminiaudio.a" ]; then
     ar rcs "$DEPS/libminiaudio.a" "$DEPS"/miniaudio/*.o
 fi
 
-if [ ! -d "$DEPS/SDL" ]; then
-    # Match the desktop SDL, the Odin bindings are written against it
-    SDL_VERSION=${SDL_VERSION:-$(brew list --versions sdl3 | awk '{print $2}')}
-    git -c advice.detachedHead=false clone --depth 1 --branch "release-$SDL_VERSION" https://github.com/libsdl-org/SDL "$DEPS/SDL"
-fi
 if [ ! -f "$DEPS/sdl3/lib/libSDL3.a" ]; then
-    echo "Building SDL"
-    cmake -S "$DEPS/SDL" -B "$DEPS/SDL/build" \
-        -DCMAKE_OSX_ARCHITECTURES=arm64 \
-        -DCMAKE_OSX_DEPLOYMENT_TARGET=$MIN_MACOS \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="$DEPS/sdl3" \
-        -DSDL_SHARED=OFF \
-        -DSDL_STATIC=ON \
-        -DSDL_TEST_LIBRARY=OFF \
-        -DSDL_EXAMPLES=OFF
-    cmake --build "$DEPS/SDL/build" --config Release --parallel
-    cmake --install "$DEPS/SDL/build" --config Release
+    echo "No SDL in $DEPS/sdl3, build it with just sdl macos"
+    exit 1
 fi
 
 # No -microarch:native, the build has to run on every Apple silicon Mac, not only this one. Odin only emits an

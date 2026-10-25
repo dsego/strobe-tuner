@@ -24,6 +24,10 @@ setup:
         sh ../src/shaders/vulkan/compile.sh
     fi
 
+# Builds SDL from source into external/<platform>/sdl3 for the app, ipa, pkg and apk builds and just dev ios: just sdl macos|ios-device|ios-sim|android
+sdl platform:
+    sh platform/build-sdl.sh {{platform}}
+
 # just dev [target]
 #   (none) debug build, needs SDL3 (brew install sdl3)
 #   stats  with the signal stats and NSDF plots
