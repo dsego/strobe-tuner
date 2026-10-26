@@ -300,3 +300,50 @@ phone's width beside the turned strobe is the portrait panel's box, 367 by 372 o
   slide, and hides offsets below the fold.
 - The plist's phone key adds the two landscapes, upside down stays off.
 - Checked in the simulator or on the phone, the desktop window doesn't go under 620 tall.
+
+## Looks for a purpose
+
+Some combinations of the display settings suit a job, e.g. the wheel with one track in By note colors
+for naming a note at a glance. A look sets them together with one tap. It sets the display and strobe
+rows only, never the tuning: the instrument is what's tuned, the look is how it's shown. Tapping one sets the rows, changing a row afterwards leaves no look picked.
+
+Needs first, a look only where one is real. Three kinds of use:
+
+- Tuning an instrument: the instrument is off and a peg or a slide fixes it. A fast way in, a still
+  strobe at the end.
+- Playing in tune: the player is off and there's nothing to turn. Their pitch over a note and a phrase,
+  how it starts, wavers and drifts, and which way they lean on each note.
+- Making or setting up an instrument: the partials too, how they sit against the fundamental and each
+  other, on a held note.
+
+Candidates, the settings a first guess to try live:
+
+- Guitar and bass, string by string: the curved strobe with 1×, 2×, 4× and Readout 0.15 s. Today's
+  defaults, maybe no look needed.
+- Long tones on brass and woodwinds, a trumpet or a sax held for seconds to settle and stay: the trace
+  at 5 s and 25 cents, Readout 0.4 s, or the circle scope as a target that should stand still. A Bb
+  trumpet's transpose is the instrument's, not the look's.
+- Singing: vibrato, the mean pitch through it, slides into a note. The trace at 5 s and 50 cents,
+  Readout 0.4 s, By note to know which note it is.
+- Fretless strings, a violin or a fretless bass playing scales: notes change fast, finger placement.
+  A short trace, Readout 0.15 s, By note.
+- Naming a note by ear, sight singing or picking a riff off a record: the wheel, one track, By note,
+  the color before the name.
+- Guitar intonation at the saddles, the 12th fret's harmonic against the fretted note, a held note to a
+  fraction of a cent: the flat strobe with every track, Amber, Spin rate 200%, Readout 0.4 s, long
+  Motion smoothing, each track's cents shown.
+- Piano, harpsichord, pans and bells, where the partials are tuned too: tracks at 1×, 2×, 3×, 4× labeled
+  with their notes and cents, long Motion smoothing for the decay, the spectrum to see what rings.
+  Temperaments above would go with it.
+- Teaching and showing sound, a classroom or a video: the circle scope in By note, the lamp, the
+  spectrum with its notes labeled.
+- On stage between songs, dark and read from a step away: one big flat track, Mono or red. Maybe.
+
+Open:
+
+- Playing in tune may want more than a look: which notes a player leans sharp or flat on over a
+  session, a trumpet's 5th partial flat for one. A feature of its own, not settings.
+- Purpose names, "Note finder", "Long tones", against the mechanism names of the settings. A look is a
+  purpose, a setting isn't.
+- On the display sheet, as small pictures like the colors' swatches, nothing on the main screen.
+- Built-in looks first, the musician's own saved ones later if they catch on.
