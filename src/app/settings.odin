@@ -430,7 +430,7 @@ gui_track_settings :: proc(
     }
 
     if gui_reset_track_row(sheet_layout, &row, config, slot, reset_partial) do changed = true
-    if gui_add_remove_track(sheet_layout, config) do changed = true
+    if gui_add_remove_track(sheet_layout, config, slot) do changed = true
 
     return
 }
@@ -505,10 +505,10 @@ TRACK_BUTTONS_HEIGHT :: 28
 TRACK_BUTTONS_GAP :: 8
 
 // Not a row: centred at the bottom of the sheet with no label or line and smaller than the controls, these
-// change the strobe and not the track above. Added and removed on top, a new track follows the next whole
-// partial above the one under it, the 1½ fifth is only for picking by hand. Not above the highest partial,
-// a track added there would be the top one again.
-gui_add_remove_track :: proc(sheet_layout: SheetLayout, config: ^Config) -> bool {
+// change the strobe and not the track above. Remove takes this track out, Add puts one on top, following the
+// next whole partial above the one under it, the 1½ fifth is only for picking by hand. Not above the highest
+// partial, a track added there would be the top one again.
+gui_add_remove_track :: proc(sheet_layout: SheetLayout, config: ^Config, slot: int) -> bool {
     count, top := track_count_and_top(config)
     partials := TRACK_PARTIALS
     highest := partials[len(partials) - 1]
@@ -527,10 +527,20 @@ gui_add_remove_track :: proc(sheet_layout: SheetLayout, config: ^Config) -> bool
         return true
     }
     if remove {
-        clear_track(config, top, 0)
+        remove_track(config, slot)
         return true
     }
     return false
+}
+
+// The tracks above move down a slot, so there's no gap for Add to step over, and the top slot is cleared
+remove_track :: proc(config: ^Config, slot: int) {
+    for above in slot + 1 ..< core.MAX_BANDS {
+        config.strobe_intervals[above - 1] = config.strobe_intervals[above]
+        config.strobe_offsets_cents[above - 1] = config.strobe_offsets_cents[above]
+        config.strobe_speeds[above - 1] = config.strobe_speeds[above]
+    }
+    clear_track(config, core.MAX_BANDS - 1, 0)
 }
 
 // How many tracks there are and the slot of the top one
