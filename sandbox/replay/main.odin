@@ -66,7 +66,7 @@ main :: proc() {
     retune(strobe, note_target.target_note.frequency)
 
     fmt.println(
-        "   time      Hz  cents  note  clarity     SNR  pitch   tuner   readout   tracks: SNR, cents, drift, stripes a second, jitter",
+        "   time      Hz  cents  note  clarity     SNR  pitch   tuner   readout   tracks: SNR, level gain, cents, drift, stripes a second, jitter",
     )
 
     next_print: f32 = 0
@@ -145,15 +145,17 @@ main :: proc() {
         // The stripes fade out between 16 and 8 dB, see core.STROBE_FADE_SNR_DB. And by their speed, the
         // desktop's stripes a second by the drift, they fade from a quarter of a stripe a frame, see the app's
         // STROBE_ALIAS_FADE_STRIPES.
-        // The jitter the RMS of the frames' strays
+        // The jitter the RMS of the frames' strays. Under the note's loudest track they fade, the fraction left
+        // after the SNR, see core.loudest_track_gain.
         for band, index in strobe.bands {
             drift_hz := core.freq_at_cents(band.freq_hz, band.drift_cents) - band.freq_hz
             stripes_per_s := DESKTOP_PERIODS * drift_hz * f32(core.strobe_rescale(band.freq_hz)) * band.speed
             jitter := math.sqrt(jitter_squares[index] / f32(max(jitter_frames, 1)))
             fmt.printf(
-                "  %v× %-7v %-6v %-6v %-6v %-5v",
+                "  %v× %-7v %-5v %-6v %-6v %-6v %-5v",
                 band.interval,
                 fmt.tprintf("%.1fdB", band.snr_db),
+                fmt.tprintf("×%.2f", core.loudest_track_gain(strobe.bands[:], band)),
                 fmt.tprintf("%+.1f¢", band.err_cents),
                 fmt.tprintf("~%.0f¢", band.drift_cents),
                 fmt.tprintf("%.1f/s", stripes_per_s),

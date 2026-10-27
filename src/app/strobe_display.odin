@@ -344,19 +344,24 @@ draw_strobe_display :: proc(
     }
 
     if config.strobe_mode == .HARMONIC && (config.partial_labels != .NONE || config.show_band_cents) {
-        for band, band_index in bands do draw_track_label(rect, turned, upright, band, band_index, len(bands), geometry, config)
+        for band, band_index in bands {
+            visibility := tracks.uniforms[band_index].visibility
+            draw_track_label(rect, turned, upright, band, visibility, band_index, len(bands), geometry, config)
+        }
     }
 }
 
 // The track's partial, e.g. 1×, 2×: on the right, on the curve of a curved track a little in from the edge or
 // in the middle of a flat one, and on the top of a wheel's ring, where the ring runs level and the labels of
-// the rings stack in a column. The cents on the left. Turned, the right is the pane's top and the left its
-// bottom: the labels sit along them over the ends of their tracks, upright.
+// the rings stack in a column. The cents on the left, as bright as the track's stripes, visibility. Turned, the
+// right is the pane's top and the left its bottom: the labels sit along them over the ends of their tracks,
+// upright.
 draw_track_label :: proc(
     pane: gfx.Rect,
     turned: bool,
     upright: gfx.Rect,
     band: core.PhaseBand,
+    visibility: f32,
     band_index, band_count: int,
     geometry: StrobeGeometry,
     config: ^Config,
@@ -367,16 +372,17 @@ draw_track_label :: proc(
     // Turned, the middle of the label across the pane
     label_x := pane.x + label_y + 0.5 * label_height
 
-    // How far off this partial is, nothing while it's too quiet to measure. Right aligned on the decimal point
-    // like the readout, the digits don't shift as the value changes.
-    if config.show_band_cents && band.snr_db > core.NOISE_FLOOR_SNR_DB_THRESHOLD {
+    // How far off this partial is, once its fit has a reading since the pluck. The fit stops as the stripes
+    // fade, its last reading stays, muted with the dark track until the next pluck or note. Right aligned on the
+    // decimal point like the readout, the digits don't shift as the value changes.
+    if config.show_band_cents && band.rate_time_s > 0 {
         font := pixel_fonts.band_label
         width := measure_label(font, "-00.0").x
         text := fmt.ctprintf("%+.1f", band.err_cents)
         position := [2]f32{upright.x + 16 + width, label_y}
         if turned do position = {label_x + 0.5 * width, pane.y + pane.height - 16 - label_height}
 
-        draw_text_right(font.font, text, position, font.size, 0, accent_color)
+        draw_text_right(font.font, text, position, font.size, 0, lerp_color(text_color_muted, accent_color, visibility))
     }
 
     if config.partial_labels == .NONE do return
@@ -506,18 +512,20 @@ STROBE_ALIAS_FADE_STRIPES :: [2]f32{0.25, 0.45}
 STROBE_MAX_FRAME_TIME_S :: 1.0 / 30
 
 // The visibility of a band's stripes, smoothed so they don't flicker. gain is what's left of them off the note,
-// see narrow_band_gain, stripes_per_s how fast the track's own stripes move, frame_time the screen's.
+// see narrow_band_gain, level_gain under the note's loudest track, see core.loudest_track_gain, stripes_per_s
+// how fast the track's own stripes move, frame_time the screen's.
 update_band_visibility :: proc(
     self: ^StrobeDisplay,
     band: ^core.PhaseBand,
     band_index: int,
     gain: f32,
+    level_gain: f32,
     stripes_per_s: f32,
     frame_time: f32,
 ) -> f32 {
     fade := core.STROBE_FADE_SNR_DB
     alias := STROBE_ALIAS_FADE_STRIPES
-    target := math.smoothstep(fade[0], fade[1], band.snr_db) * min(NARROW_BAND_CONTRAST * gain, 1)
+    target := math.smoothstep(fade[0], fade[1], band.snr_db) * level_gain * min(NARROW_BAND_CONTRAST * gain, 1)
     target *= 1 - math.smoothstep(alias[0], alias[1], stripes_per_s * frame_time)
 
     alpha := 1.0 - math.exp(-gfx.frame_time() / STROBE_LOOK_TIME_S)
@@ -573,7 +581,8 @@ strobe_tracks :: proc(
         // still leaves an edge a few percent of a stripe wide where they're half faded.
         uniforms.amp = STROBE_AMP * gain * gain
         frame_time := min(gfx.frame_time(), STROBE_MAX_FRAME_TIME_S)
-        uniforms.visibility = update_band_visibility(self, &band, band_index, gain, stripes_per_s, frame_time)
+        level_gain := core.loudest_track_gain(bands, band)
+        uniforms.visibility = update_band_visibility(self, &band, band_index, gain, level_gain, stripes_per_s, frame_time)
 
         // Without stripes the track looks the same whatever its phase, and doesn't change from frame to frame
         if uniforms.visibility == 0 do uniforms.phase, uniforms.phase_step = 0, 0

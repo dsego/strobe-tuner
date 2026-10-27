@@ -510,11 +510,12 @@ determine_band_phases :: proc(self: ^StrobeLockIn, bands: []^PhaseBand) {
         }
     }
 
-    for band, index in bands {
+    // Every level first, a track's fit asks how far it is under the loudest, see advance_band
+    for band in bands {
         band.amp = abs(band.dft.dft)
         band.has_phase = true
-        advance_band(self, band, phase_advances[index], had_phase[index])
     }
+    for band, index in bands do advance_band(self, band, phase_advances[index], had_phase[index])
 }
 
 // How far the track's frequency plus diff_hz is from it. An octave flat is as far as it goes: noise on a low
@@ -545,14 +546,15 @@ advance_band :: proc(self: ^StrobeLockIn, band: ^PhaseBand, phase_advance: f64, 
         band.drift_cents = abs(band_cents_off(band, band.drift_hz))
     }
 
-    // The readout fits the rate while the stripes fully show, a fading note keeps the last of it, the dimming
-    // stripes drift with the noise. Each measurement is weighted by its samples, a stalled frame counts for as
+    // The readout fits the rate while the stripes fully show, over the noise and close enough to the loudest
+    // track, see loudest_track_gain. A fading note keeps the last of it, the dimming stripes drift with the
+    // noise, and so does a track sinking far under the note. Each measurement is weighted by its samples, a stalled frame counts for as
     // long as it took, and by the partial's power against its envelope. Where two components beat, the phase
     // swings fast through the dips; weighted by power the rate settles on their mean pitch by energy instead
     // of following the swings. Against the envelope, not the absolute power: a decaying note's newest
     // moments are its weakest, and they still count as much. A single one has no slope yet, the rate is its
     // advance.
-    if had_phase && band.snr_db >= READOUT_MIN_SNR_DB {
+    if had_phase && band.snr_db >= READOUT_MIN_SNR_DB && loudest_track_gain(self.bands[:], band^) == 1 {
         if band.rate_time_s == 0 do band.fit = {}
 
         band.rate_time_s += f32(self.available) / self.sample_rate
@@ -640,6 +642,25 @@ update_onset :: proc(self: ^StrobeLockIn, band: ^PhaseBand) {
 
 // The stripes fade in between these SNRs, below it's the background noise (it stays under ~10 dB)
 STROBE_FADE_SNR_DB :: [2]f32{8, 16}
+
+// And fade out this far under the note's loudest track, full down to the first and dark at the second. On a
+// clean input the noise floor learns digital silence, and the faint noise that comes with the note itself reads
+// well over it: over every sample the tracks stay partials down to about 35 dB under the loudest and wander like
+// noise past 50 dB, see sandbox/partial_levels. Against the note rather than a level, its partials fade together
+// and a long sustain stays lit.
+STROBE_FADE_UNDER_LOUDEST_DB :: [2]f32{35, 50}
+
+// How much of a track's stripes is left by how far it is under the loudest track in range, 1 for that one
+loudest_track_gain :: proc(bands: []PhaseBand, band: PhaseBand) -> f32 {
+    loudest: f32
+    for other in bands {
+        if other.in_range do loudest = max(loudest, other.amp)
+    }
+    if band.amp <= 0 || loudest <= 0 do return 0
+
+    fade := STROBE_FADE_UNDER_LOUDEST_DB
+    return 1 - math.smoothstep(fade[0], fade[1], 20 * math.log10(loudest / band.amp))
+}
 
 // Keep an up-to-date estimate of background noise (i.e. when no note is playing)
 update_band_noise_floor :: proc(self: ^StrobeLockIn, band: ^PhaseBand, is_tonal: bool) {
