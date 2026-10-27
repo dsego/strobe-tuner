@@ -36,7 +36,7 @@ settings_rows :: proc() -> int {
 }
 
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
-DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 8, .SCOPE = 4, .TRACE = 2, .LAMP = 2, .SPECTRUM = 4}
+DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 7, .SCOPE = 4, .TRACE = 2, .LAMP = 2, .SPECTRUM = 4}
 
 // For the longer labels of the display's options
 WIDE_SEGMENT_WIDTH :: 80
@@ -76,10 +76,8 @@ DISPLAY_MENU_WIDTH :: SETTINGS_CONTROL_WIDTH
 
 // The labels of the steps below that have three
 STEP_LABELS :: []cstring{"Short", "Medium", "Long"}
-// The lamp's persistence and the strobe's stripes' average, see PERSISTENCE_STEPS_PERIODS, each its own
-// setting under its own word
+// The lamp's persistence, see PERSISTENCE_STEPS_PERIODS
 PERSISTENCE_LABEL: cstring : "Persistence"
-SMOOTHING_LABEL: cstring : "Motion smoothing"
 PERSISTENCE_LABELS :: []cstring{"Off", "Short", "Medium", "Long"}
 
 
@@ -319,9 +317,6 @@ gui_strobe_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -
         changed = true
     }
 
-    // The stripes smear and calm down on an unsteady note like the lamp's, see strobe_persistence
-    gui_persistence_row(sheet_layout, &row, SMOOTHING_LABEL, &config.strobe_persistence_periods)
-
     // The labels on the tracks: the partial, and how far off it is
     harmonic := config.strobe_mode == .HARMONIC
     gui_settings_segmented(sheet_layout, &row, "Partials", {"Off", "1×", "Hz", "Note"}, &config.partial_labels, enabled = harmonic)
@@ -367,8 +362,8 @@ gui_spectrum_display_options :: proc(sheet_layout: SheetLayout, config: ^Config)
     gui_settings_segmented(sheet_layout, &row, "Peak level", {"Off", "On"}, &config.spectrum_peak_level)
 }
 
-// The lamp's persistence and the strobe's motion smoothing, the same steps of periods under each one's word.
-// A long label leaves less room on a narrow phone, the segments shrink to fit beside it.
+// The lamp's persistence. A long label leaves less room on a narrow phone, the segments shrink to fit beside
+// it.
 gui_persistence_row :: proc(sheet_layout: SheetLayout, row: ^int, label: cstring, periods: ^f32) {
     LABEL_GAP :: 12
     labels := PERSISTENCE_LABELS

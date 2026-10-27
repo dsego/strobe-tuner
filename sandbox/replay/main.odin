@@ -13,6 +13,7 @@
 package replay
 
 import "core:fmt"
+import "core:math"
 import "core:os"
 import "core:strconv"
 import ma "vendor:miniaudio"
@@ -64,13 +65,23 @@ main :: proc() {
     }
     retune(strobe, note_target.target_note.frequency)
 
-    fmt.println("   time      Hz  cents  note  clarity     SNR  pitch   tuner   readout   tracks: SNR, cents, drift, stripes a second")
+    fmt.println(
+        "   time      Hz  cents  note  clarity     SNR  pitch   tuner   readout   tracks: SNR, cents, drift, stripes a second, jitter",
+    )
 
     next_print: f32 = 0
     was_active := false
     readout_track := -1
     readout_ready := false
     frame_samples := int(sample_rate) / FPS
+    frame_time := f32(frame_samples) / sample_rate
+
+    // How far each frame's stripes stray from where the readout's rate takes them, in stripes, since the last
+    // print: what the app's motion blur draws as a smear when it's more than a sliver
+    previous_phases: [core.MAX_BANDS]f32
+    jitter_squares: [core.MAX_BANDS]f32
+    jitter_frames := 0
+
     for start := 0; start + frame_samples <= len(samples); start += frame_samples {
         frame := samples[start:start + frame_samples]
         core.audio_capture_write(&detector, frame)
@@ -79,10 +90,25 @@ main :: proc() {
         core.run_phase_detection(strobe, pitch.is_tonal)
         // Like the app's readout, and the strobe keeps the note lit while it shows it
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
-        if core.update_note_target(&note_target, pitch, core.strobe_shows_note(strobe)) {
+        retuned := core.update_note_target(&note_target, pitch, core.strobe_shows_note(strobe))
+        if retuned {
             retune(strobe, note_target.target_note.frequency)
             readout_ready = false
         }
+
+        // A retune starts the tracks over, their step from before means nothing
+        wrap := f32(core.STROBE_PHASE_WRAP)
+        for band, index in strobe.bands {
+            step := band.scaled_phase - previous_phases[index]
+            step -= wrap * math.round(step / wrap)
+            previous_phases[index] = band.scaled_phase
+            if retuned do continue
+
+            stray := (step - core.strobe_phase_rate(strobe, band) * frame_time) * DESKTOP_PERIODS / math.TAU
+            jitter_squares[index] += stray * stray
+        }
+        if !retuned do jitter_frames += 1
+
         if !pitch.fresh do continue
 
         // Every so often, and whenever the note target lets go of the note or picks it up
@@ -119,19 +145,24 @@ main :: proc() {
         // The stripes fade out between 16 and 8 dB, see core.STROBE_FADE_SNR_DB. And by their speed, the
         // desktop's stripes a second by the drift, they fade from a quarter of a stripe a frame, see the app's
         // STROBE_ALIAS_FADE_STRIPES.
-        for band in strobe.bands {
+        // The jitter the RMS of the frames' strays
+        for band, index in strobe.bands {
             drift_hz := core.freq_at_cents(band.freq_hz, band.drift_cents) - band.freq_hz
             stripes_per_s := DESKTOP_PERIODS * drift_hz * f32(core.strobe_rescale(band.freq_hz)) * band.speed
+            jitter := math.sqrt(jitter_squares[index] / f32(max(jitter_frames, 1)))
             fmt.printf(
-                "  %v× %-7v %-6v %-6v %-5v",
+                "  %v× %-7v %-6v %-6v %-6v %-5v",
                 band.interval,
                 fmt.tprintf("%.1fdB", band.snr_db),
                 fmt.tprintf("%+.1f¢", band.err_cents),
                 fmt.tprintf("~%.0f¢", band.drift_cents),
                 fmt.tprintf("%.1f/s", stripes_per_s),
+                fmt.tprintf("±%.3f", jitter),
             )
         }
         fmt.println()
+        jitter_squares = {}
+        jitter_frames = 0
     }
 }
 

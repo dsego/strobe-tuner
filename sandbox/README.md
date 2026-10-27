@@ -13,6 +13,7 @@ Still build against the app's core, run with `odin run sandbox/<folder>`:
 - `replay`: a recording through the pitch detection, what it makes of it over time.
 - `hmm`: a hidden Markov model over the NSDF peaks next to the tuner's rules, scored on a recording.
 - `lamp_jitter`: the tracks turned by the lock-in against the ones turned by the lamp, on a recording.
+- `step_response`: a tone stepping a few cents, how long the stripes and the readout take to follow, run it with `-o:speed`.
 - `interpolate`, `perf`, `recursive_dft`, `sweep`, `pattern`, and the loose `ewma.odin`, `fir_filter.odin` and `moving_avg.odin`: smaller experiments from along the way.
 
 Archived from the 2024 raylib prototype, they no longer build: `ac`, `autogain`, `fft_filter`, `framerate`, `pitch`, `resonator`, `single_dft` and the `helpers` they share are written for an older Odin and for the libraries where they used to be. `pitchy` is a web page from the same time.

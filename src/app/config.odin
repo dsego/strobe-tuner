@@ -72,11 +72,10 @@ PITCH_STANDARD_MIN :: 400
 PITCH_STANDARD_MAX :: 480
 
 // The screens' persistence, off, short, medium and long, in periods of the strobe's frequency: the scope's
-// and the lamp's beam, the Persistence setting, and the strobe's stripes, Motion smoothing on its options,
-// see strobe_persistence. A detuned wave drifts across the
-// screen by the cycles it slips, as many a second as the note is high: in milliseconds a high note smears
-// further and averages more cycles than a low one off by the same cents, in periods they look the same.
-// Medium is 40 ms at A4, about the window of the old narrow bands.
+// and the lamp's beam, the Persistence setting. A detuned wave drifts across the screen by the cycles it
+// slips, as many a second as the note is high: in milliseconds a high note smears further and averages more
+// cycles than a low one off by the same cents, in periods they look the same. Medium is 40 ms at A4, about
+// the window of the old narrow bands.
 PERSISTENCE_STEPS_PERIODS :: [4]f32{0, 7, 18, 66}
 
 // The trace's span, short, medium and long, and its range from the middle to the edge, narrow and wide.
@@ -188,10 +187,8 @@ Config :: struct {
     // How far off each track's partial is, next to the track
     show_band_cents:              bool,
 
-    // How long the strobe's stripes average, in periods of the strobe's frequency: they smear and calm down
-    // on an unsteady note like a lamp's, see strobe_persistence. 0 is off.
-    strobe_persistence_periods:   f32,
-    // how long the scope's phosphor and the lamp remember, in the same periods, 0 keeps the newest sweep only
+    // how long the scope's phosphor and the lamp remember, in periods of the strobe's frequency, 0 keeps the
+    // newest sweep only
     screen_persistence_periods:   f32,
     // what the lamp shows, the positive half of the wave like a lamp, the wave as it is, or the two halves
     // split, tapping it flips between the first and the split
@@ -260,7 +257,6 @@ config_defaults :: Config {
     strobe_glow                  = true,
     partial_labels               = .MULTIPLES,
     show_band_cents              = false,
-    strobe_persistence_periods   = 18,
     screen_persistence_periods   = 18,
     lamp_shape                   = .HALF_RECTIFIED,
     scope_sweep                  = .TIME,

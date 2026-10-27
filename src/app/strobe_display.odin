@@ -43,8 +43,6 @@ StrobeDisplay :: struct {
     band_visibility: [core.MAX_BANDS]f32,
     // per band phase drawn in the previous frame, for the motion blur, see strobe_tracks
     band_drawn_phases: [core.MAX_BANDS]f32,
-    // per band average of the stripes' phasor over the persistence, 0 while dark, see strobe_persistence
-    band_phasors:    [core.MAX_BANDS]complex64,
     // when the tracks were last drawn, another display may have shown in between, see strobe_tracks
     tracks_tick:     time.Tick,
     // what turned them and how, a change starts them over, see strobe_tracks
@@ -508,20 +506,18 @@ STROBE_ALIAS_FADE_STRIPES :: [2]f32{0.25, 0.45}
 STROBE_MAX_FRAME_TIME_S :: 1.0 / 30
 
 // The visibility of a band's stripes, smoothed so they don't flicker. gain is what's left of them off the note,
-// see narrow_band_gain, smear the persistence's contrast, see strobe_persistence, stripes_per_s how fast the
-// track's own stripes move, frame_time the screen's.
+// see narrow_band_gain, stripes_per_s how fast the track's own stripes move, frame_time the screen's.
 update_band_visibility :: proc(
     self: ^StrobeDisplay,
     band: ^core.PhaseBand,
     band_index: int,
     gain: f32,
-    smear: f32,
     stripes_per_s: f32,
     frame_time: f32,
 ) -> f32 {
     fade := core.STROBE_FADE_SNR_DB
     alias := STROBE_ALIAS_FADE_STRIPES
-    target := math.smoothstep(fade[0], fade[1], band.snr_db) * min(NARROW_BAND_CONTRAST * gain, 1) * smear
+    target := math.smoothstep(fade[0], fade[1], band.snr_db) * min(NARROW_BAND_CONTRAST * gain, 1)
     target *= 1 - math.smoothstep(alias[0], alias[1], stripes_per_s * frame_time)
 
     alpha := 1.0 - math.exp(-gfx.frame_time() / STROBE_LOOK_TIME_S)
@@ -532,43 +528,6 @@ update_band_visibility :: proc(
     if target == 0 && visibility^ < 0.001 do visibility^ = 0
 
     return visibility^
-}
-
-// The persistence of the strobe's stripes, the lamp's smear on the lock-in's phase: the stripes' phasor
-// averaged over the persistence, as the lamp's screen averages the wave. The average rides along with the
-// stripes at the readout's rate, expected_step is how far they move this frame by it: the frames before are
-// carried that far on before the newest joins them, so a steady drift keeps them aligned and the stripes move
-// sharp and on time, as a disc's do for an eye that follows them, and only what wanders off the rate smears.
-// The average's angle is where the smeared stripes sit, a jittery phase comes out calm, and its length is
-// their contrast, 1 for a phase on the rate and short for one that wandered within the window. phase is the
-// track's as drawn and comes back averaged, period_count the shader's stripes per turn of it, drawn_phase
-// the previous frame's: the averaged phase goes on from where the rate takes it the shortest way round, so
-// the motion blur sees no wrap. Lit again after dark the stripes come in where they are, not out of a dark
-// screen.
-strobe_persistence :: proc(
-    phasor: ^complex64,
-    phase: ^f32,
-    drawn_phase: f32,
-    expected_step: f32,
-    period_count: f32,
-    persistence_s: f32,
-    frame_time: f32,
-) -> (
-    contrast: f32,
-) {
-    angle := phase^ * period_count
-    newest := complex(math.cos(angle), math.sin(angle))
-    carry := expected_step * period_count
-    if phasor^ == 0 do phasor^ = newest
-    else do phasor^ *= complex(math.cos(carry), math.sin(carry))
-
-    alpha := 1 - math.exp(-frame_time / persistence_s)
-    phasor^ += complex(alpha, 0) * (newest - phasor^)
-
-    averaged := math.atan2(imag(phasor^), real(phasor^))
-    predicted := drawn_phase + expected_step
-    phase^ = predicted + f32(core.wrap_phase(f64(averaged - predicted * period_count))) / period_count
-    return abs(phasor^)
 }
 
 // The circular bands from the centre outwards, the lowest frequency is the bottom one
@@ -583,7 +542,7 @@ strobe_tracks :: proc(
 ) -> (
     tracks: StrobeTracks,
 ) {
-    lamp, persistence_periods := config.strobe_source == .LAMP, config.strobe_persistence_periods
+    lamp := config.strobe_source == .LAMP
     mode := lock_in.mode
     stale := tracks_went_stale(self, lamp, mode)
     tracks.count = len(bands)
@@ -605,36 +564,19 @@ strobe_tracks :: proc(
         uniforms.time_stretch = band.time_stretch
         uniforms.norm_freq = band.norm_freq
 
-        frame_time := min(gfx.frame_time(), STROBE_MAX_FRAME_TIME_S)
-        smear: f32
-        uniforms.phase, uniforms.phase_step, smear = track_phase(
-            self,
-            band,
-            band_index,
-            lock_in,
-            lamp,
-            persistence_periods,
-            stale,
-            geometry.density,
-            period_count,
-            frame_time,
-        )
+        uniforms.phase, uniforms.phase_step = track_phase(self, band, band_index, lock_in, lamp, stale, geometry.density, period_count)
 
         gain := track_gain(bands, band_index, mode)
         stripes_per_s := track_stripes_per_s(bands, band_index, mode, period_count, geometry.density)
 
         // Off the note the edges go soft, the stripes a sine before they fade. Squared, as the gain alone
-        // still leaves an edge a few percent of a stripe wide where they're half faded. Smeared they soften
-        // and dim the same way.
-        uniforms.amp = STROBE_AMP * gain * gain * smear * smear
-        uniforms.visibility = update_band_visibility(self, &band, band_index, gain, smear, stripes_per_s, frame_time)
+        // still leaves an edge a few percent of a stripe wide where they're half faded.
+        uniforms.amp = STROBE_AMP * gain * gain
+        frame_time := min(gfx.frame_time(), STROBE_MAX_FRAME_TIME_S)
+        uniforms.visibility = update_band_visibility(self, &band, band_index, gain, stripes_per_s, frame_time)
 
-        // Without stripes the track looks the same whatever its phase, and doesn't change from frame to frame.
-        // The persistence starts over when they show again.
-        if uniforms.visibility == 0 {
-            uniforms.phase, uniforms.phase_step = 0, 0
-            self.band_phasors[band_index] = 0
-        }
+        // Without stripes the track looks the same whatever its phase, and doesn't change from frame to frame
+        if uniforms.visibility == 0 do uniforms.phase, uniforms.phase_step = 0, 0
 
         selected := band_index == self.selected_track
         uniforms.highlight = self.selection if selected else 0
@@ -643,14 +585,14 @@ strobe_tracks :: proc(
     return
 }
 
-// Whether the phases drawn before and their averages are too old to carry on from, the strobe wasn't drawn
-// for a while or is turned another way now
+// Whether the phases drawn before are too old to carry on from, the strobe wasn't drawn for a while or is
+// turned another way now
 tracks_went_stale :: proc(self: ^StrobeDisplay, lamp: bool, mode: core.StrobeMode) -> bool {
     stale := time.duration_seconds(time.tick_since(self.tracks_tick)) > core.STROBE_STALE_S
     self.tracks_tick = time.tick_now()
 
     // The lamp's phase isn't the lock-in's, and a vernier track's stripes are packed tighter than a harmonic
-    // one's: the phase drawn before and the average of it don't carry over
+    // one's: the phase drawn before doesn't carry over
     if lamp != self.tracks_lamp || mode != self.tracks_mode do stale = true
 
     self.tracks_lamp, self.tracks_mode = lamp, mode
@@ -675,23 +617,20 @@ track_bounds :: proc(geometry: StrobeGeometry, strobe_rect: gfx.Rect, order: int
     return {strobe_rect.x, band_y, strobe_rect.width, height}
 }
 
-// The phase a track is drawn at, how far it moved since the previous frame for the motion blur, and smear the
-// persistence's contrast, 1 without it. Keeps the phase drawn and its average for the next frame.
+// The phase a track is drawn at and how far it moved since the previous frame for the motion blur. Keeps the
+// phase drawn for the next frame.
 track_phase :: proc(
     self: ^StrobeDisplay,
     band: core.PhaseBand,
     band_index: int,
     lock_in: ^core.StrobeLockIn,
     lamp: bool,
-    persistence_periods: f32,
     stale: bool,
     density: f32,
     period_count: f32,
-    frame_time: f32,
 ) -> (
     phase: f32,
     phase_step: f32,
-    smear: f32,
 ) {
     // The shader multiplies the phase by the period count, a denser pattern turns slower to drift as many
     // stripes a second as the desktop's. Drawn as of now, see strobe_phase_ahead. Not the lamp's tracks, they
@@ -705,27 +644,9 @@ track_phase :: proc(
     wrap := core.STROBE_PHASE_WRAP / density
     drawn_phase^ += wrap * math.round((phase - drawn_phase^) / wrap)
 
-    // Coming back to the strobe or turned another way, the stripes start where they are like after a pluck,
-    // not smeared from a phase seconds old or from another one
-    if stale {
-        self.band_phasors[band_index] = 0
-        drawn_phase^ = phase
-    }
-
-    // The persistence smears the stripes and calms a jittery phase like the lamp's screen. Not the lamp's
-    // tracks, their screen smeared already. A pluck starts it over, the plucked note's stripes come in where
-    // they are instead of through dark, as the lamp's loud attack outweighs its faded picture.
-    smear = 1
-    if !lamp && persistence_periods > 0 {
-        if band.onset do self.band_phasors[band_index] = 0
-
-        persistence_s := persistence_periods / lock_in.base_freq_hz
-
-        // How far the stripes moved this frame at the readout's rate, the whole frame however long it took: a
-        // hitch moved them all the way
-        expected_step := core.strobe_phase_rate(lock_in, band) * gfx.frame_time() / density
-        smear = strobe_persistence(&self.band_phasors[band_index], &phase, drawn_phase^, expected_step, period_count, persistence_s, frame_time)
-    }
+    // Coming back to the strobe or turned another way, the stripes start where they are, the motion blur
+    // doesn't sweep them from a phase seconds old or from another one
+    if stale do drawn_phase^ = phase
 
     // How far the strobe moved since the previous frame as drawn
     phase_step = phase - drawn_phase^

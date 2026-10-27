@@ -330,10 +330,10 @@ Candidates, the settings a first guess to try live:
 - Naming a note by ear, sight singing or picking a riff off a record: the wheel, one track, By note,
   the color before the name.
 - Guitar intonation at the saddles, the 12th fret's harmonic against the fretted note, a held note to a
-  fraction of a cent: the flat strobe with every track, Amber, Spin rate 200%, Readout 0.4 s, long
-  Motion smoothing, each track's cents shown.
+  fraction of a cent: the flat strobe with every track, Amber, Spin rate 200%, Readout 0.4 s, each
+  track's cents shown.
 - Piano, harpsichord, pans and bells, where the partials are tuned too: tracks at 1×, 2×, 3×, 4× labeled
-  with their notes and cents, long Motion smoothing for the decay, the spectrum to see what rings.
+  with their notes and cents, the spectrum to see what rings.
   Temperaments above would go with it.
 - Teaching and showing sound, a classroom or a video: the circle scope in By note, the lamp, the
   spectrum with its notes labeled.

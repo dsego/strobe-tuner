@@ -258,9 +258,11 @@ set_strobe_lock_in_speed :: proc(self: ^StrobeLockIn, base_speed: f32) {
 }
 
 
-// The window size of a band, a semitone wide. The comb keeps the other partials out, the readout's fit
-// steadies the cents, a narrower band only buys less noise for more lag.
-DFT_RESOLUTION_CENTS :: 100
+// The window size of a band. The comb keeps the other partials out, the readout's fit steadies the cents, a
+// narrower band buys less noise for more lag. A semitone left a bass's weak, beating partials jumping a tenth
+// of a stripe a frame, 70 cents about halves that and the fundamental's stripes take 0.12 s at C2 instead of
+// 0.08 s to follow a turned peg, see sandbox/step_response. -define:STROBE_BAND_CENTS=n to try another.
+DFT_RESOLUTION_CENTS :: #config(STROBE_BAND_CENTS, 70)
 
 // The phase is measured this many times a period of the strobe's note through the new samples. Between two
 // the phase moves by less than half a turn for a sound up to HOPS_PER_PERIOD / 2 times the note's frequency

@@ -142,7 +142,7 @@
     <!-- Lock-in -->
     <text class="title" x="310" y="222">Single-bin DFT</text>
     <text class="sub" x="310" y="239">per track, gamma window</text>
-    <text class="sub" x="310" y="252">semitone wide, comb</text>
+    <text class="sub" x="310" y="252">70 cents wide, comb</text>
 
     <text class="title" x="480" y="222">Lock-in</text>
     <text class="sub" x="480" y="239">rotate by the reference</text>
