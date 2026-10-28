@@ -156,9 +156,9 @@
     <text class="sub" x="650" y="319">least squares line</text>
     <text class="sub" x="650" y="332">through the phase</text>
 
-    <text class="title" x="310" y="302">Noise floor per band</text>
-    <text class="sub" x="310" y="319">its SNR fades and</text>
-    <text class="sub" x="310" y="332">sharpens the stripes</text>
+    <text class="title" x="310" y="302">Noise per band</text>
+    <text class="sub" x="310" y="319">floor + between partials,</text>
+    <text class="sub" x="310" y="332">its SNR fades the stripes</text>
 
     <text class="stereotype" x="990" y="216">«display»</text>
     <text class="title" x="990" y="233">Strobe tracks</text>
