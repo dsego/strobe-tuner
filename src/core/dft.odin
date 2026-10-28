@@ -65,6 +65,16 @@ comb_box :: proc(weights: []f64, gamma_size: int, comb_samples: f32) {
     }
 }
 
+// How much of white noise's power a DFT over these weights lets through, as run_single_dft scales it: the
+// squared weights summed, over the squared window size
+window_noise_gain :: proc(weights: []f64) -> f32 {
+    squares: f64
+    for weight in weights do squares += weight * weight
+
+    size := f64(len(weights))
+    return f32(squares / (size * size))
+}
+
 // Every sample the same weight
 flat_window :: proc(size: int, allocator := context.temp_allocator) -> []f64 {
     weights := make([]f64, size, allocator)

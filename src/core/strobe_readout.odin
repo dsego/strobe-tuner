@@ -86,13 +86,12 @@ hears_note :: proc(band: PhaseBand, band_cents: int) -> bool {
     return band.in_range && band.drift_cents <= f32(band_cents)
 }
 
-// Whether any track's stripes are at least half faded in, the note is still ringing. The background noise
-// stays under it, and so does the noise far under the note, see loudest_track_gain.
+// Whether any track's stripes are at least half faded in, the note is still ringing. The noise stays under it,
+// the room's and the note's own between its partials. By the envelopes, as the stripes fade.
 strobe_shows_note :: proc(self: ^StrobeLockIn) -> bool {
     fade := STROBE_FADE_SNR_DB
     for band in self.bands {
-        if !hears_note(band, self.band_cents) || band.snr_db < 0.5 * (fade[0] + fade[1]) do continue
-        if loudest_track_gain(self.bands[:], band) >= 0.5 do return true
+        if hears_note(band, self.band_cents) && band.envelope_snr_db >= 0.5 * (fade[0] + fade[1]) do return true
     }
     return false
 }

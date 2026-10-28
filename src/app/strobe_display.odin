@@ -511,21 +511,20 @@ STROBE_ALIAS_FADE_STRIPES :: [2]f32{0.25, 0.45}
 // A hitch isn't the screen's refresh, the stripes don't fade for one
 STROBE_MAX_FRAME_TIME_S :: 1.0 / 30
 
-// The visibility of a band's stripes, smoothed so they don't flicker. gain is what's left of them off the note,
-// see narrow_band_gain, level_gain under the note's loudest track, see core.loudest_track_gain, stripes_per_s
-// how fast the track's own stripes move, frame_time the screen's.
+// The visibility of a band's stripes by its envelope's SNR, smoothed so they don't flicker. gain is what's left
+// of them off the note, see narrow_band_gain, stripes_per_s how fast the track's own stripes move, frame_time
+// the screen's.
 update_band_visibility :: proc(
     self: ^StrobeDisplay,
     band: ^core.PhaseBand,
     band_index: int,
     gain: f32,
-    level_gain: f32,
     stripes_per_s: f32,
     frame_time: f32,
 ) -> f32 {
     fade := core.STROBE_FADE_SNR_DB
     alias := STROBE_ALIAS_FADE_STRIPES
-    target := math.smoothstep(fade[0], fade[1], band.snr_db) * level_gain * min(NARROW_BAND_CONTRAST * gain, 1)
+    target := math.smoothstep(fade[0], fade[1], band.envelope_snr_db) * min(NARROW_BAND_CONTRAST * gain, 1)
     target *= 1 - math.smoothstep(alias[0], alias[1], stripes_per_s * frame_time)
 
     alpha := 1.0 - math.exp(-gfx.frame_time() / STROBE_LOOK_TIME_S)
@@ -581,8 +580,7 @@ strobe_tracks :: proc(
         // still leaves an edge a few percent of a stripe wide where they're half faded.
         uniforms.amp = STROBE_AMP * gain * gain
         frame_time := min(gfx.frame_time(), STROBE_MAX_FRAME_TIME_S)
-        level_gain := core.loudest_track_gain(bands, band)
-        uniforms.visibility = update_band_visibility(self, &band, band_index, gain, level_gain, stripes_per_s, frame_time)
+        uniforms.visibility = update_band_visibility(self, &band, band_index, gain, stripes_per_s, frame_time)
 
         // Without stripes the track looks the same whatever its phase, and doesn't change from frame to frame
         if uniforms.visibility == 0 do uniforms.phase, uniforms.phase_step = 0, 0

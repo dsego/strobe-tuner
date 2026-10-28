@@ -66,7 +66,7 @@ main :: proc() {
     retune(strobe, note_target.target_note.frequency)
 
     fmt.println(
-        "   time      Hz  cents  note  clarity     SNR  pitch   tuner   readout   tracks: SNR, level gain, cents, drift, stripes a second, jitter",
+        "   time      Hz  cents  note  clarity     SNR  pitch   tuner   readout   tracks: SNR, cents, drift, stripes a second, jitter",
     )
 
     next_print: f32 = 0
@@ -74,11 +74,14 @@ main :: proc() {
     readout_track := -1
     readout_ready := false
     frame_samples := int(sample_rate) / FPS
-    frame_time := f32(frame_samples) / sample_rate
 
-    // How far each frame's stripes stray from where the readout's rate takes them, in stripes, since the last
-    // print: what the app's motion blur draws as a smear when it's more than a sliver
+    // How differently each frame's stripes move from the frame before, in stripes, over √2 like
+    // sandbox/lamp_jitter's, since the last print: what the app's motion blur draws as a smear when it's more
+    // than a sliver. A steady drift moves them alike every frame, whatever rate the readout fitted: a track in
+    // the noise stops fitting and keeps a stale one.
     previous_phases: [core.MAX_BANDS]f32
+    previous_steps: [core.MAX_BANDS]f32
+    steps_known := 0 // frames since a retune, the first's step and the second's change mean nothing
     jitter_squares: [core.MAX_BANDS]f32
     jitter_frames := 0
 
@@ -96,18 +99,18 @@ main :: proc() {
             readout_ready = false
         }
 
-        // A retune starts the tracks over, their step from before means nothing
+        // A retune starts the tracks over, their steps from before mean nothing
+        if retuned do steps_known = 0
         wrap := f32(core.STROBE_PHASE_WRAP)
         for band, index in strobe.bands {
             step := band.scaled_phase - previous_phases[index]
             step -= wrap * math.round(step / wrap)
-            previous_phases[index] = band.scaled_phase
-            if retuned do continue
-
-            stray := (step - core.strobe_phase_rate(strobe, band) * frame_time) * DESKTOP_PERIODS / math.TAU
-            jitter_squares[index] += stray * stray
+            change := (step - previous_steps[index]) * DESKTOP_PERIODS / math.TAU / math.SQRT_TWO
+            previous_phases[index], previous_steps[index] = band.scaled_phase, step
+            if steps_known >= 2 do jitter_squares[index] += change * change
         }
-        if !retuned do jitter_frames += 1
+        if steps_known >= 2 do jitter_frames += 1
+        steps_known += 1
 
         if !pitch.fresh do continue
 
@@ -142,20 +145,18 @@ main :: proc() {
             readout = fmt.tprintf("%+.1f¢ %v× %v", band.err_cents, band.interval, core.note_name(note_target.target_note))
         }
         fmt.printf("%-13v ", readout)
-        // The stripes fade out between 16 and 8 dB, see core.STROBE_FADE_SNR_DB. And by their speed, the
-        // desktop's stripes a second by the drift, they fade from a quarter of a stripe a frame, see the app's
-        // STROBE_ALIAS_FADE_STRIPES.
-        // The jitter the RMS of the frames' strays. Under the note's loudest track they fade, the fraction left
-        // after the SNR, see core.loudest_track_gain.
+        // The stripes fade out between 16 and 8 dB of the envelope's SNR, see core.STROBE_FADE_SNR_DB. And by
+        // their speed, the desktop's stripes a second by the drift, they fade from a quarter of a stripe a frame,
+        // see the app's STROBE_ALIAS_FADE_STRIPES.
+        // The jitter the RMS of the frames' changes.
         for band, index in strobe.bands {
             drift_hz := core.freq_at_cents(band.freq_hz, band.drift_cents) - band.freq_hz
             stripes_per_s := DESKTOP_PERIODS * drift_hz * f32(core.strobe_rescale(band.freq_hz)) * band.speed
             jitter := math.sqrt(jitter_squares[index] / f32(max(jitter_frames, 1)))
             fmt.printf(
-                "  %v× %-7v %-5v %-6v %-6v %-6v %-5v",
+                "  %v× %-7v %-6v %-6v %-6v %-5v",
                 band.interval,
-                fmt.tprintf("%.1fdB", band.snr_db),
-                fmt.tprintf("×%.2f", core.loudest_track_gain(strobe.bands[:], band)),
+                fmt.tprintf("%.1fdB", band.envelope_snr_db),
                 fmt.tprintf("%+.1f¢", band.err_cents),
                 fmt.tprintf("~%.0f¢", band.drift_cents),
                 fmt.tprintf("%.1f/s", stripes_per_s),

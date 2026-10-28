@@ -161,7 +161,7 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     if measurement.traced_track >= 0 {
         band := lock_in.bands[measurement.traced_track]
         fade := core.STROBE_FADE_SNR_DB
-        light = math.smoothstep(fade[0], fade[1], band.snr_db) * core.loudest_track_gain(lock_in.bands[:], band)
+        light = math.smoothstep(fade[0], fade[1], band.envelope_snr_db)
         if light == 0 || !band.in_range do measurement.traced_track = -1
 
         if measurement.traced_track >= 0 && !out_of_range && abs(band.err_cents) <= core.READOUT_RANGE_CENTS {

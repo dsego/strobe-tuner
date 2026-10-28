@@ -96,7 +96,12 @@ PhaseBand :: struct {
     scaled_phase: f32, // the strobe's phase, phase_diff times the speed added up, see turn_strobe
     speed:        f32, // under 1 the strobe turns slower, over 1 faster
     snr_db:       f32,
+    envelope_snr_db: f32, // the SNR with the level at its envelope, what the stripes fade by, see update_band_noise_floor
     noise_floor:  NoiseFloor,
+    // the noise between the note's partials as the track would read it, 0 unmeasured, and the readings it's
+    // the median of, see measure_noise_between_partials
+    noise_between: f32,
+    noise_history: NoiseHistory,
 
     // Lock-in reference oscillator frequency, radians per sample
     ref_omega:    f64,
@@ -133,6 +138,8 @@ StrobeLockIn :: struct {
     band_cents:       int, // the width of each track's band, DFT_RESOLUTION_CENTS, set_strobe_lock_in_freq retunes it
     readout_fit_s:    f32, // the time constant of the readout's fit, READOUT_FIT_S, longer is steadier and later
     available:        int, // the new samples of the latest run_phase_detection
+    window_noise_gain: f32, // of the window every track shares, see window_noise_gain
+    noise_spectrum:   WindowedSpectrum, // the noise between the note's partials is measured on, see measure_noise_between_partials
 
     // Absolute index of the sample just past the end of the newest window, i.e. the lock-in clock
     sample_clock:     i64,
@@ -166,6 +173,7 @@ init_strobe_lock_in :: proc(
 destroy_strobe_lock_in :: proc(self: ^StrobeLockIn) {
     destroy_audio_capture_node(self)
     delete(self.sample_buffer)
+    destroy_windowed_spectrum(&self.noise_spectrum)
     for &band in self.bands do destroy_phase_band(&band)
 
     delete(self.bands)
@@ -299,6 +307,7 @@ set_strobe_lock_in_freq :: proc(
     comb_samples := comb_periods(self.bands[:], mode) * self.sample_rate / base_freq_hz
     gamma_size := dft_window_size(base_freq_hz, self.sample_rate, self.band_cents)
     window := gamma_comb_window(gamma_size, comb_samples)
+    self.window_noise_gain = window_noise_gain(window)
 
     for &band, band_index in self.bands {
         band.time_stretch = self.sample_rate / base_freq_hz
@@ -353,7 +362,10 @@ restart_band :: proc(band: ^PhaseBand) {
     // Nothing heard yet, like a track out of range, the previous note's level isn't this one's
     band.amp = 0
     band.snr_db = 0
+    band.envelope_snr_db = 0
     band.phase_diff = 0
+    band.noise_between = 0
+    band.noise_history = {}
 }
 
 // Another input's signal is unrelated to the previous one's, everything starts over like at launch: the
@@ -405,6 +417,7 @@ run_phase_detection :: proc(self: ^StrobeLockIn, is_tonal := false) {
         }
     }
     determine_band_phases(self, measured[:measured_count])
+    measure_noise_between_partials(self)
     for band in measured[:measured_count] do update_band_noise_floor(self, band, is_tonal)
 
     for &band, band_index in self.bands {
@@ -415,11 +428,13 @@ run_phase_detection :: proc(self: ^StrobeLockIn, is_tonal := false) {
             band.phase_diff, band.rate, band.err_cents = base_band.phase_diff, base_band.rate, base_band.err_cents
             band.drift_hz, band.drift_cents = base_band.drift_hz, base_band.drift_cents
             band.noise_floor, band.snr_db = base_band.noise_floor, base_band.snr_db
+            band.envelope_snr_db = base_band.envelope_snr_db
             turn_strobe(&band.scaled_phase, band.phase_diff, band.speed)
         } else if !band.in_range {
             // Nothing to measure up there, quiet so the track stays dark
             band.amp = 0
             band.snr_db = 0
+            band.envelope_snr_db = 0
             band.phase_diff = 0
         }
     }
@@ -510,12 +525,11 @@ determine_band_phases :: proc(self: ^StrobeLockIn, bands: []^PhaseBand) {
         }
     }
 
-    // Every level first, a track's fit asks how far it is under the loudest, see advance_band
-    for band in bands {
+    for band, index in bands {
         band.amp = abs(band.dft.dft)
         band.has_phase = true
+        advance_band(self, band, phase_advances[index], had_phase[index])
     }
-    for band, index in bands do advance_band(self, band, phase_advances[index], had_phase[index])
 }
 
 // How far the track's frequency plus diff_hz is from it. An octave flat is as far as it goes: noise on a low
@@ -546,15 +560,14 @@ advance_band :: proc(self: ^StrobeLockIn, band: ^PhaseBand, phase_advance: f64, 
         band.drift_cents = abs(band_cents_off(band, band.drift_hz))
     }
 
-    // The readout fits the rate while the stripes fully show, over the noise and close enough to the loudest
-    // track, see loudest_track_gain. A fading note keeps the last of it, the dimming stripes drift with the
-    // noise, and so does a track sinking far under the note. Each measurement is weighted by its samples, a stalled frame counts for as
-    // long as it took, and by the partial's power against its envelope. Where two components beat, the phase
-    // swings fast through the dips; weighted by power the rate settles on their mean pitch by energy instead
-    // of following the swings. Against the envelope, not the absolute power: a decaying note's newest
-    // moments are its weakest, and they still count as much. A single one has no slope yet, the rate is its
-    // advance.
-    if had_phase && band.snr_db >= READOUT_MIN_SNR_DB && loudest_track_gain(self.bands[:], band^) == 1 {
+    // The readout fits the rate while the stripes fully show, over the noise around the track, see
+    // update_band_noise_floor. A fading note keeps the last of it, the dimming stripes drift with the noise.
+    // Each measurement is weighted by its samples, a stalled frame counts for as long as it took, and by the
+    // partial's power against its envelope. Where two components beat, the phase swings fast through the dips;
+    // weighted by power the rate settles on their mean pitch by energy instead of following the swings.
+    // Against the envelope, not the absolute power: a decaying note's newest moments are its weakest, and they
+    // still count as much. A single one has no slope yet, the rate is its advance.
+    if had_phase && band.snr_db >= READOUT_MIN_SNR_DB {
         if band.rate_time_s == 0 do band.fit = {}
 
         band.rate_time_s += f32(self.available) / self.sample_rate
@@ -640,27 +653,8 @@ update_onset :: proc(self: ^StrobeLockIn, band: ^PhaseBand) {
 }
 
 
-// The stripes fade in between these SNRs, below it's the background noise (it stays under ~10 dB)
+// The stripes fade in between these SNRs of the track's envelope, below it's the noise
 STROBE_FADE_SNR_DB :: [2]f32{8, 16}
-
-// And fade out this far under the note's loudest track, full down to the first and dark at the second. On a
-// clean input the noise floor learns digital silence, and the faint noise that comes with the note itself reads
-// well over it: over every sample the tracks stay partials down to about 35 dB under the loudest and wander like
-// noise past 50 dB, see sandbox/partial_levels. Against the note rather than a level, its partials fade together
-// and a long sustain stays lit.
-STROBE_FADE_UNDER_LOUDEST_DB :: [2]f32{35, 50}
-
-// How much of a track's stripes is left by how far it is under the loudest track in range, 1 for that one
-loudest_track_gain :: proc(bands: []PhaseBand, band: PhaseBand) -> f32 {
-    loudest: f32
-    for other in bands {
-        if other.in_range do loudest = max(loudest, other.amp)
-    }
-    if band.amp <= 0 || loudest <= 0 do return 0
-
-    fade := STROBE_FADE_UNDER_LOUDEST_DB
-    return 1 - math.smoothstep(fade[0], fade[1], 20 * math.log10(loudest / band.amp))
-}
 
 // Keep an up-to-date estimate of background noise (i.e. when no note is playing)
 update_band_noise_floor :: proc(self: ^StrobeLockIn, band: ^PhaseBand, is_tonal: bool) {
@@ -673,7 +667,24 @@ update_band_noise_floor :: proc(self: ^StrobeLockIn, band: ^PhaseBand, is_tonal:
     window_full := self.sample_clock >= i64(band.dft.window_size)
     if !window_full && noise_floor.warmup == 0 && noise_floor.level > 0 {
         band.snr_db = 20 * math.log10(max(band.amp, MIN_NOISE_FLOOR) / noise_floor.level)
-        return
+    } else {
+        band.snr_db = update_noise_floor(noise_floor, band.amp, dt, window_full, is_tonal)
     }
-    band.snr_db = update_noise_floor(noise_floor, band.amp, dt, window_full, is_tonal)
+
+    // Over the floor and the noise between the partials together when that's measured, the two add as powers:
+    // the floor was learned before the note, the noise the note brings along shows only between its partials,
+    // see measure_noise_between_partials. More noise, never a higher SNR.
+    if band.noise_between > 0 {
+        noise := math.sqrt(noise_floor.level * noise_floor.level + band.noise_between * band.noise_between)
+        band.snr_db = 20 * math.log10(max(band.amp, MIN_NOISE_FLOOR) / noise)
+    }
+
+    // The same with the level at its envelope, what the stripes fade by. In noise a weak partial's level swings a
+    // few dB from one tenth of a second to the next, and dips for a moment where it beats: through the fade, a few
+    // dB wide, its stripes flickered. The envelope follows over ONSET_ENVELOPE_TIME_S and jumps along with a
+    // pluck, the stripes still light up with the attack. Under its noise a track's level is the noise's, nothing
+    // of the note is left to remember: the envelope drops to it, a stopped or muted note's stripes go dark at once
+    // instead of drawing the noise while the envelope follows, whole turns a frame as the window empties.
+    if band.snr_db < 0 do band.envelope = band.amp
+    band.envelope_snr_db = band.snr_db + 20 * math.log10(max(band.envelope, MIN_NOISE_FLOOR) / max(band.amp, MIN_NOISE_FLOOR))
 }
