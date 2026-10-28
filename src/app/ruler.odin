@@ -26,7 +26,8 @@ import "../gfx"
 // The ruler, the notes in a row with the target note large in the middle: every semitone, or an
 // instrument's strings in the order they're tuned.
 // The notes slide over to the next one, further jumps snap, a swipe drags the row. A note grows as it
-// comes into the middle and shrinks as it goes.
+// comes into the middle and shrinks as it goes. On every semitone a swipe up or down turns the middle note's
+// octave, the same letter an octave higher or lower, and its octave rolls over like a wheel.
 // The fonts are loaded at the exact sizes, see update_pixel_fonts, and everything lands on whole pixels.
 
 RULER_SPACING :: 70 // between the letters of neighbouring notes, room for a sharp between them
@@ -40,10 +41,17 @@ RULER_VELOCITY_S :: 0.024 // the finger's speed smoothed over about this long, h
 RULER_COAST_MAX :: 20 // notes per second
 RULER_COAST_MIN :: 2 // notes per second, let go slower than this it settles on the nearest note
 RULER_COAST_FRICTION :: 4 // how far a flick coasts, 1/4 of a second at the finger's speed, in about 1/2 a second
+RULER_OCTAVE_SPACING :: 50 // points up or down for an octave, the next one comes in halfway
+RULER_OCTAVE_SLOPE :: 2 // up or down this many times as far as sideways, the octave turns and not the row
+
+// Past the highest or the lowest octave there's no such note, the octave turns this much of the finger's
+// way, up to this much of an octave, and springs back
+RULER_OCTAVE_GIVE :: 0.25
 
 // The ruler between frames
 NoteRuler :: struct {
     position:    f32, // where the middle is, counted in its notes, it follows the target note a little behind
+    roll:        f32, // octaves the middle note's octave is turned from it, up is higher, rolls back to 0
     initialized: bool,
     swipe:       RulerSwipe,
 }
@@ -62,22 +70,24 @@ RulerLayout :: struct {
 
 // A press on the ruler. Let go where it was, a tap on a neighbour selects it. Moved sideways it's a swipe,
 // the row follows the finger, and let go it coasts on with the finger's speed and slows down. Only the
-// note it settles on becomes the target.
+// note it settles on becomes the target. Moved up or down instead the octave follows the finger, without a
+// coast.
 RulerGesture :: enum {
     NONE,
     PRESSED, // let go where it was it's a tap
     CAUGHT, // pressed while it coasted, let go without swiping it settles where it is
     SWIPING, // the row follows the finger
     COASTING, // let go, it slows down to a stop on a note
+    TURNING, // the octave follows the finger up and down
 }
 
-// The row moved off its note or about to, it lands on one when it's over
-RULER_MOVING :: bit_set[RulerGesture]{.CAUGHT, .SWIPING, .COASTING}
+// The row moved off its note or about to, or the octave turning, it lands on a note when it's over
+RULER_MOVING :: bit_set[RulerGesture]{.CAUGHT, .SWIPING, .COASTING, .TURNING}
 
 RulerSwipe :: struct {
     gesture:  RulerGesture,
-    press_x:  f32, // where the finger was when the row started following it
-    grab:     f32, // the ruler's position then
+    press:    [2]f32, // where the finger was when the row or the octave started following it
+    grab:     f32, // the ruler's position then, the target note's when the octave turns
     last_x:   f32,
     velocity: f32, // points per second, right is positive
     coast:    f32, // seconds the coast takes
@@ -86,15 +96,17 @@ RulerSwipe :: struct {
     stop_at:  f32, // the note it coasts to
 }
 
-// notes[target] is the target note, none hides the ruler. Returns how many notes to step when another note is
-// tapped or the note in the middle of a swipe changes, whether the target itself was tapped, which toggles the
-// lock like the lock button, and whether the row is swiped or coasting, which locks the note even when it
-// lands back on the same one.
+// notes[target] is the target note, none hides the ruler, octaves when they're every semitone and a swipe
+// up or down turns the octave. Returns how many notes to step when another note is tapped, the note in the
+// middle of a swipe changes or the octave turns, whether the target itself was tapped, which toggles the
+// lock like the lock button, and whether the row is swiped or coasting or the octave turning, which locks
+// the note even when it lands back on the same one.
 gui_note_ruler :: proc(
     rect: gfx.Rect,
     notes: []core.Note,
     target: int,
     active: bool,
+    octaves: bool,
 ) -> (
     step: int,
     toggle_lock: bool,
@@ -107,11 +119,12 @@ gui_note_ruler :: proc(
     }
     if !ruler.initialized {
         ruler.position = f32(target)
+        ruler.roll = 0
         ruler.initialized = true
     }
 
     layout := ruler_layout(rect)
-    settle, land, tapped := ruler_follow_finger(ruler, rect, layout.spacing, f32(len(notes) - 1))
+    settle, land, tapped := ruler_follow_finger(ruler, rect, layout.spacing, f32(len(notes) - 1), target, octaves)
     gesture := ruler.swipe.gesture
     swiping = gesture in RULER_MOVING
 
@@ -120,29 +133,45 @@ gui_note_ruler :: proc(
     step = int(settle) - target if swiping || land else 0
     if land do ruler.swipe = {}
 
+    slide := 1 - math.exp(-RULER_SLIDE_SPEED * gfx.frame_time())
     if !swiping || land {
         // Slide to the next note, and settle exactly on it, a jump further snaps
         shown := f32(target + step)
         if abs(shown - ruler.position) > 1 && step == 0 do ruler.position = shown
 
-        ruler.position += (shown - ruler.position) * (1 - math.exp(-RULER_SLIDE_SPEED * gfx.frame_time()))
+        ruler.position += (shown - ruler.position) * slide
         if abs(shown - ruler.position) < RULER_ON_NOTE do ruler.position = shown
     }
 
+    // Let go, the octave rolls back onto the note the same way
+    if ruler.swipe.gesture != .TURNING {
+        ruler.roll -= ruler.roll * slide
+        if abs(ruler.roll) < RULER_ON_NOTE do ruler.roll = 0
+    }
+
     // The target note is white while there's a pitch
-    draw_ruler(layout, notes, ruler.position, text_color_white if active else text_color_muted)
+    draw_ruler(layout, notes, ruler.position, ruler.roll, text_color_white if active else text_color_muted)
 
     if tapped do step, toggle_lock = ruler_tap(layout, notes, ruler.position, target)
 
     return
 }
 
-// Moves the row with the finger and the coast. settle is where it settles, the nearest note or the next one
-// on the way, land a swipe or a coast that's over, tapped a press let go where it was. The cases in order,
-// the first that holds is the one.
-ruler_follow_finger :: proc(ruler: ^NoteRuler, rect: gfx.Rect, spacing, highest: f32) -> (settle: f32, land, tapped: bool) {
+// Moves the row with the finger and the coast, or turns the octave. settle is where it settles, the nearest
+// note or the next one on the way, land a swipe, a coast or a turn that's over, tapped a press let go where it
+// was. The cases in order, the first that holds is the one.
+ruler_follow_finger :: proc(
+    ruler: ^NoteRuler,
+    rect: gfx.Rect,
+    spacing, highest: f32,
+    target: int,
+    octaves: bool,
+) -> (
+    settle: f32,
+    land, tapped: bool,
+) {
     swipe := &ruler.swipe
-    mouse_x := gfx.mouse_position().x
+    mouse := gfx.mouse_position()
 
     switch {
     case gui.disabled:
@@ -151,17 +180,17 @@ ruler_follow_finger :: proc(ruler: ^NoteRuler, rect: gfx.Rect, spacing, highest:
         if !land do swipe^ = {}
     case swipe.gesture == .COASTING && gfx.mouse_pressed():
         // Caught on the ruler it stops there and can be swiped on, a press anywhere else settles it
-        if gui_background_pressed(rect) do swipe^ = ruler_press(.CAUGHT, mouse_x)
+        if gui_background_pressed(rect) do swipe^ = ruler_press(.CAUGHT, mouse)
         else do land = true
     case swipe.gesture == .COASTING:
         land = ruler_coast(swipe, &ruler.position)
     case swipe.gesture == .NONE:
-        if gui_background_pressed(rect) do swipe^ = ruler_press(.PRESSED, mouse_x)
+        if gui_background_pressed(rect) do swipe^ = ruler_press(.PRESSED, mouse)
     case gfx.mouse_down():
-        ruler_drag(swipe, &ruler.position, mouse_x, spacing)
+        ruler_drag(ruler, mouse, spacing, highest, target, octaves)
     case swipe.gesture == .SWIPING:
         land = ruler_let_go(swipe, ruler.position, spacing, highest)
-    case swipe.gesture == .CAUGHT:
+    case swipe.gesture == .CAUGHT || swipe.gesture == .TURNING:
         land = true
     case:
         tapped = true
@@ -179,9 +208,9 @@ ruler_follow_finger :: proc(ruler: ^NoteRuler, rect: gfx.Rect, spacing, highest:
 
 RULER_ON_NOTE :: 0.002 // notes, closer than this the row is on the note
 
-// A press at x, the row follows it once it moves
-ruler_press :: proc(gesture: RulerGesture, x: f32) -> RulerSwipe {
-    return {gesture = gesture, press_x = x, last_x = x}
+// A press at mouse, the row or the octave follows it once it moves
+ruler_press :: proc(gesture: RulerGesture, mouse: [2]f32) -> RulerSwipe {
+    return {gesture = gesture, press = mouse, last_x = mouse.x}
 }
 
 // Slowing down steadily to a stop on the note, from the finger's speed. Returns true when it's there.
@@ -192,22 +221,60 @@ ruler_coast :: proc(swipe: ^RulerSwipe, position: ^f32) -> (land: bool) {
     return left == 0
 }
 
-// The row under the finger once it's moved past RULER_SWIPE_START, to the left brings in the notes on the
-// right. The finger's speed kept for the coast.
-ruler_drag :: proc(swipe: ^RulerSwipe, position: ^f32, mouse_x, spacing: f32) {
+// The row under the finger once it's moved past RULER_SWIPE_START sideways, to the left brings in the notes on
+// the right. The finger's speed kept for the coast. On every semitone, moved that far up or down first and
+// steeply, the octave turns instead, see ruler_turn.
+ruler_drag :: proc(ruler: ^NoteRuler, mouse: [2]f32, spacing, highest: f32, target: int, octaves: bool) {
+    swipe := &ruler.swipe
+
     // Smoothed, a finger stops for a frame or two before it lets go
     if dt := gfx.frame_time(); dt > 0 {
-        swipe.velocity += ((mouse_x - swipe.last_x) / dt - swipe.velocity) * (1 - math.exp(-dt / RULER_VELOCITY_S))
+        swipe.velocity += ((mouse.x - swipe.last_x) / dt - swipe.velocity) * (1 - math.exp(-dt / RULER_VELOCITY_S))
     }
-    swipe.last_x = mouse_x
+    swipe.last_x = mouse.x
 
-    if swipe.gesture != .SWIPING && abs(mouse_x - swipe.press_x) > RULER_SWIPE_START {
-        // From here, the few points it took don't make the row jump
+    // From here, the few points it took don't make the row jump or the octave turn
+    moved := mouse - swipe.press
+    steep := abs(moved.y) > RULER_SWIPE_START && abs(moved.y) > RULER_OCTAVE_SLOPE * abs(moved.x)
+    if octaves && swipe.gesture == .PRESSED && steep {
+        swipe.gesture = .TURNING
+        swipe.press = mouse
+        swipe.grab = f32(target)
+    } else if (swipe.gesture == .PRESSED || swipe.gesture == .CAUGHT) && abs(moved.x) > RULER_SWIPE_START {
         swipe.gesture = .SWIPING
-        swipe.press_x = mouse_x
-        swipe.grab = position^
+        swipe.press = mouse
+        swipe.grab = ruler.position
     }
-    if swipe.gesture == .SWIPING do position^ = swipe.grab + (swipe.press_x - mouse_x) / spacing
+
+    if swipe.gesture == .SWIPING do ruler.position = swipe.grab + (swipe.press.x - mouse.x) / spacing
+    if swipe.gesture == .TURNING do ruler_turn(ruler, (swipe.press.y - mouse.y) / RULER_OCTAVE_SPACING, highest)
+}
+
+// The octave turned by turned octaves from the note it started on, up is higher, the row on the same letter
+// in the nearest octave, already the target while the finger's still down. Past the highest or the lowest
+// octave there's no such note, it gives a little and springs back when let go.
+ruler_turn :: proc(ruler: ^NoteRuler, turned, highest: f32) {
+    start := ruler.swipe.grab
+    within := clamp(turned, -math.floor(start / 12), math.floor((highest - start) / 12))
+    octaves := math.round(within)
+    give := clamp((turned - within) * RULER_OCTAVE_GIVE, -RULER_OCTAVE_GIVE, RULER_OCTAVE_GIVE)
+
+    ruler.position = start + 12 * octaves
+    ruler.roll = within - octaves + give
+}
+
+// An octave up or down from notes[target] with the arrow keys, turn is 1 or -1, its octave rolls over to
+// the next. Past the ends there's no such note, it gives a little and springs back.
+ruler_step_octave :: proc(count, target, turn: int) -> (step: int) {
+    ruler := &note_ruler
+    if stepped := target + 12 * turn; stepped < 0 || stepped >= count {
+        ruler.roll = f32(turn) * RULER_OCTAVE_GIVE
+        return 0
+    }
+
+    // From the octave it was on, still rolling on to it after a quick second press
+    ruler.roll = clamp(ruler.roll - f32(turn), -1, 1)
+    return 12 * turn
 }
 
 // Let go of a swipe, it coasts to where friction would stop it, rounded to a note on the way. Slowing down
@@ -255,8 +322,9 @@ ruler_note_x :: proc(layout: RulerLayout, offset: f32) -> f32 {
     return layout.center.x + offset * layout.spacing + math.sign(offset) * layout.center_gap * min(abs(offset), 1)
 }
 
-// Notes slide in and out at the ends, fading. note_color is the target's.
-draw_ruler :: proc(layout: RulerLayout, notes: []core.Note, position: f32, note_color: gfx.Color) {
+// Notes slide in and out at the ends, fading. note_color is the target's, roll how far the middle note's
+// octave is turned.
+draw_ruler :: proc(layout: RulerLayout, notes: []core.Note, position, roll: f32, note_color: gfx.Color) {
     first, last := ruler_shown_notes(layout, position, len(notes))
     for index in first ..= last {
         offset := f32(index) - position
@@ -271,7 +339,10 @@ draw_ruler :: proc(layout: RulerLayout, notes: []core.Note, position: f32, note_
         // Muted a note away, the ones at the ends fade out
         color := fade_color(lerp_color(text_color_muted, note_color, large), clamp(f32(layout.per_side) + 1 - distance, 0, 1))
 
-        draw_ruler_note(notes[index], {ruler_note_x(layout, offset), layout.center.y}, large, octave, color)
+        // The octaves below and above that are on the ruler, the middle note's octave rolls to them
+        turns := [2]int{-1 if index >= 12 else 0, 1 if index + 12 < len(notes) else 0}
+
+        draw_ruler_note(notes[index], {ruler_note_x(layout, offset), layout.center.y}, large, octave, color, roll, turns)
     }
 }
 
@@ -297,8 +368,9 @@ ruler_tap :: proc(layout: RulerLayout, notes: []core.Note, position: f32, target
 
 // The name centred on pos, the sharp or the flat and the octave to the right, octave is how much of it shows
 // (in the middle). large is how far it's grown from a neighbour to the target, in between it's drawn from the
-// large letters scaled down, settled at the fonts' own sizes, texel for pixel.
-draw_ruler_note :: proc(note: core.Note, pos: [2]f32, large, octave: f32, color: gfx.Color) {
+// large letters scaled down, settled at the fonts' own sizes, texel for pixel. roll is how far the octave is
+// turned up, it rolls to the octaves turns reaches, -1 the one below and 1 the one above.
+draw_ruler_note :: proc(note: core.Note, pos: [2]f32, large, octave: f32, color: gfx.Color, roll: f32, turns: [2]int) {
     SIGNS :: [core.Accidental]cstring{.NATURAL = "", .SHARP = "♯", .FLAT = "♭"}
 
     // From the letter's top right, of its size, the tops of both signs level with the letter's and their left
@@ -337,8 +409,17 @@ draw_ruler_note :: proc(note: core.Note, pos: [2]f32, large, octave: f32, color:
     }
 
     if octave > 0 {
+        // Turned, the octaves roll like a wheel a line apart, the one above comes in from below as the finger
+        // goes up, fading in as the one it leaves fades out
         font := pixel_fonts.octave
-        octave_pos := snap_to_pixels({right, top_left.y + name_size.y - 1.3 * font.size})
-        gfx.draw_text(font.font, octave_label, octave_pos, font.size, 0, fade_color(color, octave))
+        octave_pos := [2]f32{right, top_left.y + name_size.y - 1.3 * font.size}
+        for turn in turns[0] ..= turns[1] {
+            offset := f32(turn) - roll
+            if abs(offset) >= 1 do continue
+
+            label := fmt.ctprintf("%v", note.octave + turn)
+            label_pos := snap_to_pixels(octave_pos + {0, offset * font.size})
+            gfx.draw_text(font.font, label, label_pos, font.size, 0, fade_color(color, octave * (1 - abs(offset))))
+        }
     }
 }

@@ -108,6 +108,8 @@ when ODIN_OS == .Darwin {
 scancodes := [Key]sdl.Scancode {
     .LEFT        = .LEFT,
     .RIGHT       = .RIGHT,
+    .UP          = .UP,
+    .DOWN        = .DOWN,
     .TAB         = .TAB,
     .SPACE       = .SPACE,
     .COMMA       = .COMMA,

@@ -286,7 +286,7 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading, menu: Me
         }
         target = clamp(shown_cents / 100 - core.LOWEST_NOTE, 0, core.NOTE_COUNT - 1)
     }
-    step, note_tapped, swiping := gui_note_ruler(layout.ruler, ruler_notes, target, note_target.active)
+    step, note_tapped, swiping := gui_note_ruler(layout.ruler, ruler_notes, target, note_target.active, !string_mode)
 
     // Within half a semitone of the note, or a few semitones of a string or a locked note
     cents := reading.steady.err_cents
@@ -312,6 +312,10 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading, menu: Me
         if gfx.key_pressed(.SPACE) || menu == .LOCK_NOTE do lock_toggled = true
         if gfx.key_pressed(.LEFT) do step = -1
         if gfx.key_pressed(.RIGHT) do step = 1
+
+        // An octave up and down on every note, the strings have no octaves
+        if !string_mode && gfx.key_pressed(.UP) do step = ruler_step_octave(len(ruler_notes), target, 1)
+        if !string_mode && gfx.key_pressed(.DOWN) do step = ruler_step_octave(len(ruler_notes), target, -1)
     }
 
     // A swipe locks the note in the middle as it goes, the one it started on right away, rather than the

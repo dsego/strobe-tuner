@@ -61,6 +61,8 @@ Window :: struct {
 KEY_CODES :: [Key]string {
     .LEFT          = "ArrowLeft",
     .RIGHT         = "ArrowRight",
+    .UP            = "ArrowUp",
+    .DOWN          = "ArrowDown",
     .TAB           = "Tab",
     .SPACE         = "Space",
     .COMMA         = "Comma",
@@ -282,8 +284,8 @@ on_key :: proc(event: js.Event) {
     for code, key in codes {
         if code != event.key.code do continue
 
-        // Tab would move the focus off the canvas, Space would scroll
-        if key == .TAB || key == .SPACE do js.event_prevent_default()
+        // Tab would move the focus off the canvas, Space and the up and down arrows would scroll
+        if key == .TAB || key == .SPACE || key == .UP || key == .DOWN do js.event_prevent_default()
 
         if event.kind == .Key_Up {
             pointer.keys -= {key}

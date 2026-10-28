@@ -437,7 +437,7 @@ limit_frame_rate :: proc(app: ^App) {
         if band.snr_db > core.STROBE_FADE_SNR_DB[0] do signal = true
     }
     touched := gfx.mouse_down() || gfx.mouse_pressed() || gfx.mouse_wheel() != 0
-    sliding := note_ruler.swipe.gesture == .COASTING
+    sliding := note_ruler.swipe.gesture == .COASTING || note_ruler.roll != 0
     for sheet in all_sheets(&app.sheets) {
         if sheet.slide != slide_target(sheet^) do sliding = true
     }

@@ -61,6 +61,8 @@ PURPLE :: Color{200, 122, 255, 255}
 Key :: enum {
     LEFT,
     RIGHT,
+    UP,
+    DOWN,
     TAB,
     SPACE,
     COMMA,
