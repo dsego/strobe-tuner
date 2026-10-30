@@ -31,6 +31,9 @@ FPS :: #config(FPS, 60)
 PRINT_EVERY_MS :: #config(PRINT_EVERY_MS, 250)
 // e.g. -define:PITCH_STANDARD=443 to tune the notes to a hum or an instrument off 440
 PITCH_STANDARD :: f32(#config(PITCH_STANDARD, 440))
+// -define:SHOW_LEVELS=true prints each track's readout SNR, level and envelope in dBFS, and how long it fitted,
+// what the readout picks its track by, see core.strobe_readout_track
+SHOW_LEVELS :: #config(SHOW_LEVELS, false)
 
 LEAD_IN_S :: 2
 
@@ -162,6 +165,15 @@ main :: proc() {
                 fmt.tprintf("%.1f/s", stripes_per_s),
                 fmt.tprintf("±%.3f", jitter),
             )
+            when SHOW_LEVELS {
+                fmt.printf(
+                    " [%v %v %v %v]",
+                    fmt.tprintf("%.1fdB", band.snr_db),
+                    fmt.tprintf("%.0fdBFS", 20 * math.log10(max(band.amp, core.MIN_NOISE_FLOOR))),
+                    fmt.tprintf("env %.0f", 20 * math.log10(max(band.envelope, core.MIN_NOISE_FLOOR))),
+                    fmt.tprintf("%.2fs", band.rate_time_s),
+                )
+            }
         }
         fmt.println()
         jitter_squares = {}

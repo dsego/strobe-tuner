@@ -115,6 +115,7 @@ Detection :: struct {
     retuned:      bool,
     read:       bool, // a readout, none until a strobe track settled, like the app's
     cents:      f32, // the note's plus the readout
+    read_on:    f32, // the partial of the track the readout follows, 1 the fundamental
     tracks:     [len(INTERVALS)]Track,
 }
 
@@ -128,6 +129,7 @@ Run :: struct {
     // moment of the performance, the note's drift cancels moment by moment
     aligned_cents:  f32,
     unread:         int, // detections in the sustain lit without a readout
+    read_on:        [len(INTERVALS)]int, // detections in the sustain with a readout, per track it follows
     expected_note:  int,
     shown_note:     int, // the most common in the sustain
     wrong_note:     int, // detections in the sustain on another note, or none
@@ -321,6 +323,8 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, se
         note_counts[detection.note_cents] += 1
         if detection.read {
             append(&cents, fold_octave(detection.cents, expected_note))
+            intervals := INTERVALS
+            if index, found := slice.linear_search(intervals[:], detection.read_on); found do run.read_on[index] += 1
         } else {
             run.unread += 1
         }
@@ -593,6 +597,7 @@ play :: proc(recording: []f32, sample_rate: f32, pitch_standard: f32) -> (detect
             band := strobe.bands[readout_track]
             detection.read = true
             detection.cents = f32(note_target.target_note.cents) + band.err_cents
+            detection.read_on = band.interval
         }
         // Lit like sandbox/accuracy counts it, an instrument's partials are whole multiples
         fade := core.STROBE_FADE_SNR_DB
@@ -668,11 +673,11 @@ status_text :: proc(run: Run) -> string {
     return "ok half" if run.half_way > 0 else "ok"
 }
 
-// The tracks turning the wrong way and in how many detections, e.g. "4×110", "-" for none
-wrong_way_text :: proc(run: Run) -> string {
+// The tracks and in how many detections, e.g. "4x110", "-" for none
+tracks_text :: proc(counts: [len(INTERVALS)]int) -> string {
     builder := strings.builder_make(context.temp_allocator)
     intervals := INTERVALS
-    for count, index in run.wrong_way {
+    for count, index in counts {
         if count == 0 do continue
         if strings.builder_len(builder) > 0 do strings.write_byte(&builder, ' ')
         fmt.sbprintf(&builder, "%vx%v", intervals[index], count)
@@ -701,6 +706,8 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
                note, the readout hides past it and reads only one side of the drift there.
   unread       detections in the sustain lit without a readout, before a track settled or one more than
                half a semitone off, report only
+  read on      the tracks the readout followed and in how many detections, 1x300 is the fundamental's
+               300 times, a string's partials read a few cents apart
   shown/named  the note the tuner showed most, then the filename's note if they differ
   wrong note   detections in the sustain on another note or dark, out of all of them in the sustain,
                an octave down or two up count here too
@@ -721,29 +728,30 @@ should move by exactly the shift, however the player tuned. Worst runs first, c 
 `)
 
     // Plain ASCII, the padding counts bytes and a ¢ is two
-    rule := "+-----------------+----------+-----+---------+---------+------------+-------------+------------+------------+------------+-------+------------+---------+-------+----------+"
+    rule := "+-----------------+----------+-----+---------+---------+------------+------------------+-------------+------------+------------+------------+-------+------------+---------+-------+----------+"
     fmt.println()
     fmt.println(rule)
-    fmt.println("| file            | shift c  | A   | error c | aligned | unread     | shown/named | wrong note | half way   | octave up  | 1x dB | wrong way  | spread c| lit s |          |")
+    fmt.println("| file            | shift c  | A   | error c | aligned | unread     | read on          | shown/named | wrong note | half way   | octave up  | 1x dB | wrong way  | spread c| lit s |          |")
     fmt.println(rule)
     for run in sorted {
         note := note_name(run.shown_note)
         if run.shown_note != run.expected_note do note = fmt.tprintf("%v/%v", note, note_name(run.expected_note))
         fmt.printfln(
             // Odin pads a width on a float with zeros, they go in as text
-            "| %-15v | %8v | %3v | %7v | %7v | %10v | %-11v | %10v | %10v | %10v | %5v | %-10v | %7v | %5v | %-8v |",
+            "| %-15v | %8v | %3v | %7v | %7v | %10v | %-16v | %-11v | %10v | %10v | %10v | %5v | %-10v | %7v | %5v | %-8v |",
             os.stem(run.file),
             "original" if run.shift_cents == 0 else fmt.tprintf("%+.2f", run.shift_cents),
             fmt.tprintf("%.0f", run.pitch_standard),
             fmt.tprintf("%+.2f", run.error_cents),
             "-" if run.shift_cents == 0 else fmt.tprintf("%+.2f", run.aligned_cents),
             fmt.tprintf("%v/%v", run.unread, run.measured),
+            tracks_text(run.read_on),
             note,
             fmt.tprintf("%v/%v", run.wrong_note, run.measured),
             fmt.tprintf("%v/%v", run.half_way, run.measured),
             fmt.tprintf("%v/%v", run.octave, run.measured),
             fmt.tprintf("%.0f", run.fundamental_db),
-            wrong_way_text(run),
+            tracks_text(run.wrong_way),
             fmt.tprintf("%.1f", run.spread_cents),
             fmt.tprintf("%.1f", run.lit_s),
             status_text(run),
@@ -787,16 +795,17 @@ print_spectra :: proc(spectra: []Spectrum) {
 }
 
 print_csv :: proc(runs: []Run) {
-    fmt.println("file,shift_cents,pitch_standard,error_cents,aligned_cents,unread,expected_note,shown_note,wrong_note,half_way,octave,octave_louder,measured,fundamental_db,wrong_way,spread_cents,lit_s")
+    fmt.println("file,shift_cents,pitch_standard,error_cents,aligned_cents,unread,read_on,expected_note,shown_note,wrong_note,half_way,octave,octave_louder,measured,fundamental_db,wrong_way,spread_cents,lit_s")
     for run in runs {
         fmt.printfln(
-            "%v,%.3f,%.0f,%.3f,%.3f,%v,%v,%v,%v,%v,%v,%v,%v,%.1f,%v,%.2f,%.2f",
+            "%v,%.3f,%.0f,%.3f,%.3f,%v,%v,%v,%v,%v,%v,%v,%v,%v,%.1f,%v,%.2f,%.2f",
             run.file,
             run.shift_cents,
             run.pitch_standard,
             run.error_cents,
             run.aligned_cents,
             run.unread,
+            tracks_text(run.read_on),
             note_name(run.expected_note),
             note_name(run.shown_note),
             run.wrong_note,
@@ -805,7 +814,7 @@ print_csv :: proc(runs: []Run) {
             run.octave_louder,
             run.measured,
             run.fundamental_db,
-            wrong_way_text(run),
+            tracks_text(run.wrong_way),
             run.spread_cents,
             run.lit_s,
         )

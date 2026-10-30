@@ -17,21 +17,27 @@
 #+build !js
 package core
 
+import "core:math"
 import "core:testing"
 
 @(test)
 test_readout_track :: proc(t: ^testing.T) {
+    level :: proc(db: f32) -> f32 {
+        return math.pow(10, db / 20)
+    }
+
     self := init_strobe_lock_in(123.47, {1, 2, 4}, .HARMONIC)
     defer destroy_strobe_lock_in(self)
 
     set_strobe_lock_in_freq(self, 123.47, 440, 0.01, 2, .HARMONIC)
 
-    // Every track settled on the note, the fundamental under the 2nd harmonic but not by much
-    snrs := [?]f32{90, 95, 30}
+    // Every track settled on the note and clean, the fundamental far under the 2nd harmonic, a bass string's
+    levels_db := [?]f32{-60, -25, -90}
     for &band, index in self.bands {
         band.in_range = true
         band.rate_time_s = 1
-        band.snr_db = snrs[index]
+        band.snr_db, band.envelope_snr_db = 30, 30
+        band.envelope = level(levels_db[index])
     }
     track, ready := strobe_readout_track(self, -1)
     testing.expect_value(t, track, 0)
@@ -43,17 +49,38 @@ test_readout_track :: proc(t: ^testing.T) {
     testing.expect_value(t, track, 0)
     self.bands[2].onset = false
 
-    // The fundamental dies down under the 2nd harmonic still ringing, the readout goes on with that one
-    self.bands[0].snr_db = 70
+    // The fundamental dies down while the 2nd harmonic still rings, the readout goes on with that one
+    self.bands[0].snr_db, self.bands[0].envelope_snr_db = 10, 12
     track, ready = strobe_readout_track(self, track)
     testing.expect_value(t, track, 1)
     testing.expect(t, ready)
 
-    // A pluck on the loudest track picks again, the fundamental back up
-    self.bands[0].snr_db = 92
+    // It doesn't take the readout back as it comes up again, only a pluck picks again
+    self.bands[0].snr_db, self.bands[0].envelope_snr_db = 30, 30
+    track, _ = strobe_readout_track(self, track)
+    testing.expect_value(t, track, 1)
     self.bands[1].onset = true
     track, _ = strobe_readout_track(self, track)
     testing.expect_value(t, track, 0)
+    self.bands[1].onset = false
+
+    // A fundamental under its noise gives way to the loudest partial over it
+    self.bands[0].snr_db = 10
+    track, _ = strobe_readout_track(self, -1)
+    testing.expect_value(t, track, 1)
+
+    // After a retune the 2nd harmonic is readable first and takes the readout, the quieter fundamental still
+    // under the pluck's noise. Once its track settles it takes over.
+    self.available = 800
+    self.bands[0].rate_time_s = 0
+    track, ready = strobe_readout_track(self, -1)
+    testing.expect_value(t, track, 1)
+    testing.expect(t, ready)
+    self.bands[0].snr_db = 17
+    self.bands[0].rate_time_s = READOUT_SETTLE_S + 0.001
+    track, ready = strobe_readout_track(self, track)
+    testing.expect_value(t, track, 0)
+    testing.expect(t, ready)
 
     // A twelfth isn't an octave, it never reads out however loud
     set_strobe_lock_in_tracks(self, {1, 3}, {0, 0}, {1, 1})
@@ -61,7 +88,8 @@ test_readout_track :: proc(t: ^testing.T) {
     for &band, index in self.bands {
         band.in_range = true
         band.rate_time_s = 1
-        band.snr_db = 50 if index == 0 else 90
+        band.snr_db, band.envelope_snr_db = 30, 30
+        band.envelope = level(-30 if index == 0 else -10)
     }
     track, _ = strobe_readout_track(self, -1)
     testing.expect_value(t, track, 0)

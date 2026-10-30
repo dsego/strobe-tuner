@@ -188,6 +188,17 @@ Measured once a frame, a track more than half the frame rate off would alias, 30
 
 The strobe phase is rescaled so each note spins at the same rate per cent of detuning, and since it's a measured phase it can be multiplied by any factor, which is what the track speed, the fast toggle and the vernier mode are built on.
 
+#### Readout
+
+The cents readout and the trace follow one strobe track, the fundamental's. A string's partials are stretched, each a little sharper than a whole multiple of the fundamental, a few cents on a wound guitar string, so every track reads its own cents. The fundamental reads out whenever its stripes fully show, however far under its partials it is, and only while they don't does the loudest octave track that's fully lit take over, whose cents from its partial are the note's. Once a track has fitted for 50 ms after a pluck, the readout stays on it until the next pluck, so it doesn't hop between partials a few cents apart as their levels move. When its stripes fade, a track still fully lit takes it over, e.g. when a low string's fundamental dies down first. After the strobe moves to a new note, a low note's fundamental is the last track to clear the pluck's noise, a few tenths of a second after its 2nd partial took the readout: its track settling picks again, once, so a fundamental that comes back up after it faded doesn't take the readout back.
+
+Choosing by the levels instead, the fundamental only while it's less than 20 dB under the loudest partial, was dropped: a bass string's fundamental sits right about there, and a recording of one read its 2nd partial while the same recording played 23 cents lower read its fundamental, 4 cents away.
+
+Other ways to make one number of a note:
+- A pitch detector's cents: the period of the whole wave, pulled sharp by the stretched partials. Here the pitch detector only picks the note.
+- A blend of the partials' cents, close to the pitch the ear hears, which leans on the spacing of the partials where the fundamental is faint. It reads sharp of the fundamental on a stretched string and moves as the upper partials die away before it.
+- A partial the player picks, e.g. the 2× to tune octaves, with a fallback where it's missing. Not built.
+
 
 #### Ways to build a strobe
 

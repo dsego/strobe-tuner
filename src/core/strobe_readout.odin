@@ -20,55 +20,62 @@ import "core:math"
 
 // The readout follows a track this loud, where its stripes are fully there
 READOUT_MIN_SNR_DB :: STROBE_FADE_SNR_DB[1]
-READOUT_WEAK_FUNDAMENTAL_DB :: 20 // this far under the loudest partial the fundamental gives way to it
 // The track's own reading this far off its partial, as far as a note holds past halfway to the next one
 // (NOTE_HOLD_CENTS) and the tracks were measured to read, see sandbox/accuracy and sandbox/recordings. Further
 // out the readout has none.
 READOUT_RANGE_CENTS :: NOTE_HOLD_CENTS
 READOUT_SETTLE_S :: 0.05 // the track's fit since the pluck before the readout follows it
 
-// The track the readout follows, the fundamental. A weak or missing fundamental gives way to the loudest
-// partial. The partials read a few cents apart, so once its track is ready the readout stays on it and
-// keeps its last reading as it fades, until a pluck or another note starts the tracks over. Only a partial
-// still ringing this far over it takes the readout on, e.g. a low string's fundamental dies down first.
-// Only an octave track reads out, its cents from its partial are the note's. -1 for none.
+// The track the readout follows, the fundamental's while it's clean enough to read, over READOUT_MIN_SNR_DB,
+// however far under its partials. Otherwise the loudest octave partial's that is. The partials read a few cents
+// apart, so once its track is ready the readout stays on it and keeps its last reading as it fades, until a pluck
+// or another note starts the tracks over. Only a track still fully lit takes the readout on when the held one's
+// stripes fade, e.g. a low string's fundamental dies down first. Only an octave track reads out, its cents from
+// its partial are the note's. -1 for none.
 //
 // ready once its track has fitted a little since the pluck, until then the readout is the pitch detection's.
 strobe_readout_track :: proc(self: ^StrobeLockIn, current: int) -> (track: int, ready: bool) {
     settled :: proc(band: PhaseBand) -> bool {
         return band.rate_time_s >= READOUT_SETTLE_S
     }
+    // Settled in this frame's samples
+    just_settled :: proc(self: ^StrobeLockIn, band: PhaseBand) -> bool {
+        return settled(band) && band.rate_time_s - f32(self.available) / self.sample_rate < READOUT_SETTLE_S
+    }
 
-    // A pluck lifts the loudest partial, a faint one's level wobbling isn't one
+    // A pluck lifts the loudest partial, a faint one's level wobbling isn't one. The fundamental's track settling
+    // picks again too, it wasn't there to pick yet: after a retune the noise between the partials still has the
+    // pluck in it, and a low note's fundamental, quieter than its 2nd partial, clears it a few tenths of a second
+    // later. Only then, so a fundamental that fades never takes the readout back.
     loudest, fundamental := readout_candidates(self)
-    plucked := loudest >= 0 && self.bands[loudest].onset
+    pick_again := loudest >= 0 && self.bands[loudest].onset
+    pick_again ||= fundamental >= 0 && just_settled(self, self.bands[fundamental])
 
-    // Held, unless a pluck brings another track to pick or the held one fades under a ringing partial
+    // Held, unless a pluck brings another track to pick or the held one's stripes fade while another's are lit. By
+    // the envelope like the stripes, a beating partial's dip doesn't hand the readout on.
     held := current >= 0 && current < len(self.bands) && measures_band(self, current) && settled(self.bands[current])
-    if held && !plucked {
-        faded := loudest >= 0 && self.bands[loudest].snr_db - self.bands[current].snr_db >= READOUT_WEAK_FUNDAMENTAL_DB
-        if !faded do return current, true
+    if held && !pick_again {
+        faded := self.bands[current].envelope_snr_db < READOUT_MIN_SNR_DB
+        if !faded || loudest < 0 do return current, true
 
         return loudest, settled(self.bands[loudest])
     }
 
     if loudest < 0 do return -1, false
 
-    track = loudest
-    if fundamental >= 0 && self.bands[loudest].snr_db - self.bands[fundamental].snr_db < READOUT_WEAK_FUNDAMENTAL_DB {
-        track = fundamental
-    }
+    track = fundamental if fundamental >= 0 else loudest
     return track, settled(self.bands[track])
 }
 
-// The loudest track the readout can follow and the fundamental's, -1 for none
+// The loudest track the readout can follow and the fundamental's, -1 for none. The loudest by level at the
+// envelope, not by SNR, each track's is over its own band's noise.
 readout_candidates :: proc(self: ^StrobeLockIn) -> (loudest, fundamental: int) {
     loudest, fundamental = -1, -1
     for band, index in self.bands {
         if !measures_band(self, index) || !is_octave_track(band) do continue
         if !hears_note(band, self.band_cents) || band.snr_db < READOUT_MIN_SNR_DB do continue
 
-        if loudest < 0 || band.snr_db > self.bands[loudest].snr_db do loudest = index
+        if loudest < 0 || band.envelope > self.bands[loudest].envelope do loudest = index
         if band.interval == 1 do fundamental = index
     }
     return
