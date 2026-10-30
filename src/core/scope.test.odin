@@ -483,6 +483,62 @@ test_scope_autoset :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_scope_scale_over_a_move :: proc(t: ^testing.T) {
+    // A note set the scale, then decays: the strobe moving up an octave keeps it, the tail shrinks on
+    FREQ :: 220.0
+
+    scope := scope_test_init(FREQ)
+    defer destroy_scope(&scope)
+    scope.persistence_s = 18 / FREQ
+    scope.average_sweeps = true
+
+    play :: proc(scope: ^Scope, freq_hz: f64, amp: f32, frames: int) {
+        samples: [SCOPE_TEST_FRAME]f32
+        for _ in 0 ..< frames {
+            scope_test_sine(samples[:], freq_hz, scope.sample_clock)
+            for &sample in samples do sample *= amp
+
+            audio_capture_write(scope, samples[:])
+            update_scope(scope)
+        }
+    }
+
+    play(&scope, FREQ, 1, 30)
+    testing.expect(t, !scope_autosetting(&scope))
+    set_scope_freq(&scope, 2 * FREQ, autoset = false)
+    play(&scope, FREQ, 0.1, 30)
+    testing.expectf(t, abs(scope.level - 1) < 0.01, "an octave on: level %v", scope.level)
+
+    // Set again, and the strobe moving while it's set starts it over at the new frequency
+    autoset_scope(&scope)
+    testing.expect(t, scope_autosetting(&scope))
+    set_scope_freq(&scope, FREQ, autoset = scope_autosetting(&scope))
+    play(&scope, FREQ, 0.1, 30)
+    testing.expectf(t, abs(scope.level - 0.1) < 0.01, "set again: level %v", scope.level)
+}
+
+@(test)
+test_input_attack :: proc(t: ^testing.T) {
+    FRAME_S :: 1.0 / 60
+    attack: InputAttack
+
+    // A pluck, then its decay and a level holding: one attack
+    testing.expect(t, input_attack(&attack, 1, true, FRAME_S))
+    attacks := 0
+    for frame in 0 ..< 120 {
+        if input_attack(&attack, math.pow(0.97, f32(frame)), true, FRAME_S) do attacks += 1
+    }
+    testing.expect_value(t, attacks, 0)
+
+    // Another pluck over the tail
+    testing.expect(t, input_attack(&attack, 1, true, FRAME_S))
+
+    // Noise jumping isn't one
+    attack = {}
+    testing.expect(t, !input_attack(&attack, 1, false, FRAME_S))
+}
+
+@(test)
 test_scope_uniform_gain :: proc(t: ^testing.T) {
     // Half a second of a note and half a second of it 20 dB quieter, uniform: the quieter part is as tall,
     // with no pluck to set the scale again. Under the noise's floor it stays small.

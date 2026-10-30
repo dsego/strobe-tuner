@@ -36,6 +36,12 @@ Measurement :: struct {
     readout_track:  int, // the strobe track the readout follows, see core.strobe_readout_track
     held_readout:   HeldReadout, // the last one shown while the note was lit, see measure
     traced_track:   int, // the track the readout followed, the trace stays on it while its stripes show
+
+    // What sets the scope's scale again, see feed_scope: an attack on the input, or a note lit from silence
+    input_attack:   core.InputAttack,
+    attacked:       bool,
+    was_active:     bool, // the note target's last frame
+    note_lit:       bool,
 }
 
 // This frame's measurements, for the main screen
@@ -95,6 +101,7 @@ reset_measurement :: proc(measurement: ^Measurement) {
     core.reset_scope(&measurement.scope)
     measurement.readout_track, measurement.traced_track = -1, -1
     measurement.held_readout = {}
+    measurement.input_attack = {}
 }
 
 // The windows and filters sized for the input's sample rate
@@ -119,6 +126,13 @@ measure :: proc(app: ^App) -> (reading: Reading) {
         retune(measurement, app.config)
         ready = false
     }
+
+    // What sets the scope's scale again, see feed_scope: an attack on the input, its level clear of the noise
+    // like a track's onset, or the note lit from silence, a swell or a bow easing in has no attack
+    loud := reading.pitch.snr_db > core.NOISE_FLOOR_SNR_DB_THRESHOLD
+    measurement.attacked = core.input_attack(&measurement.input_attack, reading.pitch.rms, loud, gfx.frame_time())
+    measurement.note_lit = note_target.active && !measurement.was_active
+    measurement.was_active = note_target.active
 
     out_of_range := core.out_of_range(note_target)
     reading.steady = core.readout_pitch(note_target)
@@ -197,9 +211,15 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
     }
 
     // At the strobe's frequency, not the target note's: that one jumps an octave with the detection while
-    // the strobe stays, and every change starts with a dark screen
+    // the strobe stays, and every change starts with a dark screen. The scale stays, a note that starts comes
+    // with an attack: a dying low note's strobe hands over to its 2nd partial an octave up, and as a new note
+    // its weak tail was set to the full height again. Still being set, it starts over at the new frequency, the
+    // average it was following is gone. The first one sets it.
     strobe_hz := f64(measurement.strobe_lock_in.base_freq_hz)
-    if scope.freq_hz != strobe_hz do core.set_scope_freq(scope, strobe_hz)
+    if scope.freq_hz != strobe_hz {
+        autoset := scope.freq_hz == 0 || core.scope_autosetting(scope)
+        core.set_scope_freq(scope, strobe_hz, autoset = autoset)
+    }
 
     // The lamp is the screen from above, it needs the sweep over time, and so do the tracks it turns
     sweep := config.scope_sweep if config.strobe_display_type == .SCOPE else .TIME
@@ -225,13 +245,9 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
         core.autoset_scope(scope)
     }
 
-    // A pluck sets the scope's scale again
-    for band in measurement.strobe_lock_in.bands {
-        if band.onset && band.in_range {
-            core.autoset_scope(scope)
-            break
-        }
-    }
+    // An attack on the input or a note lit from silence sets the scope's scale again, see measure. Not the
+    // tracks' onsets: they start over as the strobe moves, and a violin's partials swing with its vibrato.
+    if measurement.attacked || measurement.note_lit do core.autoset_scope(scope)
 
     // The lamp and its tracks take the wave as it comes. Turned on or off, the average starts over: the sweeps
     // in it went through the low-pass or didn't, and are placed by its delay or not, the next ones stepped

@@ -241,8 +241,9 @@ destroy_scope :: proc(self: ^Scope) {
     for &dft in self.noise_dfts do destroy_dft(&dft)
 }
 
-// Starts with a dark screen at the new reference frequency
-set_scope_freq :: proc(self: ^Scope, freq_hz: f64) {
+// Starts with a dark screen at the new reference frequency, and with autoset on a scale set again, see
+// autoset_scope
+set_scope_freq :: proc(self: ^Scope, freq_hz: f64, autoset := true) {
     self.freq_hz = freq_hz
     self.step = freq_hz / (f64(self.sample_rate) * SCOPE_PERIODS)
 
@@ -253,17 +254,43 @@ set_scope_freq :: proc(self: ^Scope, freq_hz: f64) {
     self.average_bins = clamp(int(1 / self.step) if self.step > 0 else 1, SCOPE_CURVE_SAMPLES + 1, SCOPE_SWEEP_MAX_SAMPLES)
 
     clear_scope(self)
-    autoset_scope(self)
+    if autoset do autoset_scope(self)
 }
 
-// A note started, a pluck or another note: the averaged scope's scale follows the average's peak for
-// SCOPE_AUTOSET_PERIODS and is then held like an oscilloscope's after its Autoset, until the next one. The
+// A note started, an attack or a note lit from silence: the averaged scope's scale follows the average's peak
+// for SCOPE_AUTOSET_PERIODS and is then held like an oscilloscope's after its Autoset, until the next one. The
 // note decays on the screen and shrinks into the noise, nothing scales its weak tail up. The click of the
 // pluck is short and doesn't repeat, by the window's end the average has let go of it.
 autoset_scope :: proc(self: ^Scope) {
     if self.freq_hz <= 0 do return
 
     self.autoset_samples = i64(SCOPE_AUTOSET_PERIODS / self.freq_hz * f64(self.sample_rate))
+}
+
+// The scale is still being set, see autoset_scope
+scope_autosetting :: proc(self: ^Scope) -> bool {
+    return self.autoset_samples > 0
+}
+
+// An attack on the whole input, its level jumping ONSET_RATIO over its envelope like a track's onset, see
+// update_onset: a pluck, a tongued note, a bow's bite. The input never starts over like the strobe's tracks
+// when the strobe moves to another note, their first loud frame is them catching up with a note already
+// ringing. Nor does it move with a dying note's strobe handing over to its 2nd partial an octave up.
+InputAttack :: struct {
+    envelope: f32,
+}
+
+// Whether level, the input's RMS dt seconds after the last one, jumped over it lately. loud is a level clear of
+// the noise, the noise's own swings aren't attacks.
+input_attack :: proc(self: ^InputAttack, level: f32, loud: bool, dt: f32) -> bool {
+    if loud && level > ONSET_RATIO * self.envelope {
+        self.envelope = level
+        return true
+    }
+
+    alpha := 1 - math.exp(-dt / ONSET_ENVELOPE_TIME_S)
+    self.envelope += alpha * (level - self.envelope)
+    return false
 }
 
 // The input opened at another rate, the beam moves across by its samples. It starts over on a dark screen,

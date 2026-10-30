@@ -91,7 +91,7 @@ SPECTRUM_WINDOW_STEPS :: [3]f32{1, 2, 4}
 
 // The scope's height, see core.autoset_scope
 ScopeGain :: enum {
-    AUTOSET, // set by every new note and held, the note decays and shrinks into the noise
+    AUTOSET, // set by every attack and note lit from silence and held, the note decays and shrinks into the noise
     UNIFORM, // every sweep as loud, a tremolo or a decaying note stays the same size until the noise
 }
 
