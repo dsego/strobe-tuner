@@ -32,11 +32,11 @@ SEGMENT_WIDTH :: 60
 // The rows in gui_settings, one more with the In-tune tap on a phone. The display's options page is at least
 // as tall, see DISPLAY_OPTION_ROWS.
 settings_rows :: proc() -> int {
-    return 6 if gfx.has_haptics() else 5
+    return 7 if gfx.has_haptics() else 6
 }
 
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
-DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 7, .SCOPE = 4, .TRACE = 2, .NEEDLE = 2, .LAMP = 2, .SPECTRUM = 4}
+DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 6, .SCOPE = 4, .TRACE = 2, .NEEDLE = 2, .LAMP = 2, .SPECTRUM = 4}
 
 // For the longer labels of the display's options
 WIDE_SEGMENT_WIDTH :: 80
@@ -140,6 +140,13 @@ gui_settings :: proc(
     close = draw_sheet_header(sheet_layout, "Settings", VERSION)
     row := 0
     if gui_concert_a_row(sheet_layout, &row, config) do changed = true
+
+    // How long every cents number averages, the same fit on every display: the readout, the tracks' cents, the
+    // needle, the trace and the In-tune tap. The longer evens out a voice's vibrato into its mean pitch, a
+    // turned peg shows later on the numbers while the stripes move at once.
+    if gui_steps(sheet_layout, &row, "Readout speed", {"0.15 s", "0.4 s"}, &config.readout_fit_s, READOUT_FIT_STEPS_S) {
+        changed = true
+    }
 
     display_rect := gui_display_row(sheet_layout, &row, display_options)
 
@@ -318,13 +325,6 @@ gui_strobe_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -
 
     // 200% spins twice as fast per cent, for the final adjustment
     if gui_settings_segmented(sheet_layout, &row, "Spin rate", {"100%", "200%"}, &config.strobe_fast, WIDE_SEGMENT_WIDTH) {
-        changed = true
-    }
-
-    // How long every cents number averages, the readout under the strobe and the labels on the tracks are the
-    // same fit. The longer evens out a voice's vibrato into its mean pitch, a turned peg shows later on the
-    // numbers while the stripes move at once.
-    if gui_steps(sheet_layout, &row, "Readout speed", {"0.15 s", "0.4 s"}, &config.readout_fit_s, READOUT_FIT_STEPS_S) {
         changed = true
     }
 
