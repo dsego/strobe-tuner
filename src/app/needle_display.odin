@@ -94,8 +94,11 @@ NeedleLine :: struct {
 // tape is a neutral gray on whole pixels, it stays
 // out of the needle's way. Sharp with the retro glow too, it's the strobe's lamp and the scope's phosphor: a
 // bloom softened the point wide notches, and a lamp behind the tape didn't look like anything.
+// Edge to edge like the other views, the view is the one note: its ends at 50 cents are halfway to the next
+// notes. Their notches only in from the edges enough for a marker pinned there to keep its triangles whole, the
+// labels held inside them.
 draw_needle_display :: proc(self: ^NeedleDisplay, rect: gfx.Rect, lock_in: ^core.StrobeLockIn, config: ^Config) {
-    MARGIN :: 32 // either side, the end labels fit
+    MARGIN :: MARKER_POINTER_WIDTH / 2
 
     line_color, background := gfx.hex(strobe_colors(config).x), gfx.hex(strobe_bg_color)
 
@@ -109,12 +112,12 @@ draw_needle_display :: proc(self: ^NeedleDisplay, rect: gfx.Rect, lock_in: ^core
 
     gfx.begin_scissor(rect)
     draw_needle_glows(tape, lines, line_color)
-    draw_needle_tape(tape)
+    draw_needle_tape(tape, rect)
     draw_needle_lines(tape, lines, line_color)
     gfx.end_scissor()
 
-    draw_needle_labels(tape)
-    if partials do draw_needle_partial_labels(tape, lock_in, lines, config.needle_labels)
+    draw_needle_labels(tape, rect)
+    if partials do draw_needle_partial_labels(tape, rect, lock_in, lines, config.needle_labels)
 }
 
 // The readout's marker, or with the partials every track as it is, each as lit as its stripes: the fundamental's
@@ -179,12 +182,12 @@ draw_needle_lines :: proc(tape: gfx.Rect, lines: []NeedleLine, color: gfx.Color)
     }
 }
 
-// The notches and the lines they stand on and hang from
-draw_needle_tape :: proc(tape: gfx.Rect) {
+// The notches and the lines they stand on and hang from, the lines across the whole view
+draw_needle_tape :: proc(tape, view: gfx.Rect) {
     draw_needle_notches(tape)
 
-    draw_crisp_rect({tape.x, tape.y - 1}, {tape.width, 2}, text_color_muted)
-    draw_crisp_rect({tape.x, tape.y + tape.height - 1}, {tape.width, 2}, text_color_muted)
+    draw_crisp_rect({view.x, tape.y - 1}, {view.width, 2}, text_color_muted)
+    draw_crisp_rect({view.x, tape.y + tape.height - 1}, {view.width, 2}, text_color_muted)
 }
 
 // The labelled notches long and the rest short, up from the bottom line and down from the top one, all in the
@@ -274,7 +277,7 @@ track_light :: proc(band: core.PhaseBand) -> f32 {
 }
 
 // The labelled notches' cents under the line they stand on, in the trace's font and the notches' gray
-draw_needle_labels :: proc(tape: gfx.Rect) {
+draw_needle_labels :: proc(tape, view: gfx.Rect) {
     GAP :: 0.8 * MARKER_POINTER_WIDTH + 6
     font := pixel_fonts.band_label
     y := tape.y + tape.height + GAP
@@ -284,15 +287,23 @@ draw_needle_labels :: proc(tape: gfx.Rect) {
 
             text: cstring = "0" if cents == 0 else fmt.ctprintf("%+.0f", side * cents)
             width := measure_label(font, text).x
-            draw_label(font, text, snap_to_pixels({needle_x(tape, side * cents) - width / 2, y}), text_color_muted)
+            left := needle_label_left(view, needle_x(tape, side * cents), width)
+            draw_label(font, text, snap_to_pixels({left, y}), text_color_muted)
         }
     }
 }
 
+// A label's left edge centered on x, held inside the view's edges
+needle_label_left :: proc(view: gfx.Rect, x, width: f32) -> f32 {
+    EDGE :: 4
+    return clamp(x - width / 2, view.x + EDGE, view.x + view.width - width - EDGE)
+}
+
 // Each line's label over it, its partial, frequency or note in the cyan of the strobe's track labels, as lit as
 // the line. Each in a row of its own so none overlap, the same row however the others come and go: the
-// fundamental's right over the triangles on the tape, the others' up from it in the tracks' order.
-draw_needle_partial_labels :: proc(tape: gfx.Rect, lock_in: ^core.StrobeLockIn, lines: []NeedleLine, type: PartialLabelType) {
+// fundamental's right over the triangles on the tape, the others' up from it in the tracks' order. Held inside the
+// view's edges like the tape's labels.
+draw_needle_partial_labels :: proc(tape, view: gfx.Rect, lock_in: ^core.StrobeLockIn, lines: []NeedleLine, type: PartialLabelType) {
     GAP :: 0.8 * MARKER_POINTER_WIDTH + 6
     ROW_GAP :: 2
     if type == .NONE do return
@@ -315,6 +326,7 @@ draw_needle_partial_labels :: proc(tape: gfx.Rect, lock_in: ^core.StrobeLockIn, 
         size := measure_label(font, text)
         bottom := tape.y - GAP - f32(rows[line.track]) * row_height
         color := with_alpha(accent_color, f32(accent_color.a) * line.light)
-        draw_label(font, text, snap_to_pixels({needle_x(tape, line.cents) - size.x / 2, bottom - size.y}), color)
+        left := needle_label_left(view, needle_x(tape, line.cents), size.x)
+        draw_label(font, text, snap_to_pixels({left, bottom - size.y}), color)
     }
 }

@@ -123,6 +123,7 @@ gui_display_button :: proc(pos: [2]f32, type: ^StrobeDisplayType, open: ^bool) {
     // Its left edge on the touch area's, a dropdown button's height around the label
     anchor := gfx.Rect{touch.x, pos.y - DROPDOWN_OPTION_HEIGHT / 2, MENU_WIDTH, DROPDOWN_OPTION_HEIGHT}
     menu := dropdown_menu_rect(anchor, len(StrobeDisplayType), nil, true)
+    was_open := open^
     open^ = dropdown_press(open^, touch, menu, true)
     if !open^ do return
 
@@ -130,7 +131,8 @@ gui_display_button :: proc(pos: [2]f32, type: ^StrobeDisplayType, open: ^bool) {
     options: [len(StrobeDisplayType)]GuiOption
     for name, display in names do options[int(display)] = {i32(display), string(name)}
 
-    if picked, was_picked := draw_dropdown_menu(menu, options[:], nil); was_picked {
+    // The press that opened it is the button's, the touch area reaches over the first option
+    if picked, was_picked := draw_dropdown_menu(menu, options[:], nil); was_picked && was_open {
         type^ = StrobeDisplayType(picked)
         open^ = false
         gui.menu_open = false
