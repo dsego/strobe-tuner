@@ -68,6 +68,8 @@ Displays :: struct {
     // The arrows on the strobe, see draw_tuning_arrows
     flat_arrow:   bool,
     sharp_arrow:  bool,
+
+    menu_open:    bool, // the displays' menu over the strobe, see gui_display_button
 }
 
 

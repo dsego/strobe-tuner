@@ -39,11 +39,6 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu: Menu
         app.measurement.note_target.active,
     )
 
-    // The displays in a cycle, the number keys go straight to one
-    if gui_display_button(layout.display, config.strobe_display_type) {
-        config.strobe_display_type = next_display(config.strobe_display_type)
-    }
-
     // Opens on the settings, not the display's options it was closed on
     if gui_settings_button(layout.settings) do open_settings_sheet(&app.sheets)
 
@@ -81,6 +76,10 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu: Menu
         app.input.stats_age = INPUT_STATS_HOLD_S
         app.input.refresh = true
     }
+
+    // A menu of the displays, last so it opens over the controls under it. Tab goes through them and the number
+    // keys straight to one.
+    gui_display_button(layout.display, &config.strobe_display_type, &app.displays.menu_open)
 
     when DEBUG_STATS do draw_debug_stats(app, layout, reading.pitch, meter)
 }

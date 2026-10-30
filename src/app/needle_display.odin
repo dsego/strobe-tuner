@@ -24,8 +24,9 @@ import "../gfx"
 
 // The readout's cents as a marker over a tape, one of the display types. A meter's needle laid flat: in tune in
 // the middle, flat to the left, sharp to the right. The tape is spread out near the note and squeezed further
-// out, the last cents to in tune are the widest. Tapped, it shows every track as it is instead, each partial at
-// its own cents, the fundamental's the thick one: a string's upper partials stand a few cents sharp of it.
+// out, the last cents to in tune are the widest. It shows every track as it is, each partial at its own cents,
+// the fundamental's the marker: a string's upper partials stand a few cents sharp of it. Tapped, only the
+// readout's marker stays.
 
 NEEDLE_RANGE_CENTS :: 50 // the tape's ends, further pins the marker there
 
@@ -34,14 +35,16 @@ NEEDLE_RANGE_CENTS :: 50 // the tape's ends, further pins the marker there
 // -define:NEEDLE_SPREAD_CENTS=n to try another.
 NEEDLE_SPREAD_CENTS :: f32(#config(NEEDLE_SPREAD_CENTS, 2.5))
 
-// A notch every step out to that many cents, closer notches where the tape is spread out
+// A notch every step out to that many cents, closer notches where the tape is spread out. Each step ends where
+// its notches would crowd, the tape squeezes as it goes out: half cents out to 5 were 11 points apart next to
+// in tune and 4 near 5, a comb, about as even from 5 to 11 points on a phone as these are.
 NeedleNotches :: struct {
     out_to, step: f32,
 }
-NEEDLE_NOTCHES :: [?]NeedleNotches{{5, 0.5}, {10, 1}, {20, 2}, {NEEDLE_RANGE_CENTS, 5}}
+NEEDLE_NOTCHES :: [?]NeedleNotches{{2, 0.5}, {10, 1}, {20, 2}, {NEEDLE_RANGE_CENTS, 5}}
 
-// Labelled and the tallest notches, either side
-NEEDLE_LABELS :: [?]f32{0, 5, 10, 20, NEEDLE_RANGE_CENTS}
+// Labelled and the tallest notches, either side. The cent either side of in tune is the In-tune tap's.
+NEEDLE_LABELS :: [?]f32{0, 1, 5, 10, 20, NEEDLE_RANGE_CENTS}
 
 // The marker's glow, as wide and at its middle as opaque
 NEEDLE_GLOW_WIDTH :: #config(NEEDLE_GLOW_WIDTH, 22)
@@ -51,10 +54,24 @@ NEEDLE_GLOW_ALPHA :: #config(NEEDLE_GLOW_ALPHA, 150)
 MARKER_POINTER_WIDTH :: 10
 PARTIAL_POINTER_WIDTH :: 7
 
-// The marker's, the readout's track: NaN without one, and as lit as its stripes, see measure
+// How lit a line stays once its stripes are gone, at the last reading they showed, like the readout's gray
+// number. Until the track reads again after a pluck, another note clears it.
+NEEDLE_HELD_LIGHT :: 0.3
+
 NeedleDisplay :: struct {
-    cents: f32,
-    light: f32,
+    // The readout's track: NaN without one, and as lit as its stripes, see measure
+    cents:  f32,
+    light:  f32,
+
+    // The last readings shown, the readout's and each track's, see needle_lines
+    marker: HeldNeedle,
+    tracks: [core.MAX_BANDS]HeldNeedle,
+}
+
+HeldNeedle :: struct {
+    cents:   f32,
+    freq_hz: f32, // the strobe's or the track's then, another note's tracks start over
+    shown:   bool,
 }
 
 // A line on the tape, the marker's or a partial's
@@ -62,6 +79,7 @@ NeedleLine :: struct {
     cents:  f32,
     light:  f32,
     marker: bool, // in a glow, the readout's or the fundamental's
+    track:  int, // its label's, -1 for the readout's marker
 }
 
 // The tape across the middle of the view, its notches standing on a line with the labels under it. The needle is
@@ -105,33 +123,40 @@ draw_needle_display :: proc(
     }
 
     draw_needle_labels(tape)
-    if partials do draw_needle_partial_labels(tape, lock_in, config.needle_labels, line_color)
+    if partials do draw_needle_partial_labels(tape, lock_in, lines, config.needle_labels)
 }
 
 // The readout's marker, or with the partials every track as it is, each as lit as its stripes: the fundamental's
 // the marker, last so it's over the others. A weak fundamental fades out where it is, the marker doesn't move
-// over to the partial the readout follows instead. Until the end of the frame.
+// over to the partial the readout follows instead. Faded, each stays at NEEDLE_HELD_LIGHT where it last read.
+// Until the end of the frame.
 needle_lines :: proc(self: ^NeedleDisplay, lock_in: ^core.StrobeLockIn, partials: bool) -> []NeedleLine {
     lines := make([dynamic]NeedleLine, context.temp_allocator)
     if !partials {
-        if !math.is_nan(self.cents) do append(&lines, NeedleLine{self.cents, self.light, true})
+        marker := &self.marker
+        if !math.is_nan(self.cents) {
+            marker^ = {self.cents, lock_in.base_freq_hz, true}
+            append(&lines, NeedleLine{self.cents, max(self.light, NEEDLE_HELD_LIGHT), true, -1})
+        } else if marker.shown && marker.freq_hz == lock_in.base_freq_hz {
+            append(&lines, NeedleLine{marker.cents, NEEDLE_HELD_LIGHT, true, -1})
+        } else {
+            marker^ = {}
+        }
         return lines[:]
     }
 
-    fundamental := -1
+    fundamental: Maybe(NeedleLine)
     for band, index in lock_in.bands {
-        if !shows_partial(lock_in, index) do continue
+        line, shown := track_needle_line(&self.tracks[index], lock_in, index)
+        if !shown do continue
 
         if band.interval == 1 {
-            fundamental = index
+            fundamental = line
         } else {
-            append(&lines, NeedleLine{band.err_cents, track_light(band), false})
+            append(&lines, line)
         }
     }
-    if fundamental >= 0 {
-        band := lock_in.bands[fundamental]
-        append(&lines, NeedleLine{band.err_cents, track_light(band), true})
-    }
+    if line, shown := fundamental.?; shown do append(&lines, line)
     return lines[:]
 }
 
@@ -167,13 +192,11 @@ draw_needle_lines :: proc(tape: gfx.Rect, lines: []NeedleLine, color: gfx.Color)
 draw_needle_tape :: proc(tape: gfx.Rect) {
     draw_needle_notches(tape)
 
-    rule := text_color_muted
-    rule.a = 160
-    draw_crisp_rect({tape.x, tape.y + tape.height - 1}, {tape.width, 2}, rule)
+    draw_crisp_rect({tape.x, tape.y + tape.height - 1}, {tape.width, 2}, text_color_muted)
 }
 
-// The labelled notches the tallest, the whole cents near in tune taller than the rest, gray like the ruler's
-// other notes
+// The labelled notches the tallest, the whole cents near in tune taller than the rest and the fine ones short, all
+// in the gray of the ruler's other notes
 draw_needle_notches :: proc(tape: gfx.Rect) {
     baseline := tape.y + tape.height
     labels := NEEDLE_LABELS
@@ -187,17 +210,15 @@ draw_needle_notches :: proc(tape: gfx.Rect) {
             for label in labels do labelled ||= abs(cents - label) < 0.01
             whole := abs(cents - math.round(cents)) < 0.01
 
-            height, alpha: f32 = 0.2 * tape.height, 110
-            if whole && cents < 5 do height, alpha = 0.35 * tape.height, 170
-            if labelled do height, alpha = 0.55 * tape.height, 255
+            height := 0.12 * tape.height
+            if whole && cents < 5 do height = 0.3 * tape.height
+            if labelled do height = 0.55 * tape.height
 
-            notch := text_color_muted
-            notch.a = u8(alpha)
             for side in ([2]f32{-1, 1}) {
                 if cents == 0 && side < 0 do continue
 
                 x := needle_x(tape, side * cents)
-                draw_crisp_rect({x - 0.5, baseline - height}, {1, height}, notch)
+                draw_crisp_rect({x - 0.5, baseline - height}, {1, height}, text_color_muted)
             }
         }
         previous = notches.out_to
@@ -236,13 +257,30 @@ with_alpha :: proc(color: gfx.Color, alpha: f32) -> gfx.Color {
     return {color.r, color.g, color.b, u8(clamp(alpha, 0, 255))}
 }
 
-// A track with a reading of its own on the tape: one that fitted since the pluck like the readout's, a track
-// that never did reads 0 without having measured anything
-shows_partial :: proc(lock_in: ^core.StrobeLockIn, index: int) -> bool {
+// The track's line as it reads, or where it last read while it starts over after a pluck, held as the track's
+// last reading. Gone on another note.
+track_needle_line :: proc(held: ^HeldNeedle, lock_in: ^core.StrobeLockIn, index: int) -> (line: NeedleLine, shown: bool) {
+    band := lock_in.bands[index]
+    fundamental := band.interval == 1
+    if reads_partial(lock_in, index) {
+        held^ = {band.err_cents, band.freq_hz, true}
+        return {band.err_cents, max(track_light(band), NEEDLE_HELD_LIGHT), fundamental, index}, true
+    }
+    if held.shown && held.freq_hz == band.freq_hz && core.measures_band(lock_in, index) {
+        return {held.cents, NEEDLE_HELD_LIGHT, fundamental, index}, true
+    }
+
+    held^ = {}
+    return
+}
+
+// A track with a reading of its own: one that fitted since the pluck like the readout's, a track that never did
+// reads 0 without having measured anything. A dark track's cents stay where its stripes last fully showed.
+reads_partial :: proc(lock_in: ^core.StrobeLockIn, index: int) -> bool {
     band := lock_in.bands[index]
     if !core.measures_band(lock_in, index) || !band.in_range || band.rate_time_s < core.READOUT_SETTLE_S do return false
 
-    return abs(band.err_cents) <= core.READOUT_RANGE_CENTS && track_light(band) > 0
+    return abs(band.err_cents) <= core.READOUT_RANGE_CENTS
 }
 
 // As lit as the track's stripes, see core.STROBE_FADE_SNR_DB
@@ -267,29 +305,32 @@ draw_needle_labels :: proc(tape: gfx.Rect) {
     }
 }
 
-// Each track's label over its line, its partial, frequency or note like the strobe's, in their color and as lit
-// as it. Each in a row of its own so none overlap, the same row however the others come and go: the fundamental's
-// right over the tape, the others' up from it in the tracks' order.
-draw_needle_partial_labels :: proc(tape: gfx.Rect, lock_in: ^core.StrobeLockIn, type: PartialLabelType, line_color: gfx.Color) {
+// Each line's label over it, its partial, frequency or note in the cyan of the strobe's track labels, as lit as
+// the line. Each in a row of its own so none overlap, the same row however the others come and go: the
+// fundamental's right over the tape, the others' up from it in the tracks' order.
+draw_needle_partial_labels :: proc(tape: gfx.Rect, lock_in: ^core.StrobeLockIn, lines: []NeedleLine, type: PartialLabelType) {
     GAP :: 6
     ROW_GAP :: 2
     if type == .NONE do return
 
-    row_height := pixel_fonts.band_label.size + ROW_GAP
-    others := 0 // the tracks up to this one that aren't the fundamental
+    // The tracks up to each one that aren't the fundamental
+    rows: [core.MAX_BANDS]int
+    others := 0
     for band, index in lock_in.bands {
-        row := 0
-        if band.interval != 1 {
-            others += 1
-            row = others
-        }
-        if !shows_partial(lock_in, index) do continue
+        if band.interval == 1 do continue
 
-        text, font := partial_label(type, band)
+        others += 1
+        rows[index] = others
+    }
+
+    row_height := pixel_fonts.band_label.size + ROW_GAP
+    for line in lines {
+        if line.track < 0 do continue
+
+        text, font := partial_label(type, lock_in.bands[line.track])
         size := measure_label(font, text)
-        bottom := tape.y - GAP - f32(row) * row_height
-        color := line_color
-        color.a = u8(f32(color.a) * track_light(band))
-        draw_label(font, text, snap_to_pixels({needle_x(tape, band.err_cents) - size.x / 2, bottom - size.y}), color)
+        bottom := tape.y - GAP - f32(rows[line.track]) * row_height
+        color := with_alpha(accent_color, f32(accent_color.a) * line.light)
+        draw_label(font, text, snap_to_pixels({needle_x(tape, line.cents) - size.x / 2, bottom - size.y}), color)
     }
 }

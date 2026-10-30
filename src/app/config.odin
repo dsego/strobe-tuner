@@ -270,7 +270,7 @@ config_defaults :: Config {
     scope_gain                   = .AUTOSET,
     trace_seconds                = 2,
     trace_range_cents            = 25,
-    needle_partials              = false,
+    needle_partials              = true,
     needle_labels                = .MULTIPLES,
     spectrum_windows             = 2,
     spectrum_scale               = .SNR,

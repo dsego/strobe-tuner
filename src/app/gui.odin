@@ -102,23 +102,39 @@ fade_color :: proc(color: gfx.Color, amount: f32) -> gfx.Color {
     return faded
 }
 
-// The arrows icon and the shown display's name after it, a tap goes on to the next display. pos is the
-// left edge, vertically centred.
-gui_display_button :: proc(pos: [2]f32, type: StrobeDisplayType) -> bool {
-    ICON_GAP :: 8
+// The shown display's name and a caret after it, plain like the other controls on the main screen. A tap opens
+// the displays' menu under it, the settings' dropdown menu over the panel, and the one picked shows. Drawn after
+// the controls under it. pos is the left edge, vertically centred.
+gui_display_button :: proc(pos: [2]f32, type: ^StrobeDisplayType, open: ^bool) {
+    CARET_GAP :: 4
     TOUCH_HEIGHT :: 44
-
-    draw_icon(ICON_ARROWS_LEFT_RIGHT, {pos.x, pos.y - ICON_SIZE / 2}, icon_color)
+    MENU_WIDTH :: 140
+    TOUCH_PAD :: 12 // past the label and the caret on each side
 
     labels := DISPLAY_LABELS
-    label := labels[type]
-    label_x := pos.x + ICON_SIZE + ICON_GAP
+    label := labels[type^]
     label_width := measure_label(pixel_fonts.label, label, 1).x
-    draw_label(pixel_fonts.label, label, {label_x, pos.y - 7}, text_color_light, 1)
+    draw_label(pixel_fonts.label, label, {pos.x, pos.y - 7}, text_color_light, 1)
+    draw_icon(ICON_CARET_DOWN, {pos.x + label_width + CARET_GAP, pos.y - ICON_SIZE / 2}, icon_color)
 
-    // The icon and the label, a little past them on each side
-    width := label_x + label_width - pos.x
-    return gui_button({pos.x - 12, pos.y - TOUCH_HEIGHT / 2, width + 24, TOUCH_HEIGHT})
+    width := label_width + CARET_GAP + ICON_SIZE
+    touch := gfx.Rect{pos.x - TOUCH_PAD, pos.y - TOUCH_HEIGHT / 2, width + 2 * TOUCH_PAD, TOUCH_HEIGHT}
+
+    // Its left edge on the touch area's, a dropdown button's height around the label
+    anchor := gfx.Rect{touch.x, pos.y - DROPDOWN_OPTION_HEIGHT / 2, MENU_WIDTH, DROPDOWN_OPTION_HEIGHT}
+    menu := dropdown_menu_rect(anchor, len(StrobeDisplayType), nil, true)
+    open^ = dropdown_press(open^, touch, menu, true)
+    if !open^ do return
+
+    names := DISPLAY_NAMES
+    options: [len(StrobeDisplayType)]GuiOption
+    for name, display in names do options[int(display)] = {i32(display), string(name)}
+
+    if picked, was_picked := draw_dropdown_menu(menu, options[:], nil); was_picked {
+        type^ = StrobeDisplayType(picked)
+        open^ = false
+        gui.menu_open = false
+    }
 }
 
 // The note lock as a labelled button, gray while off and violet while locked. center is the middle of the
