@@ -20,7 +20,7 @@ Strobie is coming to the App Store for Mac and iPhone. [Try it in your browser](
 - Track settings: tap a track to choose its partial (1× to 8×, or the fifth at 1½×), move its target by up to ±50 cents (e.g. for a stretched octave) and change its spin rate.
 - Vernier mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity.
 - Spin rate setting: 200% spins the strobe twice as fast per cent of detuning, for the final adjustment.
-- Readout speed setting: how long every cents reading averages, the readout, the tracks' cents, the needle and the trace alike, 0.4 s evens a vibrato into its mean pitch, 0.15 s follows a turned peg sooner.
+- Readout speed setting: how long every cents reading averages, the readout, the tracks' cents, the needle and the trace alike, 400 ms evens a vibrato into its mean pitch, 150 ms follows a turned peg sooner.
 - In-tune tap on a phone: one haptic tap once the readout holds within a cent, again only after it moved away.
 - Six displays, a menu under the strobe picks one, see [Displays](#displays):
   - Strobe: curved tracks, a wheel or flat tracks, turned by a lock-in on each partial or by the lamp.
