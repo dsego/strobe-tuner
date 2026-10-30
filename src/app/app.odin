@@ -62,6 +62,7 @@ Displays :: struct {
     strobe:       StrobeDisplay,
     scope:        ScopeDisplay, // the scope's and the lamp's views
     trace:        TraceDisplay,
+    needle:       NeedleDisplay,
     spectrum:     SpectrumDisplay,
 
     // The arrows on the strobe, see draw_tuning_arrows
@@ -327,8 +328,9 @@ handle_keys :: proc(app: ^App) -> (menu: MenuCommand) {
         .STROBE   = .NUM_1,
         .SCOPE    = .NUM_2,
         .TRACE    = .NUM_3,
-        .LAMP     = .NUM_4,
-        .SPECTRUM = .NUM_5,
+        .NEEDLE   = .NUM_4,
+        .LAMP     = .NUM_5,
+        .SPECTRUM = .NUM_6,
     }
     for key, type in DISPLAY_KEYS {
         if plain && gfx.key_pressed(key) do config.strobe_display_type = type

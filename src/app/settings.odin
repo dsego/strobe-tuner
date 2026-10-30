@@ -36,7 +36,7 @@ settings_rows :: proc() -> int {
 }
 
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
-DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 7, .SCOPE = 4, .TRACE = 2, .LAMP = 2, .SPECTRUM = 4}
+DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 7, .SCOPE = 4, .TRACE = 2, .NEEDLE = 2, .LAMP = 2, .SPECTRUM = 4}
 
 // For the longer labels of the display's options
 WIDE_SEGMENT_WIDTH :: 80
@@ -52,6 +52,7 @@ DISPLAY_NAMES :: [StrobeDisplayType]cstring {
     .STROBE   = "Strobe",
     .SCOPE    = "Scope",
     .TRACE    = "Trace",
+    .NEEDLE   = "Needle",
     .LAMP     = "Lamp",
     .SPECTRUM = "Spectrum",
 }
@@ -66,7 +67,14 @@ COLORWAY_NAMES :: [StrobeColorway]cstring {
 }
 
 // The same on the main screen's display button, in caps like the other controls' labels
-DISPLAY_LABELS :: [StrobeDisplayType]cstring{.STROBE = "STROBE", .SCOPE = "SCOPE", .TRACE = "TRACE", .LAMP = "LAMP", .SPECTRUM = "SPECTRUM"}
+DISPLAY_LABELS :: [StrobeDisplayType]cstring {
+    .STROBE   = "STROBE",
+    .SCOPE    = "SCOPE",
+    .TRACE    = "TRACE",
+    .NEEDLE   = "NEEDLE",
+    .LAMP     = "LAMP",
+    .SPECTRUM = "SPECTRUM",
+}
 
 // A row's stepper or dropdown, on every sheet
 SETTINGS_CONTROL_WIDTH :: 176
@@ -167,6 +175,8 @@ gui_display_options_page :: proc(sheet_layout: SheetLayout, config: ^Config, dis
         gui_scope_display_options(sheet_layout, config)
     case .TRACE:
         gui_trace_display_options(sheet_layout, config)
+    case .NEEDLE:
+        gui_needle_display_options(sheet_layout, config)
     case .LAMP:
         gui_lamp_display_options(sheet_layout, config)
     case .SPECTRUM:
@@ -343,6 +353,17 @@ gui_trace_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
     row := 0
     gui_steps(sheet_layout, &row, "Span", STEP_LABELS, &config.trace_seconds, TRACE_SPAN_STEPS_S)
     gui_steps(sheet_layout, &row, "Range", {"Narrow", "Wide"}, &config.trace_range_cents, TRACE_RANGE_STEPS_CENTS)
+}
+
+gui_needle_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
+    row := 0
+
+    // Every track on the tape as it is, tapping the needle flips it too, and what their labels say, like the
+    // strobe's. Vernier's tracks are all the fundamental, nothing to show.
+    harmonic := config.strobe_mode == .HARMONIC
+    gui_settings_segmented(sheet_layout, &row, "Partials", {"Off", "On"}, &config.needle_partials, enabled = harmonic)
+    labelled := harmonic && config.needle_partials
+    gui_settings_segmented(sheet_layout, &row, "Labels", {"Off", "1×", "Hz", "Note"}, &config.needle_labels, enabled = labelled)
 }
 
 gui_lamp_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {

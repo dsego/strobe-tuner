@@ -28,6 +28,7 @@ MenuCommand :: enum {
     SHOW_STROBE,
     SHOW_SCOPE,
     SHOW_TRACE,
+    SHOW_NEEDLE,
     SHOW_LAMP,
     SHOW_SPECTRUM,
     COLORS_RED,
@@ -48,6 +49,7 @@ DISPLAY_COMMANDS :: [StrobeDisplayType]MenuCommand {
     .STROBE   = .SHOW_STROBE,
     .SCOPE    = .SHOW_SCOPE,
     .TRACE    = .SHOW_TRACE,
+    .NEEDLE   = .SHOW_NEEDLE,
     .LAMP     = .SHOW_LAMP,
     .SPECTRUM = .SHOW_SPECTRUM,
 }

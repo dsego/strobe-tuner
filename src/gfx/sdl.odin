@@ -123,6 +123,7 @@ scancodes := [Key]sdl.Scancode {
     .NUM_3       = ._3,
     .NUM_4       = ._4,
     .NUM_5       = ._5,
+    .NUM_6       = ._6,
     .LEFT_SUPER  = .LGUI,
     .RIGHT_SUPER = .RGUI,
     .LEFT_CONTROL = .LCTRL,

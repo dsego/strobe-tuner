@@ -103,6 +103,8 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         draw_strobe_with_tracks(app, layout)
     case .TRACE:
         draw_trace_area(app, view)
+    case .NEEDLE:
+        draw_needle_area(app, strobe, view)
     case .SPECTRUM:
         draw_spectrum_area(app, view)
     case .SCOPE, .LAMP:
@@ -140,6 +142,16 @@ draw_strobe_with_tracks :: proc(app: ^App, layout: Layout) {
 draw_trace_area :: proc(app: ^App, view: gfx.Rect) {
     displays := &app.displays
     draw_trace_display(&displays.trace, &displays.glow_targets, view, app.config)
+}
+
+// The readout's cents on the tape. Tapped, the other tracks' partials show on it too or go, vernier's tracks are
+// all the fundamental.
+draw_needle_area :: proc(app: ^App, strobe, view: gfx.Rect) {
+    config, measurement := app.config, &app.measurement
+    draw_needle_display(&app.displays.needle, &app.displays.glow_targets, view, measurement.strobe_lock_in, config)
+    if config.strobe_mode != .HARMONIC || input_missing(app) || !gui_button(strobe) do return
+
+    config.needle_partials = !config.needle_partials
 }
 
 draw_spectrum_area :: proc(app: ^App, view: gfx.Rect) {

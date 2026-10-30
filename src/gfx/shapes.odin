@@ -99,6 +99,35 @@ draw_rect :: proc(position: [2]f32, size: [2]f32, color: Color) {
     push_quad(gpu.white.handle, {position.x, position.y, size.x, size.y}, {0, 0}, {1, 1}, color)
 }
 
+draw_triangle :: proc(first, second, third: [2]f32, color: Color) {
+    push_vertices(gpu.white.handle, {{first, {0, 0}, color}, {second, {1, 0}, color}, {third, {1, 1}, color}})
+}
+
+// The rect in color down its middle, fading to clear at its left and right edges, its top and bottom straight,
+// e.g. a glow around an upright line
+draw_side_fade :: proc(rect: Rect, color: Color) {
+    clear := Color{color.r, color.g, color.b, 0}
+    left, middle, right := rect.x, rect.x + rect.width / 2, rect.x + rect.width
+    top, bottom := rect.y, rect.y + rect.height
+    push_vertices(
+        gpu.white.handle,
+        {
+            {{left, top}, {0, 0}, clear},
+            {{middle, top}, {1, 0}, color},
+            {{middle, bottom}, {1, 1}, color},
+            {{left, top}, {0, 0}, clear},
+            {{middle, bottom}, {1, 1}, color},
+            {{left, bottom}, {0, 1}, clear},
+            {{middle, top}, {0, 0}, color},
+            {{right, top}, {1, 0}, clear},
+            {{right, bottom}, {1, 1}, clear},
+            {{middle, top}, {0, 0}, color},
+            {{right, bottom}, {1, 1}, clear},
+            {{middle, bottom}, {0, 1}, color},
+        },
+    )
+}
+
 draw_line :: proc(start, end: [2]f32, thickness: f32, color: Color) {
     if start == end do return
 

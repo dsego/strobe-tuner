@@ -170,6 +170,7 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     }
 
     record_trace(&app.displays.trace, traced_cents, light, reading.pitch.fresh, gfx.frame_time())
+    app.displays.needle = {traced_cents, light}
 
     // The spectrum of what came in, only while it's the display
     config := app.config

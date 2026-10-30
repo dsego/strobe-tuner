@@ -76,6 +76,7 @@ KEY_CODES :: [Key]string {
     .NUM_3         = "Digit3",
     .NUM_4         = "Digit4",
     .NUM_5         = "Digit5",
+    .NUM_6         = "Digit6",
     .LEFT_SUPER    = "MetaLeft",
     .RIGHT_SUPER   = "MetaRight",
     .LEFT_CONTROL  = "ControlLeft",

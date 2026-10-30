@@ -146,23 +146,24 @@ partial_text :: proc(partial: f32) -> cstring {
     return fmt.ctprintf("%v", partial)
 }
 
+// A track's label, its partial, its frequency or its note, and the font it's in. The frequency a size smaller.
+partial_label :: proc(type: PartialLabelType, band: core.PhaseBand) -> (text: cstring, font: PixelFont) {
+    switch type {
+    case .FREQUENCY:
+        return fmt.ctprintf("%.1fHz", band.freq_hz), pixel_fonts.band_label_small
+    case .NOTE_NAMES:
+        // Inter has no ♯ or ♭, a plain # and b read fine at this size
+        return fmt.ctprintf("%s", core.note_name(band.note)), pixel_fonts.band_label
+    case .NONE, .MULTIPLES:
+    }
+    return fmt.ctprintf("%v×", partial_text(band.interval)), pixel_fonts.band_label
+}
+
 // Right aligned at position, a track's offset from the exact partial goes before it so it's never hidden.
 // Tapping the track opens its sheet, see strobe_track_at.
 // position is the label's top right, or its middle when centered
 draw_strobe_partial_label :: proc(position: [2]f32, type: PartialLabelType, band: core.PhaseBand, centered := false) {
-    text: cstring
-    font := pixel_fonts.band_label
-
-    if type == .FREQUENCY {
-        font = pixel_fonts.band_label_small
-        text = fmt.ctprintf("%.1fHz", band.freq_hz)
-    } else if type == .NOTE_NAMES {
-        // Inter has no ♯ or ♭, a plain # and b read fine at this size
-        text = fmt.ctprintf("%s", core.note_name(band.note))
-    } else {
-        text = fmt.ctprintf("%v×", partial_text(band.interval))
-    }
-
+    text, font := partial_label(type, band)
     text_size := measure_label(font, text)
     bounds: gfx.Rect = {position.x - text_size.x, position.y, text_size.x, text_size.y}
     if centered do bounds.x, bounds.y = position.x - text_size.x / 2, position.y - text_size.y / 2

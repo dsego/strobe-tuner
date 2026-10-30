@@ -34,6 +34,7 @@ StrobeDisplayType :: enum {
     STROBE, // the tracks, in one of the StrobeShapes
     SCOPE, // the wave itself, like an oscilloscope synced to the strobe's frequency, see src/core/scope.odin
     TRACE, // a line of the cents over the last few seconds
+    NEEDLE, // the cents as a marker over a tape, a meter's needle laid flat, see src/app/needle_display.odin
     LAMP, // the scope from above, stripes as bright as the wave is high, the lamp of a mechanical strobe
     SPECTRUM, // what the pitch detection hears, its peaks named, see src/app/spectrum_display.odin
 }
@@ -207,6 +208,10 @@ Config :: struct {
     trace_seconds:                f32,
     trace_range_cents:            f32,
 
+    // Needle display: every track on the tape as it is, tapping it shows or hides them, and what their labels say
+    needle_partials:              bool,
+    needle_labels:                PartialLabelType,
+
     // Spectrum display: its window as many of the detector's, see SPECTRUM_WINDOW_STEPS, its height and what
     // the peaks are labelled with
     spectrum_windows:             f32,
@@ -265,6 +270,8 @@ config_defaults :: Config {
     scope_gain                   = .AUTOSET,
     trace_seconds                = 2,
     trace_range_cents            = 25,
+    needle_partials              = false,
+    needle_labels                = .MULTIPLES,
     spectrum_windows             = 2,
     spectrum_scale               = .SNR,
     spectrum_labels              = .BOTH,
