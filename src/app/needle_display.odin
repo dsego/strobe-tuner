@@ -49,7 +49,6 @@ NEEDLE_LABELS :: [?]f32{0, 1, 5, 10, 20, NEEDLE_RANGE_CENTS}
 // The marker's glow, as wide and at its middle as opaque
 NEEDLE_GLOW_WIDTH :: #config(NEEDLE_GLOW_WIDTH, 22)
 NEEDLE_GLOW_ALPHA :: #config(NEEDLE_GLOW_ALPHA, 150)
-
 // The triangles under the lines pointing up at their notch, the marker's and the partials', the labels under them
 MARKER_POINTER_WIDTH :: 10
 PARTIAL_POINTER_WIDTH :: 7
@@ -85,15 +84,9 @@ NeedleLine :: struct {
 // The tape across the middle of the view, its notches standing on a line with the labels under it. The needle is
 // the colorway's: the marker a sharp line in its lit color in a glow, the partials the same line without one,
 // each with a triangle under it pointing up at its notch. The tape is a neutral gray on whole pixels, it stays
-// out of the needle's way. With the retro glow only the needle blooms: the glow's offscreen pass softens a point
-// wide notch, so the tape goes over it sharp and the needle's lines over the tape again.
-draw_needle_display :: proc(
-    self: ^NeedleDisplay,
-    targets: ^GlowTargets,
-    rect: gfx.Rect,
-    lock_in: ^core.StrobeLockIn,
-    config: ^Config,
-) {
+// out of the needle's way. Sharp with the retro glow too, it's the strobe's lamp and the scope's phosphor: a
+// bloom softened the point wide notches, and a lamp behind the tape didn't look like anything.
+draw_needle_display :: proc(self: ^NeedleDisplay, rect: gfx.Rect, lock_in: ^core.StrobeLockIn, config: ^Config) {
     MARGIN :: 32 // either side, the end labels fit
 
     line_color, background := gfx.hex(strobe_colors(config).x), gfx.hex(strobe_bg_color)
@@ -104,23 +97,13 @@ draw_needle_display :: proc(
     partials := config.needle_partials && config.strobe_mode == .HARMONIC
     lines := needle_lines(self, lock_in, partials)
 
-    if config.strobe_glow {
-        begin_glow(targets, rect, background)
-        draw_needle_glows(tape, lines, line_color)
-        draw_needle_lines(tape, lines, line_color)
-        end_glow(targets, rect, 1)
+    gfx.draw_rect({rect.x, rect.y}, {rect.width, rect.height}, background)
 
-        draw_needle_tape(tape)
-        draw_needle_lines(tape, lines, line_color)
-    } else {
-        gfx.draw_rect({rect.x, rect.y}, {rect.width, rect.height}, background)
-
-        gfx.begin_scissor(rect)
-        draw_needle_glows(tape, lines, line_color)
-        draw_needle_tape(tape)
-        draw_needle_lines(tape, lines, line_color)
-        gfx.end_scissor()
-    }
+    gfx.begin_scissor(rect)
+    draw_needle_glows(tape, lines, line_color)
+    draw_needle_tape(tape)
+    draw_needle_lines(tape, lines, line_color)
+    gfx.end_scissor()
 
     draw_needle_labels(tape)
     if partials do draw_needle_partial_labels(tape, lock_in, lines, config.needle_labels)

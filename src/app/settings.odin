@@ -146,7 +146,8 @@ gui_settings :: proc(
     // The displays read the colors and the glow from the config as they draw, nothing to retune
     gui_colorway_row(sheet_layout, &row, config)
 
-    // Lights the stripes like a lamp behind the disc, in the hue of the colors above
+    // Lights the stripes like a lamp behind the disc, in the hue of the colors above, and the scope's beam glows.
+    // The plots and the needle stay sharp.
     gui_settings_segmented(sheet_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow)
 
     // A tap in the hand as the readout holds in tune, only where there's something to tap with

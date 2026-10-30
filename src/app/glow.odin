@@ -25,7 +25,7 @@ BLOOM_DOWNSCALE :: 2
 BLOOM_TAP_SPACING :: 1.5 // blur taps spaced apart for a wider glow at the same cost
 BLOOM_ITERATIONS :: 2
 
-// The retro glow's render targets, shared by the displays that glow: the strobe, the scope and the spectrum.
+// The retro glow's render targets, shared by the displays that glow: the strobe and the scope.
 // A display is rendered into scene_rt and blurred through bloom_rt.
 GlowTargets :: struct {
     scene_rt: gfx.RenderTarget,

@@ -140,14 +140,14 @@ draw_strobe_with_tracks :: proc(app: ^App, layout: Layout) {
 
 draw_trace_area :: proc(app: ^App, view: gfx.Rect) {
     displays := &app.displays
-    draw_trace_display(&displays.trace, &displays.glow_targets, view, app.config)
+    draw_trace_display(&displays.trace, view, app.config)
 }
 
 // The readout's cents on the tape. Tapped, the other tracks' partials show on it too or go, vernier's tracks are
 // all the fundamental.
 draw_needle_area :: proc(app: ^App, strobe, view: gfx.Rect) {
     config, measurement := app.config, &app.measurement
-    draw_needle_display(&app.displays.needle, &app.displays.glow_targets, view, measurement.strobe_lock_in, config)
+    draw_needle_display(&app.displays.needle, view, measurement.strobe_lock_in, config)
     if config.strobe_mode != .HARMONIC || input_missing(app) || !gui_button(strobe) do return
 
     config.needle_partials = !config.needle_partials
@@ -157,7 +157,7 @@ draw_spectrum_area :: proc(app: ^App, view: gfx.Rect) {
     displays := &app.displays
     track_hz := strobe_track_hz(app.measurement.strobe_lock_in)
     active := app.measurement.note_target.active
-    draw_spectrum_display(&displays.spectrum, &displays.glow_targets, view, track_hz, active, app.config)
+    draw_spectrum_display(&displays.spectrum, view, track_hz, active, app.config)
 }
 
 // The partials the strobe's tracks follow, until the end of the frame

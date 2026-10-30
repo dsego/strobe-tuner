@@ -263,7 +263,7 @@ config_defaults :: Config {
     partial_labels               = .MULTIPLES,
     show_band_cents              = false,
     screen_persistence_periods   = 18,
-    lamp_shape                   = .HALF_RECTIFIED,
+    lamp_shape                   = .SPLIT,
     scope_sweep                  = .TIME,
     scope_lowpass                = true,
     scope_beam                   = .SOLID,

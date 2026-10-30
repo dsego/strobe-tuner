@@ -88,8 +88,7 @@ record_trace :: proc(self: ^TraceDisplay, cents, light: f32, fresh: bool, frame_
 // Oldest on the left, the latest point on the right edge, sharp is up. The config's trace seconds across,
 // its range in cents from the middle to the top and bottom.
 // The line in the colorway's lit color, the in tune band in its second color
-// With the retro glow the band and the line glow like the spectrum's curve.
-draw_trace_display :: proc(self: ^TraceDisplay, targets: ^GlowTargets, rect: gfx.Rect, config: ^Config) {
+draw_trace_display :: proc(self: ^TraceDisplay, rect: gfx.Rect, config: ^Config) {
     // The in tune band, a line through the middle of it and the trace over them
     draw_plot :: proc(self: ^TraceDisplay, plot: gfx.Rect, span, cents_range: f32, line_color, band_color: gfx.Color) {
         middle := plot.y + plot.height / 2
@@ -130,17 +129,12 @@ draw_trace_display :: proc(self: ^TraceDisplay, targets: ^GlowTargets, rect: gfx
     PADDING :: 28
     plot := gfx.Rect{rect.x, rect.y + PADDING, rect.width, rect.height - 2 * PADDING}
 
-    if config.strobe_glow {
-        begin_glow(targets, rect, background)
-        draw_plot(self, plot, span, cents_range, line_color, band_color)
-        end_glow(targets, rect, 1)
-    } else {
-        gfx.draw_rect({rect.x, rect.y}, {rect.width, rect.height}, background)
+    // Sharp with the retro glow too, it's the strobe's lamp and the scope's phosphor, a plot has neither
+    gfx.draw_rect({rect.x, rect.y}, {rect.width, rect.height}, background)
 
-        gfx.begin_scissor(rect)
-        draw_plot(self, plot, span, cents_range, line_color, band_color)
-        gfx.end_scissor()
-    }
+    gfx.begin_scissor(rect)
+    draw_plot(self, plot, span, cents_range, line_color, band_color)
+    gfx.end_scissor()
 
     // Sharp over it, inside the plot's top and bottom edges, clear of the tuning arrows above it, in the font
     // and color of the partials on the strobe's tracks

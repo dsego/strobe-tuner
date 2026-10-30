@@ -264,16 +264,9 @@ spectrum_y :: proc(db: f32, range: [2]f32, plot: gfx.Rect) -> f32 {
     return plot.y + plot.height * (1 - clamp((db - range[0]) / (range[1] - range[0]), 0, 1))
 }
 
-// Low notes on the left on a log scale, a C every octave. track_hz are the strobe tracks' partials, marked
-// and lit while the tuner has the note.
-draw_spectrum_display :: proc(
-    self: ^SpectrumDisplay,
-    targets: ^GlowTargets,
-    rect: gfx.Rect,
-    track_hz: []f32,
-    active: bool,
-    config: ^Config,
-) {
+// Low notes on the left on a log scale, a C every octave. track_hz are the strobe tracks' partials, a triangle
+// under the plot for each, lit while the tuner has the note.
+draw_spectrum_display :: proc(self: ^SpectrumDisplay, rect: gfx.Rect, track_hz: []f32, active: bool, config: ^Config) {
     colors := strobe_colors(config)
     line_color, band_color, background := gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color)
 
@@ -296,22 +289,15 @@ draw_spectrum_display :: proc(
     track_x := spectrum_track_marks(track_hz, axes)
     points := update_spectrum_curve(self, shown, range, axes, bin_hz)
 
-    // The curve's glow and the labels' pills reach past the sides. The glow's offscreen drawing isn't cut, see
-    // gfx.begin_render_target.
+    // The curve's glow and the labels' pills reach past the sides
     gfx.begin_scissor(rect)
     defer gfx.end_scissor()
 
-    // With the retro glow the curve glows like the scope's beam, the bloom added once: the scope's thin
-    // beam takes it a few times over, the curve's thicker and busier
-    if config.strobe_glow {
-        begin_glow(targets, rect, background)
-        draw_spectrum_plot(plot, points, octaves, track_x, active, line_color, band_color, background)
-        end_glow(targets, rect, 1)
-    } else {
-        draw_spectrum_plot(plot, points, octaves, track_x, active, line_color, band_color, background)
-    }
+    // Sharp with the retro glow too, it's the strobe's lamp and the scope's phosphor, a plot has neither
+    draw_spectrum_plot(plot, points, octaves, line_color, band_color, background)
 
     // The text over it, sharp
+    draw_spectrum_track_pointers(track_x, plot, active)
     draw_spectrum_octave_labels(octaves, plot)
 
     peaks := find_spectrum_peaks(self, shown, low_hz, high_hz, bin_hz)
@@ -408,21 +394,10 @@ spectrum_column_db :: proc(shown: []f32, from, to, floor: f32) -> f32 {
 
 // The octaves' lines and the tracks' marks behind the curve, filled solid under it so they stay behind.
 // The curve like the trace's line, a soft glow under a thin line, both of anti-aliased dots.
-draw_spectrum_plot :: proc(
-    plot: gfx.Rect,
-    points: [][2]f32,
-    octaves: []SpectrumOctave,
-    track_x: []f32,
-    active: bool,
-    line_color, band_color, background: gfx.Color,
-) {
+draw_spectrum_plot :: proc(plot: gfx.Rect, points: [][2]f32, octaves: []SpectrumOctave, line_color, band_color, background: gfx.Color) {
     grid := band_color
     grid.a = 70
     for octave in octaves do gfx.draw_rect({octave.x, plot.y}, {1, plot.height}, grid)
-
-    mark := accent_color
-    mark.a = 160 if active else 60
-    for x in track_x do gfx.draw_rect({x - 0.5, plot.y}, {1.5, plot.height}, mark)
 
     fill := lerp_color(background, line_color, 0.2)
     fill.a = 255
@@ -446,14 +421,32 @@ draw_spectrum_plot :: proc(
     }
 }
 
-// Each C under its line, held inside the edges, C8's near the right one
+// The tracks' triangles under the plot pointing up at their partials, like the needle's, full while the tuner has
+// the note and dim without it. No lines up through the plot, they cut through the peaks and the labels name them.
+SPECTRUM_POINTER_WIDTH :: 7
+SPECTRUM_POINTER_HEIGHT :: 0.8 * SPECTRUM_POINTER_WIDTH
+
+draw_spectrum_track_pointers :: proc(track_x: []f32, plot: gfx.Rect, active: bool) {
+    color := accent_color
+    color.a = 255 if active else 80
+    floor := plot.y + plot.height
+    half := f32(SPECTRUM_POINTER_WIDTH) / 2
+    for x in track_x {
+        gfx.draw_triangle({x, floor}, {x + half, floor + SPECTRUM_POINTER_HEIGHT}, {x - half, floor + SPECTRUM_POINTER_HEIGHT}, color)
+    }
+}
+
+// Each C under its line, held inside the edges, C8's near the right one. Under the tracks' triangles, they never
+// cover a C.
 draw_spectrum_octave_labels :: proc(octaves: []SpectrumOctave, plot: gfx.Rect) {
+    GAP :: 4
     font := pixel_fonts.band_label_small
+    y := plot.y + plot.height + SPECTRUM_POINTER_HEIGHT + GAP
     for octave in octaves {
         text := fmt.ctprintf("C%d", octave.octave)
         width := measure_label(font, text).x
         x := clamp(octave.x - width / 2, plot.x + 4, plot.x + plot.width - width - 4)
-        draw_label(font, text, {x, plot.y + plot.height + 6}, text_color_muted)
+        draw_label(font, text, {x, y}, text_color_muted)
     }
 }
 
