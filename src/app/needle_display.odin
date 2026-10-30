@@ -35,23 +35,30 @@ NEEDLE_RANGE_CENTS :: 50 // the tape's ends, further pins the marker there
 // -define:NEEDLE_SPREAD_CENTS=n to try another.
 NEEDLE_SPREAD_CENTS :: f32(#config(NEEDLE_SPREAD_CENTS, 2.5))
 
-// A notch every step out to that many cents, closer notches where the tape is spread out. Each step ends where
-// its notches would crowd, the tape squeezes as it goes out: half cents out to 5 were 11 points apart next to
-// in tune and 4 near 5, a comb, about as even from 5 to 11 points on a phone as these are.
-NeedleNotches :: struct {
-    out_to, step: f32,
-}
-NEEDLE_NOTCHES :: [?]NeedleNotches{{2, 0.5}, {10, 1}, {20, 2}, {NEEDLE_RANGE_CENTS, 5}}
+// The notches either side, every half cent out to 2, every cent to 5 and past it only the labelled ones. The
+// half cents only mark halfway where the tape is widest, half a cent is inside the In-tune tap and less than a
+// plucked string drifts, the readout's tenths show it. Past 5 the needle says which way and about how far,
+// every 2 and 5 cents there squeezed into a comb.
+NEEDLE_NOTCHES :: [?]f32{0, 0.5, 1, 1.5, 2, 3, 4, 5, 10, 20, NEEDLE_RANGE_CENTS}
 
-// Labelled and the tallest notches, either side. The cent either side of in tune is the In-tune tap's.
-NEEDLE_LABELS :: [?]f32{0, 1, 5, 10, 20, NEEDLE_RANGE_CENTS}
+// Labelled and the long notches, either side. Each about as far from the next on the tape, a 1 crowded the 0.
+NEEDLE_LABELS :: [?]f32{0, 2, 5, 10, 20, NEEDLE_RANGE_CENTS}
+
+// The short and the long notches as tall, of the tape's height, and the needle's lines and the long notches as
+// wide in points, the short notches a point. Two heights only, a third for the whole cents near in tune read as
+// another kind of mark, the long ones stand out by their width too. A needle on a long notch covers it.
+// -define:NEEDLE_NOTCH_HEIGHT=n, NEEDLE_LONG_NOTCH_HEIGHT=n and NEEDLE_LINE_WIDTH=n to try others.
+NEEDLE_NOTCH_HEIGHT :: f32(#config(NEEDLE_NOTCH_HEIGHT, 0.12))
+NEEDLE_LONG_NOTCH_HEIGHT :: f32(#config(NEEDLE_LONG_NOTCH_HEIGHT, 0.21))
+NEEDLE_LINE_WIDTH :: f32(#config(NEEDLE_LINE_WIDTH, 1.5))
 
 // The marker's glow, as wide and at its middle as opaque
 NEEDLE_GLOW_WIDTH :: #config(NEEDLE_GLOW_WIDTH, 22)
 NEEDLE_GLOW_ALPHA :: #config(NEEDLE_GLOW_ALPHA, 150)
-// The triangles under the lines pointing up at their notch, the marker's and the partials', the labels under them
-MARKER_POINTER_WIDTH :: 10
-PARTIAL_POINTER_WIDTH :: 7
+// The triangles under and over the lines pointing at their notches, the marker's and the partials', the labels
+// past them
+MARKER_POINTER_WIDTH :: 12
+PARTIAL_POINTER_WIDTH :: 9
 
 // How lit a line stays once its stripes are gone, at the last reading they showed, like the readout's gray
 // number. Until the track reads again after a pluck, another note clears it.
@@ -81,9 +88,10 @@ NeedleLine :: struct {
     track:  int, // its label's, -1 for the readout's marker
 }
 
-// The tape across the middle of the view, its notches standing on a line with the labels under it. The needle is
-// the colorway's: the marker a sharp line in its lit color in a glow, the partials the same line without one,
-// each with a triangle under it pointing up at its notch. The tape is a neutral gray on whole pixels, it stays
+// The tape across the middle of the view, its notches standing on a line with the labels under it and mirrored
+// hanging from a line over it. The needle is the colorway's: the marker a sharp line in its lit color in a glow,
+// the partials the same line without one, each with a triangle under and over it pointing at its notches. The
+// tape is a neutral gray on whole pixels, it stays
 // out of the needle's way. Sharp with the retro glow too, it's the strobe's lamp and the scope's phosphor: a
 // bloom softened the point wide notches, and a lamp behind the tape didn't look like anything.
 draw_needle_display :: proc(self: ^NeedleDisplay, rect: gfx.Rect, lock_in: ^core.StrobeLockIn, config: ^Config) {
@@ -171,55 +179,48 @@ draw_needle_lines :: proc(tape: gfx.Rect, lines: []NeedleLine, color: gfx.Color)
     }
 }
 
-// The notches and the line they stand on
+// The notches and the lines they stand on and hang from
 draw_needle_tape :: proc(tape: gfx.Rect) {
     draw_needle_notches(tape)
 
+    draw_crisp_rect({tape.x, tape.y - 1}, {tape.width, 2}, text_color_muted)
     draw_crisp_rect({tape.x, tape.y + tape.height - 1}, {tape.width, 2}, text_color_muted)
 }
 
-// The labelled notches the tallest, the whole cents near in tune taller than the rest and the fine ones short, all
-// in the gray of the ruler's other notes
+// The labelled notches long and the rest short, up from the bottom line and down from the top one, all in the
+// gray of the ruler's other notes
 draw_needle_notches :: proc(tape: gfx.Rect) {
     baseline := tape.y + tape.height
     labels := NEEDLE_LABELS
+    for cents in NEEDLE_NOTCHES {
+        labelled := false
+        for label in labels do labelled ||= cents == label
 
-    // Each group starts a step past where the one before ended, the first at in tune
-    previous: f32 = -1
-    for notches in NEEDLE_NOTCHES {
-        start := previous + notches.step if previous >= 0 else 0
-        for cents := start; cents <= notches.out_to + 0.01; cents += notches.step {
-            labelled := false
-            for label in labels do labelled ||= abs(cents - label) < 0.01
-            whole := abs(cents - math.round(cents)) < 0.01
+        height := (NEEDLE_LONG_NOTCH_HEIGHT if labelled else NEEDLE_NOTCH_HEIGHT) * tape.height
+        width := NEEDLE_LINE_WIDTH if labelled else 1
+        for side in ([2]f32{-1, 1}) {
+            if cents == 0 && side < 0 do continue
 
-            height := 0.12 * tape.height
-            if whole && cents < 5 do height = 0.3 * tape.height
-            if labelled do height = 0.55 * tape.height
-
-            for side in ([2]f32{-1, 1}) {
-                if cents == 0 && side < 0 do continue
-
-                x := needle_x(tape, side * cents)
-                draw_crisp_rect({x - 0.5, baseline - height}, {1, height}, text_color_muted)
-            }
+            left := needle_x(tape, side * cents) - width / 2
+            draw_crisp_rect({left, baseline - height}, {width, height}, text_color_muted)
+            draw_crisp_rect({left, tape.y}, {width, height}, text_color_muted)
         }
-        previous = notches.out_to
     }
 }
 
-// A sharp line from over the tape down to the line the notches stand on, a point wide on whole pixels, and a
-// triangle under it pointing up at the notch, faded by light
+// A sharp line from the top line of the tape down to the bottom one, as wide as a long notch on whole pixels, and
+// a triangle under and over it pointing at the notches, faded by light
 draw_needle_line :: proc(tape: gfx.Rect, cents, light: f32, color: gfx.Color, alpha: u8, pointer_width: f32) {
     line := with_alpha(color, f32(alpha) * light)
     baseline := tape.y + tape.height
-    left, width := crisp_span(needle_x(tape, cents) - 0.5, 1)
+    left, width := crisp_span(needle_x(tape, cents) - NEEDLE_LINE_WIDTH / 2, NEEDLE_LINE_WIDTH)
     gfx.draw_rect({left, tape.y}, {width, tape.height}, line)
 
-    // Its point on the line's middle, as tall as most of its width
+    // Their points on the line's ends, as tall as most of their width
     middle := left + width / 2
     height := 0.8 * pointer_width
     gfx.draw_triangle({middle, baseline}, {middle + pointer_width / 2, baseline + height}, {middle - pointer_width / 2, baseline + height}, line)
+    gfx.draw_triangle({middle, tape.y}, {middle - pointer_width / 2, tape.y - height}, {middle + pointer_width / 2, tape.y - height}, line)
 }
 
 // From start for size points, both ends on whole pixels, at least one pixel: a thin line stays sharp
@@ -290,9 +291,9 @@ draw_needle_labels :: proc(tape: gfx.Rect) {
 
 // Each line's label over it, its partial, frequency or note in the cyan of the strobe's track labels, as lit as
 // the line. Each in a row of its own so none overlap, the same row however the others come and go: the
-// fundamental's right over the tape, the others' up from it in the tracks' order.
+// fundamental's right over the triangles on the tape, the others' up from it in the tracks' order.
 draw_needle_partial_labels :: proc(tape: gfx.Rect, lock_in: ^core.StrobeLockIn, lines: []NeedleLine, type: PartialLabelType) {
-    GAP :: 6
+    GAP :: 0.8 * MARKER_POINTER_WIDTH + 6
     ROW_GAP :: 2
     if type == .NONE do return
 

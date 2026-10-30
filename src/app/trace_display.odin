@@ -136,11 +136,11 @@ draw_trace_display :: proc(self: ^TraceDisplay, rect: gfx.Rect, config: ^Config)
     draw_plot(self, plot, span, cents_range, line_color, band_color)
     gfx.end_scissor()
 
-    // Sharp over it, inside the plot's top and bottom edges, clear of the tuning arrows above it, in the font
-    // and color of the partials on the strobe's tracks
+    // Sharp over it, inside the plot's top and bottom edges, clear of the tuning arrows above it, in the font of
+    // the partials on the strobe's tracks and the gray of the needle's scale: the cyan is for what's measured
     font := pixel_fonts.band_label
-    draw_label(font, fmt.ctprintf("+%.0f¢", cents_range), {plot.x + 10, plot.y + 4}, accent_color)
-    draw_label(font, fmt.ctprintf("-%.0f¢", cents_range), {plot.x + 10, plot.y + plot.height - 4 - font.size}, accent_color)
+    draw_label(font, fmt.ctprintf("+%.0f¢", cents_range), {plot.x + 10, plot.y + 4}, text_color_muted)
+    draw_label(font, fmt.ctprintf("-%.0f¢", cents_range), {plot.x + 10, plot.y + plot.height - 4 - font.size}, text_color_muted)
 }
 
 // A curve through the readings, dimmed along the line as the readings' light, with a gap where the pitch

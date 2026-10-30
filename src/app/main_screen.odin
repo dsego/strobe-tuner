@@ -17,6 +17,7 @@
 package app
 
 import "core:fmt"
+import "core:math"
 
 import "../audio"
 import "../core"
@@ -27,6 +28,7 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu: Menu
 
     draw_strobe_area(app, layout)
     draw_tuning_arrows(&app.displays, &app.measurement.note_target, layout, reading)
+    draw_tap_toast(&app.displays.toast, config.strobe_display_type, layout.strobe_view)
     draw_note_controls(app, layout, reading, menu)
 
     // The strobe's reading, none before a track settled, and nothing to measure on another note than a locked
@@ -101,11 +103,11 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     case .STROBE:
         draw_strobe_with_tracks(app, layout)
     case .TRACE:
-        draw_trace_area(app, view)
+        draw_trace_area(app, strobe, view)
     case .NEEDLE:
         draw_needle_area(app, strobe, view)
     case .SPECTRUM:
-        draw_spectrum_area(app, view)
+        draw_spectrum_area(app, strobe, view)
     case .SCOPE, .LAMP:
         draw_scope_area(app, strobe, view)
     }
@@ -117,7 +119,8 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
 }
 
 // Turned by the lock-in or by the lamp's screen. Tapping a track opens its sheet, in vernier mode every track
-// shows the same pitch and there's nothing to set on one.
+// shows the same pitch and there's nothing to set on one. Off the tracks a tap could have switched the shape,
+// but the flat tracks fill the strobe and there it couldn't switch back.
 draw_strobe_with_tracks :: proc(app: ^App, layout: Layout) {
     config, measurement, strobe := app.config, &app.measurement, layout.strobe
     lock_in := measurement.strobe_lock_in
@@ -138,9 +141,15 @@ draw_strobe_with_tracks :: proc(app: ^App, layout: Layout) {
     }
 }
 
-draw_trace_area :: proc(app: ^App, view: gfx.Rect) {
-    displays := &app.displays
-    draw_trace_display(&displays.trace, view, app.config)
+// Tapped, the range flips between narrow and wide
+draw_trace_area :: proc(app: ^App, strobe, view: gfx.Rect) {
+    config, displays := app.config, &app.displays
+    draw_trace_display(&displays.trace, view, config)
+    if input_missing(app) || !gui_button(strobe) do return
+
+    steps := TRACE_RANGE_STEPS_CENTS
+    config.trace_range_cents = steps[1] if config.trace_range_cents == steps[0] else steps[0]
+    show_tap_toast(&displays.toast, .TRACE, "Range", "Wide" if config.trace_range_cents == steps[1] else "Narrow")
 }
 
 // The readout's cents on the tape. Tapped, the other tracks' partials show on it too or go, vernier's tracks are
@@ -151,13 +160,19 @@ draw_needle_area :: proc(app: ^App, strobe, view: gfx.Rect) {
     if config.strobe_mode != .HARMONIC || input_missing(app) || !gui_button(strobe) do return
 
     config.needle_partials = !config.needle_partials
+    show_tap_toast(&app.displays.toast, .NEEDLE, "Partials", "On" if config.needle_partials else "Off")
 }
 
-draw_spectrum_area :: proc(app: ^App, view: gfx.Rect) {
-    displays := &app.displays
+// Tapped, the scale flips between the noise's and the level's
+draw_spectrum_area :: proc(app: ^App, strobe, view: gfx.Rect) {
+    config, displays := app.config, &app.displays
     track_hz := strobe_track_hz(app.measurement.strobe_lock_in)
     active := app.measurement.note_target.active
-    draw_spectrum_display(&displays.spectrum, view, track_hz, active, app.config)
+    draw_spectrum_display(&displays.spectrum, view, track_hz, active, config)
+    if input_missing(app) || !gui_button(strobe) do return
+
+    config.spectrum_scale = .DBFS if config.spectrum_scale == .SNR else .SNR
+    show_tap_toast(&displays.toast, .SPECTRUM, "Scale", "dBFS" if config.spectrum_scale == .DBFS else "SNR")
 }
 
 // The partials the strobe's tracks follow, until the end of the frame
@@ -174,11 +189,54 @@ draw_scope_area :: proc(app: ^App, strobe, view: gfx.Rect) {
     draw_scope_display(&app.displays.scope, &app.displays.glow_targets, &measurement.scope, view, config, measurement.pitch_detector.snr_db)
     if input_missing(app) || !gui_button(strobe) do return
 
+    toast := &app.displays.toast
     if config.strobe_display_type == .SCOPE {
         config.scope_sweep = .TIME if config.scope_sweep == .CIRCLE else .CIRCLE
+        show_tap_toast(toast, .SCOPE, "Sweep", "Circle" if config.scope_sweep == .CIRCLE else "Time")
     } else {
         config.lamp_shape = .HALF_RECTIFIED if config.lamp_shape == .SPLIT else .SPLIT
+        show_tap_toast(toast, .LAMP, "Rectifier", "Split" if config.lamp_shape == .SPLIT else "Half")
     }
+}
+
+// The option a tap on a view changed and its new value, in the settings' own words, in a pill at the top of the
+// view for a moment and then fading. Without it a tap changed the view silently, with no note playing nothing
+// showed it at all. Another tap puts its own in its place, another display clears it.
+TapToast :: struct {
+    display:       StrobeDisplayType,
+    option, value: cstring, // nil while none shows
+    age_s:         f32,
+}
+
+TAP_TOAST_HOLD_S :: 1.0
+TAP_TOAST_FADE_S :: 0.3
+
+show_tap_toast :: proc(toast: ^TapToast, display: StrobeDisplayType, option, value: cstring) {
+    toast^ = {display, option, value, 0}
+}
+
+// In white on the panel's dark, the view under it cut out. Over the tuning arrows: on a turned strobe the sharp
+// arrow is at the top middle too, for the moment after a tap.
+draw_tap_toast :: proc(toast: ^TapToast, display: StrobeDisplayType, view: gfx.Rect) {
+    PAD :: 12
+    HEIGHT :: 24
+    TOP :: 10
+
+    if toast.option == nil do return
+
+    toast.age_s += gfx.frame_time()
+    if toast.display != display || toast.age_s >= TAP_TOAST_HOLD_S + TAP_TOAST_FADE_S {
+        toast^ = {}
+        return
+    }
+
+    light := 1 - math.smoothstep(f32(TAP_TOAST_HOLD_S), TAP_TOAST_HOLD_S + TAP_TOAST_FADE_S, toast.age_s)
+    font := pixel_fonts.label
+    text := fmt.ctprintf("%s %s", toast.option, toast.value)
+    width := 2 * PAD + measure_label(font, text, 1).x
+    pill := gfx.Rect{view.x + (view.width - width) / 2, view.y + TOP, width, HEIGHT}
+    gfx.draw_pill(pill, fade_color(gfx.hex(panel_bg_color), light))
+    draw_label(font, text, {pill.x + PAD, pill.y + (HEIGHT - LABEL_SIZE) / 2}, fade_color(text_color_white, light), 1)
 }
 
 // A denied microphone only gives silence, an input that didn't open gives nothing. The strobe would just

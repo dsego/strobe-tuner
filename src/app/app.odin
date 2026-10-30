@@ -70,6 +70,7 @@ Displays :: struct {
     sharp_arrow:  bool,
 
     menu_open:    bool, // the displays' menu over the strobe, see gui_display_button
+    toast:        TapToast, // the option a tap on the view changed, see show_tap_toast
 }
 
 
