@@ -36,7 +36,7 @@ settings_rows :: proc() -> int {
 }
 
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
-DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 6, .SCOPE = 4, .TRACE = 2, .NEEDLE = 2, .LAMP = 2, .SPECTRUM = 4}
+DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 6, .SCOPE = 4, .TRACE = 2, .LAMP = 2, .SPECTRUM = 4}
 
 // For the longer labels of the display's options
 WIDE_SEGMENT_WIDTH :: 80
@@ -52,7 +52,6 @@ DISPLAY_NAMES :: [StrobeDisplayType]cstring {
     .STROBE   = "Strobe",
     .SCOPE    = "Scope",
     .TRACE    = "Trace",
-    .NEEDLE   = "Needle",
     .LAMP     = "Lamp",
     .SPECTRUM = "Spectrum",
 }
@@ -71,7 +70,6 @@ DISPLAY_LABELS :: [StrobeDisplayType]cstring {
     .STROBE   = "STROBE",
     .SCOPE    = "SCOPE",
     .TRACE    = "TRACE",
-    .NEEDLE   = "NEEDLE",
     .LAMP     = "LAMP",
     .SPECTRUM = "SPECTRUM",
 }
@@ -142,7 +140,7 @@ gui_settings :: proc(
     if gui_concert_a_row(sheet_layout, &row, config) do changed = true
 
     // How long every cents number averages, the same fit on every display: the readout, the tracks' cents, the
-    // needle, the trace and the In-tune tap. The longer evens out a voice's vibrato into its mean pitch, a
+    // trace and the In-tune tap. The longer evens out a voice's vibrato into its mean pitch, a
     // turned peg shows later on the numbers while the stripes move at once.
     // In milliseconds, a 0.15 looks longer than a 0.4 at a glance
     if gui_steps(sheet_layout, &row, "Readout speed", {"150 ms", "400 ms"}, &config.readout_fit_s, READOUT_FIT_STEPS_S) {
@@ -155,7 +153,7 @@ gui_settings :: proc(
     gui_colorway_row(sheet_layout, &row, config)
 
     // Lights the stripes like a lamp behind the disc, in the hue of the colors above, and the scope's beam glows.
-    // The plots and the needle stay sharp.
+    // The plots stay sharp.
     gui_settings_segmented(sheet_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow)
 
     // A tap in the hand as the readout holds in tune, only where there's something to tap with
@@ -184,8 +182,6 @@ gui_display_options_page :: proc(sheet_layout: SheetLayout, config: ^Config, dis
         gui_scope_display_options(sheet_layout, config)
     case .TRACE:
         gui_trace_display_options(sheet_layout, config)
-    case .NEEDLE:
-        gui_needle_display_options(sheet_layout, config)
     case .LAMP:
         gui_lamp_display_options(sheet_layout, config)
     case .SPECTRUM:
@@ -355,17 +351,6 @@ gui_trace_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
     row := 0
     gui_steps(sheet_layout, &row, "Span", STEP_LABELS, &config.trace_seconds, TRACE_SPAN_STEPS_S)
     gui_steps(sheet_layout, &row, "Range", {"Narrow", "Wide"}, &config.trace_range_cents, TRACE_RANGE_STEPS_CENTS)
-}
-
-gui_needle_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
-    row := 0
-
-    // Every track on the tape as it is, tapping the needle flips it too, and what their labels say, like the
-    // strobe's. Vernier's tracks are all the fundamental, nothing to show.
-    harmonic := config.strobe_mode == .HARMONIC
-    gui_settings_segmented(sheet_layout, &row, "Partials", {"Off", "On"}, &config.needle_partials, enabled = harmonic)
-    labelled := harmonic && config.needle_partials
-    gui_settings_segmented(sheet_layout, &row, "Labels", {"Off", "1×", "Hz", "Note"}, &config.needle_labels, enabled = labelled)
 }
 
 gui_lamp_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {

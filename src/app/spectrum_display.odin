@@ -421,8 +421,8 @@ draw_spectrum_plot :: proc(plot: gfx.Rect, points: [][2]f32, octaves: []Spectrum
     }
 }
 
-// The tracks' triangles under the plot pointing up at their partials, like the needle's, full while the tuner has
-// the note and dim without it. No lines up through the plot, they cut through the peaks and the labels name them.
+// The tracks' triangles under the plot pointing up at their partials, full while the tuner has the note and dim
+// without it. No lines up through the plot, they cut through the peaks and the labels name them.
 SPECTRUM_POINTER_WIDTH :: 7
 SPECTRUM_POINTER_HEIGHT :: 0.8 * SPECTRUM_POINTER_WIDTH
 

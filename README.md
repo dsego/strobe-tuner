@@ -22,12 +22,11 @@ Strobie is coming to the App Store for Mac and iPhone. [Try it in your browser](
 - Spin rate: 200% spins the strobe twice as fast per cent, for the final adjustment.
 - Readout speed: how long the cents average, 400 ms evens out a vibrato, 150 ms follows a turned peg sooner.
 - In-tune tap on a phone: a haptic tap once the readout holds within a cent.
-- Six displays, a menu under the strobe picks one, see [Displays](#displays):
+- Five displays, a menu under the strobe picks one, see [Displays](#displays):
   - Strobe: curved tracks, a wheel or flat tracks, turned by a lock-in on each partial or by the lamp.
   - Lamp: the mechanical strobe, stripes lit by the wave.
   - Scope: the waveform synced to the strobe's frequency, tap it for petals on a circle.
   - Trace: the cents over time.
-  - Needle: the cents on a meter scale, a needle per partial.
   - Spectrum: the spectrum of what the pitch detection hears, the loudest peaks named.
 - Note offsets: tune a note up to ±25 cents off pitch, the strobe stands still at the offset note.
 - Transpose for B♭, E♭, F and other transposing instruments.
@@ -151,7 +150,7 @@ To install on a phone, tap Build number in Settings → About phone 7 times, tur
 
 #### Displays
 
-The first five show how the note's phase slips against a reference at the target pitch, the sixth what the pitch detection hears:
+The first four show how the note's phase slips against a reference at the target pitch, the fifth what the pitch detection hears:
 
 - **Strobe**: the tracks of a strobe tuner, one per partial in harmonic mode, still when in tune, turning left when flat and right when sharp. Flat, a wheel or curved. They're turned by:
   - **Lock-in** (the default): each track measures its own partial with a single-bin DFT, see [Stroboscopic effect](#stroboscopic-effect).
@@ -159,12 +158,11 @@ The first five show how the note's phase slips against a reference at the target
 - **Lamp**: the disc of a mechanical strobe lit by a lamp that flashes with the wave. Every sample is folded onto two periods of the reference, the stripes as bright as the wave is high there. A detuned note drifts, and a fast drift smears to gray like on a real one. The height follows the crest height the note sustains over the last 18 periods, so the stripes stay lit until the note fades into the noise.
 - **Scope**: the same folded screen drawn as a wave, an oscilloscope synced to the reference. Tapped, the sweep goes round a circle, two periods a turn, so a sine draws two lobes and the partials bump and dip them, spinning clockwise when sharp. A low-pass keeps the first few partials, delayed alike so the shape stays. The sweeps are averaged over the persistence with the reference as the trigger, so the noise cancels out and a detuned note smears like the stripes. The beam is a Solid line, or Phosphor, dim where it moves fast and bright where it lingers. The height is set like an oscilloscope's Autoset on every attack and every note lit from silence, following the average's peak for 18 periods and then held, so a decaying note shrinks into the noise instead of its tail being scaled up. With Gain on Uniform every sweep is divided by its RMS, so a tremolo or a decaying note stays the same size.
 - **Trace**: the cents of the readout over the last few seconds, to see a vibrato or a drift.
-- **Needle**: the readout's cents as a needle over a scale of cent marks, fine near in tune and coarser further out. Every partial has a needle of its own, a string's upper partials stand a few cents sharp of the fundamental; tapped, only the readout's stays. A needle fades with its stripes and stays dim at its last reading until the next pluck.
 - **Spectrum**: the power spectrum of what the pitch detection hears, the loudest peaks named, a mark at each strobe track's partial. Not for tuning, its peaks are about 12 Hz wide: it shows what's there and how far over the noise, e.g. a fridge's hum louder than the string.
 
 The cents readout comes from the lock-in in every display.
 
-A tap on a view flips one of its options: the Scope's sweep, the Trace's range, the Needle's partials, the Lamp's rectifier and the Spectrum's scale. On the Strobe a tap on a track opens its settings.
+A tap on a view flips one of its options: the Scope's sweep, the Trace's range, the Lamp's rectifier and the Spectrum's scale. On the Strobe a tap on a track opens its settings.
 
 #### Pitch detection
 

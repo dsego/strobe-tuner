@@ -104,8 +104,6 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         draw_strobe_with_tracks(app, layout)
     case .TRACE:
         draw_trace_area(app, strobe, view)
-    case .NEEDLE:
-        draw_needle_area(app, strobe, view)
     case .SPECTRUM:
         draw_spectrum_area(app, strobe, view)
     case .SCOPE, .LAMP:
@@ -150,17 +148,6 @@ draw_trace_area :: proc(app: ^App, strobe, view: gfx.Rect) {
     steps := TRACE_RANGE_STEPS_CENTS
     config.trace_range_cents = steps[1] if config.trace_range_cents == steps[0] else steps[0]
     show_tap_toast(&displays.toast, .TRACE, "Range", "Wide" if config.trace_range_cents == steps[1] else "Narrow")
-}
-
-// The readout's cents on the tape. Tapped, the other tracks' partials show on it too or go, vernier's tracks are
-// all the fundamental.
-draw_needle_area :: proc(app: ^App, strobe, view: gfx.Rect) {
-    config, measurement := app.config, &app.measurement
-    draw_needle_display(&app.displays.needle, view, measurement.strobe_lock_in, config)
-    if config.strobe_mode != .HARMONIC || input_missing(app) || !gui_button(strobe) do return
-
-    config.needle_partials = !config.needle_partials
-    show_tap_toast(&app.displays.toast, .NEEDLE, "Partials", "On" if config.needle_partials else "Off")
 }
 
 // Tapped, the scale flips between the noise's and the level's

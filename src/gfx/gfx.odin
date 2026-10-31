@@ -76,7 +76,6 @@ Key :: enum {
     NUM_3,
     NUM_4,
     NUM_5,
-    NUM_6,
     LEFT_SUPER,
     RIGHT_SUPER,
     LEFT_CONTROL,
