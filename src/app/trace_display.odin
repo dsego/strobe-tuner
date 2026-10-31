@@ -43,10 +43,9 @@ TRACE_PADDING :: 28
 // -define:TRACE_GAP=n to try another.
 TRACE_GAP :: f32(#config(TRACE_GAP, 56))
 
-// The notches across now, every TRACE_BAND cents and longer at the tens halfway out and at the ends, in points.
-// -define:TRACE_NOTCH=n and TRACE_LONG_NOTCH=n to try others.
-TRACE_NOTCH :: f32(#config(TRACE_NOTCH, 8))
-TRACE_LONG_NOTCH :: f32(#config(TRACE_LONG_NOTCH, 14))
+// The notches across now, at the tens halfway out and at the ends, as long in points.
+// -define:TRACE_NOTCH=n to try another.
+TRACE_NOTCH :: f32(#config(TRACE_NOTCH, 14))
 
 // The dot at now, its radius in points, -define:TRACE_DOT_RADIUS=n to try another
 TRACE_DOT_RADIUS :: f32(#config(TRACE_DOT_RADIUS, 6))
@@ -143,13 +142,13 @@ draw_trace_display :: proc(self: ^TraceDisplay, rect: gfx.Rect, config: ^Config)
     // Sharp with the retro glow too, it's the strobe's lamp and the scope's phosphor, a plot has neither
     gfx.draw_rect({rect.x, rect.y}, {rect.width, rect.height}, background)
 
-    // The in tune band, ±TRACE_BAND of the ±cents_range the plot covers, and a line through the middle of it,
-    // across the whole view
-    band, center_line := band_color, line_color
-    band.a, center_line.a = 110, 120
+    // The in tune band, ±TRACE_BAND of the ±cents_range the plot covers, across the whole view. Through the
+    // middle of it a thin line in the notches' gray, the scale's zero, the colorway's lit color is the trace's.
+    band := band_color
+    band.a = 110
     band_height := TRACE_BAND / cents_range * plot.height
     gfx.draw_rect({rect.x, middle - band_height / 2}, {rect.width, band_height}, band)
-    gfx.draw_rect({rect.x, middle - 1}, {rect.width, 2}, center_line)
+    gfx.draw_rect(snap_to_pixels({rect.x, middle - 0.5}), {rect.width, 1}, text_color_muted)
 
     draw_trace_notches(plot, cents_range)
 
@@ -158,32 +157,28 @@ draw_trace_display :: proc(self: ^TraceDisplay, rect: gfx.Rect, config: ^Config)
     gfx.end_scissor()
 }
 
-// Across now, every TRACE_BAND cents, longer at the tens halfway out and at the ends, in the ruler's gray. In
-// tune is the band's line. The ends' cents in small labels right of their notches, the range the plot covers.
+// Across now at the tens halfway out and at the ends, each with its cents in a small label right of it, in the
+// ruler's gray: every notch says what it is. In tune is the band's line, the band's edges are ±TRACE_BAND.
 draw_trace_notches :: proc(plot: gfx.Rect, cents_range: f32) {
     LABEL_GAP :: 3
 
-    draw_notch :: proc(plot: gfx.Rect, cents, cents_range: f32, long: bool) {
+    draw_notch :: proc(plot: gfx.Rect, cents, cents_range: f32) {
         now := plot.x + plot.width
         y := plot.y + plot.height / 2 * (1 - cents / cents_range)
-        length := TRACE_LONG_NOTCH if long else TRACE_NOTCH
-        gfx.draw_rect(snap_to_pixels({now - length / 2, y - 0.5}), {length, 1}, text_color_muted)
-        if abs(cents) < cents_range do return
+        gfx.draw_rect(snap_to_pixels({now - TRACE_NOTCH / 2, y - 0.5}), {TRACE_NOTCH, 1}, text_color_muted)
 
         font := pixel_fonts.label_small
         text := fmt.ctprintf("%+.0f¢", cents)
-        position := [2]f32{now + length / 2 + LABEL_GAP, y - measure_label(font, text).y / 2}
+        position := [2]f32{now + TRACE_NOTCH / 2 + LABEL_GAP, y - measure_label(font, text).y / 2}
         draw_label(font, text, snap_to_pixels(position), text_color_muted)
     }
 
-    // 10 on the narrow range, 20 on the wide one
+    // 10 on the narrow range, 20 on the wide one, none on a range too narrow for it
     halfway := math.floor(cents_range / 2 / 10) * 10
-    for cents := f32(TRACE_BAND); cents < cents_range; cents += TRACE_BAND {
-        draw_notch(plot, cents, cents_range, cents == halfway)
-        draw_notch(plot, -cents, cents_range, cents == halfway)
+    for side in ([2]f32{-1, 1}) {
+        if halfway > 0 do draw_notch(plot, side * halfway, cents_range)
+        draw_notch(plot, side * cents_range, cents_range)
     }
-    draw_notch(plot, cents_range, cents_range, true)
-    draw_notch(plot, -cents_range, cents_range, true)
 }
 
 // A curve through the readings, dimmed along the line as the readings' light, with a gap where the pitch
