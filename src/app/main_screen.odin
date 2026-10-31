@@ -27,7 +27,7 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu: Menu
     config := app.config
 
     draw_strobe_area(app, layout)
-    draw_tuning_arrows(&app.displays, &app.measurement.note_target, layout, reading)
+    draw_tuning_arrows(&app.displays, &app.measurement.note_target, layout, reading, config.strobe_display_type)
     draw_tap_toast(&app.displays.toast, config.strobe_display_type, layout.strobe_view)
     draw_note_controls(app, layout, reading, menu)
 
@@ -262,9 +262,9 @@ input_missing :: proc(app: ^App) -> bool {
     return audio.microphone_denied() || audio.input_failed(app.input.capture)
 }
 
-// An arrow on the side the pitch is off to, pointing inwards the way to tune: flat on the left pointing right
-// to tune up, like higher notes are to the right on the ruler
-draw_tuning_arrows :: proc(displays: ^Displays, note_target: ^core.NoteTarget, layout: Layout, reading: Reading) {
+// An arrow on the side the pitch is off to, pointing inwards the way to tune, with the sharp or the flat on its
+// outside: flat on the left pointing right to tune up, like higher notes are to the right on the ruler
+draw_tuning_arrows :: proc(displays: ^Displays, note_target: ^core.NoteTarget, layout: Layout, reading: Reading, type: StrobeDisplayType) {
     // Only the strong readings, a fading note drifts and would flash the arrows. The strobe's close to the
     // note, like the readout.
     cents := core.target_cents_off(note_target, note_target.last_good_pitch.detected_freq)
@@ -278,31 +278,69 @@ draw_tuning_arrows :: proc(displays: ^Displays, note_target: ^core.NoteTarget, l
 
     displays.flat_arrow = core.schmitt_trigger_neg(displays.flat_arrow, cents, -8, -10)
     displays.sharp_arrow = core.schmitt_trigger(displays.sharp_arrow, cents, 8, 10)
+    if !displays.flat_arrow && !displays.sharp_arrow do return
 
+    MARGIN :: 10
+    strobe, view := layout.strobe, layout.strobe_view
     arrow := pixel_fonts.strobe_arrow
+    flat, sharp := ArrowGlyph{pixel_fonts.arrow_flat, '♭'}, ArrowGlyph{pixel_fonts.arrow_sharp, '♯'}
 
-    // A turned strobe's stripes climb when sharp, see strobe_upright: flat at the bottom pointing up, sharp
-    // at the top pointing down, in the middle
-    if layout.strobe_turned {
-        strobe, view := layout.strobe, layout.strobe_view
-        glyph: cstring = "▲" if displays.flat_arrow else "▼"
-        x := strobe.x + (strobe.width - gfx.measure_text(arrow.font, glyph, arrow.size, 0).x) / 2
-        if displays.flat_arrow {
-            gfx.draw_text(arrow.font, glyph, snap_to_pixels({x, view.y + view.height - 10 - arrow.size}), arrow.size, 0, accent_color)
-        } else if displays.sharp_arrow {
-            gfx.draw_text(arrow.font, glyph, snap_to_pixels({x, view.y + 10}), arrow.size, 0, accent_color)
+    // Where sharp is up, a turned strobe's stripes climb when sharp, see strobe_upright, and the trace's line
+    // rises: flat at the bottom pointing up, sharp at the top pointing down, the sign first. In the middle of
+    // the strobe. On the trace the arrow is over and under the notches at now, pointing along them.
+    trace := type == .TRACE
+    if layout.strobe_turned || trace {
+        pair := [2]ArrowGlyph{flat, {arrow, '▲'}}
+        middle_y := view.y + view.height - MARGIN - arrow.size / 2
+        if displays.sharp_arrow {
+            pair = {sharp, {arrow, '▼'}}
+            middle_y = view.y + MARGIN + arrow.size / 2
         }
+
+        left := strobe.x + (strobe.width - arrow_pair_width(pair)) / 2
+        if trace {
+            plot := trace_plot(view)
+            left = plot.x + plot.width - arrow_pair_width(pair) + arrow_glyph_ink(pair[1]).width / 2
+        }
+        draw_arrow_pair(pair, left, middle_y)
         return
     }
 
-    arrow_y := layout.strobe_view.y + 10
-
+    middle_y := view.y + MARGIN + arrow.size / 2
     if displays.flat_arrow {
-        gfx.draw_text(arrow.font, "▶", snap_to_pixels({layout.strobe.x + 10, arrow_y}), arrow.size, 0, accent_color)
-    } else if displays.sharp_arrow {
-        width := gfx.measure_text(arrow.font, "◀", arrow.size, 0).x
-        position := snap_to_pixels({layout.strobe.x + layout.strobe.width - 10 - width, arrow_y})
-        gfx.draw_text(arrow.font, "◀", position, arrow.size, 0, accent_color)
+        draw_arrow_pair({flat, {arrow, '▶'}}, strobe.x + MARGIN, middle_y)
+    } else {
+        pair := [2]ArrowGlyph{{arrow, '◀'}, sharp}
+        draw_arrow_pair(pair, strobe.x + strobe.width - MARGIN - arrow_pair_width(pair), middle_y)
+    }
+}
+
+// An arrow's glyph, or the sharp's or the flat's beside it
+ArrowGlyph :: struct {
+    font:      PixelFont,
+    codepoint: rune,
+}
+
+// Between the arrow's ink and the sign's, -define:ARROW_SIGN_GAP=n to try another
+ARROW_SIGN_GAP :: f32(#config(ARROW_SIGN_GAP, 4))
+
+arrow_glyph_ink :: proc(glyph: ArrowGlyph) -> gfx.Rect {
+    return gfx.glyph_ink(glyph.font.font, glyph.codepoint, glyph.font.size)
+}
+
+arrow_pair_width :: proc(pair: [2]ArrowGlyph) -> f32 {
+    return arrow_glyph_ink(pair[0]).width + ARROW_SIGN_GAP + arrow_glyph_ink(pair[1]).width
+}
+
+// Left to right from left, their inks a gap apart and centred on middle_y: the sign's font sits differently in
+// its line than the arrow's
+draw_arrow_pair :: proc(pair: [2]ArrowGlyph, left, middle_y: f32) {
+    x := left
+    for glyph in pair {
+        ink := arrow_glyph_ink(glyph)
+        position := snap_to_pixels({x - ink.x, middle_y - ink.y - ink.height / 2})
+        gfx.draw_text(glyph.font.font, fmt.ctprintf("%c", glyph.codepoint), position, glyph.font.size, 0, accent_color)
+        x += ink.width + ARROW_SIGN_GAP
     }
 }
 

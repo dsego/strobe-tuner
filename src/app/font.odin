@@ -85,6 +85,10 @@ RULER_NOTE_FLAT_SIZE :: 50
 RULER_NEIGHBOUR_FLAT_SIZE :: 30
 READOUT_SIZE :: 24 // the Hz and cents values, they grow with the ruler
 STROBE_ARROW_SIZE :: 22 // over the strobe, which way to tune: sideways, or up and down on a turned strobe
+// The sharp or the flat beside the arrow, the flat larger like the ruler's.
+// -define:ARROW_SHARP_SIZE=n and ARROW_FLAT_SIZE=n to try others.
+ARROW_SHARP_SIZE :: #config(ARROW_SHARP_SIZE, 22)
+ARROW_FLAT_SIZE :: #config(ARROW_FLAT_SIZE, 33)
 OFFSET_VALUE_SIZE :: 32 // the value in the popup of the note offsets
 
 // A font and the point size that draws it one texel to one pixel
@@ -121,6 +125,8 @@ PixelFonts :: struct {
     neighbour_flat:   PixelFont,
     readout:          PixelFont,
     strobe_arrow:     PixelFont,
+    arrow_sharp:      PixelFont,
+    arrow_flat:       PixelFont,
     offset_value:     PixelFont,
     band_label:       PixelFont, // each track's partial and cents on the strobe
     band_label_small: PixelFont, // a track's frequency and its offset
@@ -176,6 +182,8 @@ update_pixel_fonts :: proc() {
         neighbour_flat   = load(noto_sans_mono, RULER_SCALE * RULER_NEIGHBOUR_FLAT_SIZE, scale, "♭"),
         readout          = load(inter_tabular, RULER_SCALE * READOUT_SIZE, scale, TABULAR_CODEPOINTS),
         strobe_arrow     = load(inter_medium, STROBE_ARROW_SIZE, scale, "◀▶▲▼"),
+        arrow_sharp      = load(noto_sans_mono, ARROW_SHARP_SIZE, scale, "♯"),
+        arrow_flat       = load(noto_sans_mono, ARROW_FLAT_SIZE, scale, "♭"),
         offset_value     = load(inter_medium, OFFSET_VALUE_SIZE, scale, "ABCDEFG#b0123456789.+-¢"),
         band_label       = load(inter_medium_tabular, LABEL_LARGE_SIZE, scale, TABULAR_CODEPOINTS),
         band_label_small = load(inter_medium_tabular, LABEL_SIZE, scale, TABULAR_CODEPOINTS),

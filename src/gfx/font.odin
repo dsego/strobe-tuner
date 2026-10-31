@@ -198,6 +198,16 @@ draw_text :: proc(
     }
 }
 
+// Where a glyph's ink is from the text position at size. Glyphs from different fonts sit differently in their
+// lines, centred on their ink they line up.
+glyph_ink :: proc(font: Font, codepoint: rune, size: f32) -> Rect {
+    scale := size / font.base_size
+    glyph, ok := font.glyphs[codepoint]
+    if !ok do glyph = font.fallback
+
+    return {glyph.offset.x * scale, glyph.offset.y * scale, glyph.source.width * scale, glyph.source.height * scale}
+}
+
 measure_text :: proc(font: Font, text: cstring, size: f32, spacing: f32) -> [2]f32 {
     scale := size / font.base_size
     width: f32 = 0

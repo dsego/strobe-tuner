@@ -24,6 +24,8 @@ import "../gfx"
 
 // The cents over the last few seconds as a line, one of the display types.
 // Shows what the strobe can't: the pluck going sharp and settling, vibrato, a held note drifting.
+// A dot at now leaves the line behind it, a little way in from the right edge, notches across now mark the
+// cents.
 
 // Readings, one a frame at the most, the longest span at 120 fps fits with room to spare. The span and the
 // range, how many cents from the middle to the top and bottom, are in the config, further is clamped to
@@ -34,8 +36,20 @@ TRACE_MAX_S :: 8 // fits TRACE_CAPACITY at MAX_FPS
 TRACE_BAND :: 5 // cents either side of in tune, marked with faint lines
 TRACE_CURVE_STEPS :: 8 // pieces of the curve between two readings
 
-// The glow's alpha inside its fading edges, -define:TRACE_GLOW_ALPHA=n to try another
-TRACE_GLOW_ALPHA :: #config(TRACE_GLOW_ALPHA, 80)
+// Over and under the plot, clear of the tuning arrows
+TRACE_PADDING :: 28
+
+// From now to the view's right edge in points, the in tune band and its line go on across it.
+// -define:TRACE_GAP=n to try another.
+TRACE_GAP :: f32(#config(TRACE_GAP, 56))
+
+// The notches across now, every TRACE_BAND cents and longer at the tens halfway out and at the ends, in points.
+// -define:TRACE_NOTCH=n and TRACE_LONG_NOTCH=n to try others.
+TRACE_NOTCH :: f32(#config(TRACE_NOTCH, 8))
+TRACE_LONG_NOTCH :: f32(#config(TRACE_LONG_NOTCH, 14))
+
+// The dot at now, its radius in points, -define:TRACE_DOT_RADIUS=n to try another
+TRACE_DOT_RADIUS :: f32(#config(TRACE_DOT_RADIUS, 6))
 
 // Only the actual readings with their time, the curve through them is worked out when drawing
 TraceSample :: struct {
@@ -85,38 +99,34 @@ record_trace :: proc(self: ^TraceDisplay, cents, light: f32, fresh: bool, frame_
     }
 }
 
-// Oldest on the left, the latest point on the right edge, sharp is up. The config's trace seconds across,
-// its range in cents from the middle to the top and bottom.
+// The readings' part of the view, left of now. Now is its right edge.
+trace_plot :: proc(view: gfx.Rect) -> gfx.Rect {
+    return {view.x, view.y + TRACE_PADDING, view.width - TRACE_GAP, view.height - 2 * TRACE_PADDING}
+}
+
+// Oldest on the left, the newest at now on the plot's right edge, sharp is up. The config's trace seconds
+// across, its range in cents from the middle to the top and bottom.
 // The line in the colorway's lit color, the in tune band in its second color
 draw_trace_display :: proc(self: ^TraceDisplay, rect: gfx.Rect, config: ^Config) {
-    // The in tune band, a line through the middle of it and the trace over them
-    draw_plot :: proc(self: ^TraceDisplay, plot: gfx.Rect, span, cents_range: f32, line_color, band_color: gfx.Color) {
+    // The trace, and the dot at now over its end
+    draw_plot :: proc(self: ^TraceDisplay, plot: gfx.Rect, span, cents_range: f32, line_color: gfx.Color) {
         middle := plot.y + plot.height / 2
 
-        band := band_color
-        band.a = 110
-
-        // ±TRACE_BAND of the ±cents_range the plot covers
-        band_height := TRACE_BAND / cents_range * plot.height
-        gfx.draw_rect({plot.x, middle - band_height / 2}, {plot.width, band_height}, band)
-        center_line := line_color
-        center_line.a = 120
-        gfx.draw_rect({plot.x, middle - 1}, {plot.width, 2}, center_line)
-
-        // Like a lit pen: a see-through glow under the line, even across most of it and fading out at its
-        // edges. The line's edges fade over a pixel.
-        GLOW_RADIUS :: 4.5
-        GLOW_FEATHER :: 1.5
+        // Without a glow, its edges and the dot's fade over a pixel
         LINE_RADIUS :: 1.25
-        glow := line_color
-        glow.a = TRACE_GLOW_ALPHA
         pixel := 1 / gfx.dpi_scale()
 
         // The plot's scales, seconds and cents to points
-        scale := [2]f32{plot.width / span, plot.height / 2 / cents_range}
+        axes := TraceAxes{plot, middle, {plot.width / span, plot.height / 2 / cents_range}}
+        draw_trace_line(self, axes, 2 * LINE_RADIUS + pixel, pixel, line_color)
 
-        draw_trace_line(self, plot, middle, scale, 2 * GLOW_RADIUS, GLOW_FEATHER, glow)
-        draw_trace_line(self, plot, middle, scale, 2 * LINE_RADIUS + pixel, pixel, line_color)
+        // As lit as the newest reading, gone with the pitch
+        newest := self.count - 1
+        if !usable_trace_sample(self, newest) do return
+
+        now := [2]f32{plot.x + plot.width, trace_point(self, newest, axes).y}
+        light := trace_sample(self, newest).light
+        gfx.draw_sector_disc(now, TRACE_DOT_RADIUS, {fade_color(line_color, light)}, pixel)
     }
 
     colors := strobe_colors(config)
@@ -125,29 +135,58 @@ draw_trace_display :: proc(self: ^TraceDisplay, rect: gfx.Rect, config: ^Config)
     // As the config file has them, none or longer than the readings kept is as far as they go
     span := clamp(config.trace_seconds, TRACE_MIN_S, TRACE_MAX_S)
     cents_range := max(config.trace_range_cents, TRACE_BAND)
-
-    PADDING :: 28
-    plot := gfx.Rect{rect.x, rect.y + PADDING, rect.width, rect.height - 2 * PADDING}
+    plot := trace_plot(rect)
+    middle := plot.y + plot.height / 2
 
     // Sharp with the retro glow too, it's the strobe's lamp and the scope's phosphor, a plot has neither
     gfx.draw_rect({rect.x, rect.y}, {rect.width, rect.height}, background)
 
-    gfx.begin_scissor(rect)
-    draw_plot(self, plot, span, cents_range, line_color, band_color)
-    gfx.end_scissor()
+    // The in tune band, ±TRACE_BAND of the ±cents_range the plot covers, and a line through the middle of it,
+    // across the whole view
+    band, center_line := band_color, line_color
+    band.a, center_line.a = 110, 120
+    band_height := TRACE_BAND / cents_range * plot.height
+    gfx.draw_rect({rect.x, middle - band_height / 2}, {rect.width, band_height}, band)
+    gfx.draw_rect({rect.x, middle - 1}, {rect.width, 2}, center_line)
 
-    // Sharp over it, inside the plot's top and bottom edges, clear of the tuning arrows above it, in the font of
-    // the partials on the strobe's tracks and the ruler's gray: the cyan is for what's measured
-    font := pixel_fonts.band_label
-    draw_label(font, fmt.ctprintf("+%.0f¢", cents_range), {plot.x + 10, plot.y + 4}, text_color_muted)
-    draw_label(font, fmt.ctprintf("-%.0f¢", cents_range), {plot.x + 10, plot.y + plot.height - 4 - font.size}, text_color_muted)
+    draw_trace_notches(plot, cents_range)
+
+    gfx.begin_scissor(rect)
+    draw_plot(self, plot, span, cents_range, line_color)
+    gfx.end_scissor()
+}
+
+// Across now, every TRACE_BAND cents, longer at the tens halfway out and at the ends, in the ruler's gray. In
+// tune is the band's line. The ends' cents in small labels right of their notches, the range the plot covers.
+draw_trace_notches :: proc(plot: gfx.Rect, cents_range: f32) {
+    LABEL_GAP :: 3
+
+    draw_notch :: proc(plot: gfx.Rect, cents, cents_range: f32, long: bool) {
+        now := plot.x + plot.width
+        y := plot.y + plot.height / 2 * (1 - cents / cents_range)
+        length := TRACE_LONG_NOTCH if long else TRACE_NOTCH
+        gfx.draw_rect(snap_to_pixels({now - length / 2, y - 0.5}), {length, 1}, text_color_muted)
+        if abs(cents) < cents_range do return
+
+        font := pixel_fonts.label_small
+        text := fmt.ctprintf("%+.0f¢", cents)
+        position := [2]f32{now + length / 2 + LABEL_GAP, y - measure_label(font, text).y / 2}
+        draw_label(font, text, snap_to_pixels(position), text_color_muted)
+    }
+
+    // 10 on the narrow range, 20 on the wide one
+    halfway := math.floor(cents_range / 2 / 10) * 10
+    for cents := f32(TRACE_BAND); cents < cents_range; cents += TRACE_BAND {
+        draw_notch(plot, cents, cents_range, cents == halfway)
+        draw_notch(plot, -cents, cents_range, cents == halfway)
+    }
+    draw_notch(plot, cents_range, cents_range, true)
+    draw_notch(plot, -cents_range, cents_range, true)
 }
 
 // A curve through the readings, dimmed along the line as the readings' light, with a gap where the pitch
 // was lost
-draw_trace_line :: proc(self: ^TraceDisplay, plot: gfx.Rect, middle: f32, scale: [2]f32, thickness, feather: f32, color: gfx.Color) {
-    axes := TraceAxes{plot, middle, scale}
-
+draw_trace_line :: proc(self: ^TraceDisplay, axes: TraceAxes, thickness, feather: f32, color: gfx.Color) {
     // Each run of readings between the gaps, its own curve. One that starts left of the plot is cut there.
     start := first_shown_trace_sample(self, axes)
     for start < self.count {
@@ -171,7 +210,7 @@ TraceAxes :: struct {
     scale:  [2]f32, // seconds and cents to points
 }
 
-// Placed by time, the newest reading is at the right edge now and scrolls left
+// Placed by time, a reading is at the right edge when it comes and scrolls left
 trace_point :: proc(self: ^TraceDisplay, index: int, axes: TraceAxes) -> [2]f32 {
     sample := trace_sample(self, index)
     x := axes.plot.x + axes.plot.width - f32(self.clock - sample.time) * axes.scale.x
@@ -193,16 +232,13 @@ first_shown_trace_sample :: proc(self: ^TraceDisplay, axes: TraceAxes) -> int {
 }
 
 // A Catmull-Rom curve through the readings from start to end, fading from each one's light to the next
-// one's. The usable neighbours either side set the curve's direction, at its ends too.
+// one's. The usable neighbours either side set the curve's direction, at its ends too. The newest reading
+// holds on to now, the dot's there.
 draw_trace_run :: proc(self: ^TraceDisplay, start, end: int, axes: TraceAxes, thickness, feather: f32, color: gfx.Color) {
-    faded :: proc(color: gfx.Color, light: f32) -> gfx.Color {
-        return {color.r, color.g, color.b, u8(f32(color.a) * light)}
-    }
-
     points := make([dynamic][2]f32, context.temp_allocator)
     colors := make([dynamic]gfx.Color, context.temp_allocator)
     append(&points, trace_point(self, start, axes))
-    append(&colors, faded(color, trace_sample(self, start).light))
+    append(&colors, fade_color(color, trace_sample(self, start).light))
 
     for index in start ..< end {
         from := trace_point(self, index, axes)
@@ -214,8 +250,15 @@ draw_trace_run :: proc(self: ^TraceDisplay, start, end: int, axes: TraceAxes, th
         for step in 1 ..= TRACE_CURVE_STEPS {
             progress := f32(step) / TRACE_CURVE_STEPS
             append(&points, core.catmull_rom(before, from, to, after, progress))
-            append(&colors, faded(color, math.lerp(light_from, light_to, progress)))
+            append(&colors, fade_color(color, math.lerp(light_from, light_to, progress)))
         }
+    }
+
+    newest := points[len(points) - 1]
+    now := axes.plot.x + axes.plot.width
+    if end == self.count - 1 && newest.x < now {
+        append(&points, [2]f32{now, newest.y})
+        append(&colors, colors[len(colors) - 1])
     }
     gfx.draw_soft_polyline(points[:], colors[:], thickness, feather)
 }
