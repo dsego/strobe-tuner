@@ -22,6 +22,27 @@ real strobe as the string comes within about 50 to 100 cents.
 - The handover is the hard part, the simulated stripes and the real ones have to meet without a
   jump in phase or speed. May not be worth it if it can't be made seamless.
 
+## Needle triangles on the strobe's tracks
+
+Each track keeps its spinning stripes and gets a small cyan triangle like the needle's, standing off its
+middle by the track's cents. The stripes steady the note, the triangle says how far there is to go. A
+stripe's speed is the strobe's only cue for distance, and it takes practice to read.
+
+- From the track's own reading, as the needle's partial lines (`reads_partial`), never the pitch
+  detection's cents. It shows once the track settles after a pluck and within 50 cents, about where the
+  stripes show anyway, so it can't reach far off where the strobe is weakest, that stays the gauge's.
+  Near the note it barely moves. It helps most from about 5 to 30 cents.
+- A triangle needs a zero to read against, the needle has its notches, a track only the lamp's hotspot.
+  A zero tick on every track, a small scale each.
+- The gap between tracks is 4 points (`STROBE_TRACK_GAP`), a partial's triangle 9 wide. It hangs from
+  the track's top edge over the stripes, drawn after the bloom so it stays sharp. The needle's spread,
+  the last cents to in tune the widest.
+- Flat across the track, curved along its arc with the zero at the top. A wheel's ring has no left and
+  right, it would go without.
+- Track cents already prints each track's number and the needle with its partials shows every track's
+  line. If it's built, a third option on the Track cents row (Off, Numbers, Triangles), not both on the
+  tracks. Tried first behind a `-define` on the flat and curved tracks, live on the Paramount sample.
+
 ## Partial next to the readout
 
 When the fundamental dies down under a partial, the readout gives way to that partial's track for its
