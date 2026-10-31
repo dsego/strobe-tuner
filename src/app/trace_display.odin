@@ -112,7 +112,7 @@ draw_trace_display :: proc(self: ^TraceDisplay, rect: gfx.Rect, config: ^Config)
     draw_plot :: proc(self: ^TraceDisplay, plot: gfx.Rect, span, cents_range: f32, line_color: gfx.Color) {
         middle := plot.y + plot.height / 2
 
-        // Without a glow, its edges and the dot's fade over a pixel
+        // Without a glow, its edges fade over a pixel
         LINE_RADIUS :: 1.25
         pixel := 1 / gfx.dpi_scale()
 
@@ -120,13 +120,15 @@ draw_trace_display :: proc(self: ^TraceDisplay, rect: gfx.Rect, config: ^Config)
         axes := TraceAxes{plot, middle, {plot.width / span, plot.height / 2 / cents_range}}
         draw_trace_line(self, axes, 2 * LINE_RADIUS + pixel, pixel, line_color)
 
-        // As lit as the newest reading, gone with the pitch
+        // As lit as the newest reading, gone with the pitch. A pill as tall as it's wide, round like the
+        // buttons' ends.
         newest := self.count - 1
         if !usable_trace_sample(self, newest) do return
 
         now := [2]f32{plot.x + plot.width, trace_point(self, newest, axes).y}
         light := trace_sample(self, newest).light
-        gfx.draw_sector_disc(now, TRACE_DOT_RADIUS, {fade_color(line_color, light)}, pixel)
+        radius := TRACE_DOT_RADIUS
+        gfx.draw_pill({now.x - radius, now.y - radius, 2 * radius, 2 * radius}, fade_color(line_color, light))
     }
 
     colors := strobe_colors(config)
