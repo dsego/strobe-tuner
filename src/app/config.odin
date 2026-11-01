@@ -68,7 +68,9 @@ strobe_speed :: proc(config: ^Config) -> f32 {
 // second later
 READOUT_FIT_STEPS_S :: [2]f32{core.READOUT_FIT_S, 0.4}
 
-PITCH_STANDARD_MIN :: 400
+// Concert A, from French baroque's 392 to Venetian's 466 with room either side. Much over 480 C8 nears the
+// pitch detection's low-pass, see core.PITCH_LOWPASS_HZ
+PITCH_STANDARD_MIN :: 390
 PITCH_STANDARD_MAX :: 480
 
 // The screens' persistence, off, short, medium and long, in periods of the strobe's frequency: the scope's

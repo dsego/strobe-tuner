@@ -138,7 +138,7 @@ test_freq_to_note :: proc(t: ^testing.T) {
 @(test)
 test_chromatic_range :: proc(t: ^testing.T) {
     // C8 and A0 stay the ends of the range away from A440
-    for pitch_standard in ([]f32{400, 440, 480}) {
+    for pitch_standard in ([]f32{390, 440, 480}) {
         c8 := cents_to_note(HIGHEST_NOTE * 100, pitch_standard)
         testing.expect_value(t, next_chromatic_note(c8).cents, c8.cents)
         testing.expect_value(t, next_chromatic_note(prev_chromatic_note(c8)).cents, c8.cents)
