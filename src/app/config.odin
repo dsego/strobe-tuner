@@ -73,11 +73,11 @@ READOUT_FIT_STEPS_S :: [2]f32{core.READOUT_FIT_S, 0.4}
 PITCH_STANDARD_MIN :: 390
 PITCH_STANDARD_MAX :: 480
 
-// The screens' persistence, off, short, medium and long, in periods of the strobe's frequency: the scope's
-// and the lamp's beam, the Persistence setting. A detuned wave drifts across the screen by the cycles it
-// slips, as many a second as the note is high: in milliseconds a high note smears further and averages more
-// cycles than a low one off by the same cents, in periods they look the same. Medium is 40 ms at A4, about
-// the window of the old narrow bands.
+// The lamp's persistence and the scope's averaging, off, short, medium and long, in periods of the strobe's
+// frequency, the Persistence and Averaging settings, one each. A detuned wave drifts across the screen by the
+// cycles it slips, as many a second as the note is high: in milliseconds a high note smears further and
+// averages more cycles than a low one off by the same cents, in periods they look the same. Medium is 40 ms
+// at A4, about the window of the old narrow bands.
 PERSISTENCE_STEPS_PERIODS :: [4]f32{0, 7, 18, 66}
 
 // The trace's span, short, medium and long, and its range from the middle to the edge, narrow and wide.
@@ -98,7 +98,7 @@ ScopeGain :: enum {
 
 // The scope's beam, see draw_scope_screen
 ScopeBeam :: enum {
-    SOLID, // one line through the sweeps averaged over the screen's persistence
+    SOLID, // one line through the sweeps averaged over scope_averaging_periods
     PHOSPHOR, // the same line as bright as the beam stays, dim where it moves fast like an analog scope's
 }
 
@@ -189,18 +189,20 @@ Config :: struct {
     // How far off each track's partial is, next to the track
     show_band_cents:              bool,
 
-    // how long the scope's phosphor and the lamp remember, in periods of the strobe's frequency, 0 keeps the
-    // newest sweep only
+    // how long the lamp's screen remembers, in periods of the strobe's frequency, 0 keeps the newest sweep only
     screen_persistence_periods:   f32,
     // what the lamp shows, the positive half of the wave like a lamp, the wave as it is, or the two halves
-    // split, tapping it flips between the first and the split
+    // split, tapping it goes round them in that order
     lamp_shape:                   core.ScopeShape,
     // the scope over time or round a circle, tapping it flips them
     scope_sweep:                  core.ScopeSweep,
     // the scope view keeps the first few partials of the wave and drops the fine wiggles above them
     scope_lowpass:                bool,
-    // the scope's beam through the sweeps averaged over the screen's persistence, a solid line or an analog
-    // scope's phosphor, as bright as the beam stays
+    // how many periods of the strobe's frequency the scope's sweeps are averaged over, the lamp's persistence
+    // is its own, 0 draws the newest sweep only
+    scope_averaging_periods:      f32,
+    // the scope's beam through the averaged sweeps, a solid line or an analog scope's phosphor, as bright as
+    // the beam stays
     scope_beam:                   ScopeBeam,
     // the scope's height set by every new note and held, or every sweep as loud
     scope_gain:                   ScopeGain,
@@ -263,6 +265,7 @@ config_defaults :: Config {
     lamp_shape                   = .SPLIT,
     scope_sweep                  = .TIME,
     scope_lowpass                = true,
+    scope_averaging_periods      = 18,
     scope_beam                   = .SOLID,
     scope_gain                   = .AUTOSET,
     trace_seconds                = 2,

@@ -66,7 +66,9 @@ INSTRUMENT_ABBREVIATIONS :: [Instrument]string {
 // The standard tuning first, the others' names are in the bottom left corner too
 Tuning :: struct {
     name:    string,
-    strings: []string, // in the order they're tuned, a guitar's low E first, a ukulele's high G
+    // in the order they're tuned, a guitar's low E first, a ukulele's high G, spelled as cents_to_note spells
+    // them (C# and F# sharp, Eb, Ab and Bb flat) so the sheet lists a string as the ruler names it
+    strings: []string,
 }
 
 TUNINGS := [Instrument][]Tuning {
@@ -74,13 +76,13 @@ TUNINGS := [Instrument][]Tuning {
     .GUITAR = {
         {"Standard", {"E2", "A2", "D3", "G3", "B3", "E4"}},
         {"Drop D", {"D2", "A2", "D3", "G3", "B3", "E4"}},
-        {"Half step down", {"D#2", "G#2", "C#3", "F#3", "A#3", "D#4"}},
+        {"Half step down", {"Eb2", "Ab2", "C#3", "F#3", "Bb3", "Eb4"}},
         {"Whole step down", {"D2", "G2", "C3", "F3", "A3", "D4"}},
         {"Drop C", {"C2", "G2", "C3", "F3", "A3", "D4"}},
         {"DADGAD", {"D2", "A2", "D3", "G3", "A3", "D4"}},
         {"Open G", {"D2", "G2", "D3", "G3", "B3", "D4"}},
         {"Open D", {"D2", "A2", "D3", "F#3", "A3", "D4"}},
-        {"Open E", {"E2", "B2", "E3", "G#3", "B3", "E4"}},
+        {"Open E", {"E2", "B2", "E3", "Ab3", "B3", "E4"}},
     },
     .SEVEN_STRING = {
         {"Standard", {"B1", "E2", "A2", "D3", "G3", "B3", "E4"}},
@@ -89,7 +91,7 @@ TUNINGS := [Instrument][]Tuning {
     .BASS = {
         {"Standard", {"E1", "A1", "D2", "G2"}},
         {"Drop D", {"D1", "A1", "D2", "G2"}},
-        {"Half step down", {"D#1", "G#1", "C#2", "F#2"}},
+        {"Half step down", {"Eb1", "Ab1", "C#2", "F#2"}},
     },
     .UKULELE = {
         {"Standard", {"G4", "C4", "E4", "A4"}},

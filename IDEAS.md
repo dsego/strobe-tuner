@@ -62,12 +62,13 @@ one-frame null, it still does.
 
 ## In-tune cues
 
-One setting, all optional.
+The phone's In-tune tap is built: a haptic tap once the readout holds within a cent for 0.3 s. A cue for
+the desktop waits until someone asks, on the same gate. Candidates:
 
+- The strobe itself flashes green or brighter for a moment, the way some strobe tuners do.
+- The cent triangles above standing in the middle of the tracks as a "locked on" sign.
 - Green note name within the tolerance, the strobe itself stays unchanged.
-- A short beep once the note holds in the window for about 300 ms. The detection ignores the input
-  briefly so the mic doesn't read the beep.
-- A haptic tap as a quieter alternative to the beep.
+- Not a beep, the microphone hears it.
 
 ## Audible beating mode
 

@@ -59,8 +59,9 @@ load_config :: proc() -> Config {
     }
     for &cents in config.strobe_offsets_cents do cents = clamp(cents, -TRACK_OFFSET_MAX_CENTS, TRACK_OFFSET_MAX_CENTS)
 
-    // 0 is off, a sliver of a period would fade the screen to nothing between two samples
+    // 0 is off, a sliver of a period would fade the screen to nothing between two samples, or average nothing
     if config.screen_persistence_periods != 0 do config.screen_persistence_periods = clamp(config.screen_persistence_periods, 1, 1000)
+    if config.scope_averaging_periods != 0 do config.scope_averaging_periods = clamp(config.scope_averaging_periods, 1, 1000)
 
     // A spectrum window of 0 would have nothing to transform
     window_steps := SPECTRUM_WINDOW_STEPS

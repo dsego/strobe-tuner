@@ -225,8 +225,10 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
     if scope.sweep != sweep do core.set_scope_sweep(scope, sweep)
 
     // In periods of the strobe's frequency, the smear and the waver per cent look the same on every note. The
-    // scope view is the sweeps averaged over it, the lamp's screen fades over it.
-    scope.persistence_s = f64(config.screen_persistence_periods) / strobe_hz
+    // scope view is the sweeps averaged over its own span, the lamp's screen fades over the lamp's, and so does
+    // the screen the lamp's tracks turn by.
+    periods := config.scope_averaging_periods if config.strobe_display_type == .SCOPE else config.screen_persistence_periods
+    scope.persistence_s = f64(periods) / strobe_hz
 
     // Starts over, the average stopped while the screen faded and the other way round
     average_sweeps := config.strobe_display_type == .SCOPE

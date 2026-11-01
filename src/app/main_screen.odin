@@ -169,8 +169,8 @@ strobe_track_hz :: proc(lock_in: ^core.StrobeLockIn) -> []f32 {
     return track_hz
 }
 
-// The scope or the lamp. Tapped, the scope flips between the wave over time and the circle, the lamp
-// between the one lamp and the split one, its two halves.
+// The scope or the lamp. Tapped, the scope flips between the wave over time and the circle, the lamp goes
+// round its rectifiers in the settings' order: the one lamp, the wave as it is, the two halves split.
 draw_scope_area :: proc(app: ^App, strobe, view: gfx.Rect) {
     config, measurement := app.config, &app.measurement
     draw_scope_display(&app.displays.scope, &app.displays.glow_targets, &measurement.scope, view, config, measurement.pitch_detector.snr_db)
@@ -181,8 +181,9 @@ draw_scope_area :: proc(app: ^App, strobe, view: gfx.Rect) {
         config.scope_sweep = .TIME if config.scope_sweep == .CIRCLE else .CIRCLE
         show_tap_toast(toast, .SCOPE, "Sweep", "Circle" if config.scope_sweep == .CIRCLE else "Time")
     } else {
-        config.lamp_shape = .HALF_RECTIFIED if config.lamp_shape == .SPLIT else .SPLIT
-        show_tap_toast(toast, .LAMP, "Rectifier", "Split" if config.lamp_shape == .SPLIT else "Half")
+        config.lamp_shape = core.ScopeShape((int(config.lamp_shape) + 1) % len(core.ScopeShape))
+        labels := RECTIFIER_LABELS
+        show_tap_toast(toast, .LAMP, "Rectifier", labels[int(config.lamp_shape)])
     }
 }
 

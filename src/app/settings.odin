@@ -36,7 +36,7 @@ settings_rows :: proc() -> int {
 }
 
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
-DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 6, .SCOPE = 4, .TRACE = 2, .LAMP = 2, .SPECTRUM = 4}
+DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 6, .SCOPE = 5, .TRACE = 2, .LAMP = 2, .SPECTRUM = 4}
 
 // For the longer labels of the display's options
 WIDE_SEGMENT_WIDTH :: 80
@@ -82,9 +82,12 @@ DISPLAY_MENU_WIDTH :: SETTINGS_CONTROL_WIDTH
 
 // The labels of the steps below that have three
 STEP_LABELS :: []cstring{"Short", "Medium", "Long"}
-// The lamp's persistence, see PERSISTENCE_STEPS_PERIODS
+// The lamp's persistence and the scope's averaging, the same steps, see PERSISTENCE_STEPS_PERIODS
 PERSISTENCE_LABEL: cstring : "Persistence"
+AVERAGING_LABEL: cstring : "Averaging"
 PERSISTENCE_LABELS :: []cstring{"Off", "Short", "Medium", "Long"}
+// The lamp's rectifier, in the order of core.ScopeShape, a tap on the lamp goes round them
+RECTIFIER_LABELS :: []cstring{"Half", "None", "Split"}
 
 
 // The dropdown whose menu is open, one at a time, on the settings', the input's or the instrument's sheet
@@ -339,8 +342,10 @@ gui_scope_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
     gui_settings_segmented(sheet_layout, &row, "Sweep", {"Time", "Circle"}, &config.scope_sweep)
     gui_settings_segmented(sheet_layout, &row, "Low-pass", {"Off", "On"}, &config.scope_lowpass)
 
-    // The sweeps averaged over the lamp's persistence, a solid line or an analog scope's phosphor, bright where
-    // the beam lingers
+    // How many sweeps the beam is drawn through, the noise cancels out over more and a detuned note smears
+    gui_persistence_row(sheet_layout, &row, AVERAGING_LABEL, &config.scope_averaging_periods)
+
+    // The averaged sweeps as a solid line or an analog scope's phosphor, bright where the beam lingers
     gui_settings_segmented(sheet_layout, &row, "Beam", {"Solid", "Phosphor"}, &config.scope_beam, WIDE_SEGMENT_WIDTH)
 
     // Set by every new note and held so the note decays on the screen, or every sweep as loud
@@ -357,8 +362,8 @@ gui_lamp_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
     row := 0
 
     // The positive half of the wave like a mechanical strobe's lamp, the wave as it is, or both halves split.
-    // Tapping the lamp flips it too.
-    gui_settings_segmented(sheet_layout, &row, "Rectifier", {"Half", "None", "Split"}, &config.lamp_shape)
+    // Tapping the lamp goes round them too.
+    gui_settings_segmented(sheet_layout, &row, "Rectifier", RECTIFIER_LABELS, &config.lamp_shape)
     gui_persistence_row(sheet_layout, &row, PERSISTENCE_LABEL, &config.screen_persistence_periods)
 }
 
@@ -370,8 +375,8 @@ gui_spectrum_display_options :: proc(sheet_layout: SheetLayout, config: ^Config)
     gui_settings_segmented(sheet_layout, &row, "Peak level", {"Off", "On"}, &config.spectrum_peak_level)
 }
 
-// The lamp's persistence. A long label leaves less room on a narrow phone, the segments shrink to fit beside
-// it.
+// The lamp's persistence or the scope's averaging, in PERSISTENCE_STEPS_PERIODS. A long label leaves less room
+// on a narrow phone, the segments shrink to fit beside it.
 gui_persistence_row :: proc(sheet_layout: SheetLayout, row: ^int, label: cstring, periods: ^f32) {
     LABEL_GAP :: 12
     labels := PERSISTENCE_LABELS
