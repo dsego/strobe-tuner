@@ -5,7 +5,8 @@
 //   odin run sandbox/accuracy -o:speed
 //   odin run sandbox/accuracy -o:speed -- full     every note from B0 to C8 and three concert pitches
 //
-// The tones are steady, a plucked note's attack and decay are for sandbox/replay with a recording.
+// The tones are steady, a plucked note's attack and decay are for sandbox/replay with a recording. The cases
+// run on every core.
 
 package accuracy
 
@@ -13,6 +14,8 @@ import "core:fmt"
 import "core:math"
 import "core:os"
 import "core:slice"
+import "core:sync"
+import "core:thread"
 
 import "../../src/core"
 
@@ -89,8 +92,8 @@ main :: proc() {
     step := 1 if full else 5
     pitch_standards := [?]f32{440, 415, 466} if full else [?]f32{440, 0, 0}
 
-    results: [dynamic]Result
-    defer delete(results)
+    cases: [dynamic]Case
+    defer delete(cases)
 
     for pitch_standard in pitch_standards {
         if pitch_standard == 0 do continue
@@ -102,12 +105,16 @@ main :: proc() {
 
                     for offset_cents in OFFSETS_CENTS {
                         before: Maybe(int) = note_semitones if abs(offset_cents) >= HELD_FROM_CENTS else nil
-                        append(&results, run_case({waveform, note_semitones, offset_cents, pitch_standard, noise_snr_db, before}))
+                        append(&cases, Case{waveform, note_semitones, offset_cents, pitch_standard, noise_snr_db, before})
                     }
                 }
             }
         }
     }
+
+    results := make([dynamic]Result, len(cases))
+    defer delete(results)
+    run_cases(cases[:], results[:])
 
     print_summary(results[:])
     print_by_offset(results[:])
@@ -170,6 +177,34 @@ passed :: proc(result: Result) -> bool {
     if result.unread > 0 do return false
 
     return result.wrong_note == 0 && abs(result.worst_cents) <= TOLERANCE_CENTS && result.wrong_way == 0
+}
+
+// The cases shared by the threads of run_cases
+Work :: struct {
+    cases:   []Case,
+    results: []Result, // each case's at its index
+    next:    int, // the next case a thread takes
+}
+
+// Each case into results at its index, on a thread per core. A case makes its own detector and strobe, and the
+// core has no globals, the threads share nothing but the next index.
+run_cases :: proc(cases: []Case, results: []Result) {
+    work := Work{cases = cases, results = results}
+
+    threads := make([]^thread.Thread, max(os.get_processor_core_count(), 1))
+    defer delete(threads)
+    for &worker in threads {
+        worker = thread.create_and_start_with_data(&work, proc(data: rawptr) {
+            work := (^Work)(data)
+            for {
+                index := sync.atomic_add(&work.next, 1)
+                if index >= len(work.cases) do return
+                work.results[index] = run_case(work.cases[index])
+            }
+        })
+    }
+    thread.join_multiple(..threads)
+    for worker in threads do thread.destroy(worker)
 }
 
 run_case :: proc(test_case: Case) -> (result: Result) {
