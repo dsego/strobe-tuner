@@ -26,12 +26,19 @@ NoteRecognition :: struct {
     candidate_s:    f32,
     steady_s:       f32, // of that, held within STEADY_RUN_CENTS of run_freq, -1 for no run
     run_freq:       f32, // the first detection of the steady run
+    last_freq:      f32, // the candidate's latest detection
+    settled:        bool, // the latest within STEADY_RUN_CENTS of the one before, or the first
 
     confirm_s:      f32, // seen this long in a row before switching, the last one strong or the run steady
 }
 
 // How long a new note is detected in a row before the strobe switches to it, the last detection strong or
-// the run steady. At 0 a note under hum flickers.
+// the run steady, and settled. At 0 a note under hum flickers.
+//
+// Settled, the pitch has stopped moving. A window across a jump in the wave's phase, a tone generator
+// starting its new note from zero, reads past the new pitch for as long as the window: from C#2 in tune
+// to 55 cents sharp read 60 to 83 cents for 50 ms, past NOTE_HOLD_CENTS, and switched to D. The
+// detections were 9 to 17 cents apart, a turned peg moves a few cents a detection.
 NOTE_SWITCH_S :: 0.05
 
 // Detections of the same note this close to the first of them are a steady pitch, see recognize_note
@@ -54,7 +61,7 @@ recognize_note :: proc(self: ^NoteRecognition, pitch: PitchInfo) -> (strong, con
     if pitch.fresh do time_detection(self, pitch)
 
     seen := holds_note(self.candidate_note, pitch.detected_note)
-    confirmed = seen && self.candidate_s >= self.confirm_s
+    confirmed = seen && self.candidate_s >= self.confirm_s && self.settled
 
     steady := seen && self.steady_s >= 0 && self.steady_s >= self.confirm_s
     strong = pitch.is_strong_pitch || (!pitch.is_weak_pitch && steady)
@@ -71,8 +78,10 @@ time_detection :: proc(self: ^NoteRecognition, pitch: PitchInfo) {
         self.candidate_s = 0
         self.steady_s = 0
         self.run_freq = pitch.detected_freq
+        self.settled = true
     case:
         self.candidate_s += pitch.elapsed_s
+        self.settled = abs(cents_deviation(pitch.detected_freq, self.last_freq)) <= STEADY_RUN_CENTS
 
         holds_steady := self.steady_s >= 0 && abs(cents_deviation(pitch.detected_freq, self.run_freq)) <= STEADY_RUN_CENTS
         if holds_steady {
@@ -82,6 +91,7 @@ time_detection :: proc(self: ^NoteRecognition, pitch: PitchInfo) {
             self.run_freq = pitch.detected_freq
         }
     }
+    self.last_freq = pitch.detected_freq
 
     // A guess at a multiple of the period isn't a steady pitch however close it holds, the wave can repeat
     // better over a few periods for a moment

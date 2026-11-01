@@ -97,10 +97,10 @@ test_recognition_steady_run :: proc(t: ^testing.T) {
 
     // Seen long enough but wandered off the run
     confirmed: bool
-    strong, confirmed = recognize_note(&recognition, test_medium_detection(freq_at_cents(A2_HZ, 10)))
+    strong, confirmed = recognize_note(&recognition, test_medium_detection(freq_at_cents(A2_HZ, 6)))
     testing.expect(t, confirmed && !strong)
-    recognize_note(&recognition, test_medium_detection(freq_at_cents(A2_HZ, 12)))
-    strong, confirmed = recognize_note(&recognition, test_medium_detection(freq_at_cents(A2_HZ, 9)))
+    recognize_note(&recognition, test_medium_detection(freq_at_cents(A2_HZ, 8)))
+    strong, confirmed = recognize_note(&recognition, test_medium_detection(freq_at_cents(A2_HZ, 7)))
     testing.expect(t, strong && confirmed)
 
     // Not a steady run of guesses at three periods, a third of the note
@@ -113,4 +113,19 @@ test_recognition_steady_run :: proc(t: ^testing.T) {
         strong, _ = recognize_note(&recognition, guess)
         testing.expect(t, !strong)
     }
+}
+
+// A pitch still moving by more than a few cents a detection isn't confirmed however long it's seen, like a
+// window across a jump in the wave's phase, see NOTE_SWITCH_S. Two that agree confirm it.
+@(test)
+test_recognition_settled :: proc(t: ^testing.T) {
+    recognition := NoteRecognition {
+        confirm_s = 0.1,
+    }
+    for cents in ([]f32{-40, -26, -17, -34}) {
+        _, confirmed := recognize_note(&recognition, test_detection(freq_at_cents(A2_HZ, cents)))
+        testing.expect(t, !confirmed)
+    }
+    _, confirmed := recognize_note(&recognition, test_detection(freq_at_cents(A2_HZ, -30)))
+    testing.expect(t, confirmed)
 }

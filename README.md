@@ -168,7 +168,7 @@ A tap on a view flips one of its options: the Scope's sweep, the Trace's range, 
 
 The pitch detection uses autocorrelation via FFT, the method of _"A Smarter Way to Find Pitch" (Philip McLeod, Geoff Wyvill)_, on the newest 4096 samples every frame. A 60 Hz high-pass takes out DC and rumble, which lift the NSDF between periods, and a 5 kHz low-pass the hiss above the highest note. Its clarity and the SNR tell a strong pitch from a weak one.
 
-A new note has to hold for 50 ms before the strobe switches to it, so a single noisy detection of a decaying note doesn't reset the display.
+A new note has to hold for 50 ms before the strobe switches to it, so a single noisy detection of a decaying note doesn't reset the display, and its last two detections have to agree within 5 cents. A window across a jump in the wave's phase, a tone generator starting a new note from zero, reads past the new pitch for as long as the window, and that overshoot could carry a note held 55 cents sharp over to the next one.
 
 #### Stroboscopic effect
 
