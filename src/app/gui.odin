@@ -344,16 +344,51 @@ gui_dropdown :: proc(
     button_rect := gfx.Rect{position.x, position.y, width, height}
     draw_dropdown_button(button_rect, options[selected^].label, left_pad)
 
-    menu_rect := dropdown_menu_rect(button_rect, len(options), dividers, down)
-    if !dropdown_press(open, button_rect, menu_rect, down) do return false
+    is_open, picked := gui_dropdown_menu(button_rect, options, open, down, dividers)
+    if index, ok := picked.?; ok do selected^ = index
+    return is_open
+}
 
-    picked, was_picked := draw_dropdown_menu(menu_rect, options, dividers)
-    if was_picked {
-        selected^ = picked
-        gui.menu_open = false
-        return false
+// The menu of a dropdown whose button is drawn elsewhere, e.g. a stepper's value. A press on button_rect opens it.
+// Returns whether it's open and the option picked, if one was.
+gui_dropdown_menu :: proc(
+    button_rect: gfx.Rect,
+    options: []GuiOption,
+    open: bool,
+    down := false,
+    dividers: []int = nil,
+) -> (
+    is_open: bool,
+    picked: Maybe(int),
+) {
+    // Down only when it fits above the screen's bottom edge, else up over the rows above, e.g. the displays'
+    // menu low on the settings in the short desktop window
+    opens_down := down
+    if down {
+        safe := gfx.safe_area()
+        below := dropdown_menu_rect(button_rect, len(options), dividers, true)
+        opens_down = below.y + below.height <= safe.y + safe.height
     }
-    return true
+
+    menu_rect := dropdown_menu_rect(button_rect, len(options), dividers, opens_down)
+    if !dropdown_press(open, button_rect, menu_rect, opens_down) do return
+
+    index, was_picked := draw_dropdown_menu(menu_rect, options, dividers)
+    if was_picked {
+        gui.menu_open = false
+        return false, index
+    }
+    return true, nil
+}
+
+// A dropdown's button as wide as its widest option and the caret after it, it keeps its width as the option
+// changes
+dropdown_width :: proc(options: []GuiOption, left_pad: f32 = 12) -> f32 {
+    widest: f32
+    for option in options {
+        widest = max(widest, measure_label(pixel_fonts.label, fmt.ctprintf("%s", option.label), 1).x)
+    }
+    return left_pad + widest + DROPDOWN_LABEL_GAP + DROPDOWN_CARET_WIDTH
 }
 
 draw_dropdown_button :: proc(rect: gfx.Rect, label: string, left_pad: f32) {

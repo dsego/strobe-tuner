@@ -71,12 +71,6 @@ DISPLAY_LABELS :: [StrobeDisplayType]cstring {
     .SPECTRUM = "SPECTRUM",
 }
 
-// A row's stepper or dropdown, on every sheet
-SETTINGS_CONTROL_WIDTH :: 176
-
-// The display dropdown in the settings, as wide as the Concert A stepper over it
-DISPLAY_MENU_WIDTH :: SETTINGS_CONTROL_WIDTH
-
 // The labels of the steps below that have three
 STEP_LABELS :: []cstring{"Short", "Medium", "Long"}
 // The lamp's persistence and the scope's averaging, the same steps, see PERSISTENCE_STEPS_PERIODS
@@ -95,6 +89,7 @@ Dropdown :: enum {
     INSTRUMENT, // the instrument's sheet, what's tuned to, a built-in instrument or a preset
     PRESET_INSTRUMENT,
     TUNING,
+    CONCERT_A, // the presets under Concert A's value
 }
 
 // Opens or closes the dropdown's menu, the one that's open stays as it is when another closes
@@ -136,8 +131,20 @@ gui_settings :: proc(
     if display_options^ do return gui_display_options_page(sheet_layout, config, display_options)
 
     close = draw_sheet_header(sheet_layout, "Settings", VERSION)
+
+    // How it looks first, its menu has the rows under it to open over, then what's measured
     row := 0
-    if gui_concert_a_row(sheet_layout, &row, config) do changed = true
+    display_rect := gui_display_row(sheet_layout, &row, display_options)
+
+    // The displays read the colors and the glow from the config as they draw, nothing to retune
+    gui_colorway_row(sheet_layout, &row, config)
+
+    // Lights the stripes like a lamp behind the disc, in the hue of the colors above, and the scope's beam glows.
+    // The plots stay sharp.
+    gui_settings_segmented(sheet_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow)
+
+    concert_a_changed, concert_a_value := gui_concert_a_row(sheet_layout, &row, config)
+    if concert_a_changed do changed = true
 
     // What the readout, the gauge and the trace read: the fundamental's track, the 2nd partial's, or a blend, the
     // whole wave like most tuners. A guitar or piano string's partials run a little sharp, each reads its own cents.
@@ -153,19 +160,11 @@ gui_settings :: proc(
         changed = true
     }
 
-    display_rect := gui_display_row(sheet_layout, &row, display_options)
-
-    // The displays read the colors and the glow from the config as they draw, nothing to retune
-    gui_colorway_row(sheet_layout, &row, config)
-
-    // Lights the stripes like a lamp behind the disc, in the hue of the colors above, and the scope's beam glows.
-    // The plots stay sharp.
-    gui_settings_segmented(sheet_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow)
-
     if gui_reset_row(sheet_layout, &row, config, confirm_reset) do changed = true
 
-    // Last, its menu opens down over the rows under it
+    // Last, their menus open down over the rows under them
     gui_display_dropdown(open, display_rect, config)
+    if gui_concert_a_menu(open, concert_a_value, config) do changed = true
     return
 }
 
@@ -209,22 +208,50 @@ draw_back_header :: proc(sheet_layout: SheetLayout, title: cstring) -> (close: b
     return
 }
 
-gui_concert_a_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config) -> bool {
-    rect := settings_row(sheet_layout, row^, "Concert A", SETTINGS_CONTROL_WIDTH)
+// Concert A, a step at a time over its range. Its value has a caret after it and opens the presets' menu, see
+// gui_concert_a_menu. Returns whether a step changed it and where the value is, the menu's button.
+gui_concert_a_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config) -> (changed: bool, value: gfx.Rect) {
+    widest: f32
+    for hz in PITCH_STANDARD_MIN ..= PITCH_STANDARD_MAX {
+        widest = max(widest, measure_label(pixel_fonts.label, fmt.ctprintf("%d Hz", hz), 1).x)
+    }
+    rect := settings_row(sheet_layout, row^, "Concert A", stepper_width(widest + DROPDOWN_LABEL_GAP + ICON_SIZE))
     row^ += 1
 
-    default := config_defaults.pitch_standard
-    pitch_standard, ok := gui_stepper(rect, config.pitch_standard, 1, PITCH_STANDARD_MIN, PITCH_STANDARD_MAX, default, "%.0f Hz")
+    value = {rect.x + STEPPER_BUTTON_WIDTH, rect.y, rect.width - 2 * STEPPER_BUTTON_WIDTH, rect.height}
+    steps, _ := gui_stepper_buttons(rect, fmt.ctprintf("%.0f Hz", config.pitch_standard), menu = true)
+    if steps == 0 do return
+
+    config.pitch_standard = clamp(config.pitch_standard + steps, PITCH_STANDARD_MIN, PITCH_STANDARD_MAX)
+    return true, value
+}
+
+// The Concert A presets, a menu under its value. Drawn last, it opens down over the rows under it. Returns
+// whether one was picked.
+gui_concert_a_menu :: proc(open: ^Dropdown, value: gfx.Rect, config: ^Config) -> bool {
+    presets := CONCERT_A_PRESETS_HZ
+    options: [len(presets)]GuiOption
+    for preset, index in presets do options[index] = {i32(index), fmt.tprintf("%.0f Hz", preset)}
+
+    is_open, picked := gui_dropdown_menu(value, options[:], open^ == .CONCERT_A, down = true)
+    if is_open {
+        open^ = .CONCERT_A
+    } else if open^ == .CONCERT_A {
+        open^ = .NONE
+    }
+
+    index, ok := picked.?
     if !ok do return false
 
-    config.pitch_standard = pitch_standard
+    config.pitch_standard = presets[index]
     return true
 }
 
 // The row of the display dropdown, drawn last by gui_display_dropdown, and the › after it under the ✕ that
 // opens the picked display's options. Returns where the dropdown goes.
 gui_display_row :: proc(sheet_layout: SheetLayout, row: ^int, display_options: ^bool) -> gfx.Rect {
-    rect := settings_row(sheet_layout, row^, "Display", DISPLAY_MENU_WIDTH)
+    options := display_menu_options()
+    rect := settings_row(sheet_layout, row^, "Display", dropdown_width(options[:]))
     row^ += 1
 
     right := rect.x + rect.width
@@ -301,13 +328,17 @@ gui_reset_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config, con
 }
 
 gui_display_dropdown :: proc(open: ^Dropdown, rect: gfx.Rect, config: ^Config) {
-    display_names := DISPLAY_NAMES
-    options: [len(StrobeDisplayType)]GuiOption
-    for name, type in display_names do options[int(type)] = {i32(type), string(name)}
-
+    options := display_menu_options()
     selected := int(config.strobe_display_type)
     gui_settings_dropdown(open, .DISPLAY, rect, options[:], &selected, down = true)
     config.strobe_display_type = StrobeDisplayType(selected)
+}
+
+// The displays as the dropdown's options, in the order of StrobeDisplayType
+display_menu_options :: proc() -> (options: [len(StrobeDisplayType)]GuiOption) {
+    display_names := DISPLAY_NAMES
+    for name, type in display_names do options[int(type)] = {i32(type), string(name)}
+    return
 }
 
 // The strobe's options, a row each. Returns changed when the strobe needs updating.
@@ -460,7 +491,11 @@ track_reset_partial :: proc(config: ^Config, slot: int) -> f32 {
 
 // A step at a time along TRACK_PARTIALS, a scroll can take a few. Reset goes back to reset_partial.
 gui_partial_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config, slot: int, reset_partial: f32) -> bool {
-    rect := settings_row(sheet_layout, row^, "Partial", SETTINGS_CONTROL_WIDTH)
+    widest: f32
+    for listed in TRACK_PARTIALS do widest = max(widest, measure_label(pixel_fonts.label, partial_text(listed), 1).x)
+
+    widest += measure_label(pixel_fonts.label_times, "×").x
+    rect := settings_row(sheet_layout, row^, "Partial", stepper_width(widest))
     row^ += 1
 
     partial := config.strobe_intervals[slot]
@@ -478,7 +513,14 @@ gui_partial_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config, s
 
 // The track stands still this far off the exact partial, eg a stretched octave. No sign on the exact partial.
 gui_target_offset_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config, slot: int) -> bool {
-    rect := settings_row(sheet_layout, row^, "Target offset", SETTINGS_CONTROL_WIDTH)
+    STEPS :: int(TRACK_OFFSET_MAX_CENTS / TRACK_OFFSET_STEP_CENTS)
+
+    widest: f32
+    for step in -STEPS ..= STEPS {
+        text := offset_cents_text(f32(step) * TRACK_OFFSET_STEP_CENTS)
+        widest = max(widest, measure_label(pixel_fonts.label, text, 1).x)
+    }
+    rect := settings_row(sheet_layout, row^, "Target offset", stepper_width(widest))
     row^ += 1
 
     offset := config.strobe_offsets_cents[slot]
@@ -827,21 +869,22 @@ gui_segmented :: proc(rect: gfx.Rect, labels: []cstring, selected: int, enabled 
 }
 
 
-// A value with - and + on either side
-gui_stepper :: proc(rect: gfx.Rect, value, step, low, high, default: f32, format: string) -> (f32, bool) {
-    steps, reset := gui_stepper_buttons(rect, fmt.ctprintf(format, value))
-    if reset do return default, true
-    if steps != 0 do return clamp(value + steps * step, low, high), true
+STEPPER_BUTTON_WIDTH :: 44 // the - and the +, the value between them
+STEPPER_VALUE_PADDING :: 4 // either side of the widest value, between it and the - and the +
 
-    return value, false
+// A stepper as wide as its widest value, widest, it keeps its width as it steps
+stepper_width :: proc(widest: f32) -> f32 {
+    return 2 * (STEPPER_BUTTON_WIDTH + STEPPER_VALUE_PADDING) + widest
 }
 
 // The - and + around label, times puts a × after it. Returns the steps taken or reset when the label is
-// double clicked. Dimmed and dead when not enabled.
+// double clicked. With menu the label opens a menu instead, a caret after it like a dropdown's, the caller
+// draws the menu. Dimmed and dead when not enabled.
 gui_stepper_buttons :: proc(
     rect: gfx.Rect,
     label: cstring,
     times := false,
+    menu := false,
     enabled := true,
 ) -> (
     steps: f32,
@@ -849,9 +892,8 @@ gui_stepper_buttons :: proc(
 ) {
     gfx.draw_pill(rect, pill_dark)
 
-    button_width: f32 = 44
-    minus := gfx.Rect{rect.x, rect.y, button_width, rect.height}
-    plus := gfx.Rect{rect.x + rect.width - button_width, rect.y, button_width, rect.height}
+    minus := gfx.Rect{rect.x, rect.y, STEPPER_BUTTON_WIDTH, rect.height}
+    plus := gfx.Rect{rect.x + rect.width - STEPPER_BUTTON_WIDTH, rect.y, STEPPER_BUTTON_WIDTH, rect.height}
 
     if !enabled {
         draw_centered_icon(ICON_MINUS, minus, text_color_disabled)
@@ -870,6 +912,13 @@ gui_stepper_buttons :: proc(
         y := rect.y + (rect.height - LABEL_SIZE) / 2
         draw_label(pixel_fonts.label, label, {x, y}, text_color_white, 1)
         draw_label(pixel_fonts.label_times, TIMES, {x + label_width, y - (LABEL_TIMES_SIZE - LABEL_SIZE) / 2}, text_color_white)
+    } else if menu {
+        // The caret after the value, the pair centred together
+        label_width := measure_label(pixel_fonts.label, label, 1).x
+        x := rect.x + (rect.width - label_width - DROPDOWN_LABEL_GAP - ICON_SIZE) / 2
+        draw_label(pixel_fonts.label, label, {x, rect.y + (rect.height - LABEL_SIZE) / 2}, text_color_white, 1)
+        caret := gfx.Rect{x + label_width + DROPDOWN_LABEL_GAP, rect.y, ICON_SIZE, rect.height}
+        draw_centered_icon(ICON_CARET_DOWN, caret, icon_color)
     } else {
         draw_centered_label(label, rect, text_color_white)
     }
@@ -880,9 +929,11 @@ gui_stepper_buttons :: proc(
 
     stepper := &gui.stepper
 
-    // Double clicking the value between the buttons puts it back to the default, both clicks on this stepper
+    // Double clicking the value between the buttons puts it back to the default, both clicks on this stepper.
+    // A menu's value opens the menu.
     DOUBLE_CLICK_TIME :: 400 * time.Millisecond
-    if gui_button(touch_area({minus.x + minus.width, rect.y, plus.x - minus.x - minus.width, rect.height})) {
+    value := touch_area({minus.x + minus.width, rect.y, plus.x - minus.x - minus.width, rect.height})
+    if !menu && gui_button(value) {
         now := time.tick_now()
         double_click := stepper.click_rect == rect && time.tick_diff(stepper.last_click, now) < DOUBLE_CLICK_TIME
         stepper.last_click = now

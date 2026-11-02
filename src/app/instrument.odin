@@ -264,25 +264,19 @@ gui_instrument :: proc(
     close = draw_sheet_header(sheet_layout, "Instrument", details)
 
     if stringed {
-        rect := settings_row(sheet_layout, options_row, "Capo", SETTINGS_CONTROL_WIDTH)
-        if gui_capo_row(rect, setup, capo_value) do changed = true
+        if gui_capo_row(sheet_layout, options_row, setup, capo_value) do changed = true
     } else {
-        rect := settings_row(sheet_layout, options_row, "Transpose", SETTINGS_CONTROL_WIDTH)
-        if gui_transpose_row(rect, setup, transpose_value) do changed = true
+        if gui_transpose_row(sheet_layout, options_row, setup, transpose_value) do changed = true
     }
 
     if is_preset && gui_note_offsets(sheet_layout, options_row + 1, config, preset, target) do changed = true
 
     // The dropdowns from the bottom up, their menus open down over the rows under them
-    if tunable {
-        rect := settings_row(sheet_layout, tuning_row, "Tuning", SETTINGS_CONTROL_WIDTH)
-        if gui_tuning_dropdown(open, rect, setup.instrument, tuning_index, tuning_value) do changed = true
+    if tunable && gui_tuning_dropdown(open, sheet_layout, tuning_row, setup.instrument, tuning_index, tuning_value) {
+        changed = true
     }
 
-    if is_preset {
-        rect := settings_row(sheet_layout, 1, "Instrument", SETTINGS_CONTROL_WIDTH)
-        if gui_preset_instrument_dropdown(open, rect, config, preset) do changed = true
-    }
+    if is_preset && gui_preset_instrument_dropdown(open, sheet_layout, config, preset) do changed = true
 
     if gui_instrument_dropdown(open, instrument_rect, config, setup.preset) do changed = true
 
@@ -290,9 +284,17 @@ gui_instrument :: proc(
 }
 
 // Writes the fret to capo_value, true when it changed
-gui_capo_row :: proc(rect: gfx.Rect, setup: Setup, capo_value: ^int) -> bool {
+gui_capo_row :: proc(sheet_layout: SheetLayout, row: int, setup: Setup, capo_value: ^int) -> bool {
+    capo_text :: proc(fret: int) -> cstring {
+        return fmt.ctprintf("Fret %d", fret) if fret > 0 else "None"
+    }
+
+    widest: f32
+    for fret in 0 ..= CAPO_MAX_FRET do widest = max(widest, measure_label(pixel_fonts.label, capo_text(fret), 1).x)
+
+    rect := settings_row(sheet_layout, row, "Capo", stepper_width(widest))
     capo := capo_fret(setup)
-    steps, reset := gui_stepper_buttons(rect, fmt.ctprintf("Fret %d", capo) if capo > 0 else "None")
+    steps, reset := gui_stepper_buttons(rect, capo_text(capo))
     capo = 0 if reset else clamp(capo + int(steps), 0, CAPO_MAX_FRET)
     if capo == capo_value^ do return false
 
@@ -301,8 +303,12 @@ gui_capo_row :: proc(rect: gfx.Rect, setup: Setup, capo_value: ^int) -> bool {
 }
 
 // Writes the key to transpose_value, true when it changed. Down a key is up a semitone, see TRANSPOSE_KEYS.
-gui_transpose_row :: proc(rect: gfx.Rect, setup: Setup, transpose_value: ^int) -> bool {
+gui_transpose_row :: proc(sheet_layout: SheetLayout, row: int, setup: Setup, transpose_value: ^int) -> bool {
     keys := TRANSPOSE_KEYS
+    widest: f32
+    for key in keys do widest = max(widest, measure_label(pixel_fonts.label, fmt.ctprintf("%s", key), 1).x)
+
+    rect := settings_row(sheet_layout, row, "Transpose", stepper_width(widest))
     transpose := transpose_key(setup)
     steps, reset := gui_stepper_buttons(rect, fmt.ctprintf("%s", keys[transpose]))
     if reset do transpose = 0
@@ -317,7 +323,8 @@ gui_transpose_row :: proc(rect: gfx.Rect, setup: Setup, transpose_value: ^int) -
 // Writes the tuning to tuning_value, true when it changed. A preset's string offsets stay with the strings.
 gui_tuning_dropdown :: proc(
     open: ^Dropdown,
-    rect: gfx.Rect,
+    sheet_layout: SheetLayout,
+    row: int,
     instrument: Instrument,
     tuning_index: int,
     tuning_value: ^int,
@@ -326,6 +333,7 @@ gui_tuning_dropdown :: proc(
     options := make([]GuiOption, len(tunings), context.temp_allocator)
     for listed, index in tunings do options[index] = {i32(index), listed.name}
 
+    rect := settings_row(sheet_layout, row, "Tuning", dropdown_width(options))
     selected := tuning_index
     gui_settings_dropdown(open, .TUNING, rect, options, &selected, down = true)
     if selected == tuning_index do return false
@@ -336,10 +344,17 @@ gui_tuning_dropdown :: proc(
 
 // A preset's instrument, another one starts the preset over, offsets and a capo are on one instrument and
 // not the next. True when it changed.
-gui_preset_instrument_dropdown :: proc(open: ^Dropdown, rect: gfx.Rect, config: ^Config, preset: int) -> bool {
+gui_preset_instrument_dropdown :: proc(
+    open: ^Dropdown,
+    sheet_layout: SheetLayout,
+    config: ^Config,
+    preset: int,
+) -> bool {
+    options := instrument_options(0)
+    rect := settings_row(sheet_layout, 1, "Instrument", dropdown_width(options))
     current := int(config.preset_instruments[preset])
     selected := current
-    gui_settings_dropdown(open, .PRESET_INSTRUMENT, rect, instrument_options(0), &selected, down = true)
+    gui_settings_dropdown(open, .PRESET_INSTRUMENT, rect, options, &selected, down = true)
     if selected == current do return false
 
     clear_preset(config, preset, Instrument(selected))

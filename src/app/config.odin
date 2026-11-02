@@ -81,6 +81,9 @@ ReadoutSource :: enum {
 PITCH_STANDARD_MIN :: 390
 PITCH_STANDARD_MAX :: 480
 
+// The Concert A presets, a tap back to 440 from anything else: the standard, the orchestras' 442, and 432
+CONCERT_A_PRESETS_HZ :: [3]f32{440, 442, 432}
+
 // The lamp's persistence and the scope's averaging, off, short, medium and long, in periods of the strobe's
 // frequency, the Persistence and Averaging settings, one each. A detuned wave drifts across the screen by the
 // cycles it slips, as many a second as the note is high: in milliseconds a high note smears further and
