@@ -56,8 +56,8 @@ STROBE_REFERENCE_HZ :: 656.5
 
 // The cents of each track are the slope of a least squares line through the phase, older measurements
 // weighted down with a time constant, readout_fit_s, this by default. Its weight on the rate of each moment
-// peaks that long ago and is twice that on average, steady but a turned peg shows that much later than on
-// the stripes.
+// peaks that long ago and is twice that on average, steady but a string being tuned shows that much later than
+// on the stripes.
 READOUT_FIT_S :: 0.15
 
 // The drift averages the chunks' phase advances this long, about the window of the old narrow bands a
@@ -269,7 +269,7 @@ set_strobe_lock_in_speed :: proc(self: ^StrobeLockIn, base_speed: f32) {
 // The window size of a band. The comb keeps the other partials out, the readout's fit steadies the cents, a
 // narrower band buys less noise for more lag. A semitone left a bass's weak, beating partials jumping a tenth
 // of a stripe a frame, 70 cents about halves that and the fundamental's stripes take 0.12 s at C2 instead of
-// 0.08 s to follow a turned peg, see sandbox/step_response. -define:STROBE_BAND_CENTS=n to try another.
+// 0.08 s to follow a string being tuned, see sandbox/step_response. -define:STROBE_BAND_CENTS=n to try another.
 DFT_RESOLUTION_CENTS :: #config(STROBE_BAND_CENTS, 70)
 
 // The phase is measured this many times a period of the strobe's note through the new samples. Between two

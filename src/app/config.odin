@@ -64,7 +64,7 @@ strobe_speed :: proc(config: ^Config) -> f32 {
 }
 
 // The readout's fit time, the Readout speed setting, see core.READOUT_FIT_S. Its weight averages twice as far
-// back: the longer spans several cycles of a vibrato and reads the mean pitch, and shows a turned peg about a
+// back: the longer spans several cycles of a vibrato and reads the mean pitch, and shows a string being tuned about a
 // second later
 READOUT_FIT_STEPS_S :: [2]f32{core.READOUT_FIT_S, 0.4}
 

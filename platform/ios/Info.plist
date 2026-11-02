@@ -23,7 +23,7 @@
         <string>iPhoneSimulator</string>
     </array>
     <key>MinimumOSVersion</key>
-    <string>15.0</string>
+    <string>26.0</string>
     <!-- iPhone and iPad. The layout follows the window's size, see compute_layout, an iPad turns and
          splits the screen with another app, iPadOS 26 dropped the full-screen opt-out. -->
     <key>UIDeviceFamily</key>

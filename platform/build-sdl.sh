@@ -17,9 +17,10 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PREFIX="$ROOT/external/$PLATFORM/sdl3"
 SRC="$(mktemp -d)/SDL"
 
-# The oldest versions the app runs on, the same as in the app's build scripts
-MIN_MACOS=11.0
-MIN_IOS=15.0
+# The oldest versions the app runs on, the same as in the app's build scripts and the Info.plists: the
+# current major release and the one before it, every Apple silicon Mac and the iPhone 11 up
+MIN_MACOS=26.0
+MIN_IOS=26.0
 MIN_SDK=29
 
 # Static on Apple, linked into the app. A shared libSDL3.so on Android, SDL's Java activity loads it.

@@ -38,7 +38,7 @@ NoteRecognition :: struct {
 // Settled, the pitch has stopped moving. A window across a jump in the wave's phase, a tone generator
 // starting its new note from zero, reads past the new pitch for as long as the window: from C#2 in tune
 // to 55 cents sharp read 60 to 83 cents for 50 ms, past NOTE_HOLD_CENTS, and switched to D. The
-// detections were 9 to 17 cents apart, a turned peg moves a few cents a detection.
+// detections were 9 to 17 cents apart, a string being tuned moves a few cents a detection.
 NOTE_SWITCH_S :: 0.05
 
 // Detections of the same note this close to the first of them are a steady pitch, see recognize_note

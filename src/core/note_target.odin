@@ -140,7 +140,8 @@ readout_follows :: proc(self: ^NoteTarget, note: Note) -> bool {
 // The readout follows the detections with this time constant, about a quarter second to settle
 READOUT_SMOOTHING_S :: 0.224
 
-// Further than this from the readout is a new note or a turned peg, the readout jumps there instead of gliding
+// Further than this from the readout is a new note or a string being tuned, the readout jumps there instead of
+// gliding
 READOUT_JUMP_CENTS :: 6
 
 // Averages the strong detections so the readout doesn't flicker with every one, a new pluck starts afresh

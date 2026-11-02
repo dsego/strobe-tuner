@@ -144,7 +144,7 @@ gui_settings :: proc(
 
     // How long every cents number averages, the same fit on every display: the readout, the tracks' cents, the
     // trace and the In-tune tap. The longer evens out a voice's vibrato into its mean pitch, a
-    // turned peg shows later on the numbers while the stripes move at once.
+    // string being tuned shows later on the numbers while the stripes move at once.
     // In milliseconds, a 0.15 looks longer than a 0.4 at a glance
     if gui_steps(sheet_layout, &row, "Readout speed", {"150 ms", "400 ms"}, &config.readout_fit_s, READOUT_FIT_STEPS_S) {
         changed = true

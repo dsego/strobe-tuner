@@ -28,17 +28,22 @@
         chunks: [], // Float32Arrays from the worklet, the first one read from offset on
         offset: 0,
         waiting: 0, // samples in chunks
+        hidden: false, // closed because the page was hidden, opened again when it shows
+        opening: 0, // counts the openings, one closed meanwhile lets its microphone go
     };
 
-    // The microphone without the browser's processing for calls, at the rate it runs at
-    async function openInput() {
+    // The microphone without the browser's processing for calls, at the rate it runs at. again is after the
+    // page was hidden: the browser may want a tap for that, which isn't the permission being off.
+    async function openInput(again = false) {
         if (input.state == INPUT_STATES.OPENING || input.state == INPUT_STATES.RUNNING) return;
 
         closeInput();
+        const opening = ++input.opening;
         input.state = INPUT_STATES.OPENING;
         console.log("Asking for the microphone");
+        let stream;
         try {
-            input.stream = await navigator.mediaDevices.getUserMedia({
+            stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     echoCancellation: false,
                     noiseSuppression: false,
@@ -48,15 +53,24 @@
             });
         } catch (error) {
             console.log("No microphone:", error);
-            input.state = error.name == "NotAllowedError" ? INPUT_STATES.DENIED : INPUT_STATES.FAILED;
+            if (opening != input.opening) return;
+
+            if (error.name != "NotAllowedError") input.state = INPUT_STATES.FAILED;
+            else input.state = again ? INPUT_STATES.WAITING_FOR_TAP : INPUT_STATES.DENIED;
             return;
         }
+        if (opening != input.opening) {
+            stream.getTracks().forEach((track) => track.stop());
+            return;
+        }
+        input.stream = stream;
 
         try {
             // At the microphone's own rate, the browser would resample it to the output's
             const rate = input.stream.getAudioTracks()[0].getSettings().sampleRate;
             input.context = rate ? new AudioContext({ sampleRate: rate }) : new AudioContext();
             await input.context.audioWorklet.addModule("capture-worklet.js");
+            if (opening != input.opening) return;
 
             const source = input.context.createMediaStreamSource(input.stream);
             const capture = new AudioWorkletNode(input.context, "strobie-capture", {
@@ -69,6 +83,8 @@
             source.connect(capture);
         } catch (error) {
             console.log("The input didn't open:", error);
+            if (opening != input.opening) return;
+
             closeInput();
             input.state = INPUT_STATES.FAILED;
             return;
@@ -87,6 +103,7 @@
     }
 
     function closeInput() {
+        input.opening++;
         if (input.stream) input.stream.getTracks().forEach((track) => track.stop());
         if (input.context) input.context.close();
 
@@ -133,16 +150,26 @@
         return count;
     }
 
-    // The browser starts audio only after a tap or a key
+    // The browser starts audio only after a tap or a key, and may want one to open the microphone again after
+    // the page was hidden
     function resumeInput() {
         if (input.context && input.context.state == "suspended") input.context.resume();
+        else if (!input.context && input.state == INPUT_STATES.WAITING_FOR_TAP) openInput(true);
     }
     window.addEventListener("pointerdown", resumeInput, true);
     window.addEventListener("keydown", resumeInput, true);
 
-    // Hidden, the page gets no frames to take them
+    // Hidden, the microphone is let go: nothing runs for a page in the background and the browser's recording
+    // light goes off. Shown again it's opened again, or waits for a tap where the browser wants one for that.
     document.addEventListener("visibilitychange", () => {
-        if (document.hidden) dropWaiting();
+        if (document.hidden) {
+            const open = input.state == INPUT_STATES.OPENING || input.state == INPUT_STATES.RUNNING || input.state == INPUT_STATES.WAITING_FOR_TAP;
+            closeInput();
+            input.hidden = open;
+        } else if (input.hidden) {
+            input.hidden = false;
+            openInput(true);
+        }
     });
 
     const CONFIG_KEY = "strobie.config";

@@ -20,7 +20,7 @@ DEPS="$ROOT/external/ios-device"
 OUT="$ROOT/build/ios-device"
 APP="$OUT/Payload/StrobeTuner.app"
 IPA="$OUT/StrobeTuner.ipa"
-MIN_IOS=15.0
+MIN_IOS=26.0
 # Shown after the settings' title and in the Settings app, e.g. "2.0 (1)"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/platform/ios/Info.plist") ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$ROOT/platform/ios/Info.plist"))"
 TARGET="arm64-apple-ios$MIN_IOS"

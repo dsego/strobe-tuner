@@ -333,7 +333,7 @@ rows only, never the tuning: the instrument is what's tuned, the look is how it'
 
 Needs first, a look only where one is real. Three kinds of use:
 
-- Tuning an instrument: the instrument is off and a peg or a slide fixes it. A fast way in, a still
+- Tuning an instrument: the instrument is off and a turn or a slide fixes it. A fast way in, a still
   strobe at the end.
 - Playing in tune: the player is off and there's nothing to turn. Their pitch over a note and a phrase,
   how it starts, wavers and drifts, and which way they lean on each note.

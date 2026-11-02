@@ -21,7 +21,7 @@ OUT="$ROOT/build/macos"
 NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$ROOT/platform/macos/Info.plist")
 APP="$OUT/$NAME.app"
 PKG="$OUT/$NAME.pkg"
-MIN_MACOS=11.0
+MIN_MACOS=26.0
 # Shown after the settings' title, e.g. "2.0 (1)", the About panel reads it from the Info.plist
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/platform/macos/Info.plist") ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$ROOT/platform/macos/Info.plist"))"
 
