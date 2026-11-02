@@ -98,6 +98,12 @@ find_device :: proc(self: ^Capture, name: string) -> i32 {
 refresh_devices :: proc(self: ^Capture) {
     if !self.ctx_ready do return
 
+    // iOS lists the route's inputs only while the session is active, and a call leaves it inactive. Still
+    // inactive, the list stays as it was, opening the input fails and the strobe area offers to try again.
+    when IOS {
+        if !activate_audio_session() do return
+    }
+
     // Copied, the names go with the list
     open_name: [ma.MAX_DEVICE_NAME_LENGTH + 1]u8
     if self.active_device >= 0 do open_name = self.capture_infos[self.active_device].name
