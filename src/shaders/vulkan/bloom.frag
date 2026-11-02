@@ -58,7 +58,7 @@ void main()
 
     vec3 sum = vec3(0.0);
     float weight_sum = 0.0;
-    for (int tap = -BLUR_RADIUS; tap <= BLUR_RADIUS; tap++) {
+    for (int tap = -BLUR_RADIUS; tap <= BLUR_RADIUS; tap += 1) {
         float weight = exp(-float(tap * tap) / (2.0 * BLUR_SIGMA * BLUR_SIGMA));
         sum += texture(texture0, frag_uv + u.texel_step * float(tap)).rgb * weight;
         weight_sum += weight;

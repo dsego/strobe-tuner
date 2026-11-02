@@ -65,7 +65,7 @@
     const buffer = detector._autocorrelator._inverseBuffer
 
     const ac = []
-    for (let i = 0; i < buffer.length/2; i++) {
+    for (let i = 0; i < buffer.length/2; i += 1) {
       ac[i] = buffer[2 * i];
     }
 
@@ -105,7 +105,7 @@
     ctx.strokeStyle = 'orange'
     ctx.lineWidth = 2
 
-    for (let i = 0; i < ac.length - 1; i++) {
+    for (let i = 0; i < ac.length - 1; i += 1) {
       ctx.moveTo(i * res, 100 - gain * ac[i])
       ctx.lineTo(i * res, 100 - gain * ac[i+1])
     }
@@ -149,7 +149,7 @@
     ctx.beginPath()
     ctx.strokeStyle = 'steelblue'
     ctx.lineWidth = 2
-    for (let i = 0; i < nsdf.length-1; i++) {
+    for (let i = 0; i < nsdf.length-1; i += 1) {
       ctx.moveTo(i * res, 100 - gain * nsdf[i])
       ctx.lineTo(i * res, 100 - gain * nsdf[i+1])
     }

@@ -124,7 +124,7 @@ static float generate_blurred_signal(
     int sample_count = int(clamp(ceil(sweep * float(MAX_SAMPLES) / TAU), 2.0, float(MAX_SAMPLES)));
 
     float sum = 0.0;
-    for (int index = 0; index < MAX_SAMPLES; index++) {
+    for (int index = 0; index < MAX_SAMPLES; index += 1) {
         if (index >= sample_count) break;
 
         float progress = (float(index) + 0.5) / float(sample_count);

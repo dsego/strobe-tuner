@@ -38,7 +38,8 @@
         if (input.state == INPUT_STATES.OPENING || input.state == INPUT_STATES.RUNNING) return;
 
         closeInput();
-        const opening = ++input.opening;
+        input.opening += 1;
+        const opening = input.opening;
         input.state = INPUT_STATES.OPENING;
         console.log("Asking for the microphone");
         let stream;
@@ -103,7 +104,7 @@
     }
 
     function closeInput() {
-        input.opening++;
+        input.opening += 1;
         if (input.stream) input.stream.getTracks().forEach((track) => track.stop());
         if (input.context) input.context.close();
 

@@ -61,7 +61,7 @@ fragment float4 bloom_fragment(
 
     float3 sum = float3(0.0);
     float weight_sum = 0.0;
-    for (int tap = -BLUR_RADIUS; tap <= BLUR_RADIUS; tap++) {
+    for (int tap = -BLUR_RADIUS; tap <= BLUR_RADIUS; tap += 1) {
         float weight = exp(-float(tap * tap) / (2.0 * BLUR_SIGMA * BLUR_SIGMA));
         sum += texture0.sample(sampler0, in.uv + u.texel_step * float(tap)).rgb * weight;
         weight_sum += weight;
