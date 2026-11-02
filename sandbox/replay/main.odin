@@ -34,6 +34,8 @@ PITCH_STANDARD :: f32(#config(PITCH_STANDARD, 440))
 // -define:SHOW_LEVELS=true prints each track's readout SNR, level and envelope in dBFS, and how long it fitted,
 // what the readout picks its track by, see core.strobe_readout_track
 SHOW_LEVELS :: #config(SHOW_LEVELS, false)
+// The partial whose track the readout prefers, -define:READOUT_PARTIAL=2 like the Readout setting's 2×
+READOUT_PARTIAL :: f32(#config(READOUT_PARTIAL, 1))
 
 LEAD_IN_S :: 2
 
@@ -95,7 +97,7 @@ main :: proc() {
         pitch := core.run_pitch_detection(&detector, note_target.pitch)
         core.run_phase_detection(strobe, pitch.is_tonal)
         // Like the app's readout, and the strobe keeps the note lit while it shows it
-        readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
+        readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track, READOUT_PARTIAL)
         retuned := core.update_note_target(&note_target, pitch, core.strobe_shows_note(strobe))
         if retuned {
             retune(strobe, note_target.target_note.frequency)

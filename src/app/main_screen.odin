@@ -31,13 +31,13 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu: Menu
     draw_tap_toast(&app.displays.toast, config.strobe_display_type, layout.strobe_view)
     draw_note_controls(app, layout, reading, menu)
 
-    // The strobe's reading, none before a track settled, and nothing to measure on another note than a locked
-    // one. The gauge points the way without one.
+    // The strobe's reading or the whole wave's, none before a track settled, and nothing to measure on another note
+    // than a locked one. The gauge points the way without one.
     draw_measurements(
         layout.measurements,
         reading.steady.detected_freq,
         reading.steady.err_cents,
-        reading.strobe_readout,
+        reading.readout_shown,
         app.measurement.note_target.active,
     )
 
@@ -269,7 +269,7 @@ draw_tuning_arrows :: proc(displays: ^Displays, note_target: ^core.NoteTarget, l
     // Only the strong readings, a fading note drifts and would flash the arrows. The strobe's close to the
     // note, like the readout.
     cents := core.target_cents_off(note_target, note_target.last_good_pitch.detected_freq)
-    if reading.strobe_readout do cents = reading.steady.err_cents
+    if reading.readout_shown do cents = reading.steady.err_cents
 
     distance := abs(cents)
     measures_target := core.measures_target(note_target)

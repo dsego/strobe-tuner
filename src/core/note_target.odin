@@ -31,6 +31,7 @@ NoteTarget :: struct {
     pitch:                PitchInfo, // the latest detection
     last_good_pitch:      PitchInfo, // the latest strong detection
     steady_freq:          f32, // the strong detections averaged for the readout, 0 before the first
+    readout_smoothing_s:  f32, // steady_freq's time constant, READOUT_SMOOTHING_S, the Readout speed sets it
 
     recognition:          NoteRecognition,
     prevent_octave_jumps: bool,
@@ -62,6 +63,7 @@ init_note_target :: proc(
         target_note = freq_to_note(target_freq_hz, pitch_standard),
         recognition = {confirm_s = confirm_s},
         prevent_octave_jumps = prevent_octave_jumps,
+        readout_smoothing_s = READOUT_SMOOTHING_S,
     }
 }
 
@@ -137,7 +139,8 @@ readout_follows :: proc(self: ^NoteTarget, note: Note) -> bool {
     return true
 }
 
-// The readout follows the detections with this time constant, about a quarter second to settle
+// The readout follows the detections with this time constant, about a quarter second to settle, at the strobe's
+// READOUT_FIT_S. A longer Readout speed stretches it as much.
 READOUT_SMOOTHING_S :: 0.224
 
 // Further than this from the readout is a new note or a string being tuned, the readout jumps there instead of
@@ -151,7 +154,7 @@ steady_readout :: proc(self: ^NoteTarget, freq: f32, elapsed_s: f32) {
         self.steady_freq = freq
     } else {
         // In cents rather than Hz, the same smoothing for every note
-        smoothing := 1 - math.exp(-elapsed_s / READOUT_SMOOTHING_S)
+        smoothing := 1 - math.exp(-elapsed_s / self.readout_smoothing_s)
         self.steady_freq = freq_at_cents(self.steady_freq, smoothing * cents_deviation(freq, self.steady_freq))
     }
 }

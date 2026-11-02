@@ -93,4 +93,20 @@ test_readout_track :: proc(t: ^testing.T) {
     }
     track, _ = strobe_readout_track(self, -1)
     testing.expect_value(t, track, 0)
+
+    // The 2nd partial chosen reads out though the fundamental is louder, the loudest while it's under its noise
+    set_strobe_lock_in_tracks(self, {1, 2, 4}, {0, 0, 0}, {1, 1, 1})
+    set_strobe_lock_in_freq(self, 123.47, 440, 0.01, 2, .HARMONIC)
+    for &band, index in self.bands {
+        band.in_range = true
+        band.rate_time_s = 1
+        band.snr_db, band.envelope_snr_db = 30, 30
+        band.envelope = level(-20 if index == 0 else -40)
+    }
+    track, _ = strobe_readout_track(self, -1, 2)
+    testing.expect_value(t, track, 1)
+
+    self.bands[1].snr_db = 10
+    track, _ = strobe_readout_track(self, -1, 2)
+    testing.expect_value(t, track, 0)
 }

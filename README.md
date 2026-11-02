@@ -20,7 +20,7 @@ Strobie is coming to the App Store for Mac and iPhone. [Try it in your browser](
 - Track settings: tap a track to choose its partial (1× to 8×, or the fifth at 1½×), move its target by up to ±50 cents (e.g. for a stretched octave) and change its spin rate.
 - Vernier mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity.
 - Spin rate: 200% spins the strobe twice as fast per cent, for the final adjustment.
-- Readout: hertz and cents to a tenth, for the fundamental alone, the other partials aren't mixed in. A guitar or piano string is stiff, so its partials run a little sharp, and the 2× can read a few cents sharp while the 1× is in tune, see [Readout](#readout).
+- Readout: hertz and cents to a tenth, of the fundamental's track, the 2×'s, or a blend, the whole wave like most tuners. A guitar or piano string is stiff, so its partials run a little sharp and the three read a few cents apart, see [Readout](#readout).
 - Readout speed: how long the cents average, 400 ms evens out a vibrato, 150 ms follows a string being tuned sooner.
 - Five displays, a menu under the strobe picks one, see [Displays](#displays):
   - Strobe: curved tracks, a wheel or flat tracks, turned by a lock-in on each partial or by the lamp.
@@ -160,7 +160,7 @@ The first four show how the note's phase slips against a reference at the target
 - **Trace**: the cents of the readout over the last few seconds, to see a vibrato or a drift. A dot at now draws the line, a little way in from the right edge.
 - **Spectrum**: the power spectrum of what the pitch detection hears, the loudest peaks named, a mark at each strobe track's partial. Not for tuning, its peaks are about 12 Hz wide: it shows what's there and how far over the noise, e.g. a fridge's hum louder than the string.
 
-The cents readout comes from the lock-in in every display.
+The cents readout comes from the lock-in in every display, or from the pitch detection with Readout on Blend, see [Readout](#readout).
 
 A tap on a view flips one of its options: the Scope's sweep, the Trace's range, the Lamp's rectifier and the Spectrum's scale. On the Strobe a tap on a track opens its settings.
 
@@ -191,12 +191,14 @@ The phase is rescaled so every note spins at the same rate per cent, and being a
 
 #### Readout
 
-The cents readout follows the fundamental's track alone, nothing is mixed in. A string is stiff, so its partials run sharp of whole multiples, a few cents on a wound guitar string, and every track reads its own cents. The fundamental reads out whenever its stripes fully show, however weak it is; otherwise the loudest fully lit octave track takes over. Once a track has read for 50 ms after a pluck, the readout stays on it until the next pluck or until its stripes fade, e.g. a low string's fundamental dying first.
+The cents readout follows a strobe track, the fundamental's by default. A string is stiff, so its partials run sharp of whole multiples, a few cents on a wound guitar string, and every track reads its own cents. The chosen track reads out whenever its stripes fully show, however weak it is; otherwise the loudest fully lit octave track takes over. Once a track has read for 50 ms after a pluck, the readout stays on it until the next pluck or until its stripes fade, e.g. a low string's fundamental dying first.
 
-Other ways to make one number of a note:
-- A pitch detector's cents: the period of the whole wave, pulled sharp by the stretched partials. Here the pitch detector only picks the note.
-- A blend of the partials' cents, close to the pitch the ear hears. It reads sharp of the fundamental on a stretched string and moves as the upper partials die away.
-- A partial the player picks, e.g. the 2× to tune octaves. Not built.
+The Readout setting picks what the readout, the gauge and the trace read:
+- 1×: the fundamental's track.
+- 2×: the 2nd partial's track, e.g. to tune octaves.
+- Blend: the pitch detector's cents, the period of the whole wave, the way most tuners measure. It lands among the partials, the louder ones count more: a stiff string's sharp partials put it a few cents over the fundamental's track, and it drifts as they die away: +7¢ to -1¢ over 9 s on a Strat's low E whose 1× reads -6¢ to -8¢. On a wind instrument or a voice it reads the same as the 1×.
+
+Not built: the tracks' own cents averaged by their level, a blend that keeps the strobe's precision. It would read sharp of the fundamental on a stretched string and move as the upper partials die away, like the pitch detector's.
 
 
 #### Ways to build a strobe

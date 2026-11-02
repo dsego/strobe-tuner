@@ -46,9 +46,9 @@ Measurement :: struct {
 
 // This frame's measurements, for the main screen
 Reading :: struct {
-    pitch:          core.PitchInfo, // the latest detection
-    steady:         core.PitchInfo, // the readout, the strong detections averaged
-    strobe_readout: bool, // the readout is the strobe track's, none without one, see measure
+    pitch:         core.PitchInfo, // the latest detection
+    steady:        core.PitchInfo, // the readout, the strong detections averaged, or a track's
+    readout_shown: bool, // the readout has a reading, none before a track settled, see measure
 }
 
 // The readout as the note went dark
@@ -92,6 +92,9 @@ retune :: proc(measurement: ^Measurement, config: ^Config) {
         VERNIER_SPEED_MULTIPLIER,
         config.strobe_mode,
     )
+
+    // The whole wave's readout averages as much longer as the tracks' fit, see core.READOUT_SMOOTHING_S
+    measurement.note_target.readout_smoothing_s = core.READOUT_SMOOTHING_S * config.readout_fit_s / core.READOUT_FIT_S
 }
 
 // Started over on another input, the readout it held included
@@ -113,15 +116,16 @@ set_measurement_sample_rate :: proc(measurement: ^Measurement, sample_rate: f32)
 
 // The pitch detection, the strobe and the note target on the new audio
 measure :: proc(app: ^App) -> (reading: Reading) {
-    measurement := &app.measurement
+    measurement, config := &app.measurement, app.config
     note_target, lock_in := &measurement.note_target, measurement.strobe_lock_in
     reading.pitch = core.run_pitch_detection(&measurement.pitch_detector, note_target.pitch)
     core.run_phase_detection(lock_in, reading.pitch.is_tonal)
 
-    // The track the readout follows. The strobe keeps the note lit while it shows it. Retuned to another note the
-    // tracks start over, their reading was from the note before.
+    // The track the readout follows, the 2nd partial's or the fundamental's. The strobe keeps the note lit while
+    // it shows it. Retuned to another note the tracks start over, their reading was from the note before.
     ready: bool
-    measurement.readout_track, ready = core.strobe_readout_track(lock_in, measurement.readout_track)
+    partial: f32 = 2 if config.readout_source == .OCTAVE else 1
+    measurement.readout_track, ready = core.strobe_readout_track(lock_in, measurement.readout_track, partial)
     if core.update_note_target(note_target, reading.pitch, core.strobe_shows_note(lock_in)) {
         retune(measurement, app.config)
         ready = false
@@ -136,25 +140,30 @@ measure :: proc(app: ^App) -> (reading: Reading) {
 
     out_of_range := core.out_of_range(note_target)
     reading.steady = core.readout_pitch(note_target)
-
-    // The readout is the strobe's, 0 where the fundamental's track stands still, none until a track has settled
-    // after the pluck. The pitch detection only picks the note: it reads the whole wave, a real string's partials
-    // are a little sharp and pull it a few cents off the track you see. The Hz move along with the cents. A
-    // fading note keeps its track's last reading, also once the note target lets go of it.
     steady := &reading.steady
-    reading.strobe_readout = ready && !out_of_range
-    reading.strobe_readout &&= abs(lock_in.bands[measurement.readout_track].err_cents) <= core.READOUT_RANGE_CENTS
 
-    if reading.strobe_readout {
-        band := lock_in.bands[measurement.readout_track]
-        steady.detected_freq = core.freq_at_cents(steady.detected_freq, band.err_cents - steady.err_cents)
-        steady.err_cents = band.err_cents
+    // The whole wave's readout is the pitch detection's, from its first detection. A guitar or piano string's
+    // partials run a little sharp, so it reads a few cents over the fundamental's track.
+    // Otherwise the readout is the strobe's, 0 where the chosen partial's track stands still, none until a track
+    // has settled after the pluck. The Hz move along with the cents. A fading note keeps its track's last
+    // reading, also once the note target lets go of it.
+    if config.readout_source == .BLEND {
+        reading.readout_shown = note_target.steady_freq != 0 && !out_of_range
+    } else {
+        reading.readout_shown = ready && !out_of_range
+        reading.readout_shown &&= abs(lock_in.bands[measurement.readout_track].err_cents) <= core.READOUT_RANGE_CENTS
+
+        if reading.readout_shown {
+            band := lock_in.bands[measurement.readout_track]
+            steady.detected_freq = core.freq_at_cents(steady.detected_freq, band.err_cents - steady.err_cents)
+            steady.err_cents = band.err_cents
+        }
     }
 
     // The readout's cents, the strobe's so an in tune note is on the middle line, none before a track settled.
     // The track the readout followed carries on as the note decays and the readout gives way, the line as lit as
     // its stripes and dark with them, not the noisy weak detections.
-    if reading.strobe_readout do measurement.traced_track = measurement.readout_track
+    if reading.readout_shown && config.readout_source != .BLEND do measurement.traced_track = measurement.readout_track
 
     // Lit, the readout is the track's as it measures. Dark, it keeps the last one shown: the track goes on
     // measuring whatever passes through its band, the room's noise would read as a wandering pitch. Another
@@ -162,17 +171,22 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     // no more.
     held := &measurement.held_readout
     if note_target.active {
-        if reading.strobe_readout do held^ = {true, steady.detected_freq, steady.err_cents}
+        if reading.readout_shown do held^ = {true, steady.detected_freq, steady.err_cents}
         if out_of_range do held^ = {}
     } else {
-        reading.strobe_readout = held.shown
+        reading.readout_shown = held.shown
         steady.detected_freq, steady.err_cents = held.freq, held.cents
     }
 
     light: f32 = 1
     traced_cents := math.nan_f32()
 
-    if measurement.traced_track >= 0 {
+    // The whole wave's readout while the note is lit, as far out as a track's
+    if config.readout_source == .BLEND {
+        if note_target.active && reading.readout_shown && abs(steady.err_cents) <= core.READOUT_RANGE_CENTS {
+            traced_cents = steady.err_cents
+        }
+    } else if measurement.traced_track >= 0 {
         band := lock_in.bands[measurement.traced_track]
         fade := core.STROBE_FADE_SNR_DB
         light = math.smoothstep(fade[0], fade[1], band.envelope_snr_db)
@@ -186,7 +200,6 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     record_trace(&app.displays.trace, traced_cents, light, reading.pitch.fresh, gfx.frame_time())
 
     // The spectrum of what came in, only while it's the display
-    config := app.config
     if config.strobe_display_type == .SPECTRUM do update_spectrum_display(&app.displays.spectrum, config.spectrum_windows)
 
     return

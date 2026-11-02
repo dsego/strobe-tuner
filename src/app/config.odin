@@ -68,6 +68,14 @@ strobe_speed :: proc(config: ^Config) -> f32 {
 // second later
 READOUT_FIT_STEPS_S :: [2]f32{core.READOUT_FIT_S, 0.4}
 
+// What the readout reads, the Readout setting. On a guitar or piano string the partials run a little sharp,
+// each track reads its own cents, and the whole wave reads a blend of them, the way most tuners measure.
+ReadoutSource :: enum {
+    FUNDAMENTAL, // the 1× track, see core.strobe_readout_track
+    OCTAVE, // the 2× track, the fundamental's without one
+    BLEND, // the pitch detection's, the period of the whole wave, the louder partials count more, see core.readout_pitch
+}
+
 // Concert A, from French baroque's 392 to Venetian's 466 with room either side. Much over 480 C8 nears the
 // pitch detection's low-pass, see core.PITCH_LOWPASS_HZ
 PITCH_STANDARD_MIN :: 390
@@ -171,6 +179,9 @@ Config :: struct {
     // The Readout speed setting, how long the readout's fit through the phase averages, see READOUT_FIT_STEPS_S
     readout_fit_s:                f32,
 
+    // The Readout setting, the track or the whole wave the readout, the gauge and the trace read
+    readout_source:               ReadoutSource,
+
     // --- Display ---
 
     strobe_display_type:          StrobeDisplayType,
@@ -249,6 +260,7 @@ config_defaults :: Config {
     strobe_speeds                = {1, 1, 1, 1, 1},
     strobe_fast                  = false,
     readout_fit_s                = core.READOUT_FIT_S,
+    readout_source               = .FUNDAMENTAL,
 
     // --- Display ---
     strobe_display_type          = .STROBE,

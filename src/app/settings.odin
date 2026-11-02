@@ -30,7 +30,7 @@ import "../gfx"
 SEGMENT_WIDTH :: 60
 
 // The rows in gui_settings. The display's options page is at least as tall, see DISPLAY_OPTION_ROWS.
-SETTINGS_ROWS :: 6
+SETTINGS_ROWS :: 7
 
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
 DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 6, .SCOPE = 5, .TRACE = 2, .LAMP = 2, .SPECTRUM = 4}
@@ -139,9 +139,15 @@ gui_settings :: proc(
     row := 0
     if gui_concert_a_row(sheet_layout, &row, config) do changed = true
 
+    // What the readout, the gauge and the trace read: the fundamental's track, the 2nd partial's, or a blend, the
+    // whole wave like most tuners. A guitar or piano string's partials run a little sharp, each reads its own cents.
+    if gui_settings_segmented(sheet_layout, &row, "Readout", {"1×", "2×", "Blend"}, &config.readout_source) {
+        changed = true
+    }
+
     // How long every cents number averages, the same fit on every display: the readout, the tracks' cents, the
-    // trace. The longer evens out a voice's vibrato into its mean pitch, a string being tuned shows later on the
-    // numbers while the stripes move at once.
+    // trace, and the whole wave's average as much longer. The longer evens out a voice's vibrato into its mean
+    // pitch, a string being tuned shows later on the numbers while the stripes move at once.
     // In milliseconds, a 0.15 looks longer than a 0.4 at a glance
     if gui_steps(sheet_layout, &row, "Readout speed", {"150 ms", "400 ms"}, &config.readout_fit_s, READOUT_FIT_STEPS_S) {
         changed = true
