@@ -20,6 +20,7 @@ Strobie is coming to the App Store for Mac and iPhone. [Try it in your browser](
 - Track settings: tap a track to choose its partial (1× to 8×, or the fifth at 1½×), move its target by up to ±50 cents (e.g. for a stretched octave) and change its spin rate.
 - Vernier mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity.
 - Spin rate: 200% spins the strobe twice as fast per cent, for the final adjustment.
+- Readout: hertz and cents to a tenth, for the fundamental alone, the other partials aren't mixed in. A guitar or piano string is stiff, so its partials run a little sharp, and the 2× can read a few cents sharp while the 1× is in tune, see [Readout](#readout).
 - Readout speed: how long the cents average, 400 ms evens out a vibrato, 150 ms follows a string being tuned sooner.
 - Five displays, a menu under the strobe picks one, see [Displays](#displays):
   - Strobe: curved tracks, a wheel or flat tracks, turned by a lock-in on each partial or by the lamp.
@@ -190,7 +191,7 @@ The phase is rescaled so every note spins at the same rate per cent, and being a
 
 #### Readout
 
-The cents readout follows the fundamental's track. A string's partials are stretched, a few cents sharp of whole multiples on a wound guitar string, so every track reads its own cents. The fundamental reads out whenever its stripes fully show, however weak it is; otherwise the loudest fully lit octave track takes over. Once a track has read for 50 ms after a pluck, the readout stays on it until the next pluck or until its stripes fade, e.g. a low string's fundamental dying first.
+The cents readout follows the fundamental's track alone, nothing is mixed in. A string is stiff, so its partials run sharp of whole multiples, a few cents on a wound guitar string, and every track reads its own cents. The fundamental reads out whenever its stripes fully show, however weak it is; otherwise the loudest fully lit octave track takes over. Once a track has read for 50 ms after a pluck, the readout stays on it until the next pluck or until its stripes fade, e.g. a low string's fundamental dying first.
 
 Other ways to make one number of a note:
 - A pitch detector's cents: the period of the whole wave, pulled sharp by the stretched partials. Here the pitch detector only picks the note.
