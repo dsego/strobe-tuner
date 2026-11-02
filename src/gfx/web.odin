@@ -534,12 +534,6 @@ mouse_down :: proc() -> bool {
     return pointer.down
 }
 
-has_haptics :: proc() -> bool {
-    return false
-}
-
-haptic_tap :: proc() {}
-
 // At once, not after the frame: WebGL keeps it until the draws already issued are done
 unload_texture :: proc(texture: Texture) {
     if texture.handle != {} do gl.DeleteTexture(texture.handle)

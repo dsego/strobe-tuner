@@ -29,11 +29,8 @@ import "../gfx"
 
 SEGMENT_WIDTH :: 60
 
-// The rows in gui_settings, one more with the In-tune tap on a phone. The display's options page is at least
-// as tall, see DISPLAY_OPTION_ROWS.
-settings_rows :: proc() -> int {
-    return 7 if gfx.has_haptics() else 6
-}
+// The rows in gui_settings. The display's options page is at least as tall, see DISPLAY_OPTION_ROWS.
+SETTINGS_ROWS :: 6
 
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
 DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 6, .SCOPE = 5, .TRACE = 2, .LAMP = 2, .SPECTRUM = 4}
@@ -143,8 +140,8 @@ gui_settings :: proc(
     if gui_concert_a_row(sheet_layout, &row, config) do changed = true
 
     // How long every cents number averages, the same fit on every display: the readout, the tracks' cents, the
-    // trace and the In-tune tap. The longer evens out a voice's vibrato into its mean pitch, a
-    // string being tuned shows later on the numbers while the stripes move at once.
+    // trace. The longer evens out a voice's vibrato into its mean pitch, a string being tuned shows later on the
+    // numbers while the stripes move at once.
     // In milliseconds, a 0.15 looks longer than a 0.4 at a glance
     if gui_steps(sheet_layout, &row, "Readout speed", {"150 ms", "400 ms"}, &config.readout_fit_s, READOUT_FIT_STEPS_S) {
         changed = true
@@ -158,9 +155,6 @@ gui_settings :: proc(
     // Lights the stripes like a lamp behind the disc, in the hue of the colors above, and the scope's beam glows.
     // The plots stay sharp.
     gui_settings_segmented(sheet_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow)
-
-    // A tap in the hand as the readout holds in tune, only where there's something to tap with
-    if gfx.has_haptics() do gui_settings_segmented(sheet_layout, &row, "In-tune tap", {"Off", "On"}, &config.in_tune_tap)
 
     if gui_reset_row(sheet_layout, &row, config, confirm_reset) do changed = true
 

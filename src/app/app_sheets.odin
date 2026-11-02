@@ -86,7 +86,7 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
     if sheet.slide == SHEET_DOWN do return
 
     // The display's options page has rows of its own, the strobe's more than the settings
-    rows := settings_rows()
+    rows := SETTINGS_ROWS
     if sheets.display_options {
         option_rows := DISPLAY_OPTION_ROWS
         rows = max(rows, option_rows[app.config.strobe_display_type])
