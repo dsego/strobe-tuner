@@ -115,6 +115,7 @@ scancodes := [Key]sdl.Scancode {
     .COMMA       = .COMMA,
     .ESCAPE      = .ESCAPE,
     .G           = .G,
+    .H           = .H,
     .I           = .I,
     .W           = .W,
     .NUM_0       = ._0,

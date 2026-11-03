@@ -68,6 +68,7 @@ Key :: enum {
     COMMA,
     ESCAPE,
     G,
+    H,
     I,
     W,
     NUM_0,

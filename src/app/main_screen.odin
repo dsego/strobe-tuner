@@ -454,7 +454,11 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo, meter
     stat(fmt.ctprintf("NF %.1f", floor_level), layout.stats + {130, 15})
     stat(fmt.ctprintf("SNR %.1f", pitch.snr_db), layout.stats + {130, 30})
 
-    stat(fmt.ctprintf("Clarity %.3f", pitch.clarity), {500, 10}, large = true)
+    if app.measurement.pitch_detector.method == .HARMONICS {
+        stat(fmt.ctprintf("Stack %.1f dB", pitch.harmonics_db), {480, 10}, large = true)
+    } else {
+        stat(fmt.ctprintf("Clarity %.3f", pitch.clarity), {500, 10}, large = true)
+    }
     if pitch.is_strong_pitch do stat("strong", {600, 10}, gfx.ORANGE, large = true)
     if pitch.is_weak_pitch do stat("weak", {600, 10}, gfx.PURPLE, large = true)
 

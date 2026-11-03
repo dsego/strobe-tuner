@@ -21,23 +21,35 @@ import "core:math"
 import "core:testing"
 
 
-// The last detection of half a second of a note, a high note's partials go over Nyquist, a sine has one
-detect_test_note :: proc(fundamental: f32, partials := 5, sample_rate: f32 = DEFAULT_SAMPLE_RATE) -> PitchInfo {
+// The last detection of half a second of a note, a high note's partials go over Nyquist, a sine has one. By
+// the WAVE method whatever -define:PITCH_HARMONICS says, the HARMONICS tests pass their own.
+detect_test_note :: proc(
+    fundamental: f32,
+    partials := 5,
+    sample_rate: f32 = DEFAULT_SAMPLE_RATE,
+    method := PitchMethod.WAVE,
+) -> PitchInfo {
+    samples := make([]f32, int(sample_rate) / 2, context.temp_allocator)
+    for &sample, i in samples {
+        for partial in 1 ..= partials {
+            phase := math.TAU * f64(partial) * f64(fundamental) * f64(i) / f64(sample_rate)
+            sample += f32(0.01 * math.sin(phase))
+        }
+    }
+    return detect_test_samples(samples, sample_rate, method)
+}
+
+// The last detection of the samples, a display frame at a time like the app, the high-pass settles from
+// their start
+detect_test_samples :: proc(samples: []f32, sample_rate: f32 = DEFAULT_SAMPLE_RATE, method := PitchMethod.WAVE) -> PitchInfo {
     detector := init_pitch_detector(sample_rate = sample_rate)
     defer destroy_pitch_detector(&detector)
+    detector.method = method
 
-    // Half a second a display frame at a time like the app, the high-pass settles from its start
-    frame := make([]f32, int(sample_rate) / DETECTIONS_PER_SECOND, context.temp_allocator)
+    frame := int(sample_rate) / DETECTIONS_PER_SECOND
     info: PitchInfo
-    for start := 0; start < int(sample_rate) / 2; start += len(frame) {
-        for &sample, i in frame {
-            sample = 0
-            for partial in 1 ..= partials {
-                phase := math.TAU * f64(partial) * f64(fundamental) * f64(start + i) / f64(sample_rate)
-                sample += f32(0.01 * math.sin(phase))
-            }
-        }
-        audio_capture_write(&detector, frame)
+    for start := 0; start + frame <= len(samples); start += frame {
+        audio_capture_write(&detector, samples[start:start + frame])
         info = run_pitch_detection(&detector, info)
     }
     return info

@@ -26,6 +26,7 @@
 package core
 
 import "base:intrinsics"
+import "core:math"
 import "core:mem"
 import "core:simd"
 
@@ -76,14 +77,15 @@ destroy_nsdf :: proc(self: ^NSDF) {
     delete(self.peaks)
 }
 
-// The frequency of the chosen peak, 0 for none, and the peak, its lag and NSDF value
-run_nsdf :: proc(self: ^NSDF, samples: []f32) -> (freq: f32, peak: Vec2) {
+// The frequency of the chosen peak, 0 for none, and the peak, its lag and NSDF value. Down to lowest_hz, a
+// longer period is no note, see nsdf_key_maxima.
+run_nsdf :: proc(self: ^NSDF, samples: []f32, lowest_hz: f32) -> (freq: f32, peak: Vec2) {
     // A whole window, find_peak looks at every lag
     assert(len(samples) == len(self.values))
 
     nsdf_autocorrelate(self, samples)
     nsdf_normalize(self, samples)
-    highest := nsdf_key_maxima(self)
+    highest := nsdf_key_maxima(self, self.sample_rate / lowest_hz)
     peak = nsdf_choose_peak(self, highest)
     if peak.x > 0 do freq = self.sample_rate / peak.x
 
@@ -111,9 +113,6 @@ nsdf_normalize :: proc(self: ^NSDF, samples: []f32) {
     }
 }
 
-// The far lags rest on few samples, their peaks are left out. The last 16th, 256 lags of 4096.
-NSDF_IGNORED_LAGS_FRACTION :: 16
-
 // Lower maxima are no period, the NSDF of the zero lag is 1
 NSDF_MIN_PEAK_VALUE :: 0.5
 
@@ -122,9 +121,14 @@ NSDF_CHOSEN_RATIO :: 0.95
 
 // The key maxima into self.peaks, the highest between two zero crossings, refined between the lags. Returns
 // the highest of them.
-nsdf_key_maxima :: proc(self: ^NSDF) -> (highest_peak: Vec2) {
+//
+// Up to the longest period, in lags, and no further: a longer one is no note, and the far lags rest on few
+// samples. Searched to the window's last 16th, under a song their maxima at 12 to 26 Hz reached 0.93 and a
+// hum's own period fell short of NSDF_CHOSEN_RATIO of them. A0's period is under half the window at any rate.
+// The end is two lags past it, the maximum at its lag is compared with the next one.
+nsdf_key_maxima :: proc(self: ^NSDF, longest_period: f32) -> (highest_peak: Vec2) {
     clear(&self.peaks)
-    end := len(self.values) - len(self.values) / NSDF_IGNORED_LAGS_FRACTION
+    end := min(int(math.ceil(longest_period)) + 2, len(self.values))
 
     lag := 1
     for lag < end {

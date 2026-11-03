@@ -36,6 +36,23 @@ PITCH_CLARITY_LOW :: 0.9
 PITCH_CLARITY_HIGH :: 0.98
 PITCH_MIN_SNR_DB :: 2
 
+// The same for the Harmonics method, its stack's dB over the background summed, see HarmonicStack. Under a
+// song a hum scored 57 to 63 in the middle, the song alone 39, 50 at its 90th percentile. At these the song
+// lit 1 of 117 frames and the hums 72 to 82%, at 40 and 50 the song 21. E.g. -define:HARMONICS_LOW_DB=n to
+// try others.
+HARMONICS_LOW_DB :: #config(HARMONICS_LOW_DB, 45)
+HARMONICS_HIGH_DB :: #config(HARMONICS_HIGH_DB, 65)
+
+// How the pitch detection hears a pitch. The detector holds both and can switch between frames.
+PitchMethod :: enum {
+    WAVE, // the period of the whole wave, the NSDF, everything weighed by its power
+    HARMONICS, // the best stack of harmonics over the sound around them, see HarmonicStack
+}
+
+// -define:PITCH_HARMONICS=true to start with HARMONICS, e.g. in the sandbox tools
+PITCH_HARMONICS :: #config(PITCH_HARMONICS, false)
+DEFAULT_PITCH_METHOD :: PitchMethod.HARMONICS when PITCH_HARMONICS else PitchMethod.WAVE
+
 // A strong pitch stays strong down to this far under PITCH_MIN_SNR_DB, so a decaying note doesn't flicker
 // between strong and weak around the threshold
 SNR_HYSTERESIS_DB :: 1.5
@@ -63,7 +80,9 @@ LOW_SAMPLE_RATE :: 44_100
 
 PitchDetector :: struct {
     using node:     AudioCaptureNode,
+    method:         PitchMethod,
     nsdf:           NSDF,
+    stack:          HarmonicStack,
     samples:        []f32,
     // DC and rumble lift the NSDF so it doesn't dip between periods, hiss blurs it, see PITCH_LOWPASS_HZ.
     // Only here, the strobe's tracks are narrow and the scope wants the wave as it is.
@@ -81,7 +100,8 @@ PitchInfo :: struct {
     elapsed_s:       f32, // the new audio since the previous measurement
     detected_freq:   f32,
     detected_note:   Note,
-    clarity:         f32,
+    clarity:         f32, // of the WAVE method
+    harmonics_db:    f32, // of the HARMONICS method, its stack's dB over the background summed
     shortest_period: bool, // the first NSDF peak, not a guess at a multiple of the period
     rms:             f32,
     rms_dbfs:        f32,
@@ -97,6 +117,7 @@ PitchInfo :: struct {
 init_pitch_detector :: proc(pitch_standard: f32 = 440.0, sample_rate: f32 = DEFAULT_SAMPLE_RATE) -> (self: PitchDetector) {
     self.noise_floor = init_noise_floor()
     self.pitch_standard = pitch_standard
+    self.method = DEFAULT_PITCH_METHOD
 
     init_audio_capture_node(&self, sample_rate)
     size_pitch_detector(&self)
@@ -105,6 +126,7 @@ init_pitch_detector :: proc(pitch_standard: f32 = 440.0, sample_rate: f32 = DEFA
 
 destroy_pitch_detector :: proc(self: ^PitchDetector) {
     destroy_nsdf(&self.nsdf)
+    destroy_harmonic_stack(&self.stack)
     destroy_audio_capture_node(self)
     delete(self.samples)
 }
@@ -116,6 +138,7 @@ set_pitch_detector_sample_rate :: proc(self: ^PitchDetector, sample_rate: f32) {
 
     self.sample_rate = sample_rate
     destroy_nsdf(&self.nsdf)
+    destroy_harmonic_stack(&self.stack)
     delete(self.samples)
     size_pitch_detector(self)
     reset_noise_floor(&self.noise_floor)
@@ -128,12 +151,13 @@ pitch_window :: proc(sample_rate: f32) -> int {
     return window
 }
 
-// The window, the NSDF and the filters at the node's rate
+// The window, the NSDF, the harmonic stack and the filters at the node's rate
 size_pitch_detector :: proc(self: ^PitchDetector) {
     window := pitch_window(self.sample_rate)
 
     self.samples = make([]f32, window)
     self.nsdf = init_nsdf(2 * window, self.sample_rate)
+    self.stack = init_harmonic_stack(window, self.sample_rate)
     self.highpass = init_highpass(PITCH_HIGHPASS_HZ, self.sample_rate)
     self.lowpass = init_lowpass(pitch_lowpass_hz(self.sample_rate), self.sample_rate)
 }
@@ -169,19 +193,38 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     info.measured = true
     info.fresh = true
 
-    nsdf_peak: Vec2
-    info.detected_freq, nsdf_peak = run_nsdf(&self.nsdf, self.samples)
-    info.clarity = nsdf_peak.y
-    info.shortest_period = self.nsdf.chosen_peak == 0
+    // A0 to C8, the piano's notes the ruler has, up to half a semitone out, at the pitch standard
+    min_freq := freq_at_cents(self.pitch_standard, LOWEST_NOTE * 100 - 50)
+    max_freq := freq_at_cents(self.pitch_standard, HIGHEST_NOTE * 100 + 50)
+
+    // Medium clear or more, and clear enough for a strong pitch
+    tonal, clear: bool
+
+    switch self.method {
+    case .WAVE:
+        nsdf_peak: Vec2
+        info.detected_freq, nsdf_peak = run_nsdf(&self.nsdf, self.samples, min_freq)
+        info.clarity = nsdf_peak.y
+        info.shortest_period = self.nsdf.chosen_peak == 0
+        tonal = info.clarity >= PITCH_CLARITY_LOW
+        clear = info.clarity >= PITCH_CLARITY_HIGH
+
+    case .HARMONICS:
+        top_hz := pitch_lowpass_hz(self.sample_rate)
+        info.detected_freq, info.harmonics_db = run_harmonic_stack(&self.stack, self.samples, self.sample_rate, min_freq, top_hz)
+
+        // The stack's own fundamental, no multiple of a period to guess at
+        info.shortest_period = true
+        tonal = info.harmonics_db >= HARMONICS_LOW_DB
+        clear = info.harmonics_db >= HARMONICS_HIGH_DB
+    }
+
     info.rms = max(calculate_rms(self.samples), MIN_NOISE_FLOOR)
     info.rms_dbfs = dbfs(info.rms)
 
     dt := f32(elapsed) / self.sample_rate
     info.elapsed_s = dt
 
-    // A0 to C8, the piano's notes the ruler has, up to half a semitone out, at the pitch standard
-    min_freq := freq_at_cents(self.pitch_standard, LOWEST_NOTE * 100 - 50)
-    max_freq := freq_at_cents(self.pitch_standard, HIGHEST_NOTE * 100 + 50)
     in_range := info.detected_freq >= min_freq && info.detected_freq <= max_freq
     mains := false
 
@@ -193,7 +236,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
 
     // A pitch is a note, not the background, even before the floor knows how loud that is. A voice or a
     // muddied string can be one, noise doesn't repeat that well.
-    info.is_tonal = in_range && info.clarity >= PITCH_CLARITY_LOW && !mains
+    info.is_tonal = in_range && tonal && !mains
     self.snr_db = update_noise_floor(&self.noise_floor, info.rms, dt, is_tonal = info.is_tonal)
     info.snr_db = self.snr_db
     info.noise_floor = self.noise_floor.level
@@ -207,11 +250,11 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     weak_snr_db: f32 = PITCH_MIN_SNR_DB - SNR_HYSTERESIS_DB
     strong_snr_db: f32 = weak_snr_db if prev_info.is_strong_pitch else PITCH_MIN_SNR_DB
 
-    info.is_strong_pitch = info.is_tonal && info.clarity >= PITCH_CLARITY_HIGH && info.snr_db >= strong_snr_db
+    info.is_strong_pitch = info.is_tonal && clear && info.snr_db >= strong_snr_db
     info.is_weak_pitch =
         mains ||
         !in_range ||
-        info.clarity < PITCH_CLARITY_LOW ||
+        !tonal ||
         info.snr_db < weak_snr_db
 
     return info

@@ -16,6 +16,8 @@
 
 package app
 
+import "core:fmt"
+
 import "../audio"
 import "../core"
 import "../gfx"
@@ -319,6 +321,14 @@ handle_keys :: proc(app: ^App) -> (menu: MenuCommand) {
     if input >= 0 && input < len(app.input.devices) do app.input.device_index = input
 
     if plain && gfx.key_pressed(.G) do config.strobe_glow = !config.strobe_glow
+
+    // H flips the pitch detection between its two ways to try them side by side, not a setting yet, see
+    // core.PitchMethod
+    if plain && gfx.key_pressed(.H) {
+        detector := &app.measurement.pitch_detector
+        detector.method = .WAVE if detector.method == .HARMONICS else .HARMONICS
+        fmt.println("Pitch detection:", detector.method)
+    }
 
     if plain && gfx.key_pressed(.TAB) do config.strobe_display_type = next_display(config.strobe_display_type)
 

@@ -130,6 +130,8 @@ main :: proc() {
         if pitch.detected_freq > 0 do note = core.note_name(pitch.detected_note)
         // From the strobe's note, to compare with the tracks
         cents := core.cents_deviation(pitch.detected_freq, note_target.target_note.frequency) if pitch.detected_freq > 0 else 0
+        // The Harmonics method's stack dB in the clarity column, see core.PitchMethod
+        clarity := pitch.harmonics_db if detector.method == .HARMONICS else pitch.clarity
         fmt.printf(
             "%-7v %-7v %-6v %-4v  %.3f %-7v  %-6v  %-6v ",
             // fmt pads numbers with zeros, the text pads with spaces
@@ -137,7 +139,7 @@ main :: proc() {
             fmt.tprintf("%.1f", pitch.detected_freq),
             fmt.tprintf("%+.1f¢", cents),
             note,
-            pitch.clarity,
+            clarity,
             fmt.tprintf("%.1fdB", pitch.snr_db),
             kind,
             "active" if note_target.active else "-",

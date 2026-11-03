@@ -68,6 +68,7 @@ KEY_CODES :: [Key]string {
     .COMMA         = "Comma",
     .ESCAPE        = "Escape",
     .G             = "KeyG",
+    .H             = "KeyH",
     .I             = "KeyI",
     .W             = "KeyW",
     .NUM_0         = "Digit0",

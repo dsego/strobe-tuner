@@ -85,7 +85,8 @@ test_nsdf_accuracy :: proc(t: ^testing.T) {
                 sample += f32(amplitude * math.sin(math.TAU * freq * f64(index) / SAMPLE_RATE + harmonic))
             }
         }
-        freq, _ := run_nsdf(&self, samples[:])
+        // Down to A0 half a semitone flat, like the pitch detection
+        freq, _ := run_nsdf(&self, samples[:], freq_at_cents(440, LOWEST_NOTE * 100 - 50))
         return cents_deviation(freq, f32(fundamental))
     }
 
@@ -103,4 +104,20 @@ test_nsdf_accuracy :: proc(t: ^testing.T) {
     // stands still on the fundamental
     stretched := run(110, {0.1, 0.4, 0.2, 0.1}, 0.5)
     testing.expectf(t, stretched > 1.5, "stretched partials, %v cents off", stretched)
+}
+
+// A period longer than the lowest note's is no note, the search stops at it: a 20 Hz sine, its period
+// past half the window, has no pitch
+@(test)
+test_nsdf_longest_period :: proc(t: ^testing.T) {
+    FFT_SIZE :: 8192
+
+    self := init_nsdf(FFT_SIZE, DEFAULT_SAMPLE_RATE)
+    defer destroy_nsdf(&self)
+
+    samples: [FFT_SIZE / 2]f32
+    for &sample, index in samples do sample = math.sin(math.TAU * 20 * f32(index) / DEFAULT_SAMPLE_RATE)
+
+    freq, _ := run_nsdf(&self, samples[:], freq_at_cents(440, LOWEST_NOTE * 100 - 50))
+    testing.expectf(t, freq == 0, "a 20 Hz sine read %v Hz", freq)
 }
