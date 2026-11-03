@@ -19,6 +19,7 @@ package core
 
 import "core:math"
 import "core:math/rand"
+import "core:slice"
 import "core:testing"
 
 
@@ -69,6 +70,48 @@ test_harmonics_in_noise :: proc(t: ^testing.T) {
 
     noise := detect_samples_with(225, {}, 0.026)
     testing.expectf(t, noise.is_weak_pitch, "the noise alone: %v", noise)
+}
+
+// A generated wave's digital silence lets everything stand out, a triangle's aliases 90 dB down made up a
+// stack of their own, see HARMONICS_RANGE_DB. A square has only the odd harmonics, its octave down none of them.
+@(test)
+test_harmonics_generated_waves :: proc(t: ^testing.T) {
+    FREQ :: 110
+
+    triangle := make([]f32, int(DEFAULT_SAMPLE_RATE) / 2, context.temp_allocator)
+    square := make([]f32, int(DEFAULT_SAMPLE_RATE) / 2, context.temp_allocator)
+    for index in 0 ..< len(triangle) {
+        cycle := math.mod(f64(FREQ) * f64(index) / DEFAULT_SAMPLE_RATE, 1)
+        triangle[index] = f32(0.3 * (4 * abs(cycle - 0.5) - 1))
+        square[index] = 0.3 if cycle < 0.5 else -0.3
+    }
+
+    for samples, name in ([2][]f32{triangle, square}) {
+        pitch := detect_test_samples(samples, method = .HARMONICS)
+        testing.expectf(t, pitch.is_strong_pitch && note_name(pitch.detected_note) == "A2", "%v: %v", name, pitch)
+    }
+}
+
+// The quarter of the bins around, as sorting them would have it
+@(test)
+test_select_nth :: proc(t: ^testing.T) {
+    random_state := rand.create(1)
+    random := rand.default_random_generator(&random_state)
+
+    for size in ([]int{1, 2, 7, 65, 97}) {
+        values := make([]f32, size, context.temp_allocator)
+        for &value in values do value = f32(rand.float64(random) * 100)
+
+        // Ties too, a dB level of digital silence repeats
+        if size > 2 do values[1] = values[0]
+
+        sorted := slice.clone(values, context.temp_allocator)
+        slice.sort(sorted)
+        for nth in 0 ..< size {
+            selected := select_nth(slice.clone(values, context.temp_allocator), nth)
+            testing.expectf(t, selected == sorted[nth], "%v values, %vth: %v, sorted %v", size, nth, selected, sorted[nth])
+        }
+    }
 }
 
 // The last detection of half a second of harmonics of the fundamental with these amplitudes, and white noise

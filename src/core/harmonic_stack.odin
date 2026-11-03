@@ -35,6 +35,11 @@ HARMONICS_BACKGROUND_HZ :: 190
 HARMONICS_BACKGROUND_STEP_HZ :: 47
 HARMONICS_QUARTER_DB :: 5.41
 
+// The background no lower than this under the loudest peak, a microphone's own noise is closer under a note.
+// Over a generated tone's digital silence a partial 90 dB down stood out as far as a loud one: a triangle wave's
+// aliases made up a stack of their own and read Bb4 for A2. Over HARMONICS_HIGH_DB, a sine stays strong.
+HARMONICS_RANGE_DB :: 70
+
 // A peak this far over its background is one, the rest is the background's own ripple
 HARMONICS_PEAK_DB :: 6
 
@@ -58,6 +63,14 @@ HARMONICS_WEIGHT :: 0.84
 // low strings' 10th about 35 cents
 HARMONICS_TOLERANCE_CENTS :: 30
 HARMONICS_STRETCH_CENTS :: 3
+
+// A low string's loud 3rd harmonic outscored its own stack at the attack, the fundamental and the 2nd still weak
+// there: A1 read E3 and G2 read D4. A third or a half of the best is the note when its own harmonics, the ones the
+// best doesn't have, add up to this percentage of the best's score. A note's own third or half finds only noise
+// there. At 50 and 70 a few of the guitar's frames still read the 3rd or the 4th harmonic, the hum under a song
+// lit the same at 30. E.g. -define:HARMONICS_OWN_PERCENT=n
+HARMONICS_OWN_PERCENT :: #config(HARMONICS_OWN_PERCENT, 30)
+HARMONICS_DIVISORS :: [2]int{3, 2}
 
 
 HarmonicStack :: struct {
@@ -121,6 +134,23 @@ run_harmonic_stack :: proc(
             if score > score_db do freq, score_db = fundamental, score
         }
     }
+
+    // Down to a third or a half while that's the note, see HARMONICS_OWN_PERCENT. The score stays the best's,
+    // how sure the stack is a note.
+    for lowered := freq > 0; lowered; {
+        lowered = false
+        for divisor in HARMONICS_DIVISORS {
+            lower := freq / f32(divisor)
+            if lower < lowest_hz do continue
+
+            own, _ := score_stack(self.peaks[:], lower, top_hz, skip = divisor)
+            if own < f32(HARMONICS_OWN_PERCENT) / 100 * score_db do continue
+
+            _, freq = score_stack(self.peaks[:], lower, top_hz)
+            lowered = true
+            break
+        }
+    }
     return
 }
 
@@ -135,26 +165,55 @@ measure_stack_background :: proc(self: ^HarmonicStack, bin_hz: f32, top_bin: int
         self.levels[bin] = 10 * math.log10(max(real(self.spectrum.spectrum[bin]), 1e-20))
     }
 
-    // The span held in at the ends
+    // The span held in at the ends, see select_nth
     background_at :: proc(levels, around: []f32, bin: int) -> f32 {
         start := clamp(bin - len(around) / 2, 0, len(levels) - len(around))
         copy(around, levels[start:])
-        slice.sort(around)
-        return around[len(around) / 4] + HARMONICS_QUARTER_DB
+        return select_nth(around, len(around) / 4) + HARMONICS_QUARTER_DB
     }
 
     levels := self.levels[:used]
+    range_floor := slice.max(levels[1:top_bin]) - HARMONICS_RANGE_DB
     step := max(int(HARMONICS_BACKGROUND_STEP_HZ / bin_hz), 1)
     below_bin := 0
-    below := background_at(levels, self.around, 0)
+    below := max(background_at(levels, self.around, 0), range_floor)
     for below_bin < top_bin {
         above_bin := min(below_bin + step, top_bin)
-        above := background_at(levels, self.around, above_bin)
+        above := max(background_at(levels, self.around, above_bin), range_floor)
         for bin in below_bin ..= above_bin {
             self.background[bin] = math.lerp(below, above, f32(bin - below_bin) / f32(above_bin - below_bin))
         }
         below_bin, below = above_bin, above
     }
+}
+
+// The value at nth were the values sorted, they're left partly sorted (Hoare's selection). Sorting the 65 bins
+// around each background point took four fifths of the HARMONICS method's time.
+select_nth :: proc(values: []f32, nth: int) -> f32 {
+    low, high := 0, len(values) - 1
+    for low < high {
+        pivot := values[(low + high) / 2]
+        left, right := low, high
+        for left <= right {
+            for values[left] < pivot do left += 1
+            for values[right] > pivot do right -= 1
+            if left <= right {
+                values[left], values[right] = values[right], values[left]
+                left += 1
+                right -= 1
+            }
+        }
+
+        // Under the pivot up to right, over it from left, the pivot's own value between
+        if nth <= right {
+            high = right
+        } else if nth >= left {
+            low = left
+        } else {
+            break
+        }
+    }
+    return values[nth]
 }
 
 // The peaks HARMONICS_PEAK_DB over their background from just under lowest_hz to top_bin and clear of louder
@@ -210,13 +269,19 @@ find_stack_peaks :: proc(self: ^HarmonicStack, bin_hz, lowest_hz: f32, top_bin: 
 
 // A candidate's first harmonics up to top_hz, each the most prominent peak close enough to it, see
 // HARMONICS_TOLERANCE_CENTS: their dB over the background summed, weighted down the stack, and the fundamental
-// they agree on, each harmonic's peak over its number weighted the same
-score_stack :: proc(peaks: []StackPeak, candidate, top_hz: f32) -> (score_db, fundamental: f32) {
+// they agree on, each harmonic's peak over its number weighted the same. Without every skip-th harmonic, the
+// ones a candidate skip times higher shares, for the candidate's own, see run_harmonic_stack.
+score_stack :: proc(peaks: []StackPeak, candidate, top_hz: f32, skip := 0) -> (score_db, fundamental: f32) {
     weight: f32 = 1
     weighted_freq: f32
     for harmonic in 1 ..= HARMONICS_COUNT {
         target := f32(harmonic) * candidate
         if target > top_hz do break
+
+        if skip > 0 && harmonic % skip == 0 {
+            weight *= HARMONICS_WEIGHT
+            continue
+        }
 
         tolerance := HARMONICS_TOLERANCE_CENTS + HARMONICS_STRETCH_CENTS * f32(harmonic)
         low := freq_at_cents(target, -tolerance)
