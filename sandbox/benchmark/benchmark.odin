@@ -28,7 +28,7 @@ import "core:math/rand"
 import "core:time"
 
 import "../../src/core"
-import pffft "../../external/odin-pffft"
+import fft "../../external/extreme_fft"
 
 SAMPLERATE :: core.DEFAULT_SAMPLE_RATE
 PITCH_FFT_SIZE :: 8192 // the pitch detection's at 48 kHz, see core.PITCH_WINDOW_S
@@ -44,20 +44,99 @@ main :: proc() {
     sink: f32
 
     {
-        out := make([]f32, PITCH_FFT_SIZE)
-        defer delete(out)
-        setup := pffft.new_setup(PITCH_FFT_SIZE, pffft.Transform.REAL)
-        defer pffft.destroy_setup(setup)
+        spectrum := make([]complex64, PITCH_FFT_SIZE / 2)
+        defer delete(spectrum)
+        plan := fft.create_quad_plan(PITCH_FFT_SIZE)
+        defer fft.destroy_quad_plan(&plan)
 
         stopwatch: time.Stopwatch
         time.stopwatch_start(&stopwatch)
         for _ in 0 ..< ITERATIONS {
-            pffft.transform_ordered(setup, raw_data(samples), raw_data(out), nil, pffft.Direction.FORWARD)
-            sink += out[1]
+            fft.run_quad(&plan, samples[:PITCH_FFT_SIZE], spectrum)
+            sink += real(spectrum[1])
         }
         time.stopwatch_stop(&stopwatch)
         microseconds := time.duration_microseconds(time.stopwatch_duration(stopwatch)) / ITERATIONS
-        fmt.printfln("pffft, %v points (pitch detection): %.1f µs", PITCH_FFT_SIZE, microseconds)
+        fmt.printfln("extreme_fft, %v points (pitch detection): %.1f µs", PITCH_FFT_SIZE, microseconds)
+    }
+
+    // The pitch detection's two ways a detection, see core.PitchMethod: the NSDF over the window, and the
+    // harmonic stack's spectrum, background, peaks and stacks. Noise has the most peaks to go through, a note
+    // the most stacks to score.
+    {
+        window := core.pitch_window(SAMPLERATE)
+        lowest_hz := core.freq_at_cents(440, core.LOWEST_NOTE * 100 - 50)
+        top_hz := core.pitch_lowpass_hz(SAMPLERATE)
+
+        nsdf := core.init_nsdf(2 * window, SAMPLERATE)
+        defer core.destroy_nsdf(&nsdf)
+
+        stack := core.init_harmonic_stack(window, SAMPLERATE)
+        defer core.destroy_harmonic_stack(&stack)
+
+        // A2's first 10 harmonics falling like a string's, about 45 dB over the noise
+        note := make([]f32, window)
+        defer delete(note)
+        for &sample, index in note {
+            sample = 0.003 * samples[index]
+            for harmonic in 1 ..= 10 {
+                phase := math.TAU * 110 * f64(harmonic * index) / SAMPLERATE
+                sample += f32(0.3 / f64(harmonic) * math.sin(phase))
+            }
+        }
+
+        // The six open strings strummed, 60 partials for the most peaks
+        chord := make([]f32, window)
+        defer delete(chord)
+        for &sample, index in chord {
+            sample = 0.003 * samples[index]
+            for string_hz in ([]f64{82.41, 110, 146.83, 196, 246.94, 329.63}) {
+                for harmonic in 1 ..= 10 {
+                    phase := math.TAU * string_hz * f64(harmonic * index) / SAMPLERATE
+                    sample += f32(0.05 / f64(harmonic) * math.sin(phase))
+                }
+            }
+        }
+
+        signals := []struct {
+            name:    string,
+            samples: []f32,
+        }{{"noise", samples[:window]}, {"A2 over noise", note}, {"open strings strummed", chord}}
+
+        for signal in signals {
+            stopwatch: time.Stopwatch
+            time.stopwatch_start(&stopwatch)
+            for _ in 0 ..< ITERATIONS {
+                freq, _ := core.run_nsdf(&nsdf, signal.samples, lowest_hz)
+                sink += freq
+            }
+            time.stopwatch_stop(&stopwatch)
+            wave := time.duration_microseconds(time.stopwatch_duration(stopwatch)) / ITERATIONS
+
+            stopwatch = {}
+            time.stopwatch_start(&stopwatch)
+            for _ in 0 ..< ITERATIONS {
+                freq, _ := core.run_harmonic_stack(&stack, signal.samples, SAMPLERATE, lowest_hz, top_hz)
+                sink += freq
+            }
+            time.stopwatch_stop(&stopwatch)
+            harmonics := time.duration_microseconds(time.stopwatch_duration(stopwatch)) / ITERATIONS
+
+            // Of one core, a detection every display frame at 60 fps
+            share :: proc(microseconds: f64) -> f64 {
+                return 100 * microseconds * core.DETECTIONS_PER_SECOND / 1e6
+            }
+            fmt.printfln(
+                "Pitch detection, %v (%v samples): NSDF %.1f µs, harmonic stack %.1f µs, at %v a second %.2f%% and %.2f%% of a core",
+                signal.name,
+                window,
+                wave,
+                harmonics,
+                core.DETECTIONS_PER_SECOND,
+                share(wave),
+                share(harmonics),
+            )
+        }
     }
 
     // A track's window as set_strobe_lock_in_freq sizes it, the comb's box of one period included

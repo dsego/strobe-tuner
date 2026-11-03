@@ -77,8 +77,9 @@ HarmonicStack :: struct {
     spectrum:   WindowedSpectrum, // the detector's window under a Hann taper
     levels:     []f32, // dB of each bin
     background: []f32, // dB around each bin, see HARMONICS_BACKGROUND_HZ
-    around:     []f32, // the bins around one, sorted for the quarter
-    peaks:      [dynamic]StackPeak, // the most prominent ones, low to high
+    around:      []f32, // the bins around one, sorted for the quarter
+    peaks:       [dynamic]StackPeak, // the most prominent ones, low to high
+    previous_hz: f32, // the best stack's fundamental the detection before, see best_stack
 }
 
 StackPeak :: struct {
@@ -125,22 +126,50 @@ run_harmonic_stack :: proc(
     find_stack_peaks(self, bin_hz, lowest_hz, top_bin)
 
     // The score stays the best stack's, how sure it is a note
-    freq, score_db = best_stack(self.peaks[:], lowest_hz, top_hz)
+    freq, score_db = best_stack(self, lowest_hz, top_hz)
     freq = step_down_to_note(self.peaks[:], freq, score_db, lowest_hz, top_hz)
     return
 }
 
 // Every peak as each of a candidate's first harmonics, the stack that scores best: its fundamental, 0 for none,
-// and its score
-best_stack :: proc(peaks: []StackPeak, lowest_hz, top_hz: f32) -> (freq, score_db: f32) {
+// and its score. The one nearest the detection before's goes first: through a held note it's the best again,
+// and the others are given up on as soon as they can't beat it, see score_stack. A strummed chord's took a
+// quarter less time, and every pitch and score came out the same.
+best_stack :: proc(self: ^HarmonicStack, lowest_hz, top_hz: f32) -> (freq, score_db: f32) {
+    peaks := self.peaks[:]
+    most_db: f32
+    for peak in peaks do most_db = max(most_db, peak.over_db)
+
+    if nearest := nearest_candidate(peaks, self.previous_hz, lowest_hz); nearest > 0 {
+        score_db, freq = score_stack(peaks, nearest, top_hz)
+    }
+
     for peak in peaks {
         for harmonic in 1 ..= HARMONICS_COUNT {
             candidate := peak.freq / f32(harmonic)
             if candidate < lowest_hz do break
 
-            score, fundamental := score_stack(peaks, candidate, top_hz)
+            score, fundamental := score_stack(peaks, candidate, top_hz, beat = score_db, most_db = most_db)
             if score > score_db do freq, score_db = fundamental, score
         }
+    }
+
+    self.previous_hz = freq
+    return
+}
+
+// The candidate nearest freq, one of the peaks over one of its first HARMONICS_COUNT harmonics, 0 for none
+nearest_candidate :: proc(peaks: []StackPeak, freq, lowest_hz: f32) -> (nearest: f32) {
+    if freq <= 0 do return
+
+    closest := max(f32)
+    for peak in peaks {
+        harmonic := clamp(math.round(peak.freq / freq), 1, HARMONICS_COUNT)
+        candidate := peak.freq / harmonic
+        if candidate < lowest_hz do continue
+
+        cents := abs(cents_deviation(candidate, freq))
+        if cents < closest do nearest, closest = candidate, cents
     }
     return
 }
@@ -313,10 +342,24 @@ keep_most_prominent :: proc(peaks: ^[dynamic]StackPeak) {
 // HARMONICS_TOLERANCE_CENTS: their dB over the background summed, weighted down the stack, and the fundamental
 // they agree on, each harmonic's peak over its number weighted the same. Without every skip-th harmonic, the
 // ones a candidate skip times higher shares, for the candidate's own, see note_under.
-score_stack :: proc(peaks: []StackPeak, candidate, top_hz: f32, skip := 0) -> (score_db, fundamental: f32) {
+//
+// Given a score to beat and the most prominent peak's dB, it gives up with none once the harmonics still to come
+// couldn't beat it, each as prominent as that peak.
+score_stack :: proc(
+    peaks: []StackPeak,
+    candidate, top_hz: f32,
+    skip := 0,
+    beat: f32 = 0,
+    most_db: f32 = 0,
+) -> (
+    score_db, fundamental: f32,
+) {
     weight: f32 = 1
     weighted_freq: f32
+    weights_left := (1 - math.pow(f32(HARMONICS_WEIGHT), HARMONICS_COUNT)) / (1 - HARMONICS_WEIGHT)
     for harmonic in 1 ..= HARMONICS_COUNT {
+        if beat > 0 && score_db + weights_left * most_db <= beat do return 0, 0
+
         target := f32(harmonic) * candidate
         if target > top_hz do break
 
@@ -329,6 +372,7 @@ score_stack :: proc(peaks: []StackPeak, candidate, top_hz: f32, skip := 0) -> (s
             score_db += counted
             weighted_freq += counted * peak.freq / f32(harmonic)
         }
+        weights_left -= weight
         weight *= HARMONICS_WEIGHT
     }
 
