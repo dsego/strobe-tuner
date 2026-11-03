@@ -124,34 +124,53 @@ run_harmonic_stack :: proc(
     measure_stack_background(self, bin_hz, top_bin)
     find_stack_peaks(self, bin_hz, lowest_hz, top_bin)
 
-    // Every peak as each of a candidate's first harmonics, the stack that scores best
-    for peak in self.peaks {
+    // The score stays the best stack's, how sure it is a note
+    freq, score_db = best_stack(self.peaks[:], lowest_hz, top_hz)
+    freq = step_down_to_note(self.peaks[:], freq, score_db, lowest_hz, top_hz)
+    return
+}
+
+// Every peak as each of a candidate's first harmonics, the stack that scores best: its fundamental, 0 for none,
+// and its score
+best_stack :: proc(peaks: []StackPeak, lowest_hz, top_hz: f32) -> (freq, score_db: f32) {
+    for peak in peaks {
         for harmonic in 1 ..= HARMONICS_COUNT {
             candidate := peak.freq / f32(harmonic)
             if candidate < lowest_hz do break
 
-            score, fundamental := score_stack(self.peaks[:], candidate, top_hz)
+            score, fundamental := score_stack(peaks, candidate, top_hz)
             if score > score_db do freq, score_db = fundamental, score
         }
     }
-
-    // Down to a third or a half while that's the note, see HARMONICS_OWN_PERCENT. The score stays the best's,
-    // how sure the stack is a note.
-    for lowered := freq > 0; lowered; {
-        lowered = false
-        for divisor in HARMONICS_DIVISORS {
-            lower := freq / f32(divisor)
-            if lower < lowest_hz do continue
-
-            own, _ := score_stack(self.peaks[:], lower, top_hz, skip = divisor)
-            if own < f32(HARMONICS_OWN_PERCENT) / 100 * score_db do continue
-
-            _, freq = score_stack(self.peaks[:], lower, top_hz)
-            lowered = true
-            break
-        }
-    }
     return
+}
+
+// Down from freq to a third or a half of it while that's the note, see note_under
+step_down_to_note :: proc(peaks: []StackPeak, freq, score_db, lowest_hz, top_hz: f32) -> f32 {
+    freq := freq
+    for freq > 0 {
+        lower, found := note_under(peaks, freq, score_db, lowest_hz, top_hz)
+        if !found do break
+
+        freq = lower
+    }
+    return freq
+}
+
+// A third or a half of freq that's the note: its own harmonics, the ones freq doesn't have, add up to
+// HARMONICS_OWN_PERCENT of the best stack's score
+note_under :: proc(peaks: []StackPeak, freq, score_db, lowest_hz, top_hz: f32) -> (lower: f32, found: bool) {
+    for divisor in HARMONICS_DIVISORS {
+        candidate := freq / f32(divisor)
+        if candidate < lowest_hz do continue
+
+        own, _ := score_stack(peaks, candidate, top_hz, skip = divisor)
+        if own < f32(HARMONICS_OWN_PERCENT) / 100 * score_db do continue
+
+        _, lower = score_stack(peaks, candidate, top_hz)
+        return lower, true
+    }
+    return 0, false
 }
 
 // The levels up to top_bin and the background around each, see HARMONICS_BACKGROUND_HZ
@@ -187,41 +206,57 @@ measure_stack_background :: proc(self: ^HarmonicStack, bin_hz: f32, top_bin: int
     }
 }
 
-// The value at nth were the values sorted, they're left partly sorted (Hoare's selection). Sorting the 65 bins
-// around each background point took four fifths of the HARMONICS method's time.
+// The value at nth were the values sorted, they're left partly sorted (Hoare's selection): each round splits the
+// part nth is in around its middle value and keeps the side nth is on. Sorting the 65 bins around each background
+// point took four fifths of the HARMONICS method's time.
 select_nth :: proc(values: []f32, nth: int) -> f32 {
     low, high := 0, len(values) - 1
     for low < high {
-        pivot := values[(low + high) / 2]
-        left, right := low, high
-        for left <= right {
-            for values[left] < pivot do left += 1
-            for values[right] > pivot do right -= 1
-            if left <= right {
-                values[left], values[right] = values[right], values[left]
-                left += 1
-                right -= 1
-            }
-        }
+        lower_end, upper_start := partition_around(values, low, high, values[(low + high) / 2])
 
-        // Under the pivot up to right, over it from left, the pivot's own value between
-        if nth <= right {
-            high = right
-        } else if nth >= left {
-            low = left
+        if nth <= lower_end {
+            high = lower_end
+        } else if nth >= upper_start {
+            low = upper_start
         } else {
-            break
+            break // between the two, on the pivot's own value
         }
     }
     return values[nth]
 }
 
+// The values from low to high swapped so the ones no higher than the pivot come first, up to lower_end, and the
+// ones no lower than it last, from upper_start, the pivot's own value between (Hoare's partition)
+partition_around :: proc(values: []f32, low, high: int, pivot: f32) -> (lower_end, upper_start: int) {
+    left, right := low, high
+    for left <= right {
+        for values[left] < pivot do left += 1
+        for values[right] > pivot do right -= 1
+
+        if left <= right {
+            values[left], values[right] = values[right], values[left]
+            left += 1
+            right -= 1
+        }
+    }
+    return right, left
+}
+
 // The peaks HARMONICS_PEAK_DB over their background from just under lowest_hz to top_bin and clear of louder
 // ones' sidelobes, the most prominent HARMONICS_MAX_PEAKS of them, low to high
 find_stack_peaks :: proc(self: ^HarmonicStack, bin_hz, lowest_hz: f32, top_bin: int) {
+    first := max(int(freq_at_cents(lowest_hz, -HARMONICS_TOLERANCE_CENTS) / bin_hz), 1)
+    collect_stack_peaks(self, bin_hz, first, top_bin)
+
+    // The transform is zero padded, a bin of the window is two of its
+    drop_sidelobes(&self.peaks, 2 * bin_hz)
+    keep_most_prominent(&self.peaks)
+}
+
+// The local maxima from first to top_bin HARMONICS_PEAK_DB over their background, refined between the bins
+collect_stack_peaks :: proc(self: ^HarmonicStack, bin_hz: f32, first, top_bin: int) {
     clear(&self.peaks)
 
-    first := max(int(freq_at_cents(lowest_hz, -HARMONICS_TOLERANCE_CENTS) / bin_hz), 1)
     levels := self.levels
     for bin in first ..< top_bin {
         level := levels[bin]
@@ -236,41 +271,48 @@ find_stack_peaks :: proc(self: ^HarmonicStack, bin_hz, lowest_hz: f32, top_bin: 
         }
         append(&self.peaks, peak)
     }
+}
 
-    // Loudest first, each kept unless one kept before leaks over it. The transform is zero padded, a bin of
-    // the window is two of its.
-    under_sidelobes :: proc(louder: []StackPeak, peak: StackPeak, window_bin_hz: f32) -> bool {
-        for other in louder {
-            bins := abs(peak.freq - other.freq) / window_bin_hz
-            if bins < HARMONICS_MAIN_LOBE_BINS do return true
+// Loudest first, each peak kept unless one kept before leaks over it, see under_sidelobes
+drop_sidelobes :: proc(peaks: ^[dynamic]StackPeak, window_bin_hz: f32) {
+    slice.sort_by(peaks[:], proc(first, second: StackPeak) -> bool {return first.level > second.level})
 
-            sidelobe := other.level - 10 - 60 * math.log10(bins)
-            if peak.level < sidelobe + HARMONICS_SIDELOBE_MARGIN_DB do return true
-        }
-        return false
-    }
-
-    slice.sort_by(self.peaks[:], proc(first, second: StackPeak) -> bool {return first.level > second.level})
     kept := 0
-    for peak in self.peaks {
-        if under_sidelobes(self.peaks[:kept], peak, 2 * bin_hz) do continue
+    for peak in peaks {
+        if under_sidelobes(peaks[:kept], peak, window_bin_hz) do continue
 
-        self.peaks[kept] = peak
+        peaks[kept] = peak
         kept += 1
     }
-    resize(&self.peaks, kept)
+    resize(peaks, kept)
+}
 
-    if len(self.peaks) > HARMONICS_MAX_PEAKS {
-        slice.sort_by(self.peaks[:], proc(first, second: StackPeak) -> bool {return first.over_db > second.over_db})
-        resize(&self.peaks, HARMONICS_MAX_PEAKS)
+// Whether the peak is in a louder one's main lobe or not far enough over its sidelobes, see
+// HARMONICS_SIDELOBE_MARGIN_DB
+under_sidelobes :: proc(louder: []StackPeak, peak: StackPeak, window_bin_hz: f32) -> bool {
+    for other in louder {
+        bins := abs(peak.freq - other.freq) / window_bin_hz
+        if bins < HARMONICS_MAIN_LOBE_BINS do return true
+
+        sidelobe := other.level - 10 - 60 * math.log10(bins)
+        if peak.level < sidelobe + HARMONICS_SIDELOBE_MARGIN_DB do return true
     }
-    slice.sort_by(self.peaks[:], proc(first, second: StackPeak) -> bool {return first.freq < second.freq})
+    return false
+}
+
+// The most prominent HARMONICS_MAX_PEAKS of them, low to high
+keep_most_prominent :: proc(peaks: ^[dynamic]StackPeak) {
+    if len(peaks) > HARMONICS_MAX_PEAKS {
+        slice.sort_by(peaks[:], proc(first, second: StackPeak) -> bool {return first.over_db > second.over_db})
+        resize(peaks, HARMONICS_MAX_PEAKS)
+    }
+    slice.sort_by(peaks[:], proc(first, second: StackPeak) -> bool {return first.freq < second.freq})
 }
 
 // A candidate's first harmonics up to top_hz, each the most prominent peak close enough to it, see
 // HARMONICS_TOLERANCE_CENTS: their dB over the background summed, weighted down the stack, and the fundamental
 // they agree on, each harmonic's peak over its number weighted the same. Without every skip-th harmonic, the
-// ones a candidate skip times higher shares, for the candidate's own, see run_harmonic_stack.
+// ones a candidate skip times higher shares, for the candidate's own, see note_under.
 score_stack :: proc(peaks: []StackPeak, candidate, top_hz: f32, skip := 0) -> (score_db, fundamental: f32) {
     weight: f32 = 1
     weighted_freq: f32
@@ -278,30 +320,30 @@ score_stack :: proc(peaks: []StackPeak, candidate, top_hz: f32, skip := 0) -> (s
         target := f32(harmonic) * candidate
         if target > top_hz do break
 
-        if skip > 0 && harmonic % skip == 0 {
-            weight *= HARMONICS_WEIGHT
-            continue
-        }
+        shared := skip > 0 && harmonic % skip == 0
+        if !shared {
+            tolerance := HARMONICS_TOLERANCE_CENTS + HARMONICS_STRETCH_CENTS * f32(harmonic)
+            peak := most_prominent_near(peaks, target, tolerance)
 
-        tolerance := HARMONICS_TOLERANCE_CENTS + HARMONICS_STRETCH_CENTS * f32(harmonic)
-        low := freq_at_cents(target, -tolerance)
-        high := freq_at_cents(target, tolerance)
-
-        best: StackPeak
-        for peak in peaks {
-            if peak.freq < low do continue
-            if peak.freq > high do break
-            if peak.over_db > best.over_db do best = peak
-        }
-
-        if best.over_db > 0 {
-            counted := weight * best.over_db
+            counted := weight * peak.over_db
             score_db += counted
-            weighted_freq += counted * best.freq / f32(harmonic)
+            weighted_freq += counted * peak.freq / f32(harmonic)
         }
         weight *= HARMONICS_WEIGHT
     }
 
     if score_db > 0 do fundamental = weighted_freq / score_db
+    return
+}
+
+// The most prominent of the peaks, low to high, within tolerance_cents of target. None counts 0 dB.
+most_prominent_near :: proc(peaks: []StackPeak, target, tolerance_cents: f32) -> (most: StackPeak) {
+    low := freq_at_cents(target, -tolerance_cents)
+    high := freq_at_cents(target, tolerance_cents)
+    for peak in peaks {
+        if peak.freq < low do continue
+        if peak.freq > high do break
+        if peak.over_db > most.over_db do most = peak
+    }
     return
 }
