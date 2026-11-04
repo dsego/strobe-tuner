@@ -24,7 +24,8 @@ import "core:slice"
 // Tuned on test recordings with the sandbox tools, not in the settings
 
 // The window, 4096 samples at 48 kHz, a power of 2 at least this long at any rate. The FFT is twice as long.
-PITCH_WINDOW_S :: 0.085
+// E.g. -define:PITCH_WINDOW_S=0.17 for 8192.
+PITCH_WINDOW_S :: #config(PITCH_WINDOW_S, 0.085)
 
 // Under a guitar's low E (82 Hz), it takes out DC and low frequency rumble. A lower note like a bass's E1
 // (41 Hz) loses its fundamental here, it's still found from its harmonics.

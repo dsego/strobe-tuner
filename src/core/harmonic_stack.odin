@@ -64,7 +64,9 @@ HARMONICS_COUNT :: 10
 HARMONICS_WEIGHT :: 0.84
 
 // A peak is the harmonic this close to it, the more so the higher, a string's partials run sharp: a piano's
-// low strings' 10th about 35 cents
+// low strings' 10th about 35 cents. It counts less the further off, nothing out there: counted whole, a low
+// square's odd harmonics, 110 Hz apart at A1, each fell within 10 to 44 cents of a 378 Hz candidate's, 8 of its
+// first ten to A1's own 5, and it outscored A1 164 to 125.
 HARMONICS_TOLERANCE_CENTS :: 30
 HARMONICS_STRETCH_CENTS :: 3
 
@@ -72,7 +74,8 @@ HARMONICS_STRETCH_CENTS :: 3
 // there: A1 read E3 and G2 read D4. A third or a half of the best is the note when its own harmonics, the ones the
 // best doesn't have, add up to this percentage of the best's score. A note's own third or half finds only noise
 // there. At 50 and 70 a few of the guitar's frames still read the 3rd or the 4th harmonic, the hum under a song
-// lit the same at 30. E.g. -define:HARMONICS_OWN_PERCENT=n
+// lit the same at 30. A fifth and a seventh too took a low square from its 7th harmonic to the note, and the
+// ukulele's G3 and G#3 a few detections under theirs. E.g. -define:HARMONICS_OWN_PERCENT=n
 HARMONICS_OWN_PERCENT :: #config(HARMONICS_OWN_PERCENT, 30)
 HARMONICS_DIVISORS :: [2]int{3, 2}
 
@@ -148,7 +151,7 @@ stack_harmonics :: proc(peaks: []StackPeak, fundamental, top_hz: f32) -> (harmon
         target := f32(harmonic) * fundamental
         if target > top_hz do break
 
-        peak = most_prominent_near(peaks, target, harmonic_tolerance(harmonic))
+        peak, _ = matching_peak(peaks, target, harmonic_tolerance(harmonic))
     }
     return
 }
@@ -409,8 +412,8 @@ score_stack :: proc(
 
         shared := skip > 0 && harmonic % skip == 0
         if !shared {
-            peak := most_prominent_near(peaks, target, harmonic_tolerance(harmonic))
-            score_db += weight * peak.over_db
+            peak, counted_db := matching_peak(peaks, target, harmonic_tolerance(harmonic))
+            score_db += weight * counted_db
 
             if peak.freq > 0 {
                 pull := math.pow(10, peak.level / 10) * f32(harmonic * harmonic)
@@ -426,14 +429,18 @@ score_stack :: proc(
     return
 }
 
-// The most prominent of the peaks, low to high, within tolerance_cents of target. None counts 0 dB.
-most_prominent_near :: proc(peaks: []StackPeak, target, tolerance_cents: f32) -> (most: StackPeak) {
+// The peak, low to high, that counts the most as the harmonic at target: its dB over the background, less the
+// further off it is, none from tolerance_cents. None counts 0 dB.
+matching_peak :: proc(peaks: []StackPeak, target, tolerance_cents: f32) -> (match: StackPeak, counted_db: f32) {
     low := freq_at_cents(target, -tolerance_cents)
     high := freq_at_cents(target, tolerance_cents)
     for peak in peaks {
         if peak.freq < low do continue
         if peak.freq > high do break
-        if peak.over_db > most.over_db do most = peak
+
+        off := cents_deviation(peak.freq, target) / tolerance_cents
+        counted := peak.over_db * (1 - off * off)
+        if counted > counted_db do match, counted_db = peak, counted
     }
     return
 }
