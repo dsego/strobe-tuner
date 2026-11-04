@@ -73,7 +73,7 @@ READOUT_FIT_STEPS_S :: [2]f32{core.READOUT_FIT_S, 0.4}
 ReadoutSource :: enum {
     FUNDAMENTAL, // the 1× track, see core.strobe_readout_track
     OCTAVE, // the 2× track, the fundamental's without one
-    BLEND, // the pitch detection's, the period of the whole wave, the louder partials count more, see core.readout_pitch
+    BLEND, // the pitch detection's, the period of the whole wave or the harmonic stack's same mix, the louder partials count more, see core.readout_pitch
 }
 
 // Concert A, from French baroque's 392 to Venetian's 466 with room either side. Much over 480 C8 nears the

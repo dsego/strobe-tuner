@@ -435,7 +435,8 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading, menu: Me
     }
 }
 
-// The levels next to the input meter and the NSDF plots on the right
+// The levels next to the input meter, and on the right the pitch detection's latest detection, its NSDF or its
+// harmonic stack, over the stack's spectrogram
 draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo, meter: [2]f32) {
     stat :: proc(text: cstring, position: [2]f32, color := text_color_white, large := false) {
         font := pixel_fonts.label_large if large else pixel_fonts.label_small
@@ -463,6 +464,16 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo, meter
     if pitch.is_weak_pitch do stat("weak", {600, 10}, gfx.PURPLE, large = true)
 
     font := pixel_fonts.label_small.font
-    draw_nsdf(gfx.Rect{520, 40, 660, 200}, &app.measurement.pitch_detector.nsdf, font)
-    draw_freq_plot(gfx.Rect{520, 300, 660, 200}, &app.measurement.pitch_detector.nsdf, font)
+    detector := &app.measurement.pitch_detector
+    if detector.method == .HARMONICS {
+        draw_stack_plot(gfx.Rect{520, 50, 660, 170}, &detector.stack, pitch, detector.sample_rate, font)
+    } else {
+        draw_nsdf(gfx.Rect{520, 40, 660, 180}, &detector.nsdf, font)
+    }
+
+    note_target := &app.measurement.note_target
+    if pitch.fresh {
+        record_debug_column(&debug_spectrogram, &detector.stack, pitch, note_target.active, note_target.target_note, detector.sample_rate)
+    }
+    draw_debug_spectrogram(&debug_spectrogram, gfx.Rect{520, 270, 660, 330}, detector.sample_rate, app.config.pitch_standard, font)
 }

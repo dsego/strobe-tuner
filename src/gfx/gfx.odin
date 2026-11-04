@@ -52,11 +52,13 @@ MAX_MENU_COMMANDS :: 64
 Color :: [4]u8
 
 WHITE :: Color{255, 255, 255, 255}
+BLACK :: Color{0, 0, 0, 255}
 LIGHTGRAY :: Color{200, 200, 200, 255}
 GOLD :: Color{255, 203, 0, 255}
 ORANGE :: Color{255, 161, 0, 255}
 PINK :: Color{255, 109, 194, 255}
 PURPLE :: Color{200, 122, 255, 255}
+GREEN :: Color{0, 228, 48, 255}
 
 Key :: enum {
     LEFT,

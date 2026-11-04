@@ -16,12 +16,12 @@
 package app
 
 import "core:fmt"
-import "core:math"
 
 import "../core"
 import "../gfx"
 
-// The debug plots of the DEBUG_STATS build, the NSDF and the spectrum of the latest pitch detection
+// The debug plots of the DEBUG_STATS build, the NSDF of the latest pitch detection. The harmonic stack's are in
+// debug_spectrogram.odin.
 
 // The NSDF over the first lags, a cross on each key maximum, the chosen one pink. 1 at the top, the NSDF of
 // the zero lag.
@@ -92,72 +92,3 @@ draw_time_plot :: proc(rect: gfx.Rect, len_samples: int, div_samples: int, font:
     )
 }
 
-// The power spectrum of the lowest bins in dB, the peaks that stand out marked with their frequency
-draw_freq_plot :: proc(rect: gfx.Rect, nsdf: ^core.NSDF, font: gfx.Font) {
-    FreqPeak :: struct {
-        position:  [2]f32,
-        magnitude: f32,
-        frequency: f32,
-    }
-    BINS :: 256
-    DB_MIN :: f32(-100.0)
-    DB_MAX :: f32(0.0)
-
-    points: [BINS][2]f32
-    bin_width := rect.width / f32(BINS - 1)
-
-    gfx.draw_text(font, "0dB", {rect.x, rect.y - 16}, 12, 0, gfx.LIGHTGRAY)
-    gfx.draw_text(font, "-100dB", {rect.x, rect.y + rect.height + 8}, 12, 0, gfx.LIGHTGRAY)
-
-    gfx.draw_line({rect.x, rect.y}, {rect.x + rect.width, rect.y}, 0.5, gfx.LIGHTGRAY)
-    gfx.draw_line(
-        {rect.x, rect.y + rect.height / 2},
-        {rect.x + rect.width, rect.y + rect.height / 2},
-        0.5,
-        gfx.LIGHTGRAY,
-    )
-    gfx.draw_line(
-        {rect.x, rect.y + rect.height},
-        {rect.x + rect.width, rect.y + rect.height},
-        0.5,
-        gfx.LIGHTGRAY,
-    )
-    gfx.draw_line({rect.x, rect.y}, {rect.x, rect.y + rect.height}, 0.5, gfx.LIGHTGRAY)
-
-    magnitudes: [BINS]f32
-    for &point, bin in points {
-        // A power over the size, see core.nsdf_autocorrelate: 10 log10 of it over the size squared
-        magnitudes[bin] = nsdf.power[bin]
-        db := 10 * math.log10(magnitudes[bin] / f32(nsdf.fft_size))
-        scaled := clamp((db - DB_MIN) / (DB_MAX - DB_MIN), 0, 1)
-        point = {rect.x + f32(bin) * bin_width, rect.y + rect.height - scaled * rect.height}
-    }
-
-    // Every local maximum, then the ones that stand out from their neighbours, the rest is jagged
-    candidates: [BINS]FreqPeak
-    candidate_count := 0
-    for bin in 1 ..< BINS - 1 {
-        if magnitudes[bin] <= magnitudes[bin - 1] || magnitudes[bin] <= magnitudes[bin + 1] do continue
-
-        offset, magnitude := core.parabolic(magnitudes[bin - 1], magnitudes[bin], magnitudes[bin + 1])
-        frequency := (f32(bin) + offset) * nsdf.sample_rate / f32(nsdf.fft_size)
-        candidates[candidate_count] = {points[bin], magnitude, frequency}
-        candidate_count += 1
-    }
-
-    gfx.draw_polyline(points[:], 1, gfx.PINK)
-
-    MIN_PROMINENCE :: 1.9953 // 3 dB of power
-    for index in 1 ..< max(candidate_count - 1, 1) {
-        peak := candidates[index]
-        prominent :=
-            peak.magnitude > candidates[index - 1].magnitude * MIN_PROMINENCE &&
-            peak.magnitude > candidates[index + 1].magnitude * MIN_PROMINENCE &&
-            peak.magnitude > 10
-        if !prominent do continue
-
-        gfx.draw_line(peak.position, {peak.position.x, rect.y + rect.height}, 0.5, gfx.LIGHTGRAY)
-        gfx.draw_circle(peak.position, 3.0, gfx.GOLD)
-        gfx.draw_text(font, fmt.ctprintf("%.1fHz", peak.frequency), peak.position - {0, 20}, 12, 0, gfx.GOLD)
-    }
-}

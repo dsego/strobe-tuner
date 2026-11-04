@@ -92,6 +92,57 @@ test_harmonics_generated_waves :: proc(t: ^testing.T) {
     }
 }
 
+// A stiff string's partials run sharp, the higher the more. The stack's fundamental reads the same mix of them as
+// the whole wave's period, see score_stack, the Blend readout doesn't move with the method. By the power alone
+// it read 3.8 cents flat of it.
+@(test)
+test_harmonics_blend_like_whole_wave :: proc(t: ^testing.T) {
+    FUNDAMENTAL :: 110
+    amplitudes := [?]f64{0.3, 0.2, 0.1, 0.08, 0.05, 0.03}
+
+    samples := make([]f32, int(DEFAULT_SAMPLE_RATE) / 2, context.temp_allocator)
+    for &sample, index in samples {
+        value: f64
+        for amplitude, partial in amplitudes {
+            // Half a cent sharp times the harmonic squared, a 6th 18 cents
+            harmonic := f64(partial + 1)
+            freq := FUNDAMENTAL * harmonic * math.pow(2, 0.5 * harmonic * harmonic / 1200)
+            value += amplitude * math.sin(math.TAU * freq * f64(index) / DEFAULT_SAMPLE_RATE)
+        }
+        sample = f32(value)
+    }
+
+    stack := detect_test_samples(samples, method = .HARMONICS)
+    wave := detect_test_samples(samples, method = .WAVE)
+    apart := cents_deviation(stack.detected_freq, wave.detected_freq)
+    testing.expectf(t, abs(apart) < 0.5, "the stack %v Hz, the whole wave %v Hz, %v cents apart", stack.detected_freq, wave.detected_freq, apart)
+}
+
+// A low saw's harmonics are close together and each stands about as far over its background, see
+// HARMONICS_PEAKS_PER_OCTAVE: the 40 most prominent of all were any of them, and an A1 saw read C#5, its 10th,
+// on some of the detections. Every one once the window is full.
+@(test)
+test_harmonics_low_saw :: proc(t: ^testing.T) {
+    // Up to the detector's low-pass
+    amplitudes := make([]f32, 90, context.temp_allocator)
+    for &amplitude, index in amplitudes do amplitude = 0.1 / f32(index + 1)
+    samples := samples_with(55, amplitudes, 0)
+
+    detector := init_pitch_detector(sample_rate = DEFAULT_SAMPLE_RATE)
+    defer destroy_pitch_detector(&detector)
+    detector.method = .HARMONICS
+
+    frame := int(DEFAULT_SAMPLE_RATE) / DETECTIONS_PER_SECOND
+    pitch: PitchInfo
+    for start := 0; start + frame <= len(samples); start += frame {
+        audio_capture_write(&detector, samples[start:start + frame])
+        pitch = run_pitch_detection(&detector, pitch)
+        if start < len(detector.samples) do continue
+
+        testing.expectf(t, note_name(pitch.detected_note) == "A1", "at %v: %v", start, pitch)
+    }
+}
+
 // The quarter of the bins around, as sorting them would have it
 @(test)
 test_select_nth :: proc(t: ^testing.T) {
@@ -114,9 +165,13 @@ test_select_nth :: proc(t: ^testing.T) {
     }
 }
 
-// The last detection of half a second of harmonics of the fundamental with these amplitudes, and white noise
-// of this RMS, at 48 kHz
+// The last detection of samples_with
 detect_samples_with :: proc(fundamental: f32, amplitudes: []f32, noise_rms: f64, method := PitchMethod.HARMONICS) -> PitchInfo {
+    return detect_test_samples(samples_with(fundamental, amplitudes, noise_rms), method = method)
+}
+
+// Half a second of harmonics of the fundamental with these amplitudes, and white noise of this RMS, at 48 kHz
+samples_with :: proc(fundamental: f32, amplitudes: []f32, noise_rms: f64) -> []f32 {
     NOISE_SEED :: 1
     noise_state := rand.create(NOISE_SEED)
     noise := rand.default_random_generator(&noise_state)
@@ -130,5 +185,5 @@ detect_samples_with :: proc(fundamental: f32, amplitudes: []f32, noise_rms: f64,
         }
         sample = f32(value)
     }
-    return detect_test_samples(samples, method = method)
+    return samples
 }

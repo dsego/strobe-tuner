@@ -65,6 +65,9 @@ init_measurement :: proc(measurement: ^Measurement, config: ^Config) {
     measurement.strobe_lock_in = core.init_strobe_lock_in(config.target_freq_hz, config.strobe_intervals[:], config.strobe_mode)
     measurement.pitch_detector = core.init_pitch_detector(config.pitch_standard)
     measurement.scope = core.init_scope(SCOPE_COLUMNS, SCOPE_ROWS)
+
+    // Its spectrogram whichever way the pitch detection goes, see draw_debug_spectrogram
+    when DEBUG_STATS do measurement.pitch_detector.stack_shown = true
 }
 
 destroy_measurement :: proc(measurement: ^Measurement) {

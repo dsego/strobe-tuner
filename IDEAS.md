@@ -304,6 +304,17 @@ spectrum flips it, like the scope's circle. Asked for in the same review, as a w
   a frame, on the same log axis. SNR or dBFS as the spectrum's scale says.
 - The 170 ms window blurs fast changes, the 340 ms one more so. Fine for decays, not attacks.
 
+## Polyphonic tuning
+
+Strum all the strings and see which one is out, a separate product or later. The harmonic stack can take the
+best stack, drop its peaks and take the next, a stack per string.
+
+- The tuning's notes are known, each string is looked for near its own note, easier than naming any chord.
+- Strings a fourth apart share partials, E2's 4th sits on A2's 3rd. A shared peak counts for one string or
+  both.
+- The 85 ms window parts peaks 23 Hz apart and more, a low string's partials crowd its neighbour's up high.
+- The cents per string want the strobe's tracks on six notes at once, it has 5 tracks.
+
 ## Phone landscape
 
 The phone is portrait only, decided against on 2026-10-11 when the panel beside the strobe needed two

@@ -142,6 +142,8 @@ destroy_displays :: proc(displays: ^Displays) {
     destroy_trace_display(&displays.trace)
     destroy_scope_display(&displays.scope)
     unload_glow_targets(&displays.glow_targets)
+
+    when DEBUG_STATS do destroy_debug_spectrogram(&debug_spectrogram)
 }
 
 // The configured input, or the default, its samples to everything that measures or shows them. The list of

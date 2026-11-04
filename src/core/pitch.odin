@@ -31,8 +31,10 @@ PITCH_WINDOW_S :: 0.085
 PITCH_HIGHPASS_HZ :: 60
 
 // A strong pitch is this clear at least and this far over the noise floor, a weak one less clear than
-// PITCH_CLARITY_LOW
-PITCH_CLARITY_LOW :: 0.9
+// PITCH_CLARITY_LOW. Clarity is about the share of the window's power repeating at the period: at 0.9 the rest
+// together is 10 dB under the note, a band or a room is often louder and holds a clear note under it. E.g.
+// -define:PITCH_CLARITY_LOW=0.8 to try others.
+PITCH_CLARITY_LOW :: #config(PITCH_CLARITY_LOW, 0.9)
 PITCH_CLARITY_HIGH :: 0.98
 PITCH_MIN_SNR_DB :: 2
 
@@ -91,6 +93,7 @@ PitchDetector :: struct {
     noise_floor:    NoiseFloor, // of the RMS
     snr_db:         f32,
     pitch_standard: f32, // A4, detected notes are named against it
+    stack_shown:    bool, // the harmonic stack runs with the WAVE method too, something shows it
 }
 
 
@@ -208,6 +211,10 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
         info.shortest_period = self.nsdf.chosen_peak == 0
         tonal = info.clarity >= PITCH_CLARITY_LOW
         clear = info.clarity >= PITCH_CLARITY_HIGH
+
+        if self.stack_shown {
+            run_harmonic_stack(&self.stack, self.samples, self.sample_rate, min_freq, pitch_lowpass_hz(self.sample_rate))
+        }
 
     case .HARMONICS:
         top_hz := pitch_lowpass_hz(self.sample_rate)
