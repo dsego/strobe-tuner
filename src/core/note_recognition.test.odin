@@ -82,28 +82,29 @@ test_recognition_confirms_note :: proc(t: ^testing.T) {
     testing.expect(t, !confirmed)
 }
 
-// Medium clarity detections are strong once they've held steady as long, a stray guess in between or
-// wandering by more than a few cents starts the run again
+// Medium clarity detections are strong once their note has been seen as long, a hum gliding within it too. A
+// stray one in between, another note or a guess at a multiple of the period, starts the run again.
 @(test)
-test_recognition_steady_run :: proc(t: ^testing.T) {
+test_recognition_medium_run :: proc(t: ^testing.T) {
     recognition := NoteRecognition {
         confirm_s = 0.1,
     }
     recognize_note(&recognition, test_medium_detection(A2_HZ))
     recognize_note(&recognition, test_medium_detection(A2_HZ * 2.0 / 3.0))
     recognize_note(&recognition, test_medium_detection(A2_HZ))
-    strong, _ := recognize_note(&recognition, test_medium_detection(freq_at_cents(A2_HZ, 1)))
+    strong, _ := recognize_note(&recognition, test_medium_detection(freq_at_cents(A2_HZ, 17)))
     testing.expect(t, !strong)
 
-    // Seen long enough but wandered off the run
-    confirmed: bool
-    strong, confirmed = recognize_note(&recognition, test_medium_detection(freq_at_cents(A2_HZ, 6)))
-    testing.expect(t, confirmed && !strong)
-    recognize_note(&recognition, test_medium_detection(freq_at_cents(A2_HZ, 8)))
-    strong, confirmed = recognize_note(&recognition, test_medium_detection(freq_at_cents(A2_HZ, 7)))
-    testing.expect(t, strong && confirmed)
+    // Gliding on, 17 cents a detection
+    strong, _ = recognize_note(&recognition, test_medium_detection(freq_at_cents(A2_HZ, 34)))
+    testing.expect(t, strong)
 
-    // Not a steady run of guesses at three periods, a third of the note
+    multiple := test_medium_detection(A2_HZ)
+    multiple.shortest_period = false
+    strong, _ = recognize_note(&recognition, multiple)
+    testing.expect(t, !strong)
+
+    // Not a run of guesses at three periods, a third of the note
     recognition = {
         confirm_s = 0.1,
     }

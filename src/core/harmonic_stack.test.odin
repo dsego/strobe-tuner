@@ -120,27 +120,32 @@ test_harmonics_blend_like_whole_wave :: proc(t: ^testing.T) {
 
 // A low saw's harmonics are close together and each stands about as far over its background, see
 // HARMONICS_PEAKS_PER_OCTAVE: the 40 most prominent of all were any of them, and an A1 saw read C#5, its 10th,
-// on some of the detections. Every one once the window is full. A low square's odd harmonics are a stack of their
+// on some of the detections. Under HARMONICS_BASS_HZ the detector's window doesn't part them at all, B0 and E1
+// had no stack. Every detection once the bass window is full. A low square's odd harmonics are a stack of their
 // own from each of them and it still reads its 7th now and then, see HARMONICS_DIVISORS.
 @(test)
-test_harmonics_low_saw :: proc(t: ^testing.T) {
-    // Up to the detector's low-pass
-    amplitudes := make([]f32, 90, context.temp_allocator)
-    for &amplitude, index in amplitudes do amplitude = 0.1 / f32(index + 1)
-    samples := samples_with(55, amplitudes, 0)
+test_harmonics_low_saws :: proc(t: ^testing.T) {
+    for fundamental in ([]f32{30.87, 41.2, 55}) {
+        // Up to the detector's low-pass
+        amplitudes := make([]f32, int(PITCH_LOWPASS_HZ / fundamental), context.temp_allocator)
+        for &amplitude, index in amplitudes do amplitude = 0.1 / f32(index + 1)
+        samples := samples_with(fundamental, amplitudes, 0)
 
-    detector := init_pitch_detector(sample_rate = DEFAULT_SAMPLE_RATE)
-    defer destroy_pitch_detector(&detector)
-    detector.method = .HARMONICS
+        detector := init_pitch_detector(sample_rate = DEFAULT_SAMPLE_RATE)
+        defer destroy_pitch_detector(&detector)
+        detector.method = .HARMONICS
 
-    frame := int(DEFAULT_SAMPLE_RATE) / DETECTIONS_PER_SECOND
-    pitch: PitchInfo
-    for start := 0; start + frame <= len(samples); start += frame {
-        audio_capture_write(&detector, samples[start:start + frame])
-        pitch = run_pitch_detection(&detector, pitch)
-        if start < len(detector.samples) do continue
+        note := freq_to_note(fundamental)
+        frame := int(DEFAULT_SAMPLE_RATE) / DETECTIONS_PER_SECOND
+        pitch: PitchInfo
+        for start := 0; start + frame <= len(samples); start += frame {
+            audio_capture_write(&detector, samples[start:start + frame])
+            pitch = run_pitch_detection(&detector, pitch)
+            if start < len(detector.samples) do continue
 
-        testing.expectf(t, note_name(pitch.detected_note) == "A1", "at %v: %v", start, pitch)
+            right := pitch.is_tonal && pitch.detected_note.cents == note.cents
+            testing.expectf(t, right, "%v Hz at %v: %v", fundamental, start, pitch)
+        }
     }
 }
 

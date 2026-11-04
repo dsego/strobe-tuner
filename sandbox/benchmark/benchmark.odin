@@ -61,10 +61,11 @@ main :: proc() {
     }
 
     // The pitch detection's two ways a detection, see core.PitchMethod: the NSDF over the window, and the
-    // harmonic stack's spectrum, background, peaks and stacks. Noise has the most peaks to go through, a note
-    // the most stacks to score.
+    // harmonic stack's two transforms, the short one and the bass one, their backgrounds, peaks and stacks. Noise
+    // has the most peaks to go through, a note the most stacks to score.
     {
         window := core.pitch_window(SAMPLERATE)
+        bass_window := core.HARMONICS_BASS_WINDOWS * window
         lowest_hz := core.freq_at_cents(440, core.LOWEST_NOTE * 100 - 50)
         top_hz := core.pitch_lowpass_hz(SAMPLERATE)
 
@@ -75,7 +76,7 @@ main :: proc() {
         defer core.destroy_harmonic_stack(&stack)
 
         // A2's first 10 harmonics falling like a string's, about 45 dB over the noise
-        note := make([]f32, window)
+        note := make([]f32, bass_window)
         defer delete(note)
         for &sample, index in note {
             sample = 0.003 * samples[index]
@@ -86,7 +87,7 @@ main :: proc() {
         }
 
         // The six open strings strummed, 60 partials for the most peaks
-        chord := make([]f32, window)
+        chord := make([]f32, bass_window)
         defer delete(chord)
         for &sample, index in chord {
             sample = 0.003 * samples[index]
@@ -101,13 +102,13 @@ main :: proc() {
         signals := []struct {
             name:    string,
             samples: []f32,
-        }{{"noise", samples[:window]}, {"A2 over noise", note}, {"open strings strummed", chord}}
+        }{{"noise", samples[:bass_window]}, {"A2 over noise", note}, {"open strings strummed", chord}}
 
         for signal in signals {
             stopwatch: time.Stopwatch
             time.stopwatch_start(&stopwatch)
             for _ in 0 ..< ITERATIONS {
-                freq, _ := core.run_nsdf(&nsdf, signal.samples, lowest_hz)
+                freq, _ := core.run_nsdf(&nsdf, signal.samples[bass_window - window:], lowest_hz)
                 sink += freq
             }
             time.stopwatch_stop(&stopwatch)
@@ -116,7 +117,7 @@ main :: proc() {
             stopwatch = {}
             time.stopwatch_start(&stopwatch)
             for _ in 0 ..< ITERATIONS {
-                freq, _ := core.run_harmonic_stack(&stack, signal.samples, SAMPLERATE, lowest_hz, top_hz)
+                freq, _ := core.run_harmonic_stack(&stack, signal.samples, lowest_hz, top_hz)
                 sink += freq
             }
             time.stopwatch_stop(&stopwatch)

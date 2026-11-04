@@ -24,16 +24,15 @@ NoteRecognition :: struct {
     // the note seen in a row so far, none after a weak detection, and for how long
     candidate_note: Maybe(Note),
     candidate_s:    f32,
-    steady_s:       f32, // of that, held within STEADY_RUN_CENTS of run_freq, -1 for no run
-    run_freq:       f32, // the first detection of the steady run
+    run_s:          f32, // of that, since a guess at a multiple of the period, see recognize_note
     last_freq:      f32, // the candidate's latest detection
-    settled:        bool, // the latest within STEADY_RUN_CENTS of the one before, or the first
+    settled:        bool, // the latest within SETTLED_CENTS of the one before, or the first
 
-    confirm_s:      f32, // seen this long in a row before switching, the last one strong or the run steady
+    confirm_s:      f32, // seen this long in a row before switching, the last one strong or the run long
 }
 
 // How long a new note is detected in a row before the strobe switches to it, the last detection strong or
-// the run steady, and settled. At 0 a note under hum flickers.
+// the run as long, and settled. At 0 a note under hum flickers.
 //
 // Settled, the pitch has stopped moving. A window across a jump in the wave's phase, a tone generator
 // starting its new note from zero, reads past the new pitch for as long as the window: from C#2 in tune
@@ -41,8 +40,8 @@ NoteRecognition :: struct {
 // detections were 9 to 17 cents apart, a string being tuned moves a few cents a detection.
 NOTE_SWITCH_S :: 0.05
 
-// Detections of the same note this close to the first of them are a steady pitch, see recognize_note
-STEADY_RUN_CENTS :: 5
+// The latest detection this close to the one before is settled
+SETTLED_CENTS :: 5
 
 // Whether the optional note is this note, by its cents from A4
 holds_note :: proc(optional: Maybe(Note), note: Note) -> bool {
@@ -54,21 +53,23 @@ holds_note :: proc(optional: Maybe(Note), note: Note) -> bool {
 // its note was seen for confirm_s in a row.
 //
 // Medium clarity detections count too, a short pluck may only be strong briefly, but they're only strong
-// once they hold steady for as long, e.g. another string ringing along muddies the wave. A stray one in
-// between, like the pitch detection's guess at a multiple of the period, breaks the run. Noise doesn't
-// hold a note to a few cents.
+// once the same note has been seen for as long, e.g. another string ringing along muddies the wave. A stray
+// one in between, like the pitch detection's guess at a multiple of the period, starts the run again. They
+// had to hold within 5 cents of the run's first as well, but a hum glides about 17 cents in 50 ms at any pitch
+// and its low notes lit only when strong. Without it a 3rd octave hum lit 73% of the time instead of 54 with
+// the stack, and the recordings, the generated tones and noise alone read the same.
 recognize_note :: proc(self: ^NoteRecognition, pitch: PitchInfo) -> (strong, confirmed: bool) {
     if pitch.fresh do time_detection(self, pitch)
 
     seen := holds_note(self.candidate_note, pitch.detected_note)
     confirmed = seen && self.candidate_s >= self.confirm_s && self.settled
 
-    steady := seen && self.steady_s >= 0 && self.steady_s >= self.confirm_s
-    strong = pitch.is_strong_pitch || (!pitch.is_weak_pitch && steady)
+    held := seen && self.run_s >= self.confirm_s
+    strong = pitch.is_strong_pitch || (!pitch.is_weak_pitch && held)
     return
 }
 
-// Times consecutive detections of the same note, and how long they held steady. Only for new measurements.
+// Times consecutive detections of the same note. Only for new measurements.
 time_detection :: proc(self: ^NoteRecognition, pitch: PitchInfo) {
     switch {
     case pitch.is_weak_pitch:
@@ -76,24 +77,16 @@ time_detection :: proc(self: ^NoteRecognition, pitch: PitchInfo) {
     case !holds_note(self.candidate_note, pitch.detected_note):
         self.candidate_note = pitch.detected_note
         self.candidate_s = 0
-        self.steady_s = 0
-        self.run_freq = pitch.detected_freq
+        self.run_s = 0
         self.settled = true
     case:
         self.candidate_s += pitch.elapsed_s
-        self.settled = abs(cents_deviation(pitch.detected_freq, self.last_freq)) <= STEADY_RUN_CENTS
-
-        holds_steady := self.steady_s >= 0 && abs(cents_deviation(pitch.detected_freq, self.run_freq)) <= STEADY_RUN_CENTS
-        if holds_steady {
-            self.steady_s += pitch.elapsed_s
-        } else {
-            self.steady_s = 0
-            self.run_freq = pitch.detected_freq
-        }
+        self.run_s += pitch.elapsed_s
+        self.settled = abs(cents_deviation(pitch.detected_freq, self.last_freq)) <= SETTLED_CENTS
     }
     self.last_freq = pitch.detected_freq
 
-    // A guess at a multiple of the period isn't a steady pitch however close it holds, the wave can repeat
-    // better over a few periods for a moment
-    if !pitch.shortest_period do self.steady_s = -1
+    // A guess at a multiple of the period isn't the note however long it holds, the wave can repeat better over
+    // a few periods for a moment
+    if !pitch.shortest_period do self.run_s = 0
 }

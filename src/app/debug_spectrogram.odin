@@ -78,19 +78,14 @@ record_debug_column :: proc(
     shown: core.Note,
     sample_rate: f32,
 ) {
+    if stack.short.top_bin <= 1 do return
+
     low, high := f32(SPECTRUM_LOW_HZ), core.pitch_lowpass_hz(sample_rate)
-    bin_hz := sample_rate / f32(stack.spectrum.fft_size)
-
     for &value, row in self.prominence[self.next] {
-        from := int(low * math.pow(high / low, f32(row) / DEBUG_SPECTROGRAM_ROWS) / bin_hz)
-        to := int(low * math.pow(high / low, f32(row + 1) / DEBUG_SPECTROGRAM_ROWS) / bin_hz)
-
-        over: f32
-        for bin in from ..= max(to, from) {
-            if bin >= len(stack.levels) do break
-            over = max(over, stack.levels[bin] - stack.background[bin])
-        }
-        value = u8(DEBUG_SPECTROGRAM_BRIGHTEST * clamp(over / DEBUG_SPECTROGRAM_RANGE_DB, 0, 1))
+        from := low * math.pow(high / low, f32(row) / DEBUG_SPECTROGRAM_ROWS)
+        to := low * math.pow(high / low, f32(row + 1) / DEBUG_SPECTROGRAM_ROWS)
+        level, background := stack_level_between(stack, from, to)
+        value = u8(DEBUG_SPECTROGRAM_BRIGHTEST * clamp((level - background) / DEBUG_SPECTROGRAM_RANGE_DB, 0, 1))
     }
 
     mark := DebugMark{freq = pitch.detected_freq, lit = lit}
@@ -207,16 +202,45 @@ draw_spectrogram_octaves :: proc(rect: gfx.Rect, low, high, pitch_standard: f32,
 // The stack's latest spectrum across rect on the spectrogram's log scale: each bin's level in dB, the background
 // under it grey, the peaks it kept grey dots, the note's harmonics gold and numbered, and over the plot the
 // note, its Hz and the stack's score
+// The stack's level and background from from_hz to to_hz, a pixel's or a row's, in the transform it looks there
+// in, see core.stack_transform_at: the loudest bin among them, or between the bins either side where they're
+// narrower than a bin. The bin under them repeated drew a low note's as blocks several pixels wide.
+stack_level_between :: proc(stack: ^core.HarmonicStack, from_hz, to_hz: f32) -> (level, background: f32) {
+    transform := core.stack_transform_at(stack, from_hz)
+    from := from_hz / transform.bin_hz
+    to := min(to_hz / transform.bin_hz, f32(transform.top_bin))
+
+    first, last := max(int(math.ceil(from)), 1), int(to)
+    if last >= first {
+        level = transform.levels[first]
+        for bin in first + 1 ..= last do level = max(level, transform.levels[bin])
+        return level, transform.background[first]
+    }
+
+    middle := (from + to) / 2
+    below := clamp(int(middle), 1, transform.top_bin - 1)
+    between := middle - f32(below)
+    level = math.lerp(transform.levels[below], transform.levels[below + 1], between)
+    background = math.lerp(transform.background[below], transform.background[below + 1], between)
+    return
+}
+
 draw_stack_plot :: proc(rect: gfx.Rect, stack: ^core.HarmonicStack, pitch: core.PitchInfo, sample_rate: f32, font: gfx.Font) {
     RANGE_DB :: 60 // from the loudest down, the background stays in it
 
-    low, high := f32(SPECTRUM_LOW_HZ), core.pitch_lowpass_hz(sample_rate)
-    bin_hz := sample_rate / f32(stack.spectrum.fft_size)
-    top_bin := min(int(high / bin_hz), len(stack.levels) - 2)
-    if top_bin <= 1 do return
+    if stack.short.top_bin <= 1 do return
 
-    loudest := stack.levels[1]
-    for level in stack.levels[1:top_bin] do loudest = max(loudest, level)
+    // Each pixel's, see stack_level_between
+    low, high := f32(SPECTRUM_LOW_HZ), core.pitch_lowpass_hz(sample_rate)
+    levels_db := make([]f32, int(rect.width), context.temp_allocator)
+    backgrounds_db := make([]f32, int(rect.width), context.temp_allocator)
+    loudest := min(f32)
+    for x in 0 ..< len(levels_db) {
+        from := low * math.pow(high / low, f32(x) / rect.width)
+        to := low * math.pow(high / low, f32(x + 1) / rect.width)
+        levels_db[x], backgrounds_db[x] = stack_level_between(stack, from, to)
+        loudest = max(loudest, levels_db[x])
+    }
 
     x_at :: proc(freq, low, high: f32, rect: gfx.Rect) -> f32 {
         return rect.x + rect.width * math.ln(freq / low) / math.ln(high / low)
@@ -227,24 +251,23 @@ draw_stack_plot :: proc(rect: gfx.Rect, stack: ^core.HarmonicStack, pitch: core.
 
     gfx.draw_rect({rect.x, rect.y + rect.height}, {rect.width, 1}, gfx.LIGHTGRAY)
 
-    // A point a pixel across, the loudest bin under it
-    levels := make([dynamic][2]f32, context.temp_allocator)
-    backgrounds := make([dynamic][2]f32, context.temp_allocator)
-    for x in 0 ..< int(rect.width) {
-        from := int(low * math.pow(high / low, f32(x) / rect.width) / bin_hz)
-        to := int(low * math.pow(high / low, f32(x + 1) / rect.width) / bin_hz)
-        if from > top_bin do break
-
-        level := stack.levels[from]
-        for bin in from ..= min(max(to, from), top_bin) do level = max(level, stack.levels[bin])
-        append(&levels, [2]f32{rect.x + f32(x), y_at(level, loudest, rect)})
-        append(&backgrounds, [2]f32{rect.x + f32(x), y_at(stack.background[from], loudest, rect)})
+    // A point a pixel across
+    levels := make([][2]f32, len(levels_db), context.temp_allocator)
+    backgrounds := make([][2]f32, len(levels_db), context.temp_allocator)
+    for x in 0 ..< len(levels_db) {
+        levels[x] = {rect.x + f32(x), y_at(levels_db[x], loudest, rect)}
+        backgrounds[x] = {rect.x + f32(x), y_at(backgrounds_db[x], loudest, rect)}
     }
-    gfx.draw_polyline(backgrounds[:], 1, gfx.LIGHTGRAY)
-    gfx.draw_polyline(levels[:], 1, gfx.WHITE)
+    gfx.draw_polyline(backgrounds, 1, gfx.LIGHTGRAY)
+    gfx.draw_polyline(levels, 1, gfx.WHITE)
 
-    for peak in stack.peaks {
-        gfx.draw_circle({x_at(peak.freq, low, high, rect), y_at(peak.level, loudest, rect)}, 2, gfx.LIGHTGRAY)
+    // Each transform's where it's drawn
+    for transform in ([2]^core.StackTransform{&stack.bass, &stack.short}) {
+        for peak in transform.peaks {
+            if core.stack_transform_at(stack, peak.freq) != transform do continue
+
+            gfx.draw_circle({x_at(peak.freq, low, high, rect), y_at(peak.level, loudest, rect)}, 2, gfx.LIGHTGRAY)
+        }
     }
 
     for peak, index in stack.harmonics {

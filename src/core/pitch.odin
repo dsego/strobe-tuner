@@ -33,17 +33,20 @@ PITCH_HIGHPASS_HZ :: 60
 
 // A strong pitch is this clear at least and this far over the noise floor, a weak one less clear than
 // PITCH_CLARITY_LOW. Clarity is about the share of the window's power repeating at the period: at 0.9 the rest
-// together is 10 dB under the note, a band or a room is often louder and holds a clear note under it. E.g.
-// -define:PITCH_CLARITY_LOW=0.8 to try others.
-PITCH_CLARITY_LOW :: #config(PITCH_CLARITY_LOW, 0.9)
+// together had to be 10 dB under the note, at 0.8 7 dB. A hum glides and its low notes are less clear, 0.83 in
+// the 2nd octave and 0.96 in the 4th: at 0.9 a 2nd octave hum lit 10% of the time, at 0.8 69%. The recordings,
+// the generated tones and noise alone read the same. A song alone lit 11% of the time instead of 5, and a hum
+// over it sometimes the period it shares with the song's bass, C#2 for C#3. E.g. -define:PITCH_CLARITY_LOW=n
+PITCH_CLARITY_LOW :: #config(PITCH_CLARITY_LOW, 0.8)
 PITCH_CLARITY_HIGH :: 0.98
 PITCH_MIN_SNR_DB :: 2
 
-// The same for the Harmonics method, its stack's dB over the background summed, see HarmonicStack. Under a
-// song a hum scored 57 to 63 in the middle, the song alone 39, 50 at its 90th percentile. At these the song
-// lit 1 of 117 frames and the hums 72 to 82%, at 40 and 50 the song 21. E.g. -define:HARMONICS_LOW_DB=n to
-// try others.
-HARMONICS_LOW_DB :: #config(HARMONICS_LOW_DB, 45)
+// The same for the Harmonics method, its stack's dB over the background summed, see HarmonicStack. A song
+// alone lighting is fine, it's tonal, a note played or hummed over it should win. A hum close to a sine has few
+// harmonics and scores less: quiet hums lit 73, 79 and 81% of the time in the 2nd to 4th octaves at 40, 63 to
+// 78% at 45. Under a song hums lit 79% either way and showed their own notes. At 35 a dip in the hum let the
+// song's weaker stacks count, its bass took the note for half a second. E.g. -define:HARMONICS_LOW_DB=n
+HARMONICS_LOW_DB :: #config(HARMONICS_LOW_DB, 40)
 HARMONICS_HIGH_DB :: #config(HARMONICS_HIGH_DB, 65)
 
 // How the pitch detection hears a pitch. The detector holds both and can switch between frames.
@@ -86,7 +89,8 @@ PitchDetector :: struct {
     method:         PitchMethod,
     nsdf:           NSDF,
     stack:          HarmonicStack,
-    samples:        []f32,
+    samples:        []f32, // the harmonic stack's bass window, see HARMONICS_BASS_WINDOWS
+    window:         []f32, // the latest pitch_window of them, the NSDF's and the stack's short transform's
     // DC and rumble lift the NSDF so it doesn't dip between periods, hiss blurs it, see PITCH_LOWPASS_HZ.
     // Only here, the strobe's tracks are narrow and the scope wants the wave as it is.
     highpass:       Biquad,
@@ -159,7 +163,8 @@ pitch_window :: proc(sample_rate: f32) -> int {
 size_pitch_detector :: proc(self: ^PitchDetector) {
     window := pitch_window(self.sample_rate)
 
-    self.samples = make([]f32, window)
+    self.samples = make([]f32, HARMONICS_BASS_WINDOWS * window)
+    self.window = self.samples[len(self.samples) - window:]
     self.nsdf = init_nsdf(2 * window, self.sample_rate)
     self.stack = init_harmonic_stack(window, self.sample_rate)
     self.highpass = init_highpass(PITCH_HIGHPASS_HZ, self.sample_rate)
@@ -207,19 +212,19 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     switch self.method {
     case .WAVE:
         nsdf_peak: Vec2
-        info.detected_freq, nsdf_peak = run_nsdf(&self.nsdf, self.samples, min_freq)
+        info.detected_freq, nsdf_peak = run_nsdf(&self.nsdf, self.window, min_freq)
         info.clarity = nsdf_peak.y
         info.shortest_period = self.nsdf.chosen_peak == 0
         tonal = info.clarity >= PITCH_CLARITY_LOW
         clear = info.clarity >= PITCH_CLARITY_HIGH
 
         if self.stack_shown {
-            run_harmonic_stack(&self.stack, self.samples, self.sample_rate, min_freq, pitch_lowpass_hz(self.sample_rate))
+            run_harmonic_stack(&self.stack, self.samples, min_freq, pitch_lowpass_hz(self.sample_rate))
         }
 
     case .HARMONICS:
         top_hz := pitch_lowpass_hz(self.sample_rate)
-        info.detected_freq, info.harmonics_db = run_harmonic_stack(&self.stack, self.samples, self.sample_rate, min_freq, top_hz)
+        info.detected_freq, info.harmonics_db = run_harmonic_stack(&self.stack, self.samples, min_freq, top_hz)
 
         // The stack's own fundamental, no multiple of a period to guess at
         info.shortest_period = true
@@ -227,7 +232,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
         clear = info.harmonics_db >= HARMONICS_HIGH_DB
     }
 
-    info.rms = max(calculate_rms(self.samples), MIN_NOISE_FLOOR)
+    info.rms = max(calculate_rms(self.window), MIN_NOISE_FLOOR)
     info.rms_dbfs = dbfs(info.rms)
 
     dt := f32(elapsed) / self.sample_rate
