@@ -45,10 +45,13 @@ PITCH_MIN_SNR_DB :: 2
 
 // The same for the Harmonics method, its stack's dB over the background summed, see HarmonicStack. A song
 // alone lighting is fine, it's tonal, a note played or hummed over it should win. A hum close to a sine has few
-// harmonics and scores less: quiet hums lit 73, 79 and 81% of the time in the 2nd to 4th octaves at 40, 63 to
-// 78% at 45. Under a song hums lit 79% either way and showed their own notes. At 35 a dip in the hum let the
-// song's weaker stacks count, its bass took the note for half a second. E.g. -define:HARMONICS_LOW_DB=n
-HARMONICS_LOW_DB :: #config(HARMONICS_LOW_DB, 40)
+// harmonics and scores less, its dips 20 to 40: a 40 s hum lit 76% of the time at 40 and 85% at 30, a quiet one
+// 55 and 73%, voices in a playground 84 and 90%. Broadband noise alone scores 27 at most. The recordings read the
+// same. A generated low sine stepping 50 cents restarts its phase, at 30 the click made up a C#2 stack for 3
+// detections, it showed for a moment and the step read as the next note. Holding the lower gate for the pitch
+// followed or the one before, a Schmitt trigger, lit the hums less or let the click through as well.
+// E.g. -define:HARMONICS_LOW_DB=n
+HARMONICS_LOW_DB :: #config(HARMONICS_LOW_DB, 30)
 HARMONICS_HIGH_DB :: #config(HARMONICS_HIGH_DB, 65)
 
 // How the pitch detection hears a pitch. The detector holds both and can switch between frames.
