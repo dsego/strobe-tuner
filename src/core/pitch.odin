@@ -34,10 +34,12 @@ PITCH_HIGHPASS_HZ :: 60
 // A strong pitch is this clear at least and this far over the noise floor, a weak one less clear than
 // PITCH_CLARITY_LOW. Clarity is about the share of the window's power repeating at the period: at 0.9 the rest
 // together had to be 10 dB under the note, at 0.8 7 dB. A hum glides and its low notes are less clear, 0.83 in
-// the 2nd octave and 0.96 in the 4th: at 0.9 a 2nd octave hum lit 10% of the time, at 0.8 69%. The recordings,
-// the generated tones and noise alone read the same. A song alone lit 11% of the time instead of 5, and a hum
-// over it sometimes the period it shares with the song's bass, C#2 for C#3. E.g. -define:PITCH_CLARITY_LOW=n
-PITCH_CLARITY_LOW :: #config(PITCH_CLARITY_LOW, 0.8)
+// the 2nd octave and 0.96 in the 4th: at 0.9 a 2nd octave hum lit 10% of the time, at 0.8 69%. A crowd is a
+// large share of the power: voices in a playground lit 17% of the time at 0.8, 46% at 0.7, where the harmonic
+// stack lit 84%. Broadband noise alone stays under 0.6. At 0.65 a ukulele's Bb4 read an octave up and failed,
+// at 0.7 the recordings and the generated tones read as at 0.8. A song alone lights more, and a hum over it
+// sometimes the period it shares with the song's bass, C#2 for C#3. E.g. -define:PITCH_CLARITY_LOW=n
+PITCH_CLARITY_LOW :: #config(PITCH_CLARITY_LOW, 0.7)
 PITCH_CLARITY_HIGH :: 0.98
 PITCH_MIN_SNR_DB :: 2
 
@@ -119,6 +121,7 @@ PitchInfo :: struct {
     is_tonal:        bool, // a pitch whatever its level, medium clarity or more, the noise floors don't learn it as the background
     snr_db:          f32,
     noise_floor:     f32,
+    followed_hz:     f32, // the pitch the tuner followed after this detection, 0 for none, see update_note_target
 }
 
 
@@ -185,7 +188,8 @@ reset_pitch_detector :: proc(self: ^PitchDetector) {
     reset_noise_floor(&self.noise_floor)
 }
 
-// Takes the previous detection to repeat when there are no new samples, the NoteTarget keeps the history
+// Takes the previous detection to repeat when there are no new samples, the NoteTarget keeps the history and
+// adds the pitch it followed, both methods hold its octave
 run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> PitchInfo {
     info := PitchInfo{}
 
@@ -212,7 +216,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     switch self.method {
     case .WAVE:
         nsdf_peak: Vec2
-        info.detected_freq, nsdf_peak = run_nsdf(&self.nsdf, self.window, min_freq)
+        info.detected_freq, nsdf_peak = run_nsdf(&self.nsdf, self.window, min_freq, prev_info.followed_hz)
         info.clarity = nsdf_peak.y
         info.shortest_period = self.nsdf.chosen_peak == 0
         tonal = info.clarity >= PITCH_CLARITY_LOW
@@ -224,7 +228,13 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
 
     case .HARMONICS:
         top_hz := pitch_lowpass_hz(self.sample_rate)
-        info.detected_freq, info.harmonics_db = run_harmonic_stack(&self.stack, self.samples, min_freq, top_hz)
+        info.detected_freq, info.harmonics_db = run_harmonic_stack(
+            &self.stack,
+            self.samples,
+            min_freq,
+            top_hz,
+            prev_info.followed_hz,
+        )
 
         // The stack's own fundamental, no multiple of a period to guess at
         info.shortest_period = true

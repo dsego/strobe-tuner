@@ -121,3 +121,35 @@ test_nsdf_longest_period :: proc(t: ^testing.T) {
     freq, _ := run_nsdf(&self, samples[:], freq_at_cents(440, LOWEST_NOTE * 100 - 50))
     testing.expectf(t, freq == 0, "a 20 Hz sine read %v Hz", freq)
 }
+
+// A sine with a third as much of the octave under it repeats better over two of its periods, like a hum whose
+// cycles alternate, and reads the octave down. Followed at the sine, its period holds. Followed an octave down,
+// a sine alone reads as itself, a rise isn't held back.
+@(test)
+test_nsdf_holds_followed_octave :: proc(t: ^testing.T) {
+    FFT_SIZE :: 8192
+    NOTE_HZ :: 220
+
+    self := init_nsdf(FFT_SIZE, DEFAULT_SAMPLE_RATE)
+    defer destroy_nsdf(&self)
+
+    lowest_hz := freq_at_cents(440, LOWEST_NOTE * 100 - 50)
+
+    alternating: [FFT_SIZE / 2]f32
+    for &sample, index in alternating {
+        time := f32(index) / DEFAULT_SAMPLE_RATE
+        sample = math.sin(math.TAU * NOTE_HZ * time) + math.sin(math.TAU * NOTE_HZ / 2 * time) / 3
+    }
+
+    alone, _ := run_nsdf(&self, alternating[:], lowest_hz)
+    testing.expectf(t, abs(cents_deviation(alone, NOTE_HZ / 2)) < 1, "not followed, read %v Hz", alone)
+
+    held, _ := run_nsdf(&self, alternating[:], lowest_hz, NOTE_HZ)
+    testing.expectf(t, abs(cents_deviation(held, NOTE_HZ)) < 1, "followed, read %v Hz", held)
+
+    sine: [FFT_SIZE / 2]f32
+    for &sample, index in sine do sample = math.sin(math.TAU * NOTE_HZ * f32(index) / DEFAULT_SAMPLE_RATE)
+
+    risen, _ := run_nsdf(&self, sine[:], lowest_hz, NOTE_HZ / 2)
+    testing.expectf(t, abs(cents_deviation(risen, NOTE_HZ)) < 1, "followed an octave down, read %v Hz", risen)
+}

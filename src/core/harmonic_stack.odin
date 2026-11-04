@@ -88,6 +88,13 @@ HARMONICS_DIVISORS :: [2]int{3, 2}
 HARMONICS_BASS_HZ :: #config(HARMONICS_BASS_HZ, 50)
 HARMONICS_BASS_WINDOWS :: 2
 
+// The pitch the tuner follows keeps its stack against a harmonic or an undertone of it while it scores this
+// much of the best, a steady octave beats one that flips, even the wrong one. For a few detections after a low
+// note stepped the bass window spans both and its stack comes apart, the short window's 3rd or 5th harmonic won
+// and was taken for the note. A note an octave up scores about two thirds of its own over the followed one's
+// even harmonics and gets through. E.g. -define:HARMONICS_HOLD_RATIO=n
+HARMONICS_HOLD_RATIO :: #config(HARMONICS_HOLD_RATIO, 0.8)
+
 
 // The stack in two transforms of the latest samples, the better of the two, see run_harmonic_stack
 HarmonicStack :: struct {
@@ -149,7 +156,15 @@ destroy_stack_transform :: proc(self: ^StackTransform) {
 // whichever scores more. The samples are the bass window's, the short one is the latest of them. The peaks are
 // looked for up to top_hz, the detector's low-pass, and a stack's fundamental may be up there too: the detector
 // tells a pitch over its notes from a note, a D8 sine taken only as far as C8 read D7, its 2nd harmonic.
-run_harmonic_stack :: proc(self: ^HarmonicStack, samples: []f32, lowest_hz, top_hz: f32) -> (freq, score_db: f32) {
+// followed_hz is the pitch the tuner follows, 0 for none, see HARMONICS_HOLD_RATIO.
+run_harmonic_stack :: proc(
+    self: ^HarmonicStack,
+    samples: []f32,
+    lowest_hz, top_hz: f32,
+    followed_hz: f32 = 0,
+) -> (
+    freq, score_db: f32,
+) {
     bass_top := min(bass_top_hz(), top_hz)
     short_freq, short_db := best_note(&self.short, samples, max(lowest_hz, HARMONICS_BASS_HZ), max(f32), top_hz)
     bass_freq, bass_db := best_note(&self.bass, samples, lowest_hz, HARMONICS_BASS_HZ, bass_top)
@@ -162,9 +177,30 @@ run_harmonic_stack :: proc(self: ^HarmonicStack, samples: []f32, lowest_hz, top_
     short_in_bass, _ := score_stack(self.bass.peaks[:], short_freq, bass_top)
     bass_wins := bass_db >= HARMONICS_HIGH_DB && bass_db > short_db && bass_db > short_in_bass
 
+    // The short note stepped down in the bass transform, to a third or a half of it under HARMONICS_BASS_HZ: the
+    // short one can't go there, and a low note's harmonics are too close together in it to step from. A B0 with a
+    // weak fundamental in noise read B1 in every other detection, its B1 scoring as much as the B0 in the bass
+    // transform, and the short transform's own B1 15 to 30 dB. Only a strong one, like the bass note.
+    under := step_down_to_note(self.bass.peaks[:], short_freq, short_in_bass, lowest_hz, bass_top)
+    under_db, _ := score_stack(self.bass.peaks[:], under, bass_top)
+    short_steps_under := under > 0 && under < HARMONICS_BASS_HZ && under_db >= HARMONICS_HIGH_DB
+
     note := &self.short
     freq, score_db = short_freq, short_db
     if bass_wins do note, freq, score_db = &self.bass, bass_freq, bass_db
+    if short_steps_under do note, freq, score_db = &self.bass, under, under_db
+
+    // The followed pitch's octave held against a harmonic or an undertone of it, the note there from the best's
+    // own pitch: the followed one may be the note before a step
+    if harmonic, above := harmonic_of_followed(freq, followed_hz); harmonic > 1 {
+        held_hz := freq / f32(harmonic) if above else freq * f32(harmonic)
+        held := stack_transform_at(self, held_hz)
+        held_top := bass_top if held == &self.bass else top_hz
+        held_db, held_freq := score_stack(held.peaks[:], held_hz, held_top)
+        if held_freq > 0 && held_db >= HARMONICS_HOLD_RATIO * score_db {
+            note, freq, score_db = held, held_freq, held_db
+        }
+    }
 
     self.harmonics = stack_harmonics(note.peaks[:], freq, top_hz)
     self.score_db = score_db
@@ -215,6 +251,24 @@ stack_harmonics :: proc(peaks: []StackPeak, fundamental, top_hz: f32) -> (harmon
 // How far a harmonic's peak may be from it, see HARMONICS_TOLERANCE_CENTS
 harmonic_tolerance :: proc(harmonic: int) -> f32 {
     return HARMONICS_TOLERANCE_CENTS + HARMONICS_STRETCH_CENTS * f32(harmonic)
+}
+
+// Which of the followed pitch's 2nd to HARMONICS_COUNT-th harmonics freq is, or of its undertones when it's
+// under it, 0 for none or no followed pitch. Within the harmonic's tolerance and NOTE_HOLD_CENTS more, the note
+// stepped as far as that and stayed the same note: a low square stepped 55 cents and its new 5th harmonic was
+// 49 cents off the followed one's.
+harmonic_of_followed :: proc(freq, followed_hz: f32) -> (harmonic: int, above: bool) {
+    if freq <= 0 || followed_hz <= 0 do return 0, false
+
+    above = freq > followed_hz
+    ratio := max(freq, followed_hz) / min(freq, followed_hz)
+    nearest := int(math.round(ratio))
+    if nearest < 2 || nearest > HARMONICS_COUNT do return 0, false
+
+    off_cents := abs(1200 * math.log2(ratio / f32(nearest)))
+    if off_cents > harmonic_tolerance(nearest) + NOTE_HOLD_CENTS do return 0, false
+
+    return nearest, above
 }
 
 // Every peak as each of a candidate's first harmonics, from from_hz to under below_hz, the stack that scores

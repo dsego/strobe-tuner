@@ -45,7 +45,8 @@ NSDF :: struct {
     values:         []f32, // the NSDF of each lag
     padded_samples: []f32,
     peaks:          [dynamic]Vec2, // lag and NSDF value of each key maximum
-    chosen_peak:    int, // in peaks, -1 for none
+    ratio_peak:     int, // in peaks, the first close enough to the highest, -1 for none
+    chosen_peak:    int, // in peaks, the ratio_peak or the followed pitch's held over it, -1 for none
 }
 
 
@@ -78,15 +79,20 @@ destroy_nsdf :: proc(self: ^NSDF) {
 }
 
 // The frequency of the chosen peak, 0 for none, and the peak, its lag and NSDF value. Down to lowest_hz, a
-// longer period is no note, see nsdf_key_maxima.
-run_nsdf :: proc(self: ^NSDF, samples: []f32, lowest_hz: f32) -> (freq: f32, peak: Vec2) {
+// longer period is no note, see nsdf_key_maxima. followed_hz is the pitch the tuner follows, 0 for none, its
+// period holds against a longer one, see nsdf_choose_peak.
+run_nsdf :: proc(self: ^NSDF, samples: []f32, lowest_hz: f32, followed_hz: f32 = 0) -> (freq: f32, peak: Vec2) {
     // A whole window, find_peak looks at every lag
     assert(len(samples) == len(self.values))
 
     nsdf_autocorrelate(self, samples)
     nsdf_normalize(self, samples)
     highest := nsdf_key_maxima(self, self.sample_rate / lowest_hz)
-    peak = nsdf_choose_peak(self, highest)
+
+    followed_lag: f32 = 0
+    if followed_hz > 0 do followed_lag = self.sample_rate / followed_hz
+
+    peak = nsdf_choose_peak(self, highest, followed_lag)
     if peak.x > 0 do freq = self.sample_rate / peak.x
 
     return
@@ -116,8 +122,19 @@ nsdf_normalize :: proc(self: ^NSDF, samples: []f32) {
 // Lower maxima are no period, the NSDF of the zero lag is 1
 NSDF_MIN_PEAK_VALUE :: 0.5
 
-// The first of the key maxima this close to the highest is the period, not a multiple of it
-NSDF_CHOSEN_RATIO :: 0.95
+// The first of the key maxima this close to the highest is the period, not a multiple of it. A hum's cycles
+// alternate a little, every other one matches better, its period's maximum read 0.85 to 0.91 two periods out
+// and the detection dropped an octave. On a 40 s hum a pitch under 80 Hz on 534 detections at 0.95, 360 at
+// 0.9 and 274 at 0.85. At 0.8 a guitar's Bb3 read an octave up and 8 recordings failed, at 0.85 to 0.95 none
+// and the generated tones the same. E.g. -define:NSDF_CHOSEN_RATIO=n
+NSDF_CHOSEN_RATIO :: #config(NSDF_CHOSEN_RATIO, 0.9)
+
+// The pitch the tuner follows keeps its period against a longer one while its maximum is this close to the
+// highest, see nsdf_choose_peak. A steady octave beats one that flips, even the wrong one: a missing
+// fundamental is there in the sound. The hum's drops under 80 Hz went from 360 to 270 at 0.8, 254 at 0.7 and
+// 250 at 0.6, most of the rest while no note was lit and nothing followed. The recordings and the generated
+// tones read the same. E.g. -define:NSDF_HOLD_RATIO=n
+NSDF_HOLD_RATIO :: #config(NSDF_HOLD_RATIO, 0.7)
 
 // The key maxima into self.peaks, the highest between two zero crossings, refined between the lags. Returns
 // the highest of them.
@@ -159,15 +176,37 @@ nsdf_key_maxima :: proc(self: ^NSDF, longest_period: f32) -> (highest_peak: Vec2
 }
 
 // The first of the key maxima close to the highest one, the period and not a multiple of it. None is zero.
-nsdf_choose_peak :: proc(self: ^NSDF, highest_peak: Vec2) -> Vec2 {
-    self.chosen_peak = -1
+//
+// A period longer than the followed one's, its lag followed_lag, is a drop: the followed period's maximum is
+// kept while it's NSDF_HOLD_RATIO of the highest. A rise is taken as it is, a note an octave up repeats as well
+// over two of its periods and a hold that way kept the octave below for as long as the note stayed lit.
+nsdf_choose_peak :: proc(self: ^NSDF, highest_peak: Vec2, followed_lag: f32 = 0) -> Vec2 {
+    self.ratio_peak = -1
     for peak, index in self.peaks {
         if peak.y >= NSDF_CHOSEN_RATIO * highest_peak.y {
-            self.chosen_peak = index
-            return peak
+            self.ratio_peak = index
+            break
         }
     }
-    return {}
+    self.chosen_peak = self.ratio_peak
+    if self.chosen_peak < 0 do return {}
+
+    chosen := self.peaks[self.chosen_peak]
+    if followed_lag > 0 && lag_cents(chosen.x, followed_lag) > NOTE_HOLD_CENTS {
+        for peak, index in self.peaks {
+            near := abs(lag_cents(peak.x, followed_lag)) <= NOTE_HOLD_CENTS
+            if near && peak.y >= NSDF_HOLD_RATIO * highest_peak.y {
+                self.chosen_peak = index
+                return peak
+            }
+        }
+    }
+    return chosen
+}
+
+// How many cents lower a period of lag samples is than one of reference samples
+lag_cents :: proc(lag, reference: f32) -> f32 {
+    return 1200 * math.log2(lag / reference)
 }
 
 

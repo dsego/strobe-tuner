@@ -16,6 +16,7 @@
 package app
 
 import "core:fmt"
+import "core:math"
 
 import "../core"
 import "../gfx"
@@ -23,8 +24,8 @@ import "../gfx"
 // The debug plots of the DEBUG_STATS build, the NSDF of the latest pitch detection. The harmonic stack's are in
 // debug_spectrogram.odin.
 
-// The NSDF over the first lags, a cross on each key maximum, the chosen one pink. 1 at the top, the NSDF of
-// the zero lag.
+// The NSDF over the first lags, a cross on each key maximum, the one the ratio picks pink and the one the
+// detection used ringed. 1 at the top, the NSDF of the zero lag.
 draw_nsdf :: proc(rect: gfx.Rect, nsdf: ^core.NSDF, font: gfx.Font) {
     LAGS :: 1500
     points: [LAGS][2]f32
@@ -49,9 +50,23 @@ draw_nsdf :: proc(rect: gfx.Rect, nsdf: ^core.NSDF, font: gfx.Font) {
         label_y := rect.y + rect.height + (24 if index % 2 == 0 else 8)
         gfx.draw_text(font, fmt.ctprintf("%.2fHz", nsdf.sample_rate / peak.x), {cross.x, label_y}, 12, 0, gfx.LIGHTGRAY)
 
-        color := gfx.PINK if index == nsdf.chosen_peak else gfx.LIGHTGRAY
+        // The frame's own pick pink, by the ratio to the highest
+        color := gfx.PINK if index == nsdf.ratio_peak else gfx.LIGHTGRAY
         gfx.draw_line(cross - {7, 0}, cross + {7, 0}, 2.0, color)
         gfx.draw_line(cross - {0, 7}, cross + {0, 7}, 2.0, color)
+
+        // The pick the detection used, the followed pitch's held over the ratio's, ringed in white: gold
+        // ran into the curve
+        if index == nsdf.chosen_peak {
+            RING_RADIUS :: 5.5
+            RING_SEGMENTS :: 24
+            ring: [RING_SEGMENTS][2]f32
+            for &point, segment in ring {
+                angle := f32(segment) / RING_SEGMENTS * math.TAU
+                point = cross + RING_RADIUS * [2]f32{math.cos(angle), math.sin(angle)}
+            }
+            gfx.draw_polyline(ring[:], 1.5, gfx.WHITE, closed = true)
+        }
     }
 }
 

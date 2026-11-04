@@ -102,6 +102,11 @@ update_note_target :: proc(self: ^NoteTarget, pitch: PitchInfo, strobe_hears := 
 
     if pitch.is_weak_pitch && !strobe_hears do self.active = false
 
+    // The next detection holds the octave of the latest strong one, see nsdf_choose_peak and
+    // HARMONICS_HOLD_RATIO. On a hummed glide it held back more drops than the latest that wasn't weak, a drop
+    // that got through became the one to hold, and than the confirmed note.
+    self.pitch.followed_hz = self.last_good_pitch.detected_freq if self.active else 0
+
     return
 }
 
