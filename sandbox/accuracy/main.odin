@@ -49,8 +49,9 @@ WRONG_WAY_MIN_HZ :: 1
 // White noise this far under the tone, 0 for none
 NOISE_SNRS_DB :: [?]f32{0, 20, 10}
 
-// Report only, their failures don't fail the run: noise louder than a room's, and a pure sine under the pitch
-// detection's highpass in noise, found from its fundamental alone (see core.PITCH_HIGHPASS_HZ)
+// Report only, their failures don't fail the run: noise louder than a room's, a pure sine under the pitch
+// detection's highpass in noise, found from its fundamental alone (see core.PITCH_HIGHPASS_HZ), and a held
+// note's step that restarts its phase, see is_stress
 STRESS_SNR_DB :: 10
 
 Waveform :: enum {
@@ -70,6 +71,7 @@ Case :: struct {
     pitch_standard:   f32,
     noise_snr_db:     f32,
     before_semitones: Maybe(int), // a note played for BEFORE_S first, in tune, the tone switches from it
+    restart_phase:    bool, // the tone starts its new note from zero phase like a tone generator, with a click
 }
 
 // Octave switches like a tone generator going from A2 to A1, the strobe has to follow the new note
@@ -104,8 +106,14 @@ main :: proc() {
                     if waveform == .WEAK_FUNDAMENTAL && note_semitones > WEAK_FUNDAMENTAL_HIGHEST do break
 
                     for offset_cents in OFFSETS_CENTS {
-                        before: Maybe(int) = note_semitones if abs(offset_cents) >= HELD_FROM_CENTS else nil
-                        append(&cases, Case{waveform, note_semitones, offset_cents, pitch_standard, noise_snr_db, before})
+                        held_step := abs(offset_cents) >= HELD_FROM_CENTS
+                        before: Maybe(int) = note_semitones if held_step else nil
+                        append(&cases, Case{waveform, note_semitones, offset_cents, pitch_standard, noise_snr_db, before, false})
+
+                        // The step again restarting its phase, report only, see is_stress
+                        if held_step {
+                            append(&cases, Case{waveform, note_semitones, offset_cents, pitch_standard, noise_snr_db, before, true})
+                        }
                     }
                 }
             }
@@ -129,6 +137,7 @@ main :: proc() {
                     pitch_standard   = 440,
                     noise_snr_db     = noise_snr_db,
                     before_semitones = switch_notes[0],
+                    restart_phase    = true,
                 }
                 result := run_case(test_case)
                 append(&results, result)
@@ -168,6 +177,10 @@ main :: proc() {
 
 is_stress :: proc(test_case: Case) -> bool {
     if test_case.noise_snr_db == STRESS_SNR_DB do return true
+
+    // A held note stepping half a semitone with a click, only a tone generator does that, a string glides
+    before, switches := test_case.before_semitones.?
+    if switches && before == test_case.note_semitones && test_case.restart_phase do return true
 
     note := core.cents_to_note(f32(100 * test_case.note_semitones), test_case.pitch_standard)
     return test_case.waveform == .SINE && test_case.noise_snr_db > 0 && note.frequency < core.PITCH_HIGHPASS_HZ
@@ -219,7 +232,7 @@ run_case :: proc(test_case: Case) -> (result: Result) {
     if before, ok := test_case.before_semitones.?; ok {
         before_hz = core.cents_to_note(f32(100 * before), test_case.pitch_standard).frequency
     }
-    samples := generate(test_case.waveform, freq_hz, test_case.noise_snr_db, before_hz)
+    samples := generate(test_case.waveform, freq_hz, test_case.noise_snr_db, before_hz, test_case.restart_phase)
     defer delete(samples)
 
     detector := core.init_pitch_detector(test_case.pitch_standard)
@@ -315,16 +328,19 @@ has_partial :: proc(waveform: Waveform, interval: f32) -> bool {
 
 // LEAD_IN_S of silence then TONE_S of the waveform at TONE_RMS, and white noise noise_snr_db under that
 // throughout. A frequency of 0 is the noise alone. With before_hz the tone plays that for BEFORE_S first,
-// at the same level.
-generate :: proc(waveform: Waveform, freq_hz, noise_snr_db: f32, before_hz: f32 = 0) -> []f32 {
+// at the same level, and goes on from where its phase got to, or from zero with restart_phase.
+generate :: proc(waveform: Waveform, freq_hz, noise_snr_db: f32, before_hz: f32 = 0, restart_phase := false) -> []f32 {
     tone_start := int(LEAD_IN_S * SAMPLERATE)
     if before_hz > 0 do tone_start += int(BEFORE_S * SAMPLERATE)
     samples := make([]f32, tone_start + int(TONE_S * SAMPLERATE))
 
-    if before_hz > 0 do add_tone(samples[int(LEAD_IN_S * SAMPLERATE):tone_start], waveform, before_hz)
-    if freq_hz > 0 do add_tone(samples[tone_start:], waveform, freq_hz)
+    cycles: f64 = 0
+    if before_hz > 0 do cycles = add_tone(samples[int(LEAD_IN_S * SAMPLERATE):tone_start], waveform, before_hz, 0)
+    if restart_phase do cycles = 0
+    if freq_hz > 0 do add_tone(samples[tone_start:], waveform, freq_hz, cycles)
 
-    add_tone :: proc(samples: []f32, waveform: Waveform, freq_hz: f32) {
+    // From start_cycles of the fundamental into its period, returns where it ended
+    add_tone :: proc(samples: []f32, waveform: Waveform, freq_hz: f32, start_cycles: f64) -> (end_cycles: f64) {
         // Band-limited, the partials under the Nyquist frequency
         amplitudes: [64]f32
         for &amplitude, index in amplitudes {
@@ -348,14 +364,18 @@ generate :: proc(waveform: Waveform, freq_hz, noise_snr_db: f32, before_hz: f32 
         for amplitude in amplitudes do power += 0.5 * amplitude * amplitude
         gain := TONE_RMS / math.sqrt(power)
 
-        phase_step := f64(freq_hz) / SAMPLERATE
+        cycles_step := f64(freq_hz) / SAMPLERATE
         for &sample, index in samples {
-            phase := math.TAU * phase_step * f64(index)
+            phase := math.TAU * (start_cycles + cycles_step * f64(index))
             for amplitude, harmonic in amplitudes {
                 if amplitude == 0 do continue
                 sample += gain * amplitude * f32(math.sin(phase * f64(harmonic + 1)))
             }
         }
+
+        // Within a period, the fraction stays precise
+        end_cycles = start_cycles + cycles_step * f64(len(samples))
+        return end_cycles - math.floor(end_cycles)
     }
 
     if noise_snr_db > 0 {
@@ -471,8 +491,10 @@ print_case :: proc(result: Result) {
     }
 
     name := note_name(result.note_semitones, result.pitch_standard)
+    // ↺ where the tone restarted its phase at the switch
     if before, ok := result.before_semitones.?; ok {
-        name = fmt.tprintf("%v→%v", note_name(before, result.pitch_standard), name)
+        restart := "↺" if result.restart_phase else ""
+        name = fmt.tprintf("%v→%v%v", note_name(before, result.pitch_standard), name, restart)
     }
     noise := "clean" if result.noise_snr_db == 0 else fmt.tprintf("%.0fdB", result.noise_snr_db)
     fmt.printf(
