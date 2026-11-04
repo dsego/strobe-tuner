@@ -16,6 +16,8 @@
 // The note an octave up counts apart from a wrong note, the readout is the same in any octave. A
 // spectrum of each original, made without the tuner, shows why, e.g. a bass string with a weak fundamental:
 // the 1x dB column is the fundamental's level from the strongest harmonic.
+//
+// The files play on a thread per core, the report lists them in order as before.
 
 package recordings
 
@@ -24,6 +26,8 @@ import "core:math"
 import "core:os"
 import "core:slice"
 import "core:strings"
+import "core:sync"
+import "core:thread"
 import ma "vendor:miniaudio"
 
 import "../../src/core"
@@ -173,18 +177,33 @@ main :: proc() {
         if strings.trim_right(folder, "/") == c3_folder do named_octave_cents = 1200
     }
 
+    recordings: [dynamic]os.File_Info
+    defer delete(recordings)
+    for file in files {
+        extension := strings.to_lower(os.ext(file.name), context.temp_allocator)
+        if extension == ".wav" || extension == ".mp3" || extension == ".flac" do append(&recordings, file)
+    }
+
+    work := Work {
+        files              = recordings[:],
+        results            = make([]FileResults, len(recordings)),
+        named_octave_cents = named_octave_cents,
+        csv                = csv,
+    }
+    defer delete(work.results)
+    run_files(&work)
+
     runs: [dynamic]Run
     defer delete(runs)
 
     spectra: [dynamic]Spectrum
     defer delete(spectra)
 
-    for file in files {
-        extension := strings.to_lower(os.ext(file.name), context.temp_allocator)
-        if extension != ".wav" && extension != ".mp3" && extension != ".flac" do continue
-
-        if !csv do fmt.eprintln("Playing", file.name)
-        run_file(&runs, &spectra, file.fullpath, file.name, named_octave_cents)
+    for &result in work.results {
+        append(&runs, ..result.runs[:])
+        append(&spectra, ..result.spectra[:])
+        delete(result.runs)
+        delete(result.spectra)
     }
 
     if csv {
@@ -197,6 +216,46 @@ main :: proc() {
     for spectrum in spectra {
         if spectrum.named_low do fmt.eprintfln("%v: %v looks an octave low, nothing at its 1x and 3x", spectrum.file, note_name(spectrum.note))
     }
+}
+
+// A file's runs and the spectrum of its original, see run_file
+FileResults :: struct {
+    runs:    [dynamic]Run,
+    spectra: [dynamic]Spectrum,
+}
+
+// The files shared by the threads of run_files
+Work :: struct {
+    files:              []os.File_Info,
+    results:            []FileResults, // each file's at its index
+    next:               int, // the next file a thread takes
+    named_octave_cents: int,
+    csv:                bool,
+}
+
+// Each file into results at its index, on a thread per core like sandbox/accuracy's cases. Every run makes its own
+// detector and strobe, and the core has no globals, the threads share nothing but the next index.
+run_files :: proc(work: ^Work) {
+    threads := make([]^thread.Thread, max(os.get_processor_core_count(), 1))
+    defer delete(threads)
+    for &worker in threads {
+        worker = thread.create_and_start_with_data(work, proc(data: rawptr) {
+            work := (^Work)(data)
+            for {
+                index := sync.atomic_add(&work.next, 1)
+                if index >= len(work.files) do return
+
+                file := work.files[index]
+                if !work.csv do fmt.eprintln("Playing", file.name)
+
+                result := &work.results[index]
+                run_file(&result.runs, &result.spectra, file.fullpath, file.name, work.named_octave_cents)
+                free_all(context.temp_allocator)
+            }
+        })
+    }
+    thread.join_multiple(..threads)
+    for worker in threads do thread.destroy(worker)
 }
 
 // The original, then every shift against it
@@ -227,7 +286,7 @@ run_file :: proc(runs: ^[dynamic]Run, spectra: ^[dynamic]Spectrum, path, name: s
     sustain := [2]f32{first_lit + SUSTAIN_FROM_S, min(last_lit, last_above_floor(levels))}
     sustain[1] -= SUSTAIN_TRIM * (sustain[1] - sustain[0])
     if first_lit < 0 || sustain[1] <= sustain[0] {
-        fmt.eprintln("  no sustain, the note is lit and over", LIVE_FLOOR_DBFS, "dBFS for under", SUSTAIN_FROM_S, "seconds")
+        fmt.eprintln(name, "has no sustain, the note is lit and over", LIVE_FLOOR_DBFS, "dBFS for under", SUSTAIN_FROM_S, "seconds")
         return
     }
 
