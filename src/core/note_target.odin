@@ -87,7 +87,11 @@ update_note_target :: proc(self: ^NoteTarget, pitch: PitchInfo, strobe_hears := 
     }
     self.pitch = pitch
 
-    strong, confirmed := recognize_note(&self.recognition, pitch)
+    // A harmonic of the confirmed note waits longer, see NOTE_HARMONIC_SWITCH_S. Not of the latest strong
+    // detection, the harmonic was one on its first.
+    confirmed_hz: f32 = 0
+    if lit, has_lit := self.detected_note.?; has_lit && self.active do confirmed_hz = lit.frequency
+    strong, confirmed := recognize_note(&self.recognition, pitch, confirmed_hz)
     if strong {
         if confirmed do retune = follow_detected_note(self, pitch.detected_note)
 

@@ -103,13 +103,19 @@ test_note_target_pitch_standard :: proc(t: ^testing.T) {
 }
 
 // The strobe follows an octave either way while a note is followed, e.g. a slur down to the note whose
-// octave the strobe was on
+// octave the strobe was on. After NOTE_HARMONIC_SWITCH_S, 0.1 s is 3 detections 0.05 s apart.
 @(test)
 test_note_target_follows_octave :: proc(t: ^testing.T) {
     target := init_note_target(A2_HZ, 440, true, 0)
     update_note_target(&target, test_detection(A2_HZ))
+
+    testing.expect(t, !update_note_target(&target, test_detection(A2_HZ / 2)))
+    update_note_target(&target, test_detection(A2_HZ / 2))
     testing.expect(t, update_note_target(&target, test_detection(A2_HZ / 2)))
     testing.expect_value(t, target.target_note.octave, 1)
+
+    testing.expect(t, !update_note_target(&target, test_detection(A2_HZ)))
+    update_note_target(&target, test_detection(A2_HZ))
     testing.expect(t, update_note_target(&target, test_detection(A2_HZ)))
     testing.expect_value(t, target.target_note.octave, 2)
 }
@@ -135,7 +141,9 @@ test_note_target_note_lock :: proc(t: ^testing.T) {
     update_note_target(&target, test_detection(E2_HZ))
     toggle_note_lock(&target)
     testing.expect(t, !out_of_range(&target))
-    update_note_target(&target, test_detection(E2_HZ / 2))
+
+    // An octave of the followed note after NOTE_HARMONIC_SWITCH_S, 3 detections
+    for _ in 0 ..< 3 do update_note_target(&target, test_detection(E2_HZ / 2))
     testing.expect_value(t, target.target_note.octave, 2)
     testing.expect(t, out_of_range(&target))
     steady := readout_pitch(&target)
@@ -189,7 +197,9 @@ test_note_target_note_offset :: proc(t: ^testing.T) {
     steady := readout_pitch(&target)
     testing.expect(t, abs(steady.err_cents) < 0.01)
 
-    // The octave isn't tuned flat, the strobe moves there untouched
+    // The octave isn't tuned flat, the strobe moves there untouched after NOTE_HARMONIC_SWITCH_S, 3 detections
+    update_note_target(&target, test_detection(A3_HZ))
+    update_note_target(&target, test_detection(A3_HZ))
     testing.expect(t, update_note_target(&target, test_detection(A3_HZ)))
     testing.expect(t, target_freq(&target) == target.target_note.frequency)
 }
@@ -244,12 +254,12 @@ test_note_target_strings :: proc(t: ^testing.T) {
     steady = readout_pitch(&held)
     testing.expect(t, abs(steady.err_cents) < 0.1)
 
-    // Drop D's low D and the D string an octave up are two strings
+    // Drop D's low D and the D string an octave up are two strings, the octave after NOTE_HARMONIC_SWITCH_S
     drop_d := []int{-31, -24, -19, -14, -10, -5}
     set_target_strings(&target, drop_d)
     update_note_target(&target, test_detection(73.42))
     testing.expect_value(t, target.string_index, 0)
-    update_note_target(&target, test_detection(146.83))
+    for _ in 0 ..< 3 do update_note_target(&target, test_detection(146.83))
     testing.expect_value(t, target.string_index, 2)
 }
 

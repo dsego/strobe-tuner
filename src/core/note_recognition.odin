@@ -43,6 +43,13 @@ NOTE_SWITCH_S :: 0.05
 // The latest detection this close to the one before is settled
 SETTLED_CENTS :: 5
 
+// A new note that's a harmonic or an undertone of the pitch followed is seen this long in a row before the
+// strobe switches to it, a steady octave beats one that flips. For about 4 detections after a low note stepped
+// 55 cents the harmonic stack's bass window spans both and the note's own stack comes apart, its 5th harmonic
+// won, held still and was taken for the note: a B0 read D3 and then Bb0. A real octave or a fifth shows about
+// 50 ms later. E.g. -define:NOTE_HARMONIC_SWITCH_S=n
+NOTE_HARMONIC_SWITCH_S :: #config(NOTE_HARMONIC_SWITCH_S, 0.1)
+
 // Whether the optional note is this note, by its cents from A4
 holds_note :: proc(optional: Maybe(Note), note: Note) -> bool {
     held, ok := optional.?
@@ -58,11 +65,19 @@ holds_note :: proc(optional: Maybe(Note), note: Note) -> bool {
 // had to hold within 5 cents of the run's first as well, but a hum glides about 17 cents in 50 ms at any pitch
 // and its low notes lit only when strong. Without it a 3rd octave hum lit 73% of the time instead of 54 with
 // the stack, and the recordings, the generated tones and noise alone read the same.
-recognize_note :: proc(self: ^NoteRecognition, pitch: PitchInfo) -> (strong, confirmed: bool) {
+//
+// confirmed_hz is the confirmed note's while it's lit, 0 for none, a harmonic of it is confirmed after
+// NOTE_HARMONIC_SWITCH_S instead.
+recognize_note :: proc(self: ^NoteRecognition, pitch: PitchInfo, confirmed_hz: f32 = 0) -> (strong, confirmed: bool) {
     if pitch.fresh do time_detection(self, pitch)
 
+    confirm_s := self.confirm_s
+    if harmonic, _ := harmonic_of_followed(pitch.detected_freq, confirmed_hz); harmonic > 1 {
+        confirm_s = max(confirm_s, NOTE_HARMONIC_SWITCH_S)
+    }
+
     seen := holds_note(self.candidate_note, pitch.detected_note)
-    confirmed = seen && self.candidate_s >= self.confirm_s && self.settled
+    confirmed = seen && self.candidate_s >= confirm_s && self.settled
 
     held := seen && self.run_s >= self.confirm_s
     strong = pitch.is_strong_pitch || (!pitch.is_weak_pitch && held)
