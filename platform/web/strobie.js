@@ -2,7 +2,7 @@
 // Licensed under the GPL v3, see LICENSE
 
 // Starts strobie.wasm with odin.js, see src/gfx/web.odin. What Odin's runtime doesn't have comes from here:
-// the microphone for src/audio/web.odin and the config's storage for src/app/web.odin.
+// the microphone for src/audio/web.odin.
 (function () {
     "use strict";
 
@@ -177,16 +177,6 @@
         }
     });
 
-    const CONFIG_KEY = "strobie.config";
-
-    function storedConfig() {
-        try {
-            return localStorage.getItem(CONFIG_KEY);
-        } catch (error) {
-            return null;
-        }
-    }
-
     const imports = {
         strobie_audio: {
             open_input: () => {
@@ -196,26 +186,6 @@
             input_state: () => input.state,
             input_rate: () => (input.context ? input.context.sampleRate : 0),
             take_samples: takeSamples,
-        },
-        strobie_storage: {
-            // In UTF-8 bytes, -1 without one
-            config_length: () => {
-                const config = storedConfig();
-                return config == null ? -1 : new TextEncoder().encode(config).length;
-            },
-            load_config_text: (buffer, capacity) => {
-                const bytes = new TextEncoder().encode(storedConfig() ?? "");
-                const count = Math.min(bytes.length, capacity);
-                memory.loadU8Array(buffer, count).set(bytes.subarray(0, count));
-                return count;
-            },
-            save_config_text: (text, length) => {
-                try {
-                    localStorage.setItem(CONFIG_KEY, memory.loadString(text, length));
-                } catch (error) {
-                    console.log("The config wasn't saved:", error);
-                }
-            },
         },
     };
 

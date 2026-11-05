@@ -27,7 +27,7 @@ import "core:strings"
 import "../core"
 
 // From the standard OS path, e.g. ~/Library/Application Support/<APP_NAME>/config.ini on macOS, see
-// config_directory in ini_file.odin, the page's storage in a browser, see web.odin. Each field as save_config writes it, see read_value. A few values are then held in
+// config_directory in ini_file.odin, the defaults in a browser, see web.odin. Each field as save_config writes it, see read_value. A few values are then held in
 // range, see the end.
 load_config :: proc() -> Config {
     config := config_defaults

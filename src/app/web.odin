@@ -20,22 +20,9 @@
 package app
 
 import "core:encoding/ini"
-import "core:fmt"
-import "core:strings"
 
 import "../audio"
 import "../gfx"
-
-foreign import strobie_storage "strobie_storage"
-
-// The config's text in the page's local storage, see platform/web/strobie.js
-@(default_calling_convention = "contextless")
-foreign strobie_storage {
-    // In bytes, -1 without one
-    config_length :: proc() -> int ---
-    load_config_text :: proc(buffer: [^]u8, capacity: int) -> int ---
-    save_config_text :: proc(text: string) ---
-}
 
 // What the frames share, run_app keeps them on its stack instead
 web_config: Config
@@ -64,33 +51,11 @@ step :: proc(delta_time: f64) -> (keep_going: bool) {
     return true
 }
 
-// The config as save_ini left it in the page's storage, the defaults on the first visit
+// The page keeps no settings, every visit starts from the defaults: it's a demo of the app, and a
+// visitor sees the defaults as they are now
 load_ini :: proc() -> (ini.Map, bool) {
-    length := config_length()
-    if length < 0 {
-        fmt.println("No config in the page's storage")
-        return nil, false
-    }
-
-    text := make([]u8, length)
-    defer delete(text)
-
-    load_config_text(raw_data(text), length)
-    ini_map, err := ini.load_map_from_string(string(text), context.allocator)
-    if err != nil {
-        fmt.println("Failed to read the config", err)
-        return nil, false
-    }
-    return ini_map, true
+    return nil, false
 }
 
-save_ini :: proc(ini_map: ini.Map) {
-    builder := strings.builder_make()
-    defer strings.builder_destroy(&builder)
-
-    if !write_ini_pairs(strings.to_stream(&builder), ini_map) {
-        fmt.println("Failed to write the config")
-        return
-    }
-    save_config_text(strings.to_string(builder))
-}
+// Settings changed on the page last until it's closed or reloaded
+save_ini :: proc(ini_map: ini.Map) {}
