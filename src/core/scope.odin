@@ -69,7 +69,9 @@ SCOPE_FILL :: 0.9 // how much of the height a full scale sample takes
 SCOPE_CHUNK_SIZE :: 4096
 SCOPE_MAX_BEAM_DOTS :: 256 // between two samples
 SCOPE_MAX_FADE_GAIN :: 1e15 // divided back into the cells at this, far under an f32's range, see sweep_samples
-SCOPE_SWEEP_MAX_SAMPLES :: 24576 // kept for the newest sweep, two periods of a 16 Hz note at 192 kHz
+SCOPE_SWEEP_MAX_SAMPLES :: 24576 // two periods of a 16 Hz note at 192 kHz
+// The samples kept, and the average's bins, for a sweep and the circle's overlap past it with room over
+SCOPE_TRACE_MAX_SAMPLES :: 2 * SCOPE_SWEEP_MAX_SAMPLES
 SCOPE_CURVE_SAMPLES :: 3 // the beam's curve to a sample runs through this many before it, see move_beam
 
 // The input's peak is held over at least this many periods, Medium's: scaled to one sweep's own peak the
@@ -121,6 +123,11 @@ SCOPE_CIRCLE_RING :: 0.5
 // The radius of a full scale sample, of the square's side. Past its edge, the ring at rest fills the
 // screen's width more and the crests reach out to its sides.
 SCOPE_CIRCLE_REACH :: 0.7
+// Round the circle the line runs on past its start by this much of a sweep, the wave as it went on, its end over
+// its start. In tune they lie on each other, detuned the end runs on beside it, as far apart as the note slips
+// in a sweep. Ended where it started, the line stepped there. The display fades both ends where they overlap.
+SCOPE_CIRCLE_OVERLAP :: #config(SCOPE_CIRCLE_OVERLAP, 0.1)
+#assert(SCOPE_CIRCLE_OVERLAP >= 0 && SCOPE_CIRCLE_OVERLAP <= 0.5)
 
 // Two running averages one after the other, see the top of the file
 ScopeLowpass :: struct {
@@ -204,9 +211,9 @@ init_scope :: proc(columns, rows: int, sample_rate: f32 = DEFAULT_SAMPLE_RATE) -
     self.depths = make([]f32, columns)
     self.dwell = make([]f32, columns)
     self.chunk = make([]f32, SCOPE_CHUNK_SIZE)
-    self.history = make([]f32, SCOPE_SWEEP_MAX_SAMPLES)
-    self.average_sums = make([]f32, SCOPE_SWEEP_MAX_SAMPLES)
-    self.average_weights = make([]f32, SCOPE_SWEEP_MAX_SAMPLES)
+    self.history = make([]f32, SCOPE_TRACE_MAX_SAMPLES)
+    self.average_sums = make([]f32, SCOPE_TRACE_MAX_SAMPLES)
+    self.average_weights = make([]f32, SCOPE_TRACE_MAX_SAMPLES)
     self.level = loudness_level(0)
     self.fade_gain = 1
     self.average_gain = 1
@@ -269,8 +276,9 @@ reset_scope :: proc(self: ^Scope) {
 // The screen and the average
 clear_scope :: proc(self: ^Scope) {
     clear_screen(self)
-    slice.zero(self.average_sums[:self.average_bins])
-    slice.zero(self.average_weights[:self.average_bins])
+    used := average_bins_used(self)
+    slice.zero(self.average_sums[:used])
+    slice.zero(self.average_weights[:used])
     self.average_gain = 1
     self.restart_average = true
     self.averaged_sweep = min(i64) // the next one is new
@@ -393,9 +401,9 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
 // adds up, a detuned one drifts while it's averaged and smears like the strobe's stripes. The bins fade by
 // the persistence the way the screen does, the newest sample weighs average_gain, and the average is the
 // sum over the weight, so a bin shows what it has from the first sample on.
-// Whole sweeps only, the samples are kept until the sweep they're in is over. Taken as they came, the bins
-// behind the newest sample had this sweep's and the ones ahead of it only the sweep before's, the line
-// stepped there, and the step walked to another place every frame.
+// Whole sweeps only, the samples are kept until the sweep they're in is over, round the circle and its overlap
+// past the end too. Taken as they came, the bins behind the newest sample had this sweep's and the ones ahead
+// of it only the sweep before's, the line stepped there, and the step walked to another place every frame.
 average_samples :: proc(self: ^Scope, samples: []f32) {
     clock, ok := begin_samples(self, samples)
     if !ok do return
@@ -409,15 +417,17 @@ average_samples :: proc(self: ^Scope, samples: []f32) {
     keep_samples(self, samples)
 
     newest := clock + i64(len(samples)) - 1
-    from, sweep_start := sweeps_to_average(self, clock, newest)
-    fold_into_average(self, newest, from, sweep_start)
+    from, sweep_start, overlap_end := sweeps_to_average(self, clock, newest)
+    fold_into_average(self, newest, from, sweep_start, overlap_end)
 }
 
-// The kept samples to add, from from up to where the sweep the newest sample is in started. From the oldest
-// sample kept, and from where a sweep starts too: where the average left off is partway into a sweep after
-// the reference changed, and so is the oldest sample kept after a gap. Started there, the bins before it
-// stayed empty and the ones after it had a part of a sweep more, the line stepped there.
-sweeps_to_average :: proc(self: ^Scope, clock, newest: i64) -> (from, sweep_start: i64) {
+// The kept samples to add, from from up to where the sweep that isn't over started, and the overlap after
+// it up to overlap_end, see fold_into_average. Round the circle a sweep is over once its overlap past the end
+// has come in, over time once it ends. From the oldest sample kept, and from where a sweep starts too: where
+// the average left off is partway into a sweep after the reference changed, and so is the oldest sample kept
+// after a gap. Started there, the bins before it stayed empty and the ones after it had a part of a sweep
+// more, the line stepped there.
+sweeps_to_average :: proc(self: ^Scope, clock, newest: i64) -> (from, sweep_start, overlap_end: i64) {
     // Started over, from these samples once the low-pass has filled again, it started over with the
     // reference. The ones kept from before went through it at the old reference and are placed by its delay
     // then, the sweep they were in stepped where they end.
@@ -427,7 +437,10 @@ sweeps_to_average :: proc(self: ^Scope, clock, newest: i64) -> (from, sweep_star
         self.averaged_clock = clock + settle
     }
 
-    sweep_start = first_clock_in_sweep(self, math.floor(f64(newest) * self.step))
+    overlap := scope_trace_sweeps(self) - 1
+    unfinished := math.floor(f64(newest) * self.step - overlap)
+    sweep_start = first_clock_in_sweep(self, unfinished)
+    overlap_end = first_clock_in_sweep(self, unfinished + overlap)
     from = max(self.averaged_clock, newest - i64(self.history_count) + 1)
     from_sweep := math.floor(f64(from) * self.step)
     if first_clock_in_sweep(self, from_sweep) < from do from = first_clock_in_sweep(self, from_sweep + 1)
@@ -437,14 +450,17 @@ sweeps_to_average :: proc(self: ^Scope, clock, newest: i64) -> (from, sweep_star
 }
 
 // The kept samples from from to before sweep_start into the average, each into the two bins around its place
-// across the sweep
-fold_into_average :: proc(self: ^Scope, newest, from, sweep_start: i64) {
+// across the sweep. Round the circle the samples at the start of a sweep, up to overlap_end, go in once more
+// as the overlap of the one before, see SCOPE_CIRCLE_OVERLAP: into the bins after its end, by its weight. The
+// sweep's end runs on into them, the last bin's samples into the bin past it, not round to the first bin.
+fold_into_average :: proc(self: ^Scope, newest, from, sweep_start, overlap_end: i64) {
     // Of one sweep. All of a sweep's samples weigh the same: faded by the sample, its end weighed more than
-    // its start, and the first bin, which takes from both, was bent toward the end.
+    // its start.
     decay := math.exp(-1 / (self.step * self.persistence_s * f64(self.sample_rate)))
 
-    bins := self.average_bins
-    for sample_clock in from ..< sweep_start {
+    overlap := scope_trace_sweeps(self) - 1
+    from_sweep := i64(math.floor(f64(from) * self.step))
+    for sample_clock in from ..< overlap_end {
         sample := kept_sample(self, newest, sample_clock)
 
         position := f64(sample_clock) * self.step
@@ -457,17 +473,49 @@ fold_into_average :: proc(self: ^Scope, newest, from, sweep_start: i64) {
         // Divided back in as soon as it's too large, see sweep_samples
         if self.average_gain > SCOPE_MAX_FADE_GAIN {
             scale := f32(1 / self.average_gain)
-            for &sum in self.average_sums[:bins] do sum *= scale
-            for &weight in self.average_weights[:bins] do weight *= scale
+            used := average_bins_used(self)
+            for &sum in self.average_sums[:used] do sum *= scale
+            for &weight in self.average_weights[:used] do weight *= scale
             self.average_gain = 1
         }
 
-        bin := (position - math.floor(position)) * f64(bins)
-        left := int(bin)
-        right_share := f32(bin - f64(left))
-        add_to_average_bin(self, left % bins, sample, f32(self.average_gain) * (1 - right_share))
-        add_to_average_bin(self, (left + 1) % bins, sample, f32(self.average_gain) * right_share)
+        across := position - math.floor(position)
+        if sample_clock < sweep_start {
+            add_to_average(self, across, sample, self.average_gain)
+
+            // The first bin from both sides like the others, from the sample before the sweep's start too.
+            // From one side, it had a sample of some sweeps and only a sliver of others', the sweeps it took
+            // weren't its neighbours', and a detuned note stepped there.
+            before := sample_clock - 1
+            if sample_clock == first_clock_in_sweep(self, f64(sweep)) && before > newest - i64(self.history_count) {
+                into_first := 1 + (f64(before) * self.step - f64(sweep)) * f64(self.average_bins)
+                add_to_average_bin(self, 0, kept_sample(self, newest, before), f32(self.average_gain * into_first))
+            }
+        }
+
+        // The sweep before's overlap only once that sweep is in, and so is this one's with the next sweep
+        if across < overlap && sweep > from_sweep do add_to_average(self, 1 + across, sample, self.average_gain * decay)
     }
+}
+
+// A sample into the two bins around its place along the line, in sweeps, by how near it is to each
+add_to_average :: proc(self: ^Scope, along: f64, sample: f32, gain: f64) {
+    bin := along * f64(self.average_bins)
+    left := int(bin)
+    right_share := f32(bin - f64(left))
+    add_to_average_bin(self, left, sample, f32(gain) * (1 - right_share))
+    add_to_average_bin(self, left + 1, sample, f32(gain) * right_share)
+}
+
+// How many of the average's bins hold the line: a sweep's, round the circle its overlap, and the bin past the
+// end the last samples go into
+average_bins_used :: proc(self: ^Scope) -> int {
+    return int(scope_trace_sweeps(self) * f64(self.average_bins)) + 2
+}
+
+// How many sweeps the line runs, round the circle on past where it started, see SCOPE_CIRCLE_OVERLAP
+scope_trace_sweeps :: proc(self: ^Scope) -> f64 {
+    return 1 + SCOPE_CIRCLE_OVERLAP if self.sweep == .CIRCLE else 1
 }
 
 // The clock of the first sample in a sweep
@@ -523,7 +571,8 @@ redraw_newest_sweep :: proc(self: ^Scope) {
 // The newest sweep as a line, or the sweeps' average: the points the beam goes through, as fractions of the
 // screen's width and height from its top left corner, in time order. As long apart in time, the distance
 // from one to the next is how fast the beam moves there, and no further apart across than a cell. Over time
-// the sweep starts over on the left, the x jumps back where it does.
+// the sweep starts over on the left, the x jumps back where it does. Round the circle it runs on past where
+// it started, see SCOPE_CIRCLE_OVERLAP.
 scope_trace :: proc(self: ^Scope, points: ^[dynamic][2]f32) {
     clear(points)
     if self.average_sweeps && self.persistence_s > 0 {
@@ -551,70 +600,34 @@ scope_trace :: proc(self: ^Scope, points: ^[dynamic][2]f32) {
 }
 
 // The average round the sweep once from its start, where the sweeps it took meet. Over time that's the
-// screen's edge, the line ends there.
+// screen's edge, the line ends there. Round the circle it runs on past the start through the overlap's bins,
+// see SCOPE_CIRCLE_OVERLAP.
 trace_average :: proc(self: ^Scope, points: ^[dynamic][2]f32) {
-    // The circle closes on itself. The sweep's end runs on into the next one's start, not
-    // into its own: a note that changes from one sweep to the next, detuned, wobbling or fading, leaves a gap
-    // as wide as it changed, and arrives at another slope. Over the sweep's last quarter the line bends
-    // smoothly into its start instead (a Hermite blend of both), there's no step or corner at the top.
-    Seam :: struct {
-        gap:   f32, // from where the end was heading to the start
-        slope: f32, // the start's slope over the end's, a bin
-        bins:  int, // the blend's, up to the end
-    }
-
-    in_bin :: proc(self: ^Scope, bin: int) -> f32 {
+    average :: proc(self: ^Scope, bin: int) -> f32 {
         weight := self.average_weights[bin]
         return self.average_sums[bin] / weight if weight > 0 else 0
     }
 
-    // Round the sweep, the bins wrap around, the seam blended in. The first bin takes from both sides of the
-    // seam, the samples just before the sweep's end lead into the next one's start, it's carried on back
-    // from the three after it instead (a parabola).
-    average :: proc(self: ^Scope, offset: int, seam: Seam) -> f32 {
-        bin := offset % self.average_bins
-        if bin == 0 do return 3 * in_bin(self, 1) - 3 * in_bin(self, 2) + in_bin(self, 3)
-
-        value := in_bin(self, bin)
-        into := bin - (self.average_bins - seam.bins)
-        if into <= 0 do return value
-
-        blend := f32(into) / f32(seam.bins)
-        rise := blend * blend * (3 - 2 * blend)
-        turn := blend * blend * (blend - 1)
-        return value + seam.gap * rise + seam.slope * f32(seam.bins) * turn
+    // The line ends at last, the bins don't wrap round to the sweep's other end, the one past an end carries
+    // the two before it on (a straight line). Wrapped, the last piece ran on to the start's height and drew
+    // the step between them at the end.
+    beside :: proc(self: ^Scope, bin, last: int) -> f32 {
+        if bin < 0 do return 2 * average(self, 0) - average(self, 1)
+        if bin > last do return 2 * average(self, last) - average(self, last - 1)
+        return average(self, bin)
     }
 
     if self.step <= 0 do return
 
+    // Over time the sweep's last bin, round the circle the overlap's but one, the last has its samples from
+    // one side only
     bins := self.average_bins
-
-    // Both sides at the join, through the three bins next to it (a parabola), the end's carried on to it
-    seam := Seam{}
-    if self.sweep != .TIME {
-        start := [3]f32{average(self, 0, seam), average(self, 1, seam), average(self, 2, seam)}
-        end := [3]f32{average(self, bins - 1, seam), average(self, bins - 2, seam), average(self, bins - 3, seam)}
-        end_value := 3 * end[0] - 3 * end[1] + end[2]
-        end_slope := (5 * end[0] - 8 * end[1] + 3 * end[2]) / 2
-        start_slope := (-3 * start[0] + 4 * start[1] - start[2]) / 2
-        seam = {gap = start[0] - end_value, slope = start_slope - end_slope, bins = bins / 4}
-    }
-
-    // Over time the line ends at the screen's edges, the bins don't wrap round to the sweep's other end, the
-    // one past an edge carries the two before it on (a straight line). Wrapped, the last piece ran on to the
-    // start's height and drew the step between them at the edge.
-    beside :: proc(self: ^Scope, bin: int, seam: Seam) -> f32 {
-        bins := self.average_bins
-        if self.sweep == .TIME && bin < 0 do return 2 * average(self, 0, seam) - average(self, 1, seam)
-        if self.sweep == .TIME && bin >= bins do return 2 * average(self, bins - 1, seam) - average(self, bins - 2, seam)
-        return average(self, bin + bins, seam)
-    }
+    last := bins - 1 if self.sweep == .TIME else int(scope_trace_sweeps(self) * f64(bins)) - 1
 
     dots := trace_dots(self)
-    pieces := bins - 1 if self.sweep == .TIME else bins
-    for bin in 0 ..< pieces {
-        before, from := beside(self, bin - 1, seam), average(self, bin, seam)
-        to, after := beside(self, bin + 1, seam), beside(self, bin + 2, seam)
+    for bin in 0 ..< last {
+        before, from := beside(self, bin - 1, last), average(self, bin)
+        to, after := beside(self, bin + 1, last), beside(self, bin + 2, last)
         for dot in 0 ..< dots {
             progress := f32(dot) / f32(dots)
             value := catmull_rom(before, from, to, after, progress)
@@ -623,18 +636,17 @@ trace_average :: proc(self: ^Scope, points: ^[dynamic][2]f32) {
         }
     }
 
-    // The last bin over time, back to where it started round the circle, it closes
-    last := bins - 1 if self.sweep == .TIME else bins
-    point := sweep_point(self, f64(last) / f64(bins), average(self, last, seam))
+    point := sweep_point(self, f64(last) / f64(bins), average(self, last))
     append(points, [2]f32{f32(point.x), f32(point.y)})
 }
 
-// The newest sweep's samples in the history: where they start in the ring, how many with the curve's
-// samples before them, and the first one's clock as it's drawn. False while there's less than a curve.
+// The newest sweep's samples in the history, round the circle with its overlap: where they start in the ring,
+// how many with the curve's samples before them, and the first one's clock as it's drawn. False while there's
+// less than a curve.
 newest_sweep :: proc(self: ^Scope) -> (start, count: int, clock: i64, ok: bool) {
     if self.step <= 0 do return
 
-    count = min(int(math.ceil(1 / self.step)) + SCOPE_CURVE_SAMPLES, self.history_count)
+    count = min(int(math.ceil(scope_trace_sweeps(self) / self.step)) + SCOPE_CURVE_SAMPLES, self.history_count)
     if count <= SCOPE_CURVE_SAMPLES do return
 
     start = (self.history_next - count + len(self.history)) % len(self.history)

@@ -60,13 +60,6 @@ SCOPE_BLOOM_PASSES :: #config(SCOPE_BLOOM_PASSES, 3)
 SCOPE_DIVISIONS :: 8
 SCOPE_AXIS_PIXELS :: 2 // the line through zero
 
-// Round the circle a sweep that doesn't end where it started, the newest alone with a note off, fades in over
-// this much of its way at the start and out over as much at the end, so its ends don't meet in a step. As far
-// as they're apart: a step SCOPE_END_GAP wide or more fades them out altogether, a hair's step barely, the
-// circle of a note just off keeps no dark notch at the top.
-SCOPE_END_FADE :: 0.06
-SCOPE_END_GAP :: 4 * SCOPE_TRACE_THICKNESS // points
-
 // The circle's afterglow, the Afterglow setting: behind the newest sweep the circle as it was a moment ago,
 // SCOPE_AFTERGLOW_SWEEPS times SCOPE_AFTERGLOW_DELAY_S apart, each further back SCOPE_AFTERGLOW_SHRINK times as
 // big and SCOPE_AFTERGLOW_FADE times as bright. Each is the trace from that long ago held at its size, not one
@@ -260,16 +253,13 @@ draw_scope_trace :: proc(
     afterglow: bool,
     beam_color: gfx.Color,
 ) {
-    // In pieces where the sweep over time starts over on the left. A line that ends where it started, the
-    // circle through the sweeps' average, is closed.
+    // In pieces where the sweep over time starts over on the left
     draw_pieces :: proc(self: ^ScopeDisplay, rect: gfx.Rect, thickness, feather: f32) {
         piece := 0
         for index in 1 ..= len(self.trace) {
             if index < len(self.trace) && !wraps(self, rect, index - 1, index) do continue
 
-            gap := self.trace[index - 1] - self.trace[piece]
-            closed := piece == 0 && index == len(self.trace) && abs(gap.x) + abs(gap.y) < 0.01
-            gfx.draw_soft_polyline(self.trace[piece:index], self.trace_colors[piece:index], thickness, feather, closed)
+            gfx.draw_soft_polyline(self.trace[piece:index], self.trace_colors[piece:index], thickness, feather)
             piece = index
         }
     }
@@ -292,9 +282,12 @@ draw_scope_trace :: proc(
     if beam == .SOLID {
         slice.fill(self.trace_light[:], 1)
     } else {
-        // How far the beam goes from one point to the next on a flat line, a sweep's way at the wave's zero
+        // How far the beam goes from one point to the next on a flat line, the line's way at the wave's zero
         way := rect.width
-        if scope.sweep == .CIRCLE do way = math.TAU * core.SCOPE_CIRCLE_REACH * core.SCOPE_CIRCLE_RING * rect.width
+        if scope.sweep == .CIRCLE {
+            turns := f32(core.scope_trace_sweeps(scope))
+            way = turns * math.TAU * core.SCOPE_CIRCLE_REACH * core.SCOPE_CIRCLE_RING * rect.width
+        }
         flat := way / f32(len(self.trace) - 1)
 
         // Each point as far as the beam goes to the next one, or from the one before where it starts over
@@ -308,19 +301,6 @@ draw_scope_trace :: proc(
         }
     }
 
-    // The ends of a circle that doesn't close faded, see SCOPE_END_FADE
-    if scope.sweep == .CIRCLE {
-        gap := self.trace[len(self.trace) - 1] - self.trace[0]
-        depth := clamp(math.sqrt(gap.x * gap.x + gap.y * gap.y) / SCOPE_END_GAP, 0, 1)
-        count := len(self.trace)
-        ends := max(int(SCOPE_END_FADE * f32(count)), 1)
-        for index in 0 ..< min(ends, count / 2) {
-            ramp := math.lerp(f32(1), math.smoothstep(f32(0), f32(1), f32(index) / f32(ends)), depth)
-            self.trace_light[index] *= ramp
-            self.trace_light[count - 1 - index] *= ramp
-        }
-    }
-
     // The circle of a moment ago behind it. Off, or over time, it forgets what it kept, so it starts afresh.
     if afterglow && scope.sweep == .CIRCLE {
         center := [2]f32{rect.x + rect.width / 2, rect.y + rect.height / 2}
@@ -330,11 +310,12 @@ draw_scope_trace :: proc(
         self.glow_count = 0
     }
 
-    // Solid, as bright all along but for the circle's faded ends
+    // Solid, as bright all along. Round the circle the ends fade where they overlap.
     if beam == .SOLID {
         for &color, index in self.trace_colors {
             color = lerp_color(self.background, beam_color, self.visibility * self.trace_light[index])
         }
+        if scope.sweep == .CIRCLE do fade_circle_ends(self.trace_colors[:])
         draw_pieces(self, rect, SCOPE_TRACE_THICKNESS, SCOPE_TRACE_FEATHER)
         return
     }
@@ -342,12 +323,30 @@ draw_scope_trace :: proc(
     for &color, index in self.trace_colors {
         color = lerp_color(self.background, beam_color, self.visibility * self.trace_light[index] * SCOPE_GLOW)
     }
+    if scope.sweep == .CIRCLE do fade_circle_ends(self.trace_colors[:])
     draw_pieces(self, rect, SCOPE_GLOW_THICKNESS, 0.5 * SCOPE_GLOW_THICKNESS)
 
     for &color, index in self.trace_colors {
         color = lerp_color(self.background, beam_color, self.visibility * self.trace_light[index])
     }
+    if scope.sweep == .CIRCLE do fade_circle_ends(self.trace_colors[:])
     draw_pieces(self, rect, SCOPE_TRACE_THICKNESS, SCOPE_TRACE_FEATHER)
+}
+
+// The ends of the circle's line where they overlap, see core.SCOPE_CIRCLE_OVERLAP: its start fades in under
+// its end over the first half of the overlap, its end out over the start over the second half. Faded clearer,
+// each still as bright as the beam: in tune the end lies on the start, where either fades the other shows
+// through at the same color and the circle is whole. Detuned the end runs on beside the start, both taper.
+// Faded darker, the end dimmed the start under it and left a dark notch.
+fade_circle_ends :: proc(colors: []gfx.Color) {
+    overlap := f32(core.SCOPE_CIRCLE_OVERLAP)
+    ends := f32(len(colors) - 1) * 0.5 * overlap / (1 + overlap) // points over half the overlap
+    if ends <= 0 do return
+
+    for &color, index in colors {
+        along := f32(min(index, len(colors) - 1 - index))
+        color.a = u8(math.round(f32(color.a) * math.smoothstep(f32(0), f32(1), along / ends)))
+    }
 }
 
 // Keeps the newest trace for the afterglow, its points from the middle and their light, unless the last one
@@ -391,18 +390,16 @@ draw_afterglow :: proc(self: ^ScopeDisplay, center: [2]f32, beam: ScopeBeam, bea
         colors := make([]gfx.Color, len(frame.points), context.temp_allocator)
         for point, index in frame.points do points[index] = center + size * point
 
-        // Closed like the newest, where it ends where it started
-        gap := frame.points[len(frame.points) - 1] - frame.points[0]
-        closed := abs(gap.x) + abs(gap.y) < 0.01
-
         if beam == .PHOSPHOR {
             for &color, index in colors {
                 color = lerp_color(self.background, beam_color, brightness * frame.light[index] * SCOPE_GLOW)
             }
-            gfx.draw_soft_polyline(points, colors, SCOPE_GLOW_THICKNESS, 0.5 * SCOPE_GLOW_THICKNESS, closed)
+            fade_circle_ends(colors)
+            gfx.draw_soft_polyline(points, colors, SCOPE_GLOW_THICKNESS, 0.5 * SCOPE_GLOW_THICKNESS)
         }
         for &color, index in colors do color = lerp_color(self.background, beam_color, brightness * frame.light[index])
-        gfx.draw_soft_polyline(points, colors, SCOPE_TRACE_THICKNESS, SCOPE_TRACE_FEATHER, closed)
+        fade_circle_ends(colors)
+        gfx.draw_soft_polyline(points, colors, SCOPE_TRACE_THICKNESS, SCOPE_TRACE_FEATHER)
     }
 }
 

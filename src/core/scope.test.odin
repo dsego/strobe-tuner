@@ -468,18 +468,14 @@ test_scope_average_lowpass :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_scope_circle_closes :: proc(t: ^testing.T) {
-    // A note 31 cents sharp drifts from one sweep to the next, the circle's line still closes at the top
-    // without a step: it bends no more sharply anywhere than an in tune note's does
+test_scope_circle_ends_apart_when_detuned :: proc(t: ^testing.T) {
+    // Round the circle the average runs on past its start as the wave went on, not bent into its start: a
+    // turn on, an in tune note is where it started, one 31 cents sharp where the next sweep starts, as far on as
+    // it slipped in one
     FREQ :: 220.0
 
-    // Of the line all the way round, the top where its last point is the first again too
-    sharpest_bend :: proc(off_hz: f64) -> f32 {
-        bend :: proc(before, point, after: [2]f32) -> f32 {
-            delta := after - 2 * point + before
-            return math.sqrt(delta.x * delta.x + delta.y * delta.y)
-        }
-
+    // From the line's first point to the one a turn on, in rows
+    end_gap :: proc(off_hz: f64) -> f32 {
         scope := scope_test_init(FREQ)
         defer destroy_scope(&scope)
         set_scope_sweep(&scope, .CIRCLE)
@@ -497,14 +493,12 @@ test_scope_circle_closes :: proc(t: ^testing.T) {
         defer delete(points)
         scope_trace(&scope, &points)
 
-        last := len(points) - 1
-        sharpest := bend(points[last - 1], points[0], points[1])
-        for index in 1 ..< last do sharpest = max(sharpest, bend(points[index - 1], points[index], points[index + 1]))
-        return sharpest
+        gap := points[scope.average_bins * trace_dots(&scope)] - points[0]
+        return math.sqrt(gap.x * gap.x + gap.y * gap.y) * f32(scope.rows)
     }
 
-    in_tune, detuned := sharpest_bend(0), sharpest_bend(4)
-    testing.expectf(t, detuned < 1.2 * in_tune, "detuned bends %v, in tune %v", detuned, in_tune)
+    in_tune, detuned := end_gap(0), end_gap(4)
+    testing.expectf(t, in_tune < 0.1 && detuned > 1, "in tune %v rows apart, detuned %v", in_tune, detuned)
 }
 
 @(test)
@@ -544,10 +538,9 @@ test_scope_average_starts_over_on_a_whole_sweep :: proc(t: ^testing.T) {
         )
         if empty > 0 do continue
 
-        // A sine moves by under a twentieth of its peak from one bin to the next, the first bin aside, it
-        // takes from both sides of where the sweeps meet
+        // A sine moves by under a twentieth of its peak from one bin to the next
         step, peak: f32
-        for bin in 1 ..< scope.average_bins - 1 {
+        for bin in 0 ..< scope.average_bins - 1 {
             value := scope.average_sums[bin] / scope.average_weights[bin]
             next := scope.average_sums[bin + 1] / scope.average_weights[bin + 1]
             step = max(step, abs(next - value))
@@ -558,11 +551,11 @@ test_scope_average_starts_over_on_a_whole_sweep :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_scope_circle_closes_on_a_string :: proc(t: ^testing.T) {
+test_scope_circle_ends_smoothly_on_a_string :: proc(t: ^testing.T) {
     // A plucked string a little sharp, its partials sharper the higher (inharmonic), each decaying at its own
-    // rate, in a little noise, through the low-pass: every frame, the circle's line bends at the top, where
-    // the sweeps meet, about as sharply as the wave does round it. A kink would bend it hundreds of times
-    // as sharply.
+    // rate, in a little noise, through the low-pass: every frame, the circle's line bends at its ends and a
+    // turn on, where the sweep runs on into its overlap, about as sharply as the wave does round it. A kink,
+    // where a bin took other sweeps than its neighbours, would bend it many times as sharply.
     FREQ :: 220.0
     OFF_HZ :: 1.0
     PARTIALS :: 8
@@ -599,10 +592,9 @@ test_scope_circle_closes_on_a_string :: proc(t: ^testing.T) {
         // Once the average has a few sweeps
         if frame < 10 do continue
 
-        // How far each point is out from the middle, in rows, round the line once, the closing point is the
-        // first one again
+        // How far each point is out from the middle, in rows, round the line once
         scope_trace(&scope, &points)
-        count := len(points) - 1
+        count := len(points)
         radii := make([]f32, count)
         defer delete(radii)
         for &radius, index in radii {
@@ -610,12 +602,13 @@ test_scope_circle_closes_on_a_string :: proc(t: ^testing.T) {
             radius = math.sqrt(x * x + y * y) * f32(scope.rows)
         }
 
-        // A kink bends the radius both ways, sharply, at the top within a couple of bins of the join
+        // A kink bends the radius both ways, sharply, within a couple of bins of an end or of a turn on
         near := 2 * trace_dots(&scope)
+        turn := scope.average_bins * trace_dots(&scope)
         at_top, elsewhere: f32
-        for index in 0 ..< count {
-            bend := abs(radii[(index + 1) % count] - 2 * radii[index] + radii[(index + count - 1) % count])
-            if index < near || index >= count - near {
+        for index in 1 ..< count - 1 {
+            bend := abs(radii[index + 1] - 2 * radii[index] + radii[index - 1])
+            if index < near || index >= count - near || abs(index - turn) < near {
                 at_top = max(at_top, bend)
             } else {
                 elsewhere = max(elsewhere, bend)
@@ -669,14 +662,15 @@ test_scope_circle_spins_clockwise_when_sharp :: proc(t: ^testing.T) {
 
     // Which way the petals point out of the ring, twice the angle anticlockwise on the screen from the
     // right. A sine's two petals are half a turn apart, at twice their angle they point the same way.
-    // From the newest sweep's line, its points as long apart in time
+    // From the newest turn of the newest sweep's line, its points as long apart in time
     petals_angle :: proc(scope: ^Scope) -> f64 {
         points: [dynamic][2]f32
         defer delete(points)
         scope_trace(scope, &points)
+        turn := int(f64(len(points)) / scope_trace_sweeps(scope))
 
         petals: [2]f64
-        for point in points {
+        for point in points[len(points) - turn:] {
             x, y := f64(point.x) - 0.5, f64(point.y) - 0.5
             radius := math.sqrt(x * x + y * y)
             angle := math.atan2(-y, x)
