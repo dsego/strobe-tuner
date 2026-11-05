@@ -214,8 +214,8 @@ Config :: struct {
     // the scope's beam through the averaged sweeps, a solid line or an analog scope's phosphor, as bright as
     // the beam stays
     scope_beam:                   ScopeBeam,
-    // round the circle, the circle of a moment ago behind the newest, smaller and dimmer, see
-    // SCOPE_AFTERGLOW_SWEEPS
+    // round the circle, the circle as it was drawn a few periods before behind the newest, smaller and dimmer,
+    // see SCOPE_AFTERGLOW_SHRINK
     scope_afterglow:              bool,
 
     // Trace display: how many seconds it shows, and how many cents from the middle to its edges

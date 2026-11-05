@@ -60,8 +60,11 @@ PitchMethod :: enum {
     HARMONICS, // the best stack of harmonics over the sound around them, see HarmonicStack
 }
 
-// -define:PITCH_HARMONICS=true to start with HARMONICS, e.g. in the sandbox tools
-PITCH_HARMONICS :: #config(PITCH_HARMONICS, false)
+// HARMONICS by default since 2026-11-05: a ukulele's pluck thumps its body near 215 Hz, as loud as the note for
+// 0.15 s, and the whole wave repeats every two or three of the note's periods with it, WAVE read E5 as A3 and
+// the strobe came 0.3 s late. The stack read the note on its first detection. See KNOWN_ISSUES.md for what
+// it misses. -define:PITCH_HARMONICS=false to start with WAVE, e.g. in the sandbox tools.
+PITCH_HARMONICS :: #config(PITCH_HARMONICS, true)
 DEFAULT_PITCH_METHOD :: PitchMethod.HARMONICS when PITCH_HARMONICS else PitchMethod.WAVE
 
 // A strong pitch stays strong down to this far under PITCH_MIN_SNR_DB, so a decaying note doesn't flicker

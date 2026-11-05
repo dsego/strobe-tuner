@@ -13,7 +13,7 @@ Strobie is coming to the App Store for Mac and iPhone. [Try it in your browser](
 
 ### Features
 
-- Automatic pitch detection based on NSDF (McLeod Pitch Method).
+- Multi-harmonic pitch detection: every harmonic of the note counts, a string's stretched partials allowed for (subharmonic summation).
 - Smooth and responsive strobe display, the stripe sharpness adapts to the signal quality.
 - Note lock: keeps the strobe on one note.
 - Harmonic mode: shows the partials of the detected note on up to 5 strobe tracks.
@@ -94,7 +94,7 @@ The first run clones and compiles the dependencies into `external/`, later runs 
 | Command | What it does |
 | --- | --- |
 | `just dev` | Debug build, then runs it |
-| `just dev stats` | Also shows the signal stats and NSDF plots |
+| `just dev stats` | Also shows the signal stats and the pitch detection's plot, the harmonic stack's or the NSDF's |
 | `just dev unlock` | With the one-time unlock's reminder and a pretend store, 10 s free and a reminder every 15 s; `UNLOCK=storekit just ipa` or `just pkg` sells it through the App Store, without `UNLOCK` the whole app is free |
 | `just dev ios` | Builds for the iOS simulator and runs it there, needs Xcode |
 | `just ipa` | Signed build for iPhone, see `platform/ios/build-device.sh`, needs Xcode and a provisioning profile |
@@ -167,7 +167,9 @@ A tap on a view flips one of its options: the Scope's sweep, the Trace's range, 
 
 #### Pitch detection
 
-The pitch detection uses autocorrelation via FFT, the method of _"A Smarter Way to Find Pitch" (Philip McLeod, Geoff Wyvill)_, on the newest 4096 samples every frame. A 60 Hz high-pass takes out DC and rumble, which lift the NSDF between periods, and a 5 kHz low-pass the hiss above the highest note. Its clarity and the SNR tell a strong pitch from a weak one. It keeps the octave of the note it follows while that period's peak is nearly as high, a steady octave beats one that flips.
+The pitch detection looks for the best stack of harmonics in the spectrum of the newest 4096 samples every frame, after Hermes' subharmonic summation. Each peak counts by how far it stands over the sound around it, not by its level, and only where a candidate's first ten harmonics fall, so a pluck's body thump, a song's bass and drums or a fridge's hum don't add to a note's stack. Its fundamental weighs each harmonic like the whole wave's period would, so the Blend readout reads the same mix of partials. A 60 Hz high-pass takes out DC and rumble and a 5 kHz low-pass the hiss above the highest note. How far the stack stands out and the SNR tell a strong pitch from a weak one. It keeps the octave of the note it follows, a steady octave beats one that flips.
+
+The period of the whole wave, by autocorrelation via FFT after _"A Smarter Way to Find Pitch" (Philip McLeod, Geoff Wyvill)_, is still in the code, H flips to it in a debug build. It weighs everything by its power: a ukulele's pluck thumps its body near 215 Hz as loud as the note, the two repeat every three of the note's periods, and it read E5 as A3 for 0.15 s. The stack misses low pure sines stepping half a semitone, see [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 A new note has to hold for 50 ms before the strobe switches to it, so a single noisy detection of a decaying note doesn't reset the display, and its last two detections have to agree within 5 cents. An octave or another harmonic of the lit note holds for 100 ms. A window across a jump in the wave's phase, a tone generator starting a new note from zero, reads past the new pitch for as long as the window, and that overshoot could carry a note held 55 cents sharp over to the next one.
 
@@ -197,7 +199,7 @@ The cents readout follows a strobe track, the fundamental's by default. A string
 The Readout setting picks what the readout, the gauge and the trace read:
 - 1×: the fundamental's track.
 - 2×: the 2nd partial's track, e.g. to tune octaves.
-- Blend: the pitch detector's cents, the period of the whole wave, the way most tuners measure. It lands among the partials, the louder ones count more: a stiff string's sharp partials put it a few cents over the fundamental's track, and it drifts as they die away: +7¢ to -1¢ over 9 s on a Strat's low E whose 1× reads -6¢ to -8¢. On a wind instrument or a voice it reads the same as the 1×.
+- Blend: the pitch detector's cents, its partials weighed like the period of the whole wave, the way most tuners measure. It lands among the partials, the louder ones count more: a stiff string's sharp partials put it a few cents over the fundamental's track, and it drifts as they die away: +7¢ to -1¢ over 9 s on a Strat's low E whose 1× reads -6¢ to -8¢. On a wind instrument or a voice it reads the same as the 1×.
 
 Not built: the tracks' own cents averaged by their level, a blend that keeps the strobe's precision. It would read sharp of the fundamental on a stretched string and move as the upper partials die away, like the pitch detector's.
 

@@ -176,7 +176,7 @@ strobe_track_hz :: proc(lock_in: ^core.StrobeLockIn) -> []f32 {
 // round its rectifiers in the settings' order: the one lamp, the wave as it is, the two halves split.
 draw_scope_area :: proc(app: ^App, strobe, view: gfx.Rect) {
     config, measurement := app.config, &app.measurement
-    draw_scope_display(&app.displays.scope, &app.displays.glow_targets, &measurement.scope, view, config, measurement.pitch_detector.snr_db)
+    draw_scope_display(&app.displays.scope, &app.displays.glow_targets, &measurement.scope, view, config)
     if input_missing(app) || !gui_button(strobe) do return
 
     toast := &app.displays.toast
