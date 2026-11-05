@@ -155,7 +155,7 @@ gui_unlock :: proc(close_after_s, slide: f32, restore: bool) -> (close: bool) {
     label: cstring
     switch state {
     case .READY, .NOTHING_TO_RESTORE:
-        label = "Unlock"
+        label = "Buy once"
     case .LOADING:
         label = "Asking the App Store…"
     case .BUSY:
