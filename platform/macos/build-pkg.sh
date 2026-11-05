@@ -32,6 +32,14 @@ if [ "$MODE" = pkg ] && { [ -z "${MAC_PROFILE:-}" ] || [ ! -f "$MAC_PROFILE" ]; 
     exit 1
 fi
 
+# The one-time unlock, see platform/apple/store.sh. The pretend store unlocks without paying, only this Mac's
+# own build can have it.
+. "$ROOT/platform/apple/store.sh"
+if [ "$MODE" = pkg ] && [ "$UNLOCK" = fake ]; then
+    echo "UNLOCK=fake unlocks without paying, it's for just app, use UNLOCK=storekit to sell it"
+    exit 1
+fi
+
 mkdir -p "$DEPS" "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 # The native libraries are built once into external/macos for the oldest macOS the app runs on, the ones
@@ -55,23 +63,10 @@ if [ ! -f "$DEPS/sdl3/lib/libSDL3.a" ]; then
     exit 1
 fi
 
+compile_store macosx "arm64-apple-macos$MIN_MACOS"
+
 # No -microarch:native, the build has to run on every Apple silicon Mac, not only this one. Odin only emits an
 # object file, clang links it with the static libraries, Odin would link Homebrew's SDL.
-# The one-time unlock, see UNLOCK in src/app/store.odin: UNLOCK=storekit sells it through the App Store with
-# platform/apple/Store.swift, UNLOCK=fake pretends to, unset leaves the whole app free
-UNLOCK="${UNLOCK:-}"
-UNLOCK_DEFINE=""
-STORE=""
-if [ -n "$UNLOCK" ]; then
-    UNLOCK_DEFINE="-define:UNLOCK=$UNLOCK"
-fi
-if [ "$UNLOCK" = storekit ]; then
-    echo "Compiling the store"
-    xcrun -sdk macosx swiftc -target arm64-apple-macos$MIN_MACOS -parse-as-library -swift-version 5 -O \
-        -c "$ROOT/platform/apple/Store.swift" -o "$OUT/store.o"
-    STORE="$OUT/store.o -L$(xcrun -sdk macosx --show-sdk-path)/usr/lib/swift -framework StoreKit"
-fi
-
 echo "Compiling app"
 odin build "$ROOT/src/app" \
     -build-mode:obj \
@@ -79,14 +74,14 @@ odin build "$ROOT/src/app" \
     -target:darwin_arm64 \
     -minimum-os-version:$MIN_MACOS \
     -define:VERSION="$VERSION" \
-    $UNLOCK_DEFINE \
+    ${UNLOCK:+"-define:UNLOCK=$UNLOCK"} \
     -o:speed \
     -out:"$OUT/app.o"
 
 echo "Linking"
 $CC \
     "$OUT/app.o" \
-    $STORE \
+    ${STORE_OBJECT:+"$STORE_OBJECT" "-L$SWIFT_LIBS" -framework StoreKit} \
     "$DEPS/libminiaudio.a" \
     "$ODIN_ROOT/vendor/stb/lib/darwin/stb_image.a" \
     "$ODIN_ROOT/vendor/stb/lib/darwin/stb_truetype.a" \

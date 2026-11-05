@@ -44,8 +44,10 @@ toggle_settings_sheet :: proc(sheets: ^AppSheets) {
     else do open_settings_sheet(sheets)
 }
 
-// Over whichever sheet is up
+// Over whichever sheet is up. Not over the unlock's reminder, it stays until it's closed.
 open_settings_sheet :: proc(sheets: ^AppSheets) {
+    if sheets.unlock.sheet.open do return
+
     for sheet in all_sheets(sheets) do if sheet != &sheets.settings do dismiss_sheet(sheets, sheet)
     reset_note_offsets_editing()
 

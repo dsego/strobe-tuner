@@ -124,7 +124,7 @@ start_app :: proc(app: ^App) -> bool {
 
     apply_config(app, {.RETUNE})
 
-    // Asks the App Store for the price and an earlier purchase, nothing without UNLOCK
+    // Asks the App Store for the product and an earlier purchase, nothing without UNLOCK
     store_start()
     return true
 }
@@ -135,7 +135,7 @@ stop_app :: proc(app: ^App) {
 
     close_audio_input(app)
     destroy_displays(&app.displays)
-    unload_unlock_backdrop(&app.sheets.unlock.backdrop)
+    unload_glow_targets(&app.sheets.unlock.backdrop)
     destroy_measurement(&app.measurement)
     gfx.unload_shapes()
 
@@ -216,6 +216,10 @@ run_frame :: proc(app: ^App) {
 
     follow_input(app)
 
+    // Before the config is compared, the free time it counts every frame isn't a change to save, it's saved with
+    // the next one, in the background or on the way out
+    follow_unlock(app)
+
     config_before := config^
     menu := handle_keys(app)
 
@@ -223,7 +227,6 @@ run_frame :: proc(app: ^App) {
 
     reading := measure(app)
     follow_note_colors(app)
-    follow_unlock(app)
 
     when !DEBUG_STATS {
         // A tablet draws in larger points than its own, see ui_scale
@@ -252,13 +255,14 @@ run_frame :: proc(app: ^App) {
     // they're all the way down again. They're drawn at the end of the frame.
     // A sheet all the way up covers the panel, the instrument sheet the strobe too when the panel is under
     // it. A phone's strobe area still shows above that, behind the notch. Not while a sheet is dragged, it
-    // may move down later in the frame.
+    // may move down later in the frame. The unlock's reminder covers nothing, the screen shows blurred under it.
     gui.disabled = false
     panel_covered := false
+    reminder := &app.sheets.unlock.sheet
     for sheet in all_sheets(&app.sheets) {
         slide_sheet(sheet)
         if sheet.open || sheet.slide > SHEET_DOWN do gui.disabled = true
-        if sheet.slide == SHEET_UP && !sheet.drag.active do panel_covered = true
+        if sheet.slide == SHEET_UP && !sheet.drag.active && sheet != reminder do panel_covered = true
     }
 
     instrument_sheet := app.sheets.instrument

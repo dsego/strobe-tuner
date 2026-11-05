@@ -19,6 +19,8 @@
 // Bloom passes for the strobe glow, the mode:
 //   DOWNSAMPLE - downsample the strobe and keep only the bright parts (the background shouldn't glow)
 //   BLUR - one direction of a separable gaussian blur
+//   SHRINK - the whole screen shrunk many times for the unlock's blurred backdrop, each texel the average of
+//            the source's under it
 
 #include <metal_stdlib>
 using namespace metal;
@@ -31,16 +33,21 @@ struct FragmentIn {
 
 // Same layout as BloomUniforms in src/gfx/gfx.odin
 struct BloomUniforms {
-    float2 texel_step; // DOWNSAMPLE: source texel size, BLUR: blur step (texel size * direction * spacing)
+    float2 texel_step; // DOWNSAMPLE: source texel size, BLUR: blur step (texel size * direction * spacing),
+                       // SHRINK: target texel size
     int mode;
 };
 
 // BloomMode in src/gfx/gfx.odin
 constant int DOWNSAMPLE = 0;
 constant int BLUR = 1;
+constant int SHRINK = 2;
 
 constant int BLUR_RADIUS = 6;
 constant float BLUR_SIGMA = 3.0; // in taps
+
+// SHRINK's bilinear taps across a target texel, each the average of 2 source texels across, up to 16 of them
+constant int MAX_SHRINK_TAPS = 8;
 
 fragment float4 bloom_fragment(
     FragmentIn in [[stage_in]],
@@ -61,6 +68,21 @@ fragment float4 bloom_fragment(
         color *= smoothstep(0.35, 0.9, peak);
 
         return float4(color, 1.0);
+    }
+
+    if (u.mode == SHRINK) {
+        // A grid of taps evenly over the block under this texel, each between 2x2 source texels, so they cover
+        // all of it. A thin stripe moving across the block counts the same wherever it is.
+        float2 source_size = float2(texture0.get_width(), texture0.get_height());
+        int2 taps = clamp(int2(ceil(u.texel_step * source_size / 2.0)), int2(1), int2(MAX_SHRINK_TAPS));
+        float3 sum = float3(0.0);
+        for (int row = 0; row < taps.y; row += 1) {
+            for (int column = 0; column < taps.x; column += 1) {
+                float2 offset = (float2(column, row) + 0.5) / float2(taps) - 0.5;
+                sum += texture0.sample(sampler0, in.uv + offset * u.texel_step).rgb;
+            }
+        }
+        return float4(sum / float(taps.x * taps.y), 1.0);
     }
 
     float3 sum = float3(0.0);

@@ -26,7 +26,8 @@ BLOOM_TAP_SPACING :: 1.5 // blur taps spaced apart for a wider glow at the same 
 BLOOM_ITERATIONS :: 2
 
 // The retro glow's render targets, shared by the displays that glow: the strobe and the scope.
-// A display is rendered into scene_rt and blurred through bloom_rt.
+// A display is rendered into scene_rt and blurred through bloom_rt. The unlock's reminder blurs the screen
+// under it through a set of its own, see begin_unlock_backdrop.
 GlowTargets :: struct {
     scene_rt: gfx.RenderTarget,
     bloom_rt: [2]gfx.RenderTarget,
@@ -50,10 +51,10 @@ unload_glow_targets :: proc(self: ^GlowTargets) {
 }
 
 // (Re)create the glow render targets, the scene is rendered at the display's DPI scale to stay sharp, the
-// bloom in the window's own points so the glow spreads the same at any UI scale
-ensure_glow_targets :: proc(self: ^GlowTargets, size: [2]f32) {
+// bloom in the window's own points shrunk by downscale, so the glow spreads the same at any UI scale
+ensure_glow_targets :: proc(self: ^GlowTargets, size: [2]f32, downscale: f32 = BLOOM_DOWNSCALE) {
     scale := gfx.dpi_scale()
-    bloom := size * gfx.ui_scale() / BLOOM_DOWNSCALE
+    bloom := size * gfx.ui_scale() / downscale
     if scale == self.scale && size == self.size && bloom == self.bloom do return
 
     unload_glow_targets(self)

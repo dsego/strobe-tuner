@@ -125,10 +125,11 @@ StrobeUniforms :: struct #align (16) {
 BloomMode :: enum i32 {
     DOWNSAMPLE, // downsample the strobe and keep only the bright parts
     BLUR, // one direction of a separable gaussian blur
+    SHRINK, // the average of the block of source texels under each target texel, the unlock's backdrop
 }
 
 BloomUniforms :: struct #align (16) {
-    texel_step: [2]f32, // DOWNSAMPLE: source texel size, BLUR: blur step
+    texel_step: [2]f32, // DOWNSAMPLE: source texel size, BLUR: blur step, SHRINK: target texel size
     mode:       BloomMode,
 }
 

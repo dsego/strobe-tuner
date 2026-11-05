@@ -29,8 +29,8 @@ UNLOCK_PRODUCT :: "app.strobie.unlock"
 
 // What the store is doing, as State in Store.swift
 StoreState :: enum i32 {
-    LOADING, // asking the App Store for the price and an earlier purchase
-    READY, // the price is in, it can be bought
+    LOADING, // asking the App Store for the product and an earlier purchase
+    READY, // the product is in, it can be bought
     BUSY, // a purchase or a restore is running
     UNLOCKED,
     UNAVAILABLE, // no product from the App Store, offline or not set up there
@@ -46,8 +46,8 @@ when UNLOCK == "storekit" {
     @(default_calling_convention = "c")
     foreign store_swift {
         strobie_store_start :: proc(product: cstring) ---
+        strobie_store_retry :: proc() ---
         strobie_store_state :: proc() -> StoreState ---
-        strobie_store_price :: proc(buffer: [^]u8, size: i32) ---
         strobie_store_buy :: proc() ---
         strobie_store_restore :: proc() ---
     }
@@ -56,18 +56,16 @@ when UNLOCK == "storekit" {
         strobie_store_start(UNLOCK_PRODUCT)
     }
 
+    // The product asked for again when the App Store couldn't be reached, nothing otherwise
+    store_retry :: proc() {
+        strobie_store_retry()
+    }
+
     // StoreKit runs on its own, nothing to move on
     store_update :: proc(frame_time: f32) {}
 
     store_state :: proc() -> StoreState {
         return strobie_store_state()
-    }
-
-    // In the buyer's currency as the App Store shows it, empty until it's loaded
-    store_price :: proc() -> cstring {
-        buffer := make([]u8, 32, context.temp_allocator)
-        strobie_store_price(raw_data(buffer), i32(len(buffer)))
-        return cstring(raw_data(buffer))
     }
 
     store_buy :: proc() {
@@ -93,6 +91,9 @@ when UNLOCK == "storekit" {
         fake_store.state = .READY
     }
 
+    // It's always reached
+    store_retry :: proc() {}
+
     // Once a frame
     store_update :: proc(frame_time: f32) {
         if fake_store.state != .BUSY do return
@@ -107,10 +108,6 @@ when UNLOCK == "storekit" {
         return fake_store.state
     }
 
-    store_price :: proc() -> cstring {
-        return "$4.99"
-    }
-
     store_buy :: proc() {
         fake_store = {.BUSY, FAKE_STORE_WAIT_S, false}
     }
@@ -122,14 +119,12 @@ when UNLOCK == "storekit" {
     // Off, there's nothing to unlock and the reminder never comes
     store_start :: proc() {}
 
+    store_retry :: proc() {}
+
     store_update :: proc(frame_time: f32) {}
 
     store_state :: proc() -> StoreState {
         return .UNLOCKED
-    }
-
-    store_price :: proc() -> cstring {
-        return ""
     }
 
     store_buy :: proc() {}

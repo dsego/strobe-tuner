@@ -37,10 +37,9 @@ private final class Store {
     var productID = ""
     var product: Product?
     var state = State.loading
-    var price = ""
     var updates: Task<Void, Never>?
 
-    // The product and its price, and whether it was bought before, on this device or another with the same
+    // The product, and whether it was bought before, on this device or another with the same
     // Apple Account. A purchase finished elsewhere, Family Sharing or a refund come in as updates.
     func start(_ id: String) {
         productID = id
@@ -53,18 +52,28 @@ private final class Store {
             if await self.ownsUnlock() {
                 self.state = .unlocked
             }
+            await self.loadProduct()
+        }
+    }
 
-            do {
-                self.product = try await Product.products(for: [id]).first
-            } catch {
-                self.product = nil
-            }
-            if let product = self.product {
-                self.price = product.displayPrice
-            }
-            if self.state == .loading {
-                self.state = self.product == nil ? .unavailable : .ready
-            }
+    // Asked again as the reminder opens when the App Store couldn't be reached, offline at the start or slow
+    func retry() {
+        guard state == .unavailable else { return }
+
+        state = .loading
+        Task { await self.loadProduct() }
+    }
+
+    // The product, then it's ready to buy unless it's unlocked already. Its price shows on the App Store's own
+    // sheet, in the buyer's currency.
+    func loadProduct() async {
+        do {
+            product = try await Product.products(for: [productID]).first
+        } catch {
+            product = nil
+        }
+        if state == .loading {
+            state = product == nil ? .unavailable : .ready
         }
     }
 
@@ -105,7 +114,12 @@ private final class Store {
     func finish(_ verification: VerificationResult<Transaction>) async {
         guard case .verified(let transaction) = verification, transaction.productID == productID else { return }
 
-        state = transaction.revocationDate == nil ? .unlocked : .ready
+        if transaction.revocationDate == nil {
+            state = .unlocked
+        } else {
+            // Refunded, it can be bought again once the product is in
+            state = product == nil ? .unavailable : .ready
+        }
         await transaction.finish()
     }
 
@@ -125,20 +139,14 @@ public func strobie_store_start(_ product: UnsafePointer<CChar>) {
     MainActor.assumeIsolated { Store.shared.start(id) }
 }
 
+@_cdecl("strobie_store_retry")
+public func strobie_store_retry() {
+    MainActor.assumeIsolated { Store.shared.retry() }
+}
+
 @_cdecl("strobie_store_state")
 public func strobie_store_state() -> Int32 {
     MainActor.assumeIsolated { Store.shared.state.rawValue }
-}
-
-// The price as the App Store shows it in the buyer's currency, into buffer and cut to fit, empty until loaded
-@_cdecl("strobie_store_price")
-public func strobie_store_price(_ buffer: UnsafeMutablePointer<CChar>, _ size: Int32) {
-    let price = MainActor.assumeIsolated { Store.shared.price }
-    var bytes = Array(price.utf8.prefix(Int(max(size, 1)) - 1))
-    bytes.append(0)
-    bytes.withUnsafeBufferPointer { source in
-        source.withMemoryRebound(to: CChar.self) { buffer.update(from: $0.baseAddress!, count: $0.count) }
-    }
 }
 
 @_cdecl("strobie_store_buy")

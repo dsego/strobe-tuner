@@ -59,20 +59,9 @@ fi
 
 # --- app ---------------------------------------------------------------------------------------
 
-# The one-time unlock, see UNLOCK in src/app/store.odin: UNLOCK=storekit sells it through the App Store with
-# platform/apple/Store.swift, UNLOCK=fake pretends to, unset leaves the whole app free
-UNLOCK="${UNLOCK:-}"
-UNLOCK_DEFINE=""
-STORE=""
-if [ -n "$UNLOCK" ]; then
-    UNLOCK_DEFINE="-define:UNLOCK=$UNLOCK"
-fi
-if [ "$UNLOCK" = storekit ]; then
-    echo "Compiling the store"
-    xcrun -sdk iphoneos swiftc -target "$TARGET" -parse-as-library -swift-version 5 -O \
-        -c "$ROOT/platform/apple/Store.swift" -o "$OUT/store.o"
-    STORE="$OUT/store.o -L$(xcrun -sdk iphoneos --show-sdk-path)/usr/lib/swift -framework StoreKit"
-fi
+# The one-time unlock, see platform/apple/store.sh
+. "$ROOT/platform/apple/store.sh"
+compile_store iphoneos "$TARGET"
 
 echo "Compiling app"
 odin build "$ROOT/src/app" \
@@ -83,7 +72,7 @@ odin build "$ROOT/src/app" \
     -minimum-os-version:$MIN_IOS \
     -define:IOS=true \
     -define:VERSION="$VERSION" \
-    $UNLOCK_DEFINE \
+    ${UNLOCK:+"-define:UNLOCK=$UNLOCK"} \
     -o:speed \
     -out:"$OUT/app.o"
 
@@ -91,7 +80,7 @@ echo "Linking"
 mkdir -p "$APP"
 $CC -ObjC \
     "$OUT/app.o" \
-    $STORE \
+    ${STORE_OBJECT:+"$STORE_OBJECT" "-L$SWIFT_LIBS" -framework StoreKit} \
     "$DEPS/libminiaudio.a" \
     "$DEPS/libstb.a" \
     "$DEPS/sdl3/lib/libSDL3.a" \
@@ -183,6 +172,12 @@ if [ "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$OUT/pr
     DEFAULT_IDENTITY="Apple Development"
 else
     DEFAULT_IDENTITY="Apple Distribution"
+
+    # The pretend store unlocks without paying, a distribution profile's build is the one App Store Connect takes
+    if [ "$UNLOCK" = fake ]; then
+        echo "UNLOCK=fake unlocks without paying, it's for a development profile, use UNLOCK=storekit to sell it"
+        exit 1
+    fi
 fi
 # The certificate the profile was made for, by its SHA-1. Xcode can leave another certificate of the same
 # name in the keychain, the name alone is ambiguous then.

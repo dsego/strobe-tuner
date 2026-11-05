@@ -19,6 +19,8 @@
 // Bloom passes for the strobe glow, the mode:
 //   DOWNSAMPLE - downsample the strobe and keep only the bright parts (the background shouldn't glow)
 //   BLUR - one direction of a separable gaussian blur
+//   SHRINK - the whole screen shrunk many times for the unlock's blurred backdrop, each texel the average of
+//            the source's under it
 
 #version 450
 
@@ -31,16 +33,21 @@ layout(set = 2, binding = 0) uniform sampler2D texture0;
 
 // Same layout as BloomUniforms in src/gfx/gfx.odin
 layout(set = 3, binding = 0) uniform BloomUniforms {
-    vec2 texel_step; // DOWNSAMPLE: source texel size, BLUR: blur step (texel size * direction * spacing)
+    vec2 texel_step; // DOWNSAMPLE: source texel size, BLUR: blur step (texel size * direction * spacing),
+                     // SHRINK: target texel size
     int mode;
 } u;
 
 // BloomMode in src/gfx/gfx.odin
 const int DOWNSAMPLE = 0;
 const int BLUR = 1;
+const int SHRINK = 2;
 
 const int BLUR_RADIUS = 6;
 const float BLUR_SIGMA = 3.0; // in taps
+
+// SHRINK's bilinear taps across a target texel, each the average of 2 source texels across, up to 16 of them
+const int MAX_SHRINK_TAPS = 8;
 
 void main()
 {
@@ -57,6 +64,22 @@ void main()
         color *= smoothstep(0.35, 0.9, peak);
 
         out_color = vec4(color, 1.0);
+        return;
+    }
+
+    if (u.mode == SHRINK) {
+        // A grid of taps evenly over the block under this texel, each between 2x2 source texels, so they cover
+        // all of it. A thin stripe moving across the block counts the same wherever it is.
+        vec2 source_size = vec2(textureSize(texture0, 0));
+        ivec2 taps = clamp(ivec2(ceil(u.texel_step * source_size / 2.0)), ivec2(1), ivec2(MAX_SHRINK_TAPS));
+        vec3 sum = vec3(0.0);
+        for (int row = 0; row < taps.y; row += 1) {
+            for (int column = 0; column < taps.x; column += 1) {
+                vec2 offset = (vec2(column, row) + 0.5) / vec2(taps) - 0.5;
+                sum += texture(texture0, frag_uv + offset * u.texel_step).rgb;
+            }
+        }
+        out_color = vec4(sum / float(taps.x * taps.y), 1.0);
         return;
     }
 

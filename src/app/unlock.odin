@@ -23,8 +23,8 @@ import "../gfx"
 
 // Free with a reminder, built with UNLOCK only, see store.odin. The whole app works. Once per install it
 // gives UNLOCK_FREE_S from the first lit note, then a reminder over the whole window asks to unlock every
-// UNLOCK_REMINDER_S on screen, closed after a countdown of UNLOCK_CLOSE_AFTER_S. The time waits while a sheet
-// is up. Unlocked, it doesn't come back.
+// UNLOCK_REMINDER_S on screen, closed after a countdown of UNLOCK_CLOSE_AFTER_S. It comes over any other sheet,
+// they leave the strobe to tune with. Unlocked, it doesn't come back.
 UNLOCK_FREE_S :: f32(#config(UNLOCK_FREE_S, 120))
 UNLOCK_REMINDER_S :: f32(#config(UNLOCK_REMINDER_S, 30))
 UNLOCK_CLOSE_AFTER_S :: f32(#config(UNLOCK_CLOSE_AFTER_S, 5))
@@ -58,18 +58,10 @@ UnlockReminder :: struct {
     until_next_s:  f32, // on screen until the next one, a whole UNLOCK_REMINDER_S after a start, see new_app
     close_after_s: f32, // left of the countdown, it can be closed at 0
     asked:         bool, // opened from the settings, it has the restore too
-    backdrop:      UnlockBackdrop,
+    backdrop:      GlowTargets, // the screen under it and its blur, made while it's up, see UNLOCK_BLUR_DOWNSCALE
 }
 
-// The screen under the reminder and its blur, made while it's up, see UNLOCK_BLUR_DOWNSCALE
-UnlockBackdrop :: struct {
-    scene: gfx.RenderTarget,
-    blur:  [2]gfx.RenderTarget,
-    size:  [2]f32, // the window's in points
-    scale: f32, // the DPI scale the scene was made for, 0 while there are none
-}
-
-// Once a frame: the free time, then the reminder when it's due and no other sheet is up
+// Once a frame: the free time, then the reminder when it's due
 follow_unlock :: proc(app: ^App) {
     frame_time := gfx.frame_time()
     store_update(frame_time)
@@ -86,18 +78,24 @@ follow_unlock :: proc(app: ^App) {
         return
     }
 
-    for sheet in all_sheets(&app.sheets) do if sheet.open do return
+    if reminder.sheet.open do return
 
     reminder.until_next_s -= frame_time
     if reminder.until_next_s <= 0 do open_unlock_sheet(&app.sheets, countdown = true)
 }
 
 // Over the main screen, the other sheets go. Opened from the settings it closes at once and has the restore.
+// Already up it stays as it is, its countdown too.
 open_unlock_sheet :: proc(sheets: ^AppSheets, countdown: bool) {
-    for sheet in all_sheets(sheets) do if sheet != &sheets.unlock.sheet do dismiss_sheet(sheets, sheet)
+    reminder := &sheets.unlock
+    if reminder.sheet.open do return
+
+    for sheet in all_sheets(sheets) do if sheet != &reminder.sheet do dismiss_sheet(sheets, sheet)
     reset_note_offsets_editing()
 
-    reminder := &sheets.unlock
+    // The App Store asked again when it couldn't be reached, e.g. offline at the start
+    store_retry()
+
     reminder.sheet.open = true
     reminder.close_after_s = UNLOCK_CLOSE_AFTER_S if countdown else 0
     reminder.until_next_s = UNLOCK_REMINDER_S
@@ -152,12 +150,12 @@ gui_unlock :: proc(close_after_s, slide: f32, restore: bool) -> (close: bool) {
     }
     y += gaps[1]
 
-    // The purchase
+    // The purchase, its price is on the App Store's own sheet in the buyer's currency
     buyable := state == .READY || state == .NOTHING_TO_RESTORE
     label: cstring
     switch state {
     case .READY, .NOTHING_TO_RESTORE:
-        label = fmt.ctprintf("Unlock for %v", store_price())
+        label = "Unlock"
     case .LOADING:
         label = "Asking the App Store…"
     case .BUSY:
@@ -216,21 +214,13 @@ draw_centered_text :: proc(font: PixelFont, text: cstring, middle, top: f32) {
 begin_unlock_backdrop :: proc(reminder: ^UnlockReminder) -> (began: bool) {
     backdrop := &reminder.backdrop
     if reminder.sheet.slide == SHEET_DOWN {
-        unload_unlock_backdrop(backdrop)
+        unload_glow_targets(backdrop)
         return false
     }
 
     // The scene sharp at the display's scale, the blur in the window's own points like the glow's
-    size, scale := gfx.window_size(), gfx.dpi_scale()
-    if size != backdrop.size || scale != backdrop.scale {
-        unload_unlock_backdrop(backdrop)
-        backdrop.scene = gfx.load_render_target(i32(math.round(size.x * scale)), i32(math.round(size.y * scale)))
-        blur := size * gfx.ui_scale() / UNLOCK_BLUR_DOWNSCALE
-        for &rt in backdrop.blur do rt = gfx.load_render_target(i32(math.round(blur.x)), i32(math.round(blur.y)))
-        backdrop.size, backdrop.scale = size, scale
-    }
-
-    gfx.begin_render_target(backdrop.scene, gfx.hex(panel_bg_color), {}, scale)
+    ensure_glow_targets(backdrop, gfx.window_size(), UNLOCK_BLUR_DOWNSCALE)
+    gfx.begin_render_target(backdrop.scene_rt, gfx.hex(panel_bg_color), {}, backdrop.scale)
     return true
 }
 
@@ -239,33 +229,32 @@ end_unlock_backdrop :: proc(reminder: ^UnlockReminder) {
     backdrop := &reminder.backdrop
     gfx.end_render_target()
 
-    // Shrunk first, a wide blur for the taps of a narrow one
     gfx.set_blend_mode(.REPLACE)
-    blur_size := gfx.render_target_size(backdrop.blur[0])
-    gfx.begin_render_target(backdrop.blur[0], nil)
-    gfx.draw_render_target(backdrop.scene, {0, 0, blur_size.x, blur_size.y})
+    gfx.begin_shader(.BLOOM)
+
+    // Shrunk first, a wide blur for the taps of a narrow one. Each texel is the average of the scene's under
+    // it, a thin stripe moving across texels that took one sample each would flicker.
+    blur_size := gfx.render_target_size(backdrop.bloom_rt[0])
+    uniforms := gfx.BloomUniforms {
+        mode       = .SHRINK,
+        texel_step = 1.0 / blur_size,
+    }
+    gfx.set_shader_uniforms(.BLOOM, &uniforms)
+    gfx.begin_render_target(backdrop.bloom_rt[0], nil)
+    gfx.draw_render_target(backdrop.scene_rt, {0, 0, blur_size.x, blur_size.y})
     gfx.end_render_target()
 
-    gfx.begin_shader(.BLOOM)
-    blur_render_targets(backdrop.blur, UNLOCK_BLUR_ITERATIONS, UNLOCK_BLUR_SPACING)
+    blur_render_targets(backdrop.bloom_rt, UNLOCK_BLUR_ITERATIONS, UNLOCK_BLUR_SPACING)
     gfx.end_shader()
 
+    // The sharp screen under the blur while it slides, once it's up the blur covers all of it
+    slide := reminder.sheet.slide
     window := gfx.Rect{0, 0, backdrop.size.x, backdrop.size.y}
-    gfx.draw_render_target(backdrop.scene, window)
+    if slide < SHEET_UP do gfx.draw_render_target(backdrop.scene_rt, window)
     gfx.set_blend_mode(.ALPHA)
 
-    slide := reminder.sheet.slide
-    gfx.draw_render_target(backdrop.blur[0], window, fade_color(gfx.WHITE, slide))
+    gfx.draw_render_target(backdrop.bloom_rt[0], window, fade_color(gfx.WHITE, slide))
     gfx.draw_rect({0, 0}, backdrop.size, fade_color(gfx.hex(sheet_bg_color), UNLOCK_TINT * slide))
-}
-
-unload_unlock_backdrop :: proc(backdrop: ^UnlockBackdrop) {
-    if backdrop.scale == 0 do return
-
-    gfx.unload_render_target(backdrop.scene)
-    for rt in backdrop.blur do gfx.unload_render_target(rt)
-
-    backdrop^ = {}
 }
 
 // The version after the settings' title, and Free until it's unlocked
