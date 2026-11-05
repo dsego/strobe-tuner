@@ -15,6 +15,7 @@
 
 package app
 
+import "core:fmt"
 import "core:math"
 import "core:slice"
 
@@ -51,6 +52,12 @@ SCOPE_GLOW_THICKNESS :: 4 * SCOPE_TRACE_THICKNESS // points
 
 // The beam is a thin line and its bloom is spread thin, it's added this many times over
 SCOPE_BLOOM_PASSES :: #config(SCOPE_BLOOM_PASSES, 3)
+
+// The graticule over time, fixed like an oscilloscope's, its times change with the note: SCOPE_DIVISIONS across
+// the two periods, a quarter period each, and as many up, a quarter of full scale each. The times are under
+// every other line.
+SCOPE_DIVISIONS :: 8
+SCOPE_AXIS_PIXELS :: 2 // the line through zero
 
 // What the scope's and the lamp's views keep from one frame to the next
 ScopeDisplay :: struct {
@@ -93,10 +100,12 @@ draw_scope_display :: proc(
     alpha := 1 - math.exp(-gfx.frame_time() / STROBE_LOOK_TIME_S)
     self.visibility += alpha * (target - self.visibility)
 
+    // The times under the graticule outside the glow, sharp
     if config.strobe_display_type == .SCOPE && config.strobe_glow {
         begin_glow(targets, rect, self.background)
         draw_scope_screen(self, rect, scope, config.scope_beam, beam_color, dark_color)
         end_glow(targets, rect, SCOPE_BLOOM_PASSES)
+        draw_scope_time_labels(rect, scope, self.background)
         return
     }
 
@@ -111,6 +120,7 @@ draw_scope_display :: proc(
         draw_lamp(rect, heights, scope.depths, dwell, config.lamp_shape, beam_color, dark_color)
     } else {
         draw_scope_screen(self, rect, scope, config.scope_beam, beam_color, dark_color)
+        draw_scope_time_labels(rect, scope, self.background)
     }
 }
 
@@ -143,12 +153,59 @@ draw_scope_screen :: proc(
         }
         gfx.draw_polyline(points[:], SCOPE_GRID_THICKNESS, grid_color, closed = true)
     } else {
-        // Through zero, and where the second period starts or the reference's zero
-        gfx.draw_rect({rect.x, rect.y + (rect.height - SCOPE_GRID_THICKNESS) / 2}, {rect.width, SCOPE_GRID_THICKNESS}, grid_color)
-        gfx.draw_rect({rect.x + (rect.width - SCOPE_GRID_THICKNESS) / 2, rect.y}, {SCOPE_GRID_THICKNESS, rect.height}, grid_color)
+        // The graticule faint and a pixel wide, the line through zero brighter and SCOPE_AXIS_PIXELS wide. Where
+        // the second period starts isn't a round time, a line there stood beside the graticule's.
+        hairline := 1 / gfx.dpi_scale()
+        draw_scope_graticule(rect, grid_color, hairline)
+
+        axis := SCOPE_AXIS_PIXELS * hairline
+        gfx.draw_rect({rect.x, rect.y + (rect.height - axis) / 2}, {rect.width, axis}, grid_color)
     }
 
     draw_scope_trace(self, rect, scope, beam, beam_color)
+}
+
+// The graticule's lines, width wide, SCOPE_DIVISIONS apart across and up. The middle one up is where the second
+// period starts, the one through zero across is the caller's axis.
+draw_scope_graticule :: proc(rect: gfx.Rect, grid_color: gfx.Color, width: f32) {
+    faint := grid_color
+    faint.a /= 2
+
+    // Up, a quarter of full scale apart
+    middle := rect.y + rect.height / 2
+    for quarter in 1 ..= SCOPE_DIVISIONS / 2 {
+        offset := 0.5 * core.SCOPE_FILL * rect.height * f32(quarter) / (SCOPE_DIVISIONS / 2)
+        gfx.draw_rect({rect.x, middle - offset}, {rect.width, width}, faint)
+        gfx.draw_rect({rect.x, middle + offset}, {rect.width, width}, faint)
+    }
+
+    // Across, a quarter period apart
+    for division in 1 ..< SCOPE_DIVISIONS {
+        gfx.draw_rect({rect.x + rect.width * f32(division) / SCOPE_DIVISIONS, rect.y}, {width, rect.height}, faint)
+    }
+}
+
+// The milliseconds under every other line of the graticule along the bottom, from 0 at the right where the
+// sweep's time starts, see the top of the file. Over time only, on pills, the beam can be there.
+draw_scope_time_labels :: proc(rect: gfx.Rect, scope: ^core.Scope, background: gfx.Color) {
+    if scope.sweep != .TIME || scope.freq_hz <= 0 do return
+
+    INSET :: 8
+    font := pixel_fonts.label_small
+    span_ms := f32(core.SCOPE_PERIODS / scope.freq_hz * 1000)
+    step_ms := 2 * span_ms / SCOPE_DIVISIONS
+    decimals := 0 if step_ms >= 10 else (1 if step_ms >= 1 else 2)
+    for division := 0; division <= SCOPE_DIVISIONS; division += 2 {
+        text: cstring = "0 ms"
+        if division > 0 do text = fmt.ctprintf("%.*f ms", decimals, span_ms * f32(division) / SCOPE_DIVISIONS)
+
+        size := measure_label(font, text)
+        line := rect.x + rect.width * (1 - f32(division) / SCOPE_DIVISIONS)
+        x := clamp(line - size.x / 2, rect.x + INSET, rect.x + rect.width - size.x - INSET)
+        position := [2]f32{x, rect.y + rect.height - size.y - INSET}
+        draw_spectrum_label_pill({position.x, position.y, size.x, size.y}, background, 0.6)
+        draw_label(font, text, position, text_color_muted)
+    }
 }
 
 // The beam, a line through the points of core.scope_trace. Over time it runs right to left, like the lamp,

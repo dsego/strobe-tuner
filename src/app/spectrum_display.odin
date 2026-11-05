@@ -286,6 +286,7 @@ draw_spectrum_display :: proc(self: ^SpectrumDisplay, rect: gfx.Rect, track_hz: 
     if config.spectrum_scale == .DBFS do shown, range = self.levels, SPECTRUM_DBFS_DB
 
     octaves := spectrum_octaves(config.pitch_standard, axes)
+    levels := spectrum_grid_levels(range)
     track_x := spectrum_track_marks(track_hz, axes)
     points := update_spectrum_curve(self, shown, range, axes, bin_hz)
 
@@ -294,11 +295,12 @@ draw_spectrum_display :: proc(self: ^SpectrumDisplay, rect: gfx.Rect, track_hz: 
     defer gfx.end_scissor()
 
     // Sharp with the retro glow too, it's the strobe's lamp and the scope's phosphor, a plot has neither
-    draw_spectrum_plot(plot, points, octaves, line_color, band_color, background)
+    draw_spectrum_plot(plot, points, octaves, levels, range, line_color, band_color, background)
 
     // The text over it, sharp
     draw_spectrum_track_pointers(track_x, plot, active)
     draw_spectrum_octave_labels(octaves, plot)
+    draw_spectrum_level_labels(levels, range, plot, background)
 
     peaks := find_spectrum_peaks(self, shown, low_hz, high_hz, bin_hz)
     if config.spectrum_peak_level do draw_spectrum_peak_level(&self.peak_line, peaks, plot, range, config.spectrum_scale, background)
@@ -329,6 +331,19 @@ spectrum_octaves :: proc(pitch_standard: f32, axes: SpectrumAxes) -> []SpectrumO
         if c_hz >= axes.low_hz && c_hz <= axes.high_hz do append(&octaves, SpectrumOctave{spectrum_x(c_hz, axes), octave})
     }
     return octaves[:]
+}
+
+// The measurement grid's levels up the plot, every SPECTRUM_GRID_DB inside its bottom and top, on dBFS from 0
+// down and on SNR from 0 up. Every SPECTRUM_GRID_LABEL_DB has its number.
+SPECTRUM_GRID_DB :: 10
+SPECTRUM_GRID_LABEL_DB :: 20
+
+spectrum_grid_levels :: proc(range: [2]f32) -> []f32 {
+    levels := make([dynamic]f32, context.temp_allocator)
+    for db := math.floor(range[0] / SPECTRUM_GRID_DB) * SPECTRUM_GRID_DB + SPECTRUM_GRID_DB; db < range[1]; db += SPECTRUM_GRID_DB {
+        if db > range[0] do append(&levels, db)
+    }
+    return levels[:]
 }
 
 // The tracks' partials across the plot, those within it
@@ -392,12 +407,22 @@ spectrum_column_db :: proc(shown: []f32, from, to, floor: f32) -> f32 {
     return db
 }
 
-// The octaves' lines and the tracks' marks behind the curve, filled solid under it so they stay behind.
-// The curve a thin line over a soft glow, both polylines.
-draw_spectrum_plot :: proc(plot: gfx.Rect, points: [][2]f32, octaves: []SpectrumOctave, line_color, band_color, background: gfx.Color) {
+// The measurement grid behind the curve, a line up at each octave's C and across at each of levels in dB,
+// filled solid under it so they stay behind. The curve a thin line over a soft glow, both polylines.
+draw_spectrum_plot :: proc(
+    plot: gfx.Rect,
+    points: [][2]f32,
+    octaves: []SpectrumOctave,
+    levels: []f32,
+    range: [2]f32,
+    line_color, band_color, background: gfx.Color,
+) {
+    // A pixel wide, like the scope's graticule
     grid := band_color
     grid.a = 70
-    for octave in octaves do gfx.draw_rect({octave.x, plot.y}, {1, plot.height}, grid)
+    hairline := 1 / gfx.dpi_scale()
+    for octave in octaves do gfx.draw_rect({octave.x, plot.y}, {hairline, plot.height}, grid)
+    for db in levels do gfx.draw_rect({plot.x, spectrum_y(db, range, plot)}, {plot.width, hairline}, grid)
 
     fill := lerp_color(background, line_color, 0.2)
     fill.a = 255
@@ -447,6 +472,23 @@ draw_spectrum_octave_labels :: proc(octaves: []SpectrumOctave, plot: gfx.Rect) {
         width := measure_label(font, text).x
         x := clamp(octave.x - width / 2, plot.x + 4, plot.x + plot.width - width - 4)
         draw_label(font, text, {x, y}, text_color_muted)
+    }
+}
+
+// Every SPECTRUM_GRID_LABEL_DB of the grid over its line at the left, in dB as the scale reads: the level in
+// dBFS, or over the noise on SNR. On a pill, the curve can be there.
+draw_spectrum_level_labels :: proc(levels: []f32, range: [2]f32, plot: gfx.Rect, background: gfx.Color) {
+    INSET :: 12
+    GAP :: 5
+    font := pixel_fonts.label_small
+    for db in levels {
+        if int(db) % SPECTRUM_GRID_LABEL_DB != 0 do continue
+
+        text := fmt.ctprintf("−%v dB", int(-db)) if db < 0 else fmt.ctprintf("%v dB", int(db))
+        size := measure_label(font, text)
+        position := [2]f32{plot.x + INSET, spectrum_y(db, range, plot) - size.y - GAP}
+        draw_spectrum_label_pill({position.x, position.y, size.x, size.y}, background, 0.6)
+        draw_label(font, text, position, text_color_muted)
     }
 }
 
