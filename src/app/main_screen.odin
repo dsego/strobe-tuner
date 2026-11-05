@@ -27,7 +27,7 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu: Menu
     config := app.config
 
     draw_strobe_area(app, layout)
-    draw_tuning_arrows(&app.displays, &app.measurement.note_target, layout, reading, config.strobe_display_type)
+    draw_tuning_arrows(&app.displays, &app.measurement.note_target, layout, reading, config)
     draw_tap_toast(&app.displays.toast, config.strobe_display_type, layout.strobe_view)
     draw_note_controls(app, layout, reading, menu)
 
@@ -73,7 +73,8 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu: Menu
     // The warning, the icon and the level open the input's sheet, a finger tall around the thin meter. Its
     // levels show right away, not after the first hold, and its list has what's connected now.
     left := layout.level_meter.x - ICON_SIZE - WARNING_GAP
-    if gui_button({left, meter.y + LEVEL_METER_HEIGHT / 2 - 22, LEVEL_METER_WIDTH + ICON_SIZE + WARNING_GAP, 44}) {
+    touch_width: f32 = LEVEL_METER_WIDTH + ICON_SIZE + WARNING_GAP
+    if gui_button({left, meter.y + LEVEL_METER_HEIGHT / 2 - TOUCH_HEIGHT / 2, touch_width, TOUCH_HEIGHT}) {
         app.sheets.input.open = true
         app.input.stats_age = INPUT_STATS_HOLD_S
         app.input.refresh = true
@@ -110,10 +111,10 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         draw_scope_area(app, strobe, view)
     }
 
-    // Over the whole strobe area, the part behind the notch included
-    draw_strobe_shadow(strobe)
+    if title, hint, missing := no_input_reason(app); missing do gui_no_input_message(app, strobe, view, title, hint)
 
-    if title, hint, missing := no_input_reason(app); missing do gui_no_input_message(app, strobe, title, hint)
+    // Over the whole strobe area, the part behind the notch included, and over the message, the area's edge shows
+    draw_strobe_shadow(strobe)
 }
 
 // Turned by the lock-in or by the lamp's screen. Tapping a track opens its sheet, in vernier mode every track
@@ -139,15 +140,16 @@ draw_strobe_with_tracks :: proc(app: ^App, layout: Layout) {
     }
 }
 
-// Tapped, the range flips between narrow and wide
+// Tapped, the range flips between its narrow and its wide step
 draw_trace_area :: proc(app: ^App, strobe, view: gfx.Rect) {
     config, displays := app.config, &app.displays
     draw_trace_display(&displays.trace, view, config)
     if input_missing(app) || !gui_button(strobe) do return
 
-    steps := TRACE_RANGE_STEPS_CENTS
-    config.trace_range_cents = steps[1] if config.trace_range_cents == steps[0] else steps[0]
-    show_tap_toast(&displays.toast, .TRACE, "Range", "Wide" if config.trace_range_cents == steps[1] else "Narrow")
+    steps, labels := TRACE_RANGE_STEPS_CENTS, RANGE_LABELS
+    step := 1 if config.trace_range_cents == steps[0] else 0
+    config.trace_range_cents = steps[step]
+    show_tap_toast(&displays.toast, .TRACE, "Range", labels[step])
 }
 
 // Tapped, the scale flips between the noise's and the level's
@@ -159,7 +161,8 @@ draw_spectrum_area :: proc(app: ^App, strobe, view: gfx.Rect) {
     if input_missing(app) || !gui_button(strobe) do return
 
     config.spectrum_scale = .DBFS if config.spectrum_scale == .SNR else .SNR
-    show_tap_toast(&displays.toast, .SPECTRUM, "Scale", "dBFS" if config.spectrum_scale == .DBFS else "SNR")
+    labels := SCALE_LABELS
+    show_tap_toast(&displays.toast, .SPECTRUM, "Scale", labels[int(config.spectrum_scale)])
 }
 
 // The partials the strobe's tracks follow, until the end of the frame
@@ -179,7 +182,8 @@ draw_scope_area :: proc(app: ^App, strobe, view: gfx.Rect) {
     toast := &app.displays.toast
     if config.strobe_display_type == .SCOPE {
         config.scope_sweep = .TIME if config.scope_sweep == .CIRCLE else .CIRCLE
-        show_tap_toast(toast, .SCOPE, "Sweep", "Circle" if config.scope_sweep == .CIRCLE else "Time")
+        labels := SWEEP_LABELS
+        show_tap_toast(toast, .SCOPE, "Sweep", labels[int(config.scope_sweep)])
     } else {
         config.lamp_shape = core.ScopeShape((int(config.lamp_shape) + 1) % len(core.ScopeShape))
         labels := RECTIFIER_LABELS
@@ -230,7 +234,11 @@ draw_tap_toast :: proc(toast: ^TapToast, display: StrobeDisplayType, view: gfx.R
 // A denied microphone only gives silence, an input that didn't open gives nothing. The strobe would just
 // stand still, it says why instead.
 no_input_reason :: proc(app: ^App) -> (title, hint: cstring, missing: bool) {
-    if audio.microphone_denied() do return "Microphone access is off", "Tap to allow it in Settings", true
+    // The Mac's are System Settings, a phone's Settings
+    settings_hint: cstring = "Tap to allow it in Settings"
+    when ODIN_OS == .Darwin && !gfx.IOS do settings_hint = "Tap to allow it in System Settings"
+
+    if audio.microphone_denied() do return "Microphone access is off", settings_hint, true
     if len(app.input.devices) == 0 do return "No input found", "Connect one and tap to look again", true
     if audio.input_failed(app.input.capture) do return "The input didn't open", "Tap to try again", true
 
@@ -240,10 +248,11 @@ no_input_reason :: proc(app: ^App) -> (title, hint: cstring, missing: bool) {
     return
 }
 
-// Over the strobe area. Tapped it tries again on what's connected now, or asks for the microphone.
-gui_no_input_message :: proc(app: ^App, strobe: gfx.Rect, title, hint: cstring) {
+// Over the strobe area, in the middle of its view under the notch. Tapped it tries again on what's connected
+// now, or asks for the microphone.
+gui_no_input_message :: proc(app: ^App, strobe, view: gfx.Rect, title, hint: cstring) {
     gfx.draw_rect({strobe.x, strobe.y}, {strobe.width, strobe.height}, gfx.hex(strobe_bg_color))
-    center := [2]f32{strobe.x + strobe.width / 2, strobe.y + strobe.height / 2}
+    center := [2]f32{view.x + view.width / 2, view.y + view.height / 2}
     title_size := measure_label(pixel_fonts.title, title)
     hint_size := measure_label(pixel_fonts.label, hint)
     draw_label(pixel_fonts.title, title, center - {title_size.x / 2, title_size.y + 4}, text_color_white)
@@ -265,7 +274,7 @@ input_missing :: proc(app: ^App) -> bool {
 
 // An arrow on the side the pitch is off to, pointing inwards the way to tune, with the sharp or the flat on its
 // outside: flat on the left pointing right to tune up, like higher notes are to the right on the ruler
-draw_tuning_arrows :: proc(displays: ^Displays, note_target: ^core.NoteTarget, layout: Layout, reading: Reading, type: StrobeDisplayType) {
+draw_tuning_arrows :: proc(displays: ^Displays, note_target: ^core.NoteTarget, layout: Layout, reading: Reading, config: ^Config) {
     // Only the strong readings, a fading note drifts and would flash the arrows. The strobe's close to the
     // note, like the readout.
     cents := core.target_cents_off(note_target, note_target.last_good_pitch.detected_freq)
@@ -287,18 +296,27 @@ draw_tuning_arrows :: proc(displays: ^Displays, note_target: ^core.NoteTarget, l
     flat, sharp := ArrowGlyph{pixel_fonts.arrow_flat, '♭'}, ArrowGlyph{pixel_fonts.arrow_sharp, '♯'}
 
     // Where sharp is up, a turned strobe's stripes climb when sharp, see strobe_upright, and the trace's line
-    // rises: flat at the bottom pointing up, sharp at the top pointing down, the sign first. In the middle of
-    // the strobe. On the trace the arrow is over and under the notches at now, pointing along them.
-    trace := type == .TRACE
-    if layout.strobe_turned || trace {
-        pair := [2]ArrowGlyph{flat, {arrow, '▲'}}
-        middle_y := view.y + view.height - MARGIN - arrow.size / 2
-        if displays.sharp_arrow {
-            pair = {sharp, {arrow, '▼'}}
-            middle_y = view.y + MARGIN + arrow.size / 2
+    // rises: flat at the bottom pointing up, sharp at the top pointing down, the sign first. In the strobe's left
+    // corners, away from its hub behind the panel, inside its labels. On the trace the arrow is over and under the
+    // notches at now, pointing along them. The other views beside the panel aren't turned, sharp is still to the
+    // right.
+    trace := config.strobe_display_type == .TRACE
+    turned := config.strobe_display_type == .STROBE && layout.strobe_turned
+    if turned || trace {
+        top, bottom: f32 = MARGIN, MARGIN
+        if turned {
+            label_top, label_bottom := turned_label_reach(config)
+            top, bottom = max(top, label_top + MARGIN), max(bottom, label_bottom + MARGIN)
         }
 
-        left := strobe.x + (strobe.width - arrow_pair_width(pair)) / 2
+        pair := [2]ArrowGlyph{flat, {arrow, '▲'}}
+        middle_y := view.y + view.height - bottom - arrow.size / 2
+        if displays.sharp_arrow {
+            pair = {sharp, {arrow, '▼'}}
+            middle_y = view.y + top + arrow.size / 2
+        }
+
+        left := view.x + MARGIN
         if trace {
             plot := trace_plot(view)
             left = plot.x + plot.width - arrow_pair_width(pair) + arrow_glyph_ink(pair[1]).width / 2

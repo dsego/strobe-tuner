@@ -251,8 +251,8 @@ test_strobe_turn_rate :: proc(t: ^testing.T) {
         return start - pc.bands[0].scaled_phase
     }
 
-    // Up to the edge of the note. Further out the string is outside the band's window (100 cents a bin) and
-    // its phase has nothing to follow.
+    // Up to the edge of the note. Further out the string is outside the band's window (DFT_RESOLUTION_CENTS a
+    // bin) and its phase has nothing to follow.
     for target_hz in ([]f32{82.41, 329.63}) {
         for speed_scale in ([]f32{0.25, 1}) {
             for cents in ([]f32{1, 5, 10, 25, 50, -50}) {

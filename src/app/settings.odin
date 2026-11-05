@@ -33,7 +33,7 @@ SEGMENT_WIDTH :: 60
 SETTINGS_ROWS :: 7
 
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
-DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 6, .SCOPE = 5, .TRACE = 2, .LAMP = 2, .SPECTRUM = 4}
+DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 6, .SCOPE = 4, .TRACE = 2, .LAMP = 3, .SPECTRUM = 4}
 
 // For the longer labels of the display's options
 WIDE_SEGMENT_WIDTH :: 80
@@ -71,14 +71,21 @@ DISPLAY_LABELS :: [StrobeDisplayType]cstring {
     .SPECTRUM = "SPECTRUM",
 }
 
-// The labels of the steps below that have three
-STEP_LABELS :: []cstring{"Short", "Medium", "Long"}
 // The lamp's persistence and the scope's averaging, the same steps, see PERSISTENCE_STEPS_PERIODS
 PERSISTENCE_LABEL: cstring : "Persistence"
 AVERAGING_LABEL: cstring : "Averaging"
 PERSISTENCE_LABELS :: []cstring{"Off", "Short", "Medium", "Long"}
-// The lamp's rectifier, in the order of core.ScopeShape, a tap on the lamp goes round them
+
+// The options a tap on a view changes too, in its settings' words on the toast, see show_tap_toast. In the order
+// of their values: the rectifiers of core.ScopeShape, the sweeps of core.ScopeSweep, the scales of
+// SpectrumScale, and the trace's range in TRACE_RANGE_STEPS_CENTS.
 RECTIFIER_LABELS :: []cstring{"Half", "None", "Split"}
+SWEEP_LABELS :: []cstring{"Time", "Circle"}
+SCALE_LABELS :: []cstring{"SNR", "dBFS"}
+RANGE_LABELS :: []cstring{"±25¢", "±50¢"}
+
+// The trace's span, TRACE_SPAN_STEPS_S
+SPAN_LABELS :: []cstring{"1 s", "2 s", "5 s"}
 
 
 // The dropdown whose menu is open, one at a time, on the settings', the input's or the instrument's sheet
@@ -110,7 +117,7 @@ gui_settings_dropdown :: proc(
     }
 }
 
-// Returns close when ✕ is tapped, changed when the strobe or the note detection needs updating. With
+// Returns close when ✕ is tapped, changes when the strobe or the note detection needs updating. With
 // display_options the sheet is the picked display's options, a page of their own behind the › after the
 // displays, the ‹ back to the settings. confirm_reset is whether RESET was tapped once and asks.
 gui_settings :: proc(
@@ -121,7 +128,7 @@ gui_settings :: proc(
     open: ^Dropdown,
 ) -> (
     close: bool,
-    changed: bool,
+    changes: ConfigChanges,
 ) {
     // The controls end short of the ✕, the › after the displays sits in the column under it. The display's
     // options line up with them.
@@ -144,12 +151,12 @@ gui_settings :: proc(
     gui_settings_segmented(sheet_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow)
 
     concert_a_changed, concert_a_value := gui_concert_a_row(sheet_layout, &row, config)
-    if concert_a_changed do changed = true
+    if concert_a_changed do changes += {.RETUNE}
 
     // What the readout, the gauge and the trace read: the fundamental's track, the 2nd partial's, or a blend, the
     // whole wave like most tuners. A guitar or piano string's partials run a little sharp, each reads its own cents.
     if gui_settings_segmented(sheet_layout, &row, "Readout", {"1×", "2×", "Blend"}, &config.readout_source) {
-        changed = true
+        changes += {.READOUT}
     }
 
     // How long every cents number averages, the same fit on every display: the readout, the tracks' cents, the
@@ -157,21 +164,28 @@ gui_settings :: proc(
     // pitch, a string being tuned shows later on the numbers while the stripes move at once.
     // In milliseconds, a 0.15 looks longer than a 0.4 at a glance
     if gui_steps(sheet_layout, &row, "Readout speed", {"150 ms", "400 ms"}, &config.readout_fit_s, READOUT_FIT_STEPS_S) {
-        changed = true
+        changes += {.READOUT}
     }
 
-    if gui_reset_row(sheet_layout, &row, config, confirm_reset) do changed = true
+    if gui_reset_row(sheet_layout, &row, config, confirm_reset) do changes += {.RETUNE}
 
     // Last, their menus open down over the rows under them
     gui_display_dropdown(open, display_rect, config)
-    if gui_concert_a_menu(open, concert_a_value, config) do changed = true
+    if gui_concert_a_menu(open, concert_a_value, config) do changes += {.RETUNE}
     return
 }
 
 SETTINGS_CHEVRON_GAP :: 8 // between a row's control and the › after it
 
 // The picked display's options, a page of their own. The ‹ goes back to the settings.
-gui_display_options_page :: proc(sheet_layout: SheetLayout, config: ^Config, display_options: ^bool) -> (close: bool, changed: bool) {
+gui_display_options_page :: proc(
+    sheet_layout: SheetLayout,
+    config: ^Config,
+    display_options: ^bool,
+) -> (
+    close: bool,
+    changes: ConfigChanges,
+) {
     display_names := DISPLAY_NAMES
     back: bool
     close, back = draw_back_header(sheet_layout, display_names[config.strobe_display_type])
@@ -179,7 +193,7 @@ gui_display_options_page :: proc(sheet_layout: SheetLayout, config: ^Config, dis
 
     switch config.strobe_display_type {
     case .STROBE:
-        changed = gui_strobe_display_options(sheet_layout, config)
+        changes = gui_strobe_display_options(sheet_layout, config)
     case .SCOPE:
         gui_scope_display_options(sheet_layout, config)
     case .TRACE:
@@ -341,8 +355,8 @@ display_menu_options :: proc() -> (options: [len(StrobeDisplayType)]GuiOption) {
     return
 }
 
-// The strobe's options, a row each. Returns changed when the strobe needs updating.
-gui_strobe_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (changed: bool) {
+// The strobe's options, a row each. Returns changes when the strobe needs updating.
+gui_strobe_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (changes: ConfigChanges) {
     row := 0
     gui_settings_segmented(sheet_layout, &row, "Shape", {"Flat", "Wheel", "Curved"}, &config.strobe_shape, WIDE_SEGMENT_WIDTH)
 
@@ -351,12 +365,12 @@ gui_strobe_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -
 
     // Harmonic shows a track per partial, vernier the same frequency at different sensitivities
     if gui_settings_segmented(sheet_layout, &row, "Mode", {"Harmonic", "Vernier"}, &config.strobe_mode, WIDE_SEGMENT_WIDTH) {
-        changed = true
+        changes += {.RETUNE}
     }
 
     // 200% spins twice as fast per cent, for the final adjustment
     if gui_settings_segmented(sheet_layout, &row, "Spin rate", {"100%", "200%"}, &config.strobe_fast, WIDE_SEGMENT_WIDTH) {
-        changed = true
+        changes += {.SPEED}
     }
 
     // The labels on the tracks: the partial, and how far off it is
@@ -370,7 +384,7 @@ gui_scope_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
     row := 0
 
     // Tapping the scope flips it too
-    gui_settings_segmented(sheet_layout, &row, "Sweep", {"Time", "Circle"}, &config.scope_sweep)
+    gui_settings_segmented(sheet_layout, &row, "Sweep", SWEEP_LABELS, &config.scope_sweep)
     gui_settings_segmented(sheet_layout, &row, "Low-pass", {"Off", "On"}, &config.scope_lowpass)
 
     // How many sweeps the beam is drawn through, the noise cancels out over more and a detuned note smears
@@ -378,15 +392,12 @@ gui_scope_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
 
     // The averaged sweeps as a solid line or an analog scope's phosphor, bright where the beam lingers
     gui_settings_segmented(sheet_layout, &row, "Beam", {"Solid", "Phosphor"}, &config.scope_beam, WIDE_SEGMENT_WIDTH)
-
-    // Set by every new note and held so the note decays on the screen, or every sweep as loud
-    gui_settings_segmented(sheet_layout, &row, "Gain", {"Autoset", "Uniform"}, &config.scope_gain, WIDE_SEGMENT_WIDTH)
 }
 
 gui_trace_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
     row := 0
-    gui_steps(sheet_layout, &row, "Span", STEP_LABELS, &config.trace_seconds, TRACE_SPAN_STEPS_S)
-    gui_steps(sheet_layout, &row, "Range", {"Narrow", "Wide"}, &config.trace_range_cents, TRACE_RANGE_STEPS_CENTS)
+    gui_steps(sheet_layout, &row, "Span", SPAN_LABELS, &config.trace_seconds, TRACE_SPAN_STEPS_S)
+    gui_steps(sheet_layout, &row, "Range", RANGE_LABELS, &config.trace_range_cents, TRACE_RANGE_STEPS_CENTS)
 }
 
 gui_lamp_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
@@ -396,12 +407,13 @@ gui_lamp_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
     // Tapping the lamp goes round them too.
     gui_settings_segmented(sheet_layout, &row, "Rectifier", RECTIFIER_LABELS, &config.lamp_shape)
     gui_persistence_row(sheet_layout, &row, PERSISTENCE_LABEL, &config.screen_persistence_periods)
+    gui_settings_segmented(sheet_layout, &row, "Low-pass", {"Off", "On"}, &config.lamp_lowpass)
 }
 
 gui_spectrum_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
     row := 0
     gui_steps(sheet_layout, &row, "Window", {"85 ms", "170 ms", "340 ms"}, &config.spectrum_windows, SPECTRUM_WINDOW_STEPS)
-    gui_settings_segmented(sheet_layout, &row, "Scale", {"SNR", "dBFS"}, &config.spectrum_scale)
+    gui_settings_segmented(sheet_layout, &row, "Scale", SCALE_LABELS, &config.spectrum_scale)
     gui_settings_segmented(sheet_layout, &row, "Labels", {"Off", "Note", "Hz", "Both"}, &config.spectrum_labels)
     gui_settings_segmented(sheet_layout, &row, "Peak level", {"Off", "On"}, &config.spectrum_peak_level)
 }
@@ -439,7 +451,7 @@ gui_steps :: proc(
 
 
 // A track's own sheet, opened by tapping it on the strobe in harmonic mode. Shorter than the settings so the
-// strobe stays in sight while the track is tuned. Returns close when ✕ is tapped, changed when the strobe
+// strobe stays in sight while the track is tuned. Returns close when ✕ is tapped, changes when the strobe
 // needs updating.
 TRACK_SETTINGS_ROWS :: 5 // the last is room for the buttons that add and remove tracks
 
@@ -450,7 +462,7 @@ gui_track_settings :: proc(
     band: core.PhaseBand,
 ) -> (
     close: bool,
-    changed: bool,
+    changes: ConfigChanges,
 ) {
     close = draw_track_header(sheet_layout, track, band)
 
@@ -459,17 +471,17 @@ gui_track_settings :: proc(
 
     reset_partial := track_reset_partial(config, slot)
     row := 0
-    if gui_partial_row(sheet_layout, &row, config, slot, reset_partial) do changed = true
-    if gui_target_offset_row(sheet_layout, &row, config, slot) do changed = true
+    if gui_partial_row(sheet_layout, &row, config, slot, reset_partial) do changes += {.RETUNE}
+    if gui_target_offset_row(sheet_layout, &row, config, slot) do changes += {.RETUNE}
 
     // On top of the strobe's spin rate, a high partial spins faster than the rest. In percent, × is for partials.
     speed_labels := []cstring{"25%", "50%", "100%", "200%"}
-    if gui_steps(sheet_layout, &row, "Spin rate", speed_labels, &config.strobe_speeds[slot], [4]f32{0.25, 0.5, 1, 2}, SEGMENT_WIDTH) {
-        changed = true
+    if gui_steps(sheet_layout, &row, "Spin rate", speed_labels, &config.strobe_speeds[slot], TRACK_SPEED_STEPS, SEGMENT_WIDTH) {
+        changes += {.SPEED}
     }
 
-    if gui_reset_track_row(sheet_layout, &row, config, slot, reset_partial) do changed = true
-    if gui_add_remove_track(sheet_layout, config, slot) do changed = true
+    if gui_reset_track_row(sheet_layout, &row, config, slot, reset_partial) do changes += {.RETUNE}
+    if gui_add_remove_track(sheet_layout, config, slot) do changes += {.RETUNE}
 
     return
 }

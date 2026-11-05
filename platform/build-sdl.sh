@@ -38,13 +38,17 @@ case "$PLATFORM" in
         else
             SYSROOT=iphoneos
         fi
+        # Without the camera and HIDAPI's Bluetooth controllers: the app uses neither, and App Store Connect
+        # asks for a camera and a Bluetooth purpose string in the Info.plist for any binary that calls them
         set -- \
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_SYSROOT=$SYSROOT \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=$MIN_IOS \
             -DSDL_SHARED=OFF \
-            -DSDL_STATIC=ON
+            -DSDL_STATIC=ON \
+            -DSDL_CAMERA=OFF \
+            -DSDL_HIDAPI=OFF
         ;;
     android)
         SDK=${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}

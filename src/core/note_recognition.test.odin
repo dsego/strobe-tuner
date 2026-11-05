@@ -20,7 +20,7 @@ package core
 import "core:testing"
 
 
-// The tests' detections, like the pitch detection's 20 a second, strong or weak
+// The tests' detections, 20 a second, strong or weak
 test_detection :: proc(freq: f32, strong := true) -> PitchInfo {
     return {
         fresh = true,

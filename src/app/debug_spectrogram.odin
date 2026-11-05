@@ -199,9 +199,6 @@ draw_spectrogram_octaves :: proc(rect: gfx.Rect, low, high, pitch_standard: f32,
     }
 }
 
-// The stack's latest spectrum across rect on the spectrogram's log scale: each bin's level in dB, the background
-// under it grey, the peaks it kept grey dots, the note's harmonics gold and numbered, and over the plot the
-// note, its Hz and the stack's score
 // The stack's level and background from from_hz to to_hz, a pixel's or a row's, in the transform it looks there
 // in, see core.stack_transform_at: the loudest bin among them, or between the bins either side where they're
 // narrower than a bin. The bin under them repeated drew a low note's as blocks several pixels wide.
@@ -225,6 +222,9 @@ stack_level_between :: proc(stack: ^core.HarmonicStack, from_hz, to_hz: f32) -> 
     return
 }
 
+// The stack's latest spectrum across rect on the spectrogram's log scale: each bin's level in dB, the background
+// under it grey, the peaks it kept grey dots, the note's harmonics gold and numbered, and over the plot the
+// note, its Hz and the stack's score
 draw_stack_plot :: proc(rect: gfx.Rect, stack: ^core.HarmonicStack, pitch: core.PitchInfo, sample_rate: f32, font: gfx.Font) {
     RANGE_DB :: 60 // from the loudest down, the background stays in it
 

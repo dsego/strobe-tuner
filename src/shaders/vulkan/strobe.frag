@@ -62,6 +62,9 @@ const float DARK_TRANSMISSION = 0.3;
 const float OUTLINE_WIDTH = 1.0;
 const float DIM_AMOUNT = 0.65;
 
+// Between the tracks, a track is this much thinner than band_height, STROBE_TRACK_GAP in strobe_display.odin
+const float TRACK_GAP = 4.0;
+
 
 float generate_signal(
     float freq,
@@ -186,7 +189,7 @@ void main()
     float feathering = 2.0; // 2 px feathering for smoothstep
 
     // Define the thickness of our donut shape (track), leave a gap between tracks
-    float thickness = u.band_height - 4.0;
+    float thickness = u.band_height - TRACK_GAP;
 
     // Calculate the center so the circle touches the top of the viewport
     // vertically and is centered horizontally

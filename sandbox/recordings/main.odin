@@ -619,7 +619,7 @@ play :: proc(recording: []f32, sample_rate: f32, pitch_standard: f32) -> (detect
 
     detector := core.init_pitch_detector(pitch_standard, sample_rate)
     defer core.destroy_pitch_detector(&detector)
-    note_target := core.init_note_target(110, pitch_standard, true)
+    note_target := core.init_note_target(110, pitch_standard)
 
     intervals := INTERVALS
     strobe := core.init_strobe_lock_in(110, intervals[:], .HARMONIC, sample_rate)

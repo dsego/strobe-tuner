@@ -39,8 +39,8 @@ import "core:time"
 MIN_STROBE_FREQ_HZ :: 16.0
 MAX_BANDS :: 5 // the strobe's tracks, the config holds as many
 
-// Tracks not drawn for longer, another display showed or the app was in the background, start their
-// persistence and motion blur over: what they held is from before. The lamp's start over too.
+// Tracks not drawn for longer, another display showed or the app was in the background, start their drawn
+// phase and motion blur over: what they held is from before. The lamp's start over too.
 STROBE_STALE_S :: 0.25
 // The sample buffer, the window for the lowest note at a quarter of a semitone fits in it, 264 000 samples
 // at 48 kHz

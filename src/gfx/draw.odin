@@ -120,6 +120,13 @@ Clock :: struct {
 input: Input
 clock: Clock
 
+// The presses and the wheel the frame took
+clear_frame_input :: proc() {
+    input.keys_pressed = {}
+    input.mouse_clicked = false
+    input.wheel = 0
+}
+
 
 begin_frame :: proc(clear: Color) {
     clear_dynamic_array(&gpu.frame.vertices)

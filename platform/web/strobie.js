@@ -25,6 +25,7 @@
         state: INPUT_STATES.CLOSED,
         context: null,
         stream: null,
+        capture: null, // the worklet's node, closing the input stops the chunks it still had on the way
         chunks: [], // Float32Arrays from the worklet, the first one read from offset on
         offset: 0,
         waiting: 0, // samples in chunks
@@ -81,6 +82,7 @@
                 channelCountMode: "explicit",
             });
             capture.port.onmessage = (message) => keepChunk(message.data);
+            input.capture = capture;
             source.connect(capture);
         } catch (error) {
             console.log("The input didn't open:", error);
@@ -107,9 +109,11 @@
         input.opening += 1;
         if (input.stream) input.stream.getTracks().forEach((track) => track.stop());
         if (input.context) input.context.close();
+        if (input.capture) input.capture.port.onmessage = null;
 
         input.stream = null;
         input.context = null;
+        input.capture = null;
         input.state = INPUT_STATES.CLOSED;
         dropWaiting();
     }
@@ -152,10 +156,10 @@
     }
 
     // The browser starts audio only after a tap or a key, and may want one to open the microphone again after
-    // the page was hidden
+    // the page was hidden. Refused on a tap, the permission is off.
     function resumeInput() {
         if (input.context && input.context.state == "suspended") input.context.resume();
-        else if (!input.context && input.state == INPUT_STATES.WAITING_FOR_TAP) openInput(true);
+        else if (!input.context && input.state == INPUT_STATES.WAITING_FOR_TAP) openInput();
     }
     window.addEventListener("pointerdown", resumeInput, true);
     window.addEventListener("keydown", resumeInput, true);

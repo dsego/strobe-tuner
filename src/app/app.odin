@@ -16,7 +16,7 @@
 
 package app
 
-import "core:fmt"
+@(require) import "core:fmt"
 
 import "../audio"
 import "../core"
@@ -50,11 +50,19 @@ App :: struct {
     displays:       Displays,
     sheets:         AppSheets,
 
-    config_changed: bool, // the note target and the strobe need the new config, see apply_config
+    config_changes: ConfigChanges, // the note target and the strobe need the new config, see apply_config
     unsaved:        bool, // the config changed since it was saved, see save_when_settled
     unsaved_s:      f32, // since it last changed
     quiet_time:     f32, // seconds with no signal and nobody touching anything, see IDLE_AFTER_S
 }
+
+// What a change to the settings needs, see apply_config
+ConfigChange :: enum {
+    RETUNE, // what the tracks measure, they start over
+    SPEED, // how fast the stripes turn, the tracks keep measuring
+    READOUT, // what the readout reads and how long it averages, the tracks keep measuring
+}
+ConfigChanges :: bit_set[ConfigChange]
 
 // What the strobe area draws, the display picked in the settings and the arrows over it
 Displays :: struct {
@@ -110,7 +118,7 @@ start_app :: proc(app: ^App) -> bool {
     // Opened or not, the strobe area says why there's no input, see draw_strobe_area
     open_audio_input(app)
 
-    apply_config(app)
+    apply_config(app, {.RETUNE})
     return true
 }
 
@@ -203,7 +211,7 @@ run_frame :: proc(app: ^App) {
     config_before := config^
     menu := handle_keys(app)
 
-    if app.config_changed do apply_config(app)
+    if app.config_changes != {} do apply_config(app, app.config_changes)
 
     reading := measure(app)
     follow_note_colors(app)
@@ -255,7 +263,7 @@ run_frame :: proc(app: ^App) {
         if strobe_shows do draw_strobe_area(app, layout)
     } else if panel_covered {
         draw_strobe_area(app, layout)
-        draw_tuning_arrows(&app.displays, &app.measurement.note_target, layout, reading, app.config.strobe_display_type)
+        draw_tuning_arrows(&app.displays, &app.measurement.note_target, layout, reading, app.config)
     } else {
         draw_main_screen(app, layout, reading, menu)
     }
@@ -268,20 +276,32 @@ run_frame :: proc(app: ^App) {
 }
 
 // The pitch detection, the note target and the strobe brought up to the config, at the start and after a
-// change. The tracks start over, so only for what they measure: the displays read their colors and options from
-// the config as they draw.
-apply_config :: proc(app: ^App) {
+// change. The tracks start over only for what they measure, a turn of the spin rate or the readout's settings
+// comes while a string is being tuned. The displays read their colors and options from the config as they draw.
+apply_config :: proc(app: ^App, changes: ConfigChanges) {
     measurement, config := &app.measurement, app.config
     note_target := &measurement.note_target
+    app.config_changes = {}
 
-    // Same notes, retuned to the pitch standard
-    measurement.pitch_detector.pitch_standard = config.pitch_standard
-    core.set_target_pitch_standard(note_target, config.pitch_standard)
-    note_target.offsets_cents = active_note_offsets(config)
-    core.set_target_strings(note_target, tuning_strings(config))
+    if .RETUNE in changes {
+        // Same notes, retuned to the pitch standard
+        measurement.pitch_detector.pitch_standard = config.pitch_standard
+        core.set_target_pitch_standard(note_target, config.pitch_standard)
+        note_target.offsets_cents = active_note_offsets(config)
+        core.set_target_strings(note_target, tuning_strings(config))
 
-    retune(measurement, config)
-    app.config_changed = false
+        retune(measurement, config)
+        return
+    }
+
+    if .SPEED in changes do set_strobe_speed(measurement, config)
+
+    // Another readout picks its track again, the reading held was the other one's
+    if .READOUT in changes {
+        set_readout_speed(measurement, config)
+        measurement.readout_track, measurement.traced_track = -1, -1
+        measurement.held_readout = {}
+    }
 }
 
 // A phone suspends the app in the background and may end it there without warning. The config is saved on the
@@ -325,11 +345,13 @@ handle_keys :: proc(app: ^App) -> (menu: MenuCommand) {
     if plain && gfx.key_pressed(.G) do config.strobe_glow = !config.strobe_glow
 
     // H flips the pitch detection between its two ways to try them side by side, not a setting yet, see
-    // core.PitchMethod
-    if plain && gfx.key_pressed(.H) {
-        detector := &app.measurement.pitch_detector
-        detector.method = .WAVE if detector.method == .HARMONICS else .HARMONICS
-        fmt.println("Pitch detection:", detector.method)
+    // core.PitchMethod. Debug builds only, nothing on the screen shows which one reads.
+    when ODIN_DEBUG {
+        if plain && gfx.key_pressed(.H) {
+            detector := &app.measurement.pitch_detector
+            detector.method = .WAVE if detector.method == .HARMONICS else .HARMONICS
+            fmt.println("Pitch detection:", detector.method)
+        }
     }
 
     if plain && gfx.key_pressed(.TAB) do config.strobe_display_type = next_display(config.strobe_display_type)

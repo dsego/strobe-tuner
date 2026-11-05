@@ -63,6 +63,9 @@ strobe_speed :: proc(config: ^Config) -> f32 {
     return STROBE_SPEED_FAST if config.strobe_fast else STROBE_SPEED
 }
 
+// A track's own spin rate on top of the strobe's, its sheet's Spin rate
+TRACK_SPEED_STEPS :: [4]f32{0.25, 0.5, 1, 2}
+
 // The readout's fit time, the Readout speed setting, see core.READOUT_FIT_S. Its weight averages twice as far
 // back: the longer spans several cycles of a vibrato and reads the mean pitch, and shows a string being tuned about a
 // second later
@@ -100,12 +103,6 @@ TRACE_RANGE_STEPS_CENTS :: [2]f32{25, 50}
 // The spectrum's window, as many of the detector's: 85, 170 and 340 ms at 48 kHz. Longer, two partials closer
 // together come apart and a pluck takes longer to show, the power is averaged over as long.
 SPECTRUM_WINDOW_STEPS :: [3]f32{1, 2, 4}
-
-// The scope's height, see core.autoset_scope
-ScopeGain :: enum {
-    AUTOSET, // set by every attack and note lit from silence and held, the note decays and shrinks into the noise
-    UNIFORM, // every sweep as loud, a tremolo or a decaying note stays the same size until the noise
-}
 
 // The scope's beam, see draw_scope_screen
 ScopeBeam :: enum {
@@ -205,6 +202,8 @@ Config :: struct {
     // what the lamp shows, the positive half of the wave like a lamp, the wave as it is, or the two halves
     // split, tapping it goes round them in that order
     lamp_shape:                   core.ScopeShape,
+    // the lamp's own low-pass, the scope's filter: the room's hiss and the fine wiggles out of the stripes
+    lamp_lowpass:                 bool,
     // the scope over time or round a circle, tapping it flips them
     scope_sweep:                  core.ScopeSweep,
     // the scope view keeps the first few partials of the wave and drops the fine wiggles above them
@@ -215,8 +214,6 @@ Config :: struct {
     // the scope's beam through the averaged sweeps, a solid line or an analog scope's phosphor, as bright as
     // the beam stays
     scope_beam:                   ScopeBeam,
-    // the scope's height set by every new note and held, or every sweep as loud
-    scope_gain:                   ScopeGain,
 
     // Trace display: how many seconds it shows, and how many cents from the middle to its edges
     trace_seconds:                f32,
@@ -274,11 +271,11 @@ config_defaults :: Config {
     show_band_cents              = false,
     screen_persistence_periods   = 18,
     lamp_shape                   = .SPLIT,
+    lamp_lowpass                 = true,
     scope_sweep                  = .TIME,
     scope_lowpass                = true,
     scope_averaging_periods      = 18,
     scope_beam                   = .SOLID,
-    scope_gain                   = .AUTOSET,
     trace_seconds                = 2,
     trace_range_cents            = 25,
     spectrum_windows             = 2,

@@ -41,6 +41,14 @@ scope_test_sine :: proc(samples: []f32, freq_hz: f64, clock: i64) {
 
 SCOPE_TEST_FRAME :: DEFAULT_SAMPLE_RATE / 60
 
+// Uniform noise between -1 and 1 from a xorshift, the same noise every run from the same state
+scope_test_noise :: proc(state: ^u32) -> f32 {
+    state^ ~= state^ << 13
+    state^ ~= state^ >> 17
+    state^ ~= state^ << 5
+    return 2 * f32(state^) / f32(max(u32)) - 1
+}
+
 // The screen of the scope display type
 scope_test_init :: proc(freq_hz: f64) -> Scope {
     scope := init_scope(488, 240)
@@ -172,38 +180,58 @@ test_scope_beam_is_continuous :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_scope_noise_stays_low :: proc(t: ^testing.T) {
+test_scope_height_follows_loudness :: proc(t: ^testing.T) {
+    // A note SCOPE_LOUD_DBFS loud fills the screen, half the range quieter half of it, louder still no more,
+    // and the room's hiss far under it lies flat. The same on the lamp's screen, without persistence and in
+    // the average.
     FREQ :: 220.0
-    NOISE :: 0.01 // peak, as loud as the room
 
-    // Longer than the level takes to fall back after a note
-    amp_over_noise :: proc(snr_db: f32) -> f64 {
-        scope := scope_test_init(FREQ)
-        defer destroy_scope(&scope)
-        scope.noise_floor = NOISE / math.SQRT_TWO
-        scope.snr_db = snr_db
-
-        samples: [SCOPE_TEST_FRAME]f32
-        for _ in 0 ..< 120 {
-            scope_test_sine(samples[:], FREQ, scope.sample_clock)
-            for &sample in samples do sample *= NOISE
-
-            clear_scope(&scope)
-            sweep_samples(&scope, samples[:])
-        }
-        heights, _ := scope_from_above(&scope, .RAW_WAVEFORM)
-        _, amp := scope_test_fundamental(heights)
-        return amp
+    View :: enum {
+        LAMP, // the screen fading over a persistence
+        NEWEST_SWEEP, // without persistence
+        AVERAGE, // the scope view's
     }
 
-    // No note, as small as it is over the noise
-    amp := amp_over_noise(0)
-    expected := math.SQRT_TWO / SCOPE_NOISE_HEADROOM
-    testing.expectf(t, abs(amp - expected) < 0.02, "amp %v, expected %v", amp, expected)
+    // How high the note's peak is drawn, 1 is the full height
+    height :: proc(view: View, peak_dbfs: f32) -> f32 {
+        scope := scope_test_init(FREQ)
+        defer destroy_scope(&scope)
 
-    // Out of the noise, a note as quiet fills the screen
-    amp = amp_over_noise(STROBE_FADE_SNR_DB[1])
-    testing.expectf(t, amp > 0.95, "note: amp %v", amp)
+        switch view {
+        case .LAMP:
+            scope.persistence_s = 18 / FREQ
+        case .NEWEST_SWEEP:
+        case .AVERAGE:
+            scope.persistence_s = 18 / FREQ
+            scope.average_sweeps = true
+        }
+
+        amp := math.pow(10, peak_dbfs / 20)
+        samples: [SCOPE_TEST_FRAME]f32
+        for _ in 0 ..< 30 {
+            scope_test_sine(samples[:], FREQ, scope.sample_clock)
+            for &sample in samples do sample *= amp
+
+            audio_capture_write(&scope, samples[:])
+            update_scope(&scope)
+        }
+        return amp / scope.level
+    }
+
+    half := f32(SCOPE_LOUD_DBFS - SCOPE_LOUDNESS_RANGE_DB / 2)
+    for view in View {
+        loud := height(view, SCOPE_LOUD_DBFS)
+        testing.expectf(t, abs(loud - 1) < 0.01, "%v loud: %v high", view, loud)
+
+        quieter := height(view, half)
+        testing.expectf(t, abs(quieter - 0.5) < 0.01, "%v %v dBFS: %v high", view, half, quieter)
+
+        louder := height(view, 0)
+        testing.expectf(t, abs(louder - 1) < 0.01, "%v full scale: %v high", view, louder)
+
+        hiss := height(view, SCOPE_LOUD_DBFS - SCOPE_LOUDNESS_RANGE_DB - 10)
+        testing.expectf(t, hiss <= SCOPE_MIN_HEIGHT + 0.001, "%v hiss: %v high", view, hiss)
+    }
 }
 
 @(test)
@@ -379,20 +407,11 @@ test_scope_average :: proc(t: ^testing.T) {
     averaged.persistence_s = 18 / FREQ
     averaged.average_sweeps = true
 
-    // xorshift, the same noise every run
     state: u32 = 1
     samples: [SCOPE_TEST_FRAME]f32
-    for frame in 0 ..< 60 {
-        // A pluck once the average has settled, the scale is set from it
-        if frame == 40 do autoset_scope(&averaged)
-
+    for _ in 0 ..< 60 {
         scope_test_sine(samples[:], FREQ, newest.sample_clock)
-        for &sample in samples {
-            state ~= state << 13
-            state ~= state >> 17
-            state ~= state << 5
-            sample = AMP * sample + NOISE * (2 * f32(state) / f32(max(u32)) - 1)
-        }
+        for &sample in samples do sample = AMP * sample + NOISE * scope_test_noise(&state)
         for scope in ([]^Scope{&newest, &averaged}) {
             audio_capture_write(scope, samples[:])
             update_scope(scope)
@@ -408,10 +427,9 @@ test_scope_average :: proc(t: ^testing.T) {
     testing.expectf(t, noisy > 0.1, "newest sweep: %v off the sine", noisy)
     testing.expectf(t, clean < 0.04, "averaged: %v off the sine", clean)
 
-    // Scaled to what's drawn: the newest sweep to the noisy input's peak, the average to its own, the sine's
-    // and a little of the noise left
+    // Both scaled to how loud the noisy input is, the average's line under its peak
     testing.expectf(t, newest.level > AMP + 0.25, "newest sweep: level %v", newest.level)
-    testing.expectf(t, averaged.level > AMP && averaged.level < AMP + 0.1, "averaged: level %v", averaged.level)
+    testing.expectf(t, abs(averaged.level - newest.level) < 0.01, "averaged: level %v", averaged.level)
 }
 
 @(test)
@@ -447,138 +465,6 @@ test_scope_average_lowpass :: proc(t: ^testing.T) {
         worst = max(worst, abs(f64(point.y) - expected) * f64(scope.rows))
     }
     testing.expectf(t, worst < 2, "%v rows off the sine", worst)
-}
-
-@(test)
-test_scope_autoset :: proc(t: ^testing.T) {
-    // Half a second of a note and half a second of it 20 dB quieter: the scale is held at the note's and
-    // the quieter part shrinks, until a pluck sets it again
-    FREQ :: 220.0
-
-    scope := scope_test_init(FREQ)
-    defer destroy_scope(&scope)
-    scope.persistence_s = 18 / FREQ
-    scope.average_sweeps = true
-
-    play :: proc(scope: ^Scope, amp: f32, frames: int) {
-        samples: [SCOPE_TEST_FRAME]f32
-        for _ in 0 ..< frames {
-            scope_test_sine(samples[:], FREQ, scope.sample_clock)
-            for &sample in samples do sample *= amp
-
-            audio_capture_write(scope, samples[:])
-            update_scope(scope)
-        }
-    }
-
-    play(&scope, 1, 30)
-    testing.expectf(t, abs(scope.level - 1) < 0.01, "note: level %v", scope.level)
-
-    play(&scope, 0.1, 30)
-    testing.expectf(t, abs(scope.level - 1) < 0.01, "quieter: level %v", scope.level)
-
-    autoset_scope(&scope)
-    play(&scope, 0.1, 30)
-    testing.expectf(t, abs(scope.level - 0.1) < 0.01, "plucked: level %v", scope.level)
-}
-
-@(test)
-test_scope_scale_over_a_move :: proc(t: ^testing.T) {
-    // A note set the scale, then decays: the strobe moving up an octave keeps it, the tail shrinks on
-    FREQ :: 220.0
-
-    scope := scope_test_init(FREQ)
-    defer destroy_scope(&scope)
-    scope.persistence_s = 18 / FREQ
-    scope.average_sweeps = true
-
-    play :: proc(scope: ^Scope, freq_hz: f64, amp: f32, frames: int) {
-        samples: [SCOPE_TEST_FRAME]f32
-        for _ in 0 ..< frames {
-            scope_test_sine(samples[:], freq_hz, scope.sample_clock)
-            for &sample in samples do sample *= amp
-
-            audio_capture_write(scope, samples[:])
-            update_scope(scope)
-        }
-    }
-
-    play(&scope, FREQ, 1, 30)
-    testing.expect(t, !scope_autosetting(&scope))
-    set_scope_freq(&scope, 2 * FREQ, autoset = false)
-    play(&scope, FREQ, 0.1, 30)
-    testing.expectf(t, abs(scope.level - 1) < 0.01, "an octave on: level %v", scope.level)
-
-    // Set again, and the strobe moving while it's set starts it over at the new frequency
-    autoset_scope(&scope)
-    testing.expect(t, scope_autosetting(&scope))
-    set_scope_freq(&scope, FREQ, autoset = scope_autosetting(&scope))
-    play(&scope, FREQ, 0.1, 30)
-    testing.expectf(t, abs(scope.level - 0.1) < 0.01, "set again: level %v", scope.level)
-}
-
-@(test)
-test_input_attack :: proc(t: ^testing.T) {
-    FRAME_S :: 1.0 / 60
-    attack: InputAttack
-
-    // A pluck, then its decay and a level holding: one attack
-    testing.expect(t, input_attack(&attack, 1, true, FRAME_S))
-    attacks := 0
-    for frame in 0 ..< 120 {
-        if input_attack(&attack, math.pow(0.97, f32(frame)), true, FRAME_S) do attacks += 1
-    }
-    testing.expect_value(t, attacks, 0)
-
-    // Another pluck over the tail
-    testing.expect(t, input_attack(&attack, 1, true, FRAME_S))
-
-    // Noise jumping isn't one
-    attack = {}
-    testing.expect(t, !input_attack(&attack, 1, false, FRAME_S))
-}
-
-@(test)
-test_scope_uniform_gain :: proc(t: ^testing.T) {
-    // Half a second of a note and half a second of it 20 dB quieter, uniform: the quieter part is as tall,
-    // with no pluck to set the scale again. Under the noise's floor it stays small.
-    FREQ :: 220.0
-
-    scope := scope_test_init(FREQ)
-    defer destroy_scope(&scope)
-    scope.persistence_s = 18 / FREQ
-    scope.average_sweeps = true
-    scope.uniform_gain = true
-
-    play :: proc(scope: ^Scope, amp: f32, frames: int) {
-        samples: [SCOPE_TEST_FRAME]f32
-        for _ in 0 ..< frames {
-            scope_test_sine(samples[:], FREQ, scope.sample_clock)
-            for &sample in samples do sample *= amp
-
-            audio_capture_write(scope, samples[:])
-            update_scope(scope)
-        }
-    }
-
-    // How tall the average is on the screen, 1 is full
-    height :: proc(scope: ^Scope) -> f32 {
-        peak: f32 = 0
-        for weight, bin in scope.average_weights[:scope.average_bins] {
-            if weight > 0 do peak = max(peak, abs(scope.average_sums[bin] / weight))
-        }
-        return peak / scope.level
-    }
-
-    play(&scope, 1, 30)
-    testing.expectf(t, abs(height(&scope) - 1) < 0.02, "note: %v tall", height(&scope))
-
-    play(&scope, 0.1, 30)
-    testing.expectf(t, abs(height(&scope) - 1) < 0.02, "quieter: %v tall", height(&scope))
-
-    // A tenth of the floor, SCOPE_MIN_LEVEL here
-    play(&scope, 0.0001, 30)
-    testing.expectf(t, height(&scope) < 0.2, "under the floor: %v tall", height(&scope))
 }
 
 @(test)
@@ -693,7 +579,6 @@ test_scope_circle_closes_on_a_string :: proc(t: ^testing.T) {
     points: [dynamic][2]f32
     defer delete(points)
 
-    // xorshift, the same noise every run
     state: u32 = 1
     samples: [SCOPE_TEST_FRAME]f32
     worst: f32 = 0
@@ -706,10 +591,7 @@ test_scope_circle_closes_on_a_string :: proc(t: ^testing.T) {
                 freq := partial * (FREQ + OFF_HZ) * math.sqrt(1 + INHARMONICITY * partial * partial)
                 value += math.exp(-time * (0.5 + 0.4 * partial)) / partial * math.sin(math.TAU * freq * time + partial)
             }
-            state ~= state << 13
-            state ~= state >> 17
-            state ~= state << 5
-            sample = 0.5 * f32(value) + NOISE * (2 * f32(state) / f32(max(u32)) - 1)
+            sample = 0.5 * f32(value) + NOISE * scope_test_noise(&state)
         }
         audio_capture_write(&scope, samples[:])
         update_scope(&scope)
@@ -757,17 +639,11 @@ test_scope_average_has_no_seam :: proc(t: ^testing.T) {
     scope.average_sweeps = true
     scope.lowpass = true
 
-    // xorshift, the same noise every run
     state: u32 = 1
     samples: [SCOPE_TEST_FRAME]f32
     for _ in 0 ..< 60 {
         scope_test_sine(samples[:], FREQ, scope.sample_clock)
-        for &sample in samples {
-            state ~= state << 13
-            state ~= state >> 17
-            state ~= state << 5
-            sample = 0.5 * sample + NOISE * (2 * f32(state) / f32(max(u32)) - 1)
-        }
+        for &sample in samples do sample = 0.5 * sample + NOISE * scope_test_noise(&state)
         audio_capture_write(&scope, samples[:])
         update_scope(&scope)
     }
@@ -840,11 +716,11 @@ test_scope_circle_spins_clockwise_when_sharp :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_scope_gain :: proc(t: ^testing.T) {
+test_scope_peak_release :: proc(t: ^testing.T) {
     FREQ :: 220.0
 
-    // A second of a loud note and 0.4 s of it 20 dB quieter: the level is down at the quieter note's peak once
-    // the loud one left its SCOPE_FILL_MIN_PERIODS and the level glided down over a few SCOPE_FILL_RELEASE_S
+    // A second of a loud note and 0.4 s of it 20 dB quieter: the peak is down at the quieter note's once the
+    // loud one left its SCOPE_PEAK_MIN_PERIODS and the peak glided down over a few SCOPE_PEAK_RELEASE_S
     scope := scope_test_init(FREQ)
     defer destroy_scope(&scope)
 
@@ -855,11 +731,12 @@ test_scope_gain :: proc(t: ^testing.T) {
 
         sweep_samples(&scope, samples[:])
     }
-    testing.expectf(t, abs(scope.level - 0.1) < 0.01, "level %v", scope.level)
+    testing.expectf(t, abs(scope.peak - 0.1) < 0.001, "peak %v", scope.peak)
+    testing.expectf(t, abs(scope.level - loudness_level(0.1)) < 0.001, "level %v", scope.level)
 }
 
 @(test)
-test_scope_fill_holds_over_the_screen :: proc(t: ^testing.T) {
+test_scope_peak_holds_over_the_screen :: proc(t: ^testing.T) {
     FREQ :: 220.0
     BEAT_PERIODS :: 4 // loud for as many periods, then as many 20% quieter
 

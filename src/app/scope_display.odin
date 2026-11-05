@@ -102,7 +102,7 @@ draw_scope_display :: proc(
 
     gfx.draw_rect({rect.x, rect.y}, {rect.width, rect.height}, self.background)
 
-    // the beam's dots at the edges reach over it
+    // the beam's line at the edges reaches over it
     gfx.begin_scissor(rect)
     defer gfx.end_scissor()
 

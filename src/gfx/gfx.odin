@@ -71,8 +71,6 @@ Key :: enum {
     ESCAPE,
     G,
     H,
-    I,
-    W,
     NUM_0,
     NUM_1,
     NUM_2,
@@ -123,9 +121,15 @@ StrobeUniforms :: struct #align (16) {
     flat_track:       i32, // the top of the arc straightened
 }
 
+// The bloom shader's pass, the same numbers as in src/shaders/metal/bloom.metal
+BloomMode :: enum i32 {
+    DOWNSAMPLE, // downsample the strobe and keep only the bright parts
+    BLUR, // one direction of a separable gaussian blur
+}
+
 BloomUniforms :: struct #align (16) {
-    texel_step: [2]f32, // mode 0: source texel size, mode 1: blur step
-    mode:       i32, // 0 - downsample & threshold, 1 - blur
+    texel_step: [2]f32, // DOWNSAMPLE: source texel size, BLUR: blur step
+    mode:       BloomMode,
 }
 
 ShadowUniforms :: struct #align (16) {

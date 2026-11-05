@@ -59,7 +59,7 @@ main :: proc() {
 
     detector := core.init_pitch_detector(PITCH_STANDARD, sample_rate)
     defer core.destroy_pitch_detector(&detector)
-    note_target := core.init_note_target(110, PITCH_STANDARD, true)
+    note_target := core.init_note_target(110, PITCH_STANDARD)
 
     // The strobe tracks, following the target note like in the app
     intervals := INTERVALS

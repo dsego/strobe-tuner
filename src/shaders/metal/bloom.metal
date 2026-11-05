@@ -16,9 +16,9 @@
 
 // Metal version of vulkan/bloom.frag, keep the two in sync.
 //
-// Bloom passes for the strobe glow:
-//   mode 0 - downsample the strobe and keep only the bright parts (the background shouldn't glow)
-//   mode 1 - one direction of a separable gaussian blur
+// Bloom passes for the strobe glow, the mode:
+//   DOWNSAMPLE - downsample the strobe and keep only the bright parts (the background shouldn't glow)
+//   BLUR - one direction of a separable gaussian blur
 
 #include <metal_stdlib>
 using namespace metal;
@@ -31,9 +31,13 @@ struct FragmentIn {
 
 // Same layout as BloomUniforms in src/gfx/gfx.odin
 struct BloomUniforms {
-    float2 texel_step; // mode 0: source texel size, mode 1: blur step (texel size * direction * spacing)
+    float2 texel_step; // DOWNSAMPLE: source texel size, BLUR: blur step (texel size * direction * spacing)
     int mode;
 };
+
+// BloomMode in src/gfx/gfx.odin
+constant int DOWNSAMPLE = 0;
+constant int BLUR = 1;
 
 constant int BLUR_RADIUS = 6;
 constant float BLUR_SIGMA = 3.0; // in taps
@@ -44,7 +48,7 @@ fragment float4 bloom_fragment(
     texture2d<float> texture0 [[texture(0)]],
     sampler sampler0 [[sampler(0)]]
 ) {
-    if (u.mode == 0) {
+    if (u.mode == DOWNSAMPLE) {
         // 4 bilinear taps cover a 4x4 block of source texels, avoids shimmer from skipping pixels
         float3 color = texture0.sample(sampler0, in.uv + u.texel_step * float2(-1.0, -1.0)).rgb;
         color += texture0.sample(sampler0, in.uv + u.texel_step * float2(1.0, -1.0)).rgb;

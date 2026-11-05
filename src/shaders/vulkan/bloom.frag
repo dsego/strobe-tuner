@@ -16,9 +16,9 @@
 
 // Vulkan version of metal/bloom.metal, keep the two in sync.
 //
-// Bloom passes for the strobe glow:
-//   mode 0 - downsample the strobe and keep only the bright parts (the background shouldn't glow)
-//   mode 1 - one direction of a separable gaussian blur
+// Bloom passes for the strobe glow, the mode:
+//   DOWNSAMPLE - downsample the strobe and keep only the bright parts (the background shouldn't glow)
+//   BLUR - one direction of a separable gaussian blur
 
 #version 450
 
@@ -31,16 +31,20 @@ layout(set = 2, binding = 0) uniform sampler2D texture0;
 
 // Same layout as BloomUniforms in src/gfx/gfx.odin
 layout(set = 3, binding = 0) uniform BloomUniforms {
-    vec2 texel_step; // mode 0: source texel size, mode 1: blur step (texel size * direction * spacing)
+    vec2 texel_step; // DOWNSAMPLE: source texel size, BLUR: blur step (texel size * direction * spacing)
     int mode;
 } u;
+
+// BloomMode in src/gfx/gfx.odin
+const int DOWNSAMPLE = 0;
+const int BLUR = 1;
 
 const int BLUR_RADIUS = 6;
 const float BLUR_SIGMA = 3.0; // in taps
 
 void main()
 {
-    if (u.mode == 0) {
+    if (u.mode == DOWNSAMPLE) {
         // 4 bilinear taps cover a 4x4 block of source texels, avoids shimmer from skipping pixels
         vec3 color = texture(texture0, frag_uv + u.texel_step * vec2(-1.0, -1.0)).rgb;
         color += texture(texture0, frag_uv + u.texel_step * vec2(1.0, -1.0)).rgb;

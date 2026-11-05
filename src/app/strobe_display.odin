@@ -351,6 +351,11 @@ draw_strobe_display :: proc(
     }
 }
 
+// From the strobe's right edge to a track's partial, and from its left edge to its cents, turned from the top and
+// the bottom
+TRACK_PARTIAL_INSET :: 12
+TRACK_CENTS_INSET :: 16
+
 // The track's partial, e.g. 1×, 2×: on the right, on the curve of a curved track a little in from the edge or
 // in the middle of a flat one, and on the top of a wheel's ring, where the ring runs level and the labels of
 // the rings stack in a column. The cents on the left, as bright as the track's stripes, visibility. Turned, the
@@ -380,8 +385,8 @@ draw_track_label :: proc(
         font := pixel_fonts.band_label
         width := measure_label(font, "-00.0").x
         text := fmt.ctprintf("%+.1f", band.err_cents)
-        position := [2]f32{upright.x + 16 + width, label_y}
-        if turned do position = {label_x + 0.5 * width, pane.y + pane.height - 16 - label_height}
+        position := [2]f32{upright.x + TRACK_CENTS_INSET + width, label_y}
+        if turned do position = {label_x + 0.5 * width, pane.y + pane.height - TRACK_CENTS_INSET - label_height}
 
         draw_text_right(font.font, text, position, font.size, 0, lerp_color(text_color_muted, accent_color, visibility))
     }
@@ -391,10 +396,21 @@ draw_track_label :: proc(
     if geometry.shape == .WHEEL {
         draw_strobe_partial_label(strobe_pane_point(pane, turned, on_ring), config.partial_labels, band, centered = true)
     } else if turned {
-        draw_strobe_partial_label({label_x, pane.y + 12 + 0.5 * label_height}, config.partial_labels, band, centered = true)
+        draw_strobe_partial_label({label_x, pane.y + TRACK_PARTIAL_INSET + 0.5 * label_height}, config.partial_labels, band, centered = true)
     } else {
-        draw_strobe_partial_label({upright.x + upright.width - 12, label_y}, config.partial_labels, band)
+        draw_strobe_partial_label({upright.x + upright.width - TRACK_PARTIAL_INSET, label_y}, config.partial_labels, band)
     }
+}
+
+// How far the turned strobe's labels reach in from the pane's top, the partials, and from its bottom, the cents.
+// 0 where there are none, a wheel's partials are on its rings. The tuning arrows stay clear of them.
+turned_label_reach :: proc(config: ^Config) -> (top, bottom: f32) {
+    if config.strobe_mode != .HARMONIC do return
+
+    label_height := pixel_fonts.band_label.size
+    if config.partial_labels != .NONE && config.strobe_shape != .WHEEL do top = TRACK_PARTIAL_INSET + label_height
+    if config.show_band_cents do bottom = TRACK_CENTS_INSET + label_height
+    return
 }
 
 // The top of a track's labels in the upright strobe, and on a wheel the middle of the label on its ring
@@ -555,6 +571,9 @@ strobe_tracks :: proc(
     stale := tracks_went_stale(self, lamp, mode)
     tracks.count = len(bands)
 
+    // The stripes start dark with the phase, a note that faded while another display showed would flash its last
+    if stale do self.band_visibility = {}
+
     for &band, band_index in bands {
         uniforms := &tracks.uniforms[band_index]
         uniforms^ = shared
@@ -574,8 +593,11 @@ strobe_tracks :: proc(
 
         uniforms.phase, uniforms.phase_step = track_phase(self, band, band_index, lock_in, lamp, stale, geometry.density, period_count)
 
-        gain := track_gain(bands, band_index, mode)
-        stripes_per_s := track_stripes_per_s(bands, band_index, mode, period_count, geometry.density)
+        gain := track_gain(bands, band_index, mode, lamp)
+
+        // Not the lamp's tracks, a partial too fast to follow smears on the screen and their own SNR fades them
+        stripes_per_s: f32 = 0
+        if !lamp do stripes_per_s = track_stripes_per_s(bands, band_index, mode, period_count, geometry.density)
 
         // Off the note the edges go soft, the stripes a sine before they fade. Squared, as the gain alone
         // still leaves an edge a few percent of a stripe wide where they're half faded.
@@ -583,8 +605,9 @@ strobe_tracks :: proc(
         frame_time := min(gfx.frame_time(), STROBE_MAX_FRAME_TIME_S)
         uniforms.visibility = update_band_visibility(self, &band, band_index, gain, stripes_per_s, frame_time)
 
-        // Without stripes the track looks the same whatever its phase, and doesn't change from frame to frame
-        if uniforms.visibility == 0 do uniforms.phase, uniforms.phase_step = 0, 0
+        // Without stripes the track looks the same whatever its phase and edges, and doesn't change from frame to
+        // frame: the gain follows the noise
+        if uniforms.visibility == 0 do uniforms.phase, uniforms.phase_step, uniforms.amp = 0, 0, 0
 
         selected := band_index == self.selected_track
         uniforms.highlight = self.selection if selected else 0
@@ -666,9 +689,12 @@ track_phase :: proc(
     return
 }
 
-// How much of a track's stripes is left off the note. Vernier tracks show the first one's measurement. The
-// lamp's tracks are as far off as the lock-in's.
-track_gain :: proc(bands: []core.PhaseBand, band_index: int, mode: core.StrobeMode) -> f32 {
+// How much of a track's stripes is left off the note. Vernier tracks show the first one's measurement. Not the
+// lamp's tracks, they show the screen as it is: it smears a partial off the note, and their own SNR fades them
+// with it, see core.strobe_lamp_bands.
+track_gain :: proc(bands: []core.PhaseBand, band_index: int, mode: core.StrobeMode, lamp: bool) -> f32 {
+    if lamp do return 1
+
     band := bands[band_index]
     if mode != .VERNIER do return narrow_band_gain(band.drift_cents)
 
@@ -679,7 +705,7 @@ track_gain :: proc(bands: []core.PhaseBand, band_index: int, mode: core.StrobeMo
 
 // How fast the track's own stripes, a period of the shader's sine, move. By the drift, the phase as measured,
 // averaged: the readout's rate holds on a weak partial while its phase still moves. Vernier tracks by the
-// first one's, at their own speed. The lamp's tracks move by the screen, about as fast.
+// first one's, at their own speed.
 track_stripes_per_s :: proc(
     bands: []core.PhaseBand,
     band_index: int,

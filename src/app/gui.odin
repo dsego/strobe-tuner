@@ -62,7 +62,7 @@ gui_takes_input :: proc() -> bool {
     return !gui.menu_open && !gui.disabled
 }
 
-// Warm neutral grays: the strobe and the panel under it one dark, the sheets over them lighter
+// Cool grays with a touch of blue: the strobe and the panel under it one dark, the sheets over them lighter
 sheet_bg_color: u32 = 0x40414AFF
 panel_bg_color: u32 = 0x15161AFF
 strobe_bg_color: u32 = 0x15161AFF
@@ -102,19 +102,21 @@ fade_color :: proc(color: gfx.Color, amount: f32) -> gfx.Color {
     return faded
 }
 
+// A finger's height, the touch area around a small control on the main screen taller than the control
+TOUCH_HEIGHT :: 44
+
 // The shown display's name and a caret after it, plain like the other controls on the main screen. A tap opens
 // the displays' menu under it, the settings' dropdown menu over the panel, and the one picked shows. Drawn after
 // the controls under it. pos is the left edge, vertically centred.
 gui_display_button :: proc(pos: [2]f32, type: ^StrobeDisplayType, open: ^bool) {
     CARET_GAP :: 4
-    TOUCH_HEIGHT :: 44
     MENU_WIDTH :: 140
     TOUCH_PAD :: 12 // past the label and the caret on each side
 
     labels := DISPLAY_LABELS
     label := labels[type^]
     label_width := measure_label(pixel_fonts.label, label, 1).x
-    draw_label(pixel_fonts.label, label, {pos.x, pos.y - 7}, text_color_light, 1)
+    draw_label(pixel_fonts.label, label, {pos.x, pos.y - LABEL_SIZE / 2}, text_color_light, 1)
     draw_icon(ICON_CARET_DOWN, {pos.x + label_width + CARET_GAP, pos.y - ICON_SIZE / 2}, icon_color)
 
     width := label_width + CARET_GAP + ICON_SIZE
@@ -127,9 +129,7 @@ gui_display_button :: proc(pos: [2]f32, type: ^StrobeDisplayType, open: ^bool) {
     open^ = dropdown_press(open^, touch, menu, true)
     if !open^ do return
 
-    names := DISPLAY_NAMES
-    options: [len(StrobeDisplayType)]GuiOption
-    for name, display in names do options[int(display)] = {i32(display), string(name)}
+    options := display_menu_options()
 
     // The press that opened it is the button's, the touch area reaches over the first option
     if picked, was_picked := draw_dropdown_menu(menu, options[:], nil); was_picked && was_open {
@@ -144,7 +144,6 @@ gui_display_button :: proc(pos: [2]f32, type: ^StrobeDisplayType, open: ^bool) {
 gui_lock_toggle :: proc(center: [2]f32, locked: bool) -> bool {
     LABEL :: "LOCK NOTE"
     PADDING :: 10
-    TOUCH_HEIGHT :: 44
 
     label_size := measure_label(pixel_fonts.label, LABEL, 1)
     width := label_size.x + 2 * PADDING

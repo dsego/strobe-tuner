@@ -233,7 +233,7 @@ run_case :: proc(test_case: Case) -> (result: Result) {
 
     detector := core.init_pitch_detector(test_case.pitch_standard)
     defer core.destroy_pitch_detector(&detector)
-    note_target := core.init_note_target(110, test_case.pitch_standard, true)
+    note_target := core.init_note_target(110, test_case.pitch_standard)
 
     intervals := INTERVALS
     strobe := core.init_strobe_lock_in(110, intervals[:], .HARMONIC)
@@ -297,7 +297,7 @@ run_noise_only :: proc(noise_snr_db: f32) -> (active_s: f32) {
 
     detector := core.init_pitch_detector()
     defer core.destroy_pitch_detector(&detector)
-    note_target := core.init_note_target(110, 440, true)
+    note_target := core.init_note_target(110, 440)
 
     for start := 0; start + FRAME_SAMPLES <= len(samples); start += FRAME_SAMPLES {
         core.audio_capture_write(&detector, samples[start:start + FRAME_SAMPLES])

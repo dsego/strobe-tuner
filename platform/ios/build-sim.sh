@@ -87,7 +87,6 @@ $CC -ObjC \
     -framework CoreVideo \
     -framework CoreMotion \
     -framework CoreHaptics \
-    -framework CoreBluetooth \
     -framework GameController \
     -framework OpenGLES \
     -framework UniformTypeIdentifiers \

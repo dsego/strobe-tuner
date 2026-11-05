@@ -69,8 +69,6 @@ KEY_CODES :: [Key]string {
     .ESCAPE        = "Escape",
     .G             = "KeyG",
     .H             = "KeyH",
-    .I             = "KeyI",
-    .W             = "KeyW",
     .NUM_0         = "Digit0",
     .NUM_1         = "Digit1",
     .NUM_2         = "Digit2",
@@ -336,13 +334,6 @@ frame_due :: proc() -> bool {
 begin_web_frame :: proc() {
     tick_clock()
     follow_canvas_size()
-}
-
-// The presses and the wheel the frame took
-clear_frame_input :: proc() {
-    input.keys_pressed = {}
-    input.mouse_clicked = false
-    input.wheel = 0
 }
 
 tick_clock :: proc() {

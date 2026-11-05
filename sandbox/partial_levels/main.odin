@@ -116,7 +116,7 @@ run_file :: proc(path: string, tables, all: ^Tables) {
 
     detector := core.init_pitch_detector(440, sample_rate)
     defer core.destroy_pitch_detector(&detector)
-    note_target := core.init_note_target(110, 440, true)
+    note_target := core.init_note_target(110, 440)
 
     intervals := INTERVALS
     strobe := core.init_strobe_lock_in(110, intervals[:], .HARMONIC, sample_rate)

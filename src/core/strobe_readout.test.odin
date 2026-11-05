@@ -82,7 +82,7 @@ test_readout_track :: proc(t: ^testing.T) {
     testing.expect_value(t, track, 0)
     testing.expect(t, ready)
 
-    // A twelfth isn't an octave, it never reads out however loud
+    // A twelfth isn't an octave, it never reads out however loud, not even with the fundamental under its noise
     set_strobe_lock_in_tracks(self, {1, 3}, {0, 0}, {1, 1})
     set_strobe_lock_in_freq(self, 123.47, 440, 0.01, 2, .HARMONIC)
     for &band, index in self.bands {
@@ -93,6 +93,10 @@ test_readout_track :: proc(t: ^testing.T) {
     }
     track, _ = strobe_readout_track(self, -1)
     testing.expect_value(t, track, 0)
+
+    self.bands[0].snr_db = 10
+    track, _ = strobe_readout_track(self, -1)
+    testing.expect_value(t, track, -1)
 
     // The 2nd partial chosen reads out though the fundamental is louder, the loudest while it's under its noise
     set_strobe_lock_in_tracks(self, {1, 2, 4}, {0, 0, 0}, {1, 1, 1})

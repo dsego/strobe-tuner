@@ -85,7 +85,7 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
     sheet := &sheets.settings
     if sheet.slide == SHEET_DOWN do return
 
-    // The display's options page has rows of its own, the strobe's more than the settings
+    // The display's options page has rows of its own, the sheet stays as tall as the settings' for fewer
     rows := SETTINGS_ROWS
     if sheets.display_options {
         option_rows := DISPLAY_OPTION_ROWS
@@ -93,8 +93,8 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
     }
 
     sheet_layout, swiped := begin_sheet(sheet, rows, layout)
-    close, changed := gui_settings(sheet_layout, app.config, &sheets.display_options, &sheets.reset_confirm, &sheets.open_dropdown)
-    if changed do app.config_changed = true
+    close, changes := gui_settings(sheet_layout, app.config, &sheets.display_options, &sheets.reset_confirm, &sheets.open_dropdown)
+    app.config_changes += changes
 
     grab_sheet(sheet, sheet_layout)
 
@@ -115,8 +115,8 @@ draw_track_sheet :: proc(app: ^App, layout: Layout) {
     bands := app.measurement.strobe_lock_in.bands[:]
     sheet_layout, swiped := begin_sheet(sheet, TRACK_SETTINGS_ROWS, layout)
     sheets.selected_track = min(sheets.selected_track, len(bands) - 1)
-    close, changed := gui_track_settings(sheet_layout, config, sheets.selected_track, bands[sheets.selected_track])
-    if changed do app.config_changed = true
+    close, changes := gui_track_settings(sheet_layout, config, sheets.selected_track, bands[sheets.selected_track])
+    app.config_changes += changes
 
     grab_sheet(sheet, sheet_layout)
 
@@ -145,7 +145,7 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
     }
     close, changed := gui_instrument(sheet_layout, app.config, &sheets.open_dropdown, target)
     if changed {
-        app.config_changed = true
+        app.config_changes += {.RETUNE}
 
         // Other notes on the ruler, it starts again on the target
         note_ruler.initialized = false

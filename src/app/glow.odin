@@ -97,7 +97,7 @@ blur_render_targets :: proc(rts: [2]gfx.RenderTarget, iterations: int, tap_spaci
     dest := gfx.Rect{0, 0, size.x, size.y}
 
     uniforms := gfx.BloomUniforms {
-        mode = 1,
+        mode = .BLUR,
     }
     for _ in 0 ..< iterations {
         uniforms.texel_step = {tap_spacing / size.x, 0}
@@ -124,7 +124,7 @@ render_bloom :: proc(self: ^GlowTargets) {
     // Downsample and keep the bright parts
     scene_size := gfx.render_target_size(self.scene_rt)
     uniforms := gfx.BloomUniforms {
-        mode       = 0,
+        mode       = .DOWNSAMPLE,
         texel_step = 1.0 / scene_size,
     }
     gfx.set_shader_uniforms(.BLOOM, &uniforms)

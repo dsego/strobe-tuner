@@ -30,9 +30,10 @@ StrobeLamp :: struct {
 // The lock-in's tracks turned by the lamp instead, the strobe the other way: a DFT bin of the scope's
 // screen from above (scope_partials) for each track's partial, instead of its DFT on the samples. They turn
 // like the tracks: by the bin's phase advance, rescaled so all notes spin at the same rate per cent, times
-// the track's speed, and stand still at its partial's target, offset included. The screen's quirks show, a
-// pluck or a weak partial can make the stripes jump. A copy for drawing until the next frame, its DFTs are
-// the lock-in's own. The phases between frames are kept in self.
+// the track's speed, and stand still at its partial's target, offset included. They fade by the lamp's own
+// SNR, the bin over the screen's noise. The screen's quirks show, a pluck or a weak partial can make the
+// stripes jump. A copy for drawing until the next frame, its DFTs are the lock-in's own. The phases between
+// frames are kept in self.
 strobe_lamp_bands :: proc(
     self: ^StrobeLamp,
     scope: ^Scope,
@@ -66,9 +67,11 @@ strobe_lamp_bands :: proc(
         self.phases[index] = partial.phase
         if !band.in_range do continue
 
-        // The screen remembers a note after it fades into the room's noise, the signal's SNR fades it out
+        // What the stripes fade by, the lock-in's envelope SNR replaced. The screen remembers a note after it
+        // fades into the room's noise, the signal's SNR fades it out.
         level := max(partial.level, 1e-9)
         band.snr_db = min(f32(20 * math.log10(level / noise)), signal_snr_db)
+        band.envelope_snr_db = band.snr_db
 
         // As run_phase_detection does it, the shortest way from the previous frame's phase. On the target
         // the partial drifts on the screen by how far it is from the bin.

@@ -34,19 +34,19 @@
     the average: the noise cancels out, faded on the screen it showed as a bundle of strands. A still line
     in the cells shows their steps.
 
-    The views draw what they're given: the screen as it is, or the screen from above (scope_from_above),
-    the height of the beam in each column as a brightness. That's the classic strobe, stripes that wash
-    out to gray when the beam smears.
+    The scope view draws the line, scope_trace. The lamp and its tracks read the screen from above
+    (scope_from_above), the height of the beam in each column as a brightness. That's the classic strobe,
+    stripes that wash out to gray when the beam smears.
 
     The input as it comes, a highpass would shift the fundamental against the harmonics, tilt the flat
     top of a square wave and bend a sawtooth. Only the DC is taken out, like the AC coupling of an
     oscilloscope.
 
-    The low-pass of the scope view: two running averages, each over a twelfth of the reference period,
-    take out the fine wiggles of the high partials and the hiss and keep the first few partials. Every
-    partial is delayed the same, the shape stays, and the beam is drawn as much earlier, so the picture
+    The low-pass of the scope view and the lamp: two running averages, each over a twelfth of the reference
+    period, take out the fine wiggles of the high partials and the hiss and keep the first few partials.
+    Every partial is delayed the same, the shape stays, and the beam is drawn as much earlier, so the picture
     doesn't move when it's turned on. It cancels the 12th partial and its multiples exactly, the 3rd keeps
-    81% and the 6th 41%. The lamp and its tracks take the wave as it comes.
+    81% and the 6th 41%. The lamp's tracks take the wave as it comes, their upper partials would fade.
 
     Circle: the sweep goes round instead of across, the same two reference periods a turn, anticlockwise
     from the top, the wave out from a ring halfway at its zero, its crests to the outside and its troughs
@@ -72,25 +72,26 @@ SCOPE_MAX_FADE_GAIN :: 1e15 // divided back into the cells at this, far under an
 SCOPE_SWEEP_MAX_SAMPLES :: 24576 // kept for the newest sweep, two periods of a 16 Hz note at 192 kHz
 SCOPE_CURVE_SAMPLES :: 3 // the beam's curve to a sample runs through this many before it, see move_beam
 
-// Fill's peak is held over at least this many periods, Medium's: scaled to one sweep's own peak the picture
-// would shake as the partials beat against each other, see follow_screen_peak
-SCOPE_FILL_MIN_PERIODS :: 18
-// and its level glides down to a lower peak over this, a step would jump the picture, see follow_level
-SCOPE_FILL_RELEASE_S :: #config(SCOPE_FILL_RELEASE_S, 0.06)
+// The input's peak is held over at least this many periods, Medium's: scaled to one sweep's own peak the
+// picture would shake as the partials beat against each other, see follow_screen_peak
+SCOPE_PEAK_MIN_PERIODS :: 18
+// and glides down to a lower peak over this, a step would jump the picture, see follow_level
+SCOPE_PEAK_RELEASE_S :: #config(SCOPE_PEAK_RELEASE_S, 0.06)
 
-// The averaged scope's scale is set over this many periods after a note starts and then held, see
-// autoset_scope
-SCOPE_AUTOSET_PERIODS :: #config(SCOPE_AUTOSET_PERIODS, 18)
-// A note louder than the scale was set to runs off the screen up to this many times the full height, further
-// off it isn't seen anyway
+// The screen is as high as the input is loud, on a dB scale: a peak this loud fills it, see SCOPE_FILL, and
+// one SCOPE_LOUDNESS_RANGE_DB quieter draws flat. A hum shows about half as high as a note sung out, and a
+// fading note shrinks as it fades, see loudness_level.
+SCOPE_LOUD_DBFS :: #config(SCOPE_LOUD_DBFS, -6)
+SCOPE_LOUDNESS_RANGE_DB :: #config(SCOPE_LOUDNESS_RANGE_DB, 48)
+// Quieter still, the screen keeps this much of its height, the level never divides by nothing
+SCOPE_MIN_HEIGHT :: 0.01
+
+// A note louder than the level has caught up with runs off the screen up to this many times the full height,
+// further off it isn't seen anyway
 SCOPE_MAX_OVERSHOOT :: 2
 
-// Fill's level is the peak of what the screen shows, kept as the peaks of this many blocks of it
+// The input's peak is kept as the peaks of this many blocks of the screen's window
 SCOPE_PEAK_BLOCKS :: 16
-SCOPE_MIN_LEVEL :: 0.001 // -60 dBFS, digital silence isn't scaled up to the full height
-// 26 dB, the level stays this far above the background noise's RMS while there's no note, and lets go of it
-// as a note comes out of the noise, see sweep_samples
-SCOPE_NOISE_HEADROOM :: 20
 
 // The corner of the AC coupling, the flat top of an A4 square wave sags under 2%, a low E's under 10%
 SCOPE_AC_COUPLING_HZ :: 2
@@ -135,7 +136,7 @@ Scope :: struct {
     using node:          AudioCaptureNode,
     freq_hz:             f64,
     sweep:               ScopeSweep,
-    lowpass:             bool, // the scope view's, see the top of the file
+    lowpass:             bool, // the scope view's or the lamp's, see the top of the file
     lowpass_filter:      ScopeLowpass,
 
     // How long the beam stays on the screen, the time constant of its decay. 0 keeps the newest sweep
@@ -157,10 +158,6 @@ Scope :: struct {
     // average_samples. A bin as wide as a sample moves, the sum of the samples there and of their weights,
     // scaled up by average_gain like the screen's cells by fade_gain.
     average_sweeps:      bool,
-    // Every sweep as loud, divided by its RMS: a tremolo or a decaying note stays the same size, see
-    // average_samples
-    uniform_gain:        bool,
-    sweep_scale:         f32, // the sweep being averaged's
     average_sums:        []f32,
     average_weights:     []f32,
     average_bins:        int,
@@ -168,25 +165,21 @@ Scope :: struct {
     averaged_clock:      i64, // the samples before it are in the average, see average_samples
     restart_average:     bool, // it starts over with the samples that come in next
     averaged_sweep:      i64, // the one the newest of them is in
-    autoset_samples:     i64, // left until the averaged scope's scale is held, see autoset_scope
     columns:             int,
     rows:                int,
     recent:              [3]f32, // the samples before the newest, the beam is drawn through them
     beam_restart:        bool, // recent is from before a gap, the beam starts over on the next sample
-    level:               f32, // peak level of the input
-    fill_release:        f32, // what Fill's level glides down by a sample, see follow_level
+    level:               f32, // what the screen's height is scaled to, see follow_level
+    peak:                f32, // the input's, held over the screen's window
+    peak_release:        f32, // what the peak glides down by a sample
 
-    // Fill's, see follow_screen_peak
+    // The peak's blocks, see follow_screen_peak
     block_peaks:         [SCOPE_PEAK_BLOCKS]f32,
     screen_peaks:        [2]f32, // of the blocks, the highest and the highest but one
     block_peak:          f32, // of the newest block as far as it came in
     block_samples:       int, // of the newest block, it's done at block_length
     block_length:        int,
     next_block:          int,
-    // The RMS of the background noise, the room's hiss stays low on the screen instead of filling it, and
-    // how far the input is over it
-    noise_floor:         f32,
-    snr_db:              f32,
     chunk:               []f32,
     coupling:            [2]f32, // the previous input and output of the AC coupling
     skipping:            bool, // nothing shows the screen, see skip_scope
@@ -214,7 +207,7 @@ init_scope :: proc(columns, rows: int, sample_rate: f32 = DEFAULT_SAMPLE_RATE) -
     self.history = make([]f32, SCOPE_SWEEP_MAX_SAMPLES)
     self.average_sums = make([]f32, SCOPE_SWEEP_MAX_SAMPLES)
     self.average_weights = make([]f32, SCOPE_SWEEP_MAX_SAMPLES)
-    self.level = SCOPE_MIN_LEVEL
+    self.level = loudness_level(0)
     self.fade_gain = 1
     self.average_gain = 1
 
@@ -241,9 +234,8 @@ destroy_scope :: proc(self: ^Scope) {
     for &dft in self.noise_dfts do destroy_dft(&dft)
 }
 
-// Starts with a dark screen at the new reference frequency, and with autoset on a scale set again, see
-// autoset_scope
-set_scope_freq :: proc(self: ^Scope, freq_hz: f64, autoset := true) {
+// Starts with a dark screen at the new reference frequency
+set_scope_freq :: proc(self: ^Scope, freq_hz: f64) {
     self.freq_hz = freq_hz
     self.step = freq_hz / (f64(self.sample_rate) * SCOPE_PERIODS)
 
@@ -254,43 +246,6 @@ set_scope_freq :: proc(self: ^Scope, freq_hz: f64, autoset := true) {
     self.average_bins = clamp(int(1 / self.step) if self.step > 0 else 1, SCOPE_CURVE_SAMPLES + 1, SCOPE_SWEEP_MAX_SAMPLES)
 
     clear_scope(self)
-    if autoset do autoset_scope(self)
-}
-
-// A note started, an attack or a note lit from silence: the averaged scope's scale follows the average's peak
-// for SCOPE_AUTOSET_PERIODS and is then held like an oscilloscope's after its Autoset, until the next one. The
-// note decays on the screen and shrinks into the noise, nothing scales its weak tail up. The click of the
-// pluck is short and doesn't repeat, by the window's end the average has let go of it.
-autoset_scope :: proc(self: ^Scope) {
-    if self.freq_hz <= 0 do return
-
-    self.autoset_samples = i64(SCOPE_AUTOSET_PERIODS / self.freq_hz * f64(self.sample_rate))
-}
-
-// The scale is still being set, see autoset_scope
-scope_autosetting :: proc(self: ^Scope) -> bool {
-    return self.autoset_samples > 0
-}
-
-// An attack on the whole input, its level jumping ONSET_RATIO over its envelope like a track's onset, see
-// update_onset: a pluck, a tongued note, a bow's bite. The input never starts over like the strobe's tracks
-// when the strobe moves to another note, their first loud frame is them catching up with a note already
-// ringing. Nor does it move with a dying note's strobe handing over to its 2nd partial an octave up.
-InputAttack :: struct {
-    envelope: f32,
-}
-
-// Whether level, the input's RMS dt seconds after the last one, jumped over it lately. loud is a level clear of
-// the noise, the noise's own swings aren't attacks.
-input_attack :: proc(self: ^InputAttack, level: f32, loud: bool, dt: f32) -> bool {
-    if loud && level > ONSET_RATIO * self.envelope {
-        self.envelope = level
-        return true
-    }
-
-    alpha := 1 - math.exp(-dt / ONSET_ENVELOPE_TIME_S)
-    self.envelope += alpha * (level - self.envelope)
-    return false
 }
 
 // The input opened at another rate, the beam moves across by its samples. It starts over on a dark screen,
@@ -307,7 +262,7 @@ set_scope_sample_rate :: proc(self: ^Scope, sample_rate: f32) {
 reset_scope :: proc(self: ^Scope) {
     clear_scope(self)
     restart_beam(self)
-    self.level = 0
+    self.level, self.peak = loudness_level(0), 0
     self.block_peaks, self.screen_peaks, self.block_peak = {}, {}, 0
 }
 
@@ -318,7 +273,7 @@ clear_scope :: proc(self: ^Scope) {
     slice.zero(self.average_weights[:self.average_bins])
     self.average_gain = 1
     self.restart_average = true
-    self.averaged_sweep = min(i64) // the next one is new, its uniform gain worked out too
+    self.averaged_sweep = min(i64) // the next one is new
 }
 
 clear_screen :: proc(self: ^Scope) {
@@ -410,7 +365,7 @@ skip_scope :: proc(self: ^Scope) {
 // by 1 / decay a sample and the cells hold their light times it. The screen's readers take ratios of cells,
 // where it cancels out. Before it outgrows the cells it's divided back into them.
 sweep_samples :: proc(self: ^Scope, samples: []f32) {
-    clock, min_level, ok := begin_samples(self, samples)
+    clock, ok := begin_samples(self, samples)
     if !ok do return
 
     // Of one sample
@@ -418,7 +373,7 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
     if self.persistence_s > 0 do decay = math.exp(-1 / (self.persistence_s * f64(self.sample_rate)))
 
     for sample, index in samples {
-        follow_level(self, sample, min_level)
+        follow_level(self, sample)
         self.fade_gain /= decay
 
         // Divided back in as soon as it's too large, a chunk long against a short persistence would outgrow
@@ -442,31 +397,27 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
 // behind the newest sample had this sweep's and the ones ahead of it only the sweep before's, the line
 // stepped there, and the step walked to another place every frame.
 average_samples :: proc(self: ^Scope, samples: []f32) {
-    add_to_bin :: proc(self: ^Scope, bin: int, sample, weight: f32) {
-        self.average_sums[bin] += sample * weight
-        self.average_weights[bin] += weight
-    }
-
-    clock, min_level, ok := begin_samples(self, samples)
+    clock, ok := begin_samples(self, samples)
     if !ok do return
 
     // There's no beam to start over, only the low-pass did. Left on, it started over with every chunk and
     // the line twitched.
     self.beam_restart = false
 
+    // By the input's loudness like the lamp's, the average's peak is under the input's, it leaves the noise out
+    for sample in samples do follow_level(self, sample)
     keep_samples(self, samples)
 
-    // The clock of the first sample in a sweep
-    first_in :: proc(self: ^Scope, sweep: f64) -> i64 {
-        return i64(math.ceil(sweep / self.step))
-    }
+    newest := clock + i64(len(samples)) - 1
+    from, sweep_start := sweeps_to_average(self, clock, newest)
+    fold_into_average(self, newest, from, sweep_start)
+}
 
-    // The sample kept at a clock, the newest one's is newest
-    kept :: proc(self: ^Scope, newest, sample_clock: i64) -> f32 {
-        before_newest := int(newest - sample_clock)
-        return self.history[(self.history_next - 1 - before_newest + 2 * len(self.history)) % len(self.history)]
-    }
-
+// The kept samples to add, from from up to where the sweep the newest sample is in started. From the oldest
+// sample kept, and from where a sweep starts too: where the average left off is partway into a sweep after
+// the reference changed, and so is the oldest sample kept after a gap. Started there, the bins before it
+// stayed empty and the ones after it had a part of a sweep more, the line stepped there.
+sweeps_to_average :: proc(self: ^Scope, clock, newest: i64) -> (from, sweep_start: i64) {
     // Started over, from these samples once the low-pass has filled again, it started over with the
     // reference. The ones kept from before went through it at the old reference and are placed by its delay
     // then, the sweep they were in stepped where they end.
@@ -476,45 +427,32 @@ average_samples :: proc(self: ^Scope, samples: []f32) {
         self.averaged_clock = clock + settle
     }
 
-    // Up to where the sweep the newest sample is in started, from the oldest sample kept. From where a sweep
-    // starts too: where the average left off is partway into a sweep after the reference changed, and so is
-    // the oldest sample kept after a gap. Started there, the bins before it stayed empty and the ones after
-    // it had a part of a sweep more, the line stepped there.
-    newest := clock + i64(len(samples)) - 1
-    sweep_start := first_in(self, math.floor(f64(newest) * self.step))
-    from := max(self.averaged_clock, newest - i64(self.history_count) + 1)
-    if first_in(self, math.floor(f64(from) * self.step)) < from do from = first_in(self, math.floor(f64(from) * self.step) + 1)
-    self.averaged_clock = max(self.averaged_clock, sweep_start)
+    sweep_start = first_clock_in_sweep(self, math.floor(f64(newest) * self.step))
+    from = max(self.averaged_clock, newest - i64(self.history_count) + 1)
+    from_sweep := math.floor(f64(from) * self.step)
+    if first_clock_in_sweep(self, from_sweep) < from do from = first_clock_in_sweep(self, from_sweep + 1)
 
+    self.averaged_clock = max(self.averaged_clock, sweep_start)
+    return
+}
+
+// The kept samples from from to before sweep_start into the average, each into the two bins around its place
+// across the sweep
+fold_into_average :: proc(self: ^Scope, newest, from, sweep_start: i64) {
     // Of one sweep. All of a sweep's samples weigh the same: faded by the sample, its end weighed more than
     // its start, and the first bin, which takes from both, was bent toward the end.
     decay := math.exp(-1 / (self.step * self.persistence_s * f64(self.sample_rate)))
 
     bins := self.average_bins
     for sample_clock in from ..< sweep_start {
-        sample := kept(self, newest, sample_clock)
+        sample := kept_sample(self, newest, sample_clock)
 
         position := f64(sample_clock) * self.step
         sweep := i64(math.floor(position))
         if sweep != self.averaged_sweep {
             self.averaged_sweep = sweep
             self.average_gain /= decay
-
-            // Uniform, the sweep divided by its RMS, never by less than the noise's floor: silence and the room's
-            // hiss stay small. The RMS is the partials' loudness, as they slide against each other the wave's
-            // peak moves and it doesn't, the picture doesn't vibrate.
-            if self.uniform_gain {
-                end := first_in(self, f64(sweep + 1))
-                total: f64 = 0
-                for clock_in in sample_clock ..< end {
-                    value := f64(kept(self, newest, clock_in))
-                    total += value * value
-                }
-                rms := f32(math.sqrt(total / f64(max(end - sample_clock, 1))))
-                self.sweep_scale = 1 / max(rms, min_level)
-            }
         }
-        if self.uniform_gain do sample *= self.sweep_scale
 
         // Divided back in as soon as it's too large, see sweep_samples
         if self.average_gain > SCOPE_MAX_FADE_GAIN {
@@ -527,32 +465,33 @@ average_samples :: proc(self: ^Scope, samples: []f32) {
         bin := (position - math.floor(position)) * f64(bins)
         left := int(bin)
         right_share := f32(bin - f64(left))
-        add_to_bin(self, left % bins, sample, f32(self.average_gain) * (1 - right_share))
-        add_to_bin(self, (left + 1) % bins, sample, f32(self.average_gain) * right_share)
+        add_to_average_bin(self, left % bins, sample, f32(self.average_gain) * (1 - right_share))
+        add_to_average_bin(self, (left + 1) % bins, sample, f32(self.average_gain) * right_share)
     }
+}
 
-    // While it's set, scaled to the average's own peak as it is, what's drawn: the input's held the click
-    // of a pluck and the noise the average leaves out, and the wave dipped under it. The average changes
-    // smoothly, the scale with it. Then held, never under the noise's floor.
-    if self.autoset_samples > 0 {
-        peak: f32 = 0
-        for weight, bin in self.average_weights[:bins] {
-            if weight > 0 do peak = max(peak, abs(self.average_sums[bin] / weight))
-        }
-        self.level = peak
-        self.autoset_samples -= i64(len(samples))
-    }
+// The clock of the first sample in a sweep
+first_clock_in_sweep :: proc(self: ^Scope, sweep: f64) -> i64 {
+    return i64(math.ceil(sweep / self.step))
+}
 
-    // Uniform, the average is in RMS, a note's peak is at least 1, the noise under its floor stays small
-    self.level = max(self.level, 1 if self.uniform_gain else min_level)
+// The sample kept at a clock, the newest one's is newest
+kept_sample :: proc(self: ^Scope, newest, sample_clock: i64) -> f32 {
+    before_newest := int(newest - sample_clock)
+    return self.history[(self.history_next - 1 - before_newest + 2 * len(self.history)) % len(self.history)]
+}
+
+add_to_average_bin :: proc(self: ^Scope, bin: int, sample, weight: f32) {
+    self.average_sums[bin] += sample * weight
+    self.average_weights[bin] += weight
 }
 
 // Keeps the samples for redraw_newest_sweep instead of drawing them, with the level followed the same
 record_samples :: proc(self: ^Scope, samples: []f32) {
-    _, min_level, ok := begin_samples(self, samples)
+    _, ok := begin_samples(self, samples)
     if !ok do return
 
-    for sample in samples do follow_level(self, sample, min_level)
+    for sample in samples do follow_level(self, sample)
 
     keep_samples(self, samples)
 }
@@ -699,49 +638,51 @@ newest_sweep :: proc(self: ^Scope) -> (start, count: int, clock: i64, ok: bool) 
     if count <= SCOPE_CURVE_SAMPLES do return
 
     start = (self.history_next - count + len(self.history)) % len(self.history)
-
-    // The low-pass's output is the input this many samples before
-    clock = self.sample_clock - i64(count)
-    if self.lowpass do clock -= i64(self.lowpass_filter.length - 1)
+    clock = self.sample_clock - i64(count) - lowpass_delay(self)
     return start, count, clock, true
+}
+
+// The low-pass's output is the input this many samples before
+lowpass_delay :: proc(self: ^Scope) -> i64 {
+    return i64(self.lowpass_filter.length - 1) if self.lowpass else 0
 }
 
 history_sample :: proc(self: ^Scope, start, offset: int) -> f32 {
     return self.history[(start + offset) % len(self.history)]
 }
 
-// The bookkeeping of a chunk of samples ahead of the beam: the clock runs on, Fill's window and the level's
-// floor. Returns the clock of the first sample as it's drawn, and false for nothing to draw.
-begin_samples :: proc(self: ^Scope, samples: []f32) -> (clock: i64, min_level: f32, ok: bool) {
+// The bookkeeping of a chunk of samples ahead of the beam: the clock runs on, and the window the input's peak
+// is held over. Returns the clock of the first sample as it's drawn, and false for nothing to draw.
+begin_samples :: proc(self: ^Scope, samples: []f32) -> (clock: i64, ok: bool) {
     self.sample_clock += i64(len(samples))
     if self.step <= 0 || len(samples) == 0 do return
 
-    // Fill's window, what the screen shows: the persistence, and at least SCOPE_FILL_MIN_PERIODS
-    window := max(SCOPE_FILL_MIN_PERIODS / SCOPE_PERIODS / self.step, self.persistence_s * f64(self.sample_rate))
+    // What the screen shows: the persistence, and at least SCOPE_PEAK_MIN_PERIODS
+    window := max(SCOPE_PEAK_MIN_PERIODS / SCOPE_PERIODS / self.step, self.persistence_s * f64(self.sample_rate))
     self.block_length = max(int(math.round(window / SCOPE_PEAK_BLOCKS)), 1)
-    self.fill_release = f32(math.exp(-1 / (SCOPE_FILL_RELEASE_S * f64(self.sample_rate))))
+    self.peak_release = f32(math.exp(-1 / (SCOPE_PEAK_RELEASE_S * f64(self.sample_rate))))
 
-    // The low-pass's output is the input this many samples before
-    clock = self.sample_clock - i64(len(samples))
-    if self.lowpass do clock -= i64(self.lowpass_filter.length - 1)
-
-    // Over the noise by the headroom while there's no note, the room's hiss stays small. A note lets go of it
-    // as it comes out of the noise, the beam fades in over the same SNR, and a fading note fills the screen
-    // until it fades into the noise.
-    fade := STROBE_FADE_SNR_DB
-    headroom := math.pow(f32(SCOPE_NOISE_HEADROOM), 1 - math.smoothstep(fade[0], fade[1], self.snr_db))
-    min_level = max(self.noise_floor * headroom, SCOPE_MIN_LEVEL)
-    return clock, min_level, true
+    clock = self.sample_clock - i64(len(samples)) - lowpass_delay(self)
+    return clock, true
 }
 
-// The level the screen's height is scaled to, every note fills the screen until it fades into the noise,
-// with the newest sample and never under the floor. It's up at once, the wave would clip, and glides down
-// to a lower peak, a step would jump the picture.
-follow_level :: proc(self: ^Scope, sample, min_level: f32) {
-    self.level = max(follow_screen_peak(self, abs(sample)), self.level * self.fill_release, min_level)
+// The level the screen's height is scaled to, by the input's peak with the newest sample, see loudness_level.
+// The peak is up at once, the wave would clip, and glides down, a step would jump the picture.
+follow_level :: proc(self: ^Scope, sample: f32) {
+    self.peak = max(follow_screen_peak(self, abs(sample)), self.peak * self.peak_release)
+    self.level = loudness_level(self.peak)
 }
 
-// The crest height a note sustains over the screen, Fill's envelope, with the newest sample. A note's peak
+// The level a peak is drawn at: SCOPE_LOUD_DBFS and louder fills the screen, every dB quieter is a step
+// lower, down to flat SCOPE_LOUDNESS_RANGE_DB under it. One gain for the whole screen, the wave keeps its
+// shape and only its size follows how loud it is.
+loudness_level :: proc(peak: f32) -> f32 {
+    audible := max(peak, 1e-6)
+    height := 1 - (SCOPE_LOUD_DBFS - 20 * math.log10(audible)) / SCOPE_LOUDNESS_RANGE_DB
+    return audible / clamp(height, SCOPE_MIN_HEIGHT, 1)
+}
+
+// The crest height a note sustains over the screen, the input's peak, with the newest sample. A note's peak
 // isn't the same from period to period, its partials slide against each other and a string beats, scaled
 // to each sweep's own the copies on the screen would be drawn at different sizes and vibrate. A peak
 // decaying back would sag between the wave's crests and stretch the rest of the period. So the peaks are
@@ -880,8 +821,8 @@ beam_dot :: proc(self: ^Scope, position: f64, value: f32, brightness: f64) {
 sweep_point :: proc(self: ^Scope, position: f64, value: f32) -> [2]f64 {
     across := position - math.floor(position)
 
-    // The averaged scope's line runs off the screen, a note grown louder than its scale or the circle's crests
-    // up and down, see SCOPE_MAX_OVERSHOOT. The lamp's cells keep a crest over the level in the top row.
+    // The averaged scope's line runs off the screen, a note louder than the level has caught up with or the
+    // circle's crests up and down, see SCOPE_MAX_OVERSHOOT. The lamp's cells keep a crest over the level in the top row.
     reach: f32 = SCOPE_MAX_OVERSHOOT if self.average_sweeps else 1
     height := f64(clamp(value / self.level, -reach, reach))
 

@@ -180,8 +180,11 @@ run_harmonic_stack :: proc(
     // The short note stepped down in the bass transform, to a third or a half of it under HARMONICS_BASS_HZ: the
     // short one can't go there, and a low note's harmonics are too close together in it to step from. A B0 with a
     // weak fundamental in noise read B1 in every other detection, its B1 scoring as much as the B0 in the bass
-    // transform, and the short transform's own B1 15 to 30 dB. Only a strong one, like the bass note.
-    under := step_down_to_note(self.bass.peaks[:], short_freq, short_in_bass, lowest_hz, bass_top)
+    // transform, and the short transform's own B1 15 to 30 dB. Only a strong one, like the bass note. Only from
+    // a short note under bass_top: over it the bass transform has none of its harmonics, it scores nothing there
+    // and any bass peaks under it passed as its own.
+    under: f32
+    if short_freq < bass_top do under = step_down_to_note(self.bass.peaks[:], short_freq, short_in_bass, lowest_hz, bass_top)
     under_db, _ := score_stack(self.bass.peaks[:], under, bass_top)
     short_steps_under := under > 0 && under < HARMONICS_BASS_HZ && under_db >= HARMONICS_HIGH_DB
 

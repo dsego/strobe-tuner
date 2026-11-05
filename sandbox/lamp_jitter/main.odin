@@ -114,7 +114,7 @@ main :: proc() {
 
     detector := core.init_pitch_detector()
     defer core.destroy_pitch_detector(&detector)
-    note_target := core.init_note_target(110, 440, true)
+    note_target := core.init_note_target(110, 440)
 
     intervals := INTERVALS
     widths := BAND_WIDTHS_CENTS

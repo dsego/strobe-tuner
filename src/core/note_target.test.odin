@@ -27,13 +27,13 @@ GUITAR_STRINGS :: [?]int{-29, -24, -19, -14, -10, -5}
 @(test)
 test_note_target_switches_note :: proc(t: ^testing.T) {
     // 0.1 s is 3 detections 0.05 s apart
-    target := init_note_target(E2_HZ, 440, true, 0.1)
+    target := init_note_target(E2_HZ, 440, 0.1)
     testing.expect(t, !update_note_target(&target, test_detection(A2_HZ)))
     testing.expect(t, !update_note_target(&target, test_detection(A2_HZ)))
     testing.expect(t, update_note_target(&target, test_detection(A2_HZ)))
     testing.expect_value(t, target.target_note.name, 'A')
 
-    target = init_note_target(E2_HZ, 440, true, 0.1)
+    target = init_note_target(E2_HZ, 440, 0.1)
     update_note_target(&target, test_detection(A2_HZ))
     update_note_target(&target, test_detection(A2_HZ))
     update_note_target(&target, test_detection(A2_HZ, strong = false))
@@ -55,7 +55,7 @@ test_note_target_holds_between_notes :: proc(t: ^testing.T) {
     A :: -24
     B_FLAT :: -23
 
-    target := init_note_target(E2_HZ, 440, true, 0.1)
+    target := init_note_target(E2_HZ, 440, 0.1)
     hum(&target, 0)
     testing.expect_value(t, target.target_note.cents, A * 100)
 
@@ -78,7 +78,7 @@ test_note_target_holds_between_notes :: proc(t: ^testing.T) {
 
 @(test)
 test_note_target_steady_run :: proc(t: ^testing.T) {
-    target := init_note_target(E2_HZ, 440, true, 0.1)
+    target := init_note_target(E2_HZ, 440, 0.1)
     update_note_target(&target, test_medium_detection(A2_HZ))
     update_note_target(&target, test_medium_detection(freq_at_cents(A2_HZ, 1)))
     testing.expect(t, !target.active)
@@ -90,7 +90,7 @@ test_note_target_steady_run :: proc(t: ^testing.T) {
 // Concert A raised while a note sounds, the readout reads it against the new A at once
 @(test)
 test_note_target_pitch_standard :: proc(t: ^testing.T) {
-    target := init_note_target(A2_HZ, 440, true, 0)
+    target := init_note_target(A2_HZ, 440, 0)
     update_note_target(&target, test_detection(A2_HZ))
     testing.expect(t, abs(readout_pitch(&target).err_cents) < 0.01)
 
@@ -106,7 +106,7 @@ test_note_target_pitch_standard :: proc(t: ^testing.T) {
 // octave the strobe was on. After NOTE_HARMONIC_SWITCH_S, 0.1 s is 3 detections 0.05 s apart.
 @(test)
 test_note_target_follows_octave :: proc(t: ^testing.T) {
-    target := init_note_target(A2_HZ, 440, true, 0)
+    target := init_note_target(A2_HZ, 440, 0)
     update_note_target(&target, test_detection(A2_HZ))
 
     testing.expect(t, !update_note_target(&target, test_detection(A2_HZ / 2)))
@@ -123,7 +123,7 @@ test_note_target_follows_octave :: proc(t: ^testing.T) {
 // The strobe keeps a followed note lit when the detections turn weak, but doesn't light one
 @(test)
 test_note_target_strobe_keeps_note_lit :: proc(t: ^testing.T) {
-    target := init_note_target(A2_HZ, 440, true, 0)
+    target := init_note_target(A2_HZ, 440, 0)
     update_note_target(&target, test_detection(A2_HZ, strong = false), strobe_hears = true)
     testing.expect(t, !target.active)
     update_note_target(&target, test_detection(A2_HZ))
@@ -137,7 +137,7 @@ test_note_target_strobe_keeps_note_lit :: proc(t: ^testing.T) {
 // string.
 @(test)
 test_note_target_note_lock :: proc(t: ^testing.T) {
-    target := init_note_target(E2_HZ, 440, false, 0)
+    target := init_note_target(E2_HZ, 440, 0)
     update_note_target(&target, test_detection(E2_HZ))
     toggle_note_lock(&target)
     testing.expect(t, !out_of_range(&target))
@@ -155,7 +155,7 @@ test_note_target_note_lock :: proc(t: ^testing.T) {
 
     // Its readout doesn't follow a stray detection of another note, only one that's confirmed. 0.1 s is 3
     // detections 0.05 s apart.
-    stray := init_note_target(E2_HZ, 440, false, 0.1)
+    stray := init_note_target(E2_HZ, 440, 0.1)
     for _ in 0 ..< 3 do update_note_target(&stray, test_detection(E2_HZ))
     toggle_note_lock(&stray)
     update_note_target(&stray, test_detection(2 * E2_HZ))
@@ -176,7 +176,7 @@ test_note_target_note_lock :: proc(t: ^testing.T) {
 // The readout averages small wobbles, a bigger change jumps straight there
 @(test)
 test_note_target_readout_smoothing :: proc(t: ^testing.T) {
-    target := init_note_target(A2_HZ, 440, true, 0)
+    target := init_note_target(A2_HZ, 440, 0)
     update_note_target(&target, test_detection(A2_HZ))
     update_note_target(&target, test_detection(freq_at_cents(A2_HZ, 2)))
     steady := readout_pitch(&target)
@@ -189,7 +189,7 @@ test_note_target_readout_smoothing :: proc(t: ^testing.T) {
 // A note tuned 10 cents flat: the strobe is tuned there and the readout counts from there
 @(test)
 test_note_target_note_offset :: proc(t: ^testing.T) {
-    target := init_note_target(A2_HZ, 440, true, 0)
+    target := init_note_target(A2_HZ, 440, 0)
     a2_index, _ := note_index(target.target_note)
     target.offsets_cents[a2_index] = -10
     testing.expect(t, abs(target_freq(&target) - freq_at_cents(A2_HZ, -10)) < 0.001)
@@ -208,14 +208,14 @@ test_note_target_note_offset :: proc(t: ^testing.T) {
 @(test)
 test_note_target_strings :: proc(t: ^testing.T) {
     guitar := GUITAR_STRINGS
-    target := init_note_target(A3_HZ, 440, true, 0)
+    target := init_note_target(A3_HZ, 440, 0)
     testing.expect(t, set_target_strings(&target, guitar[:]))
     testing.expect_value(t, target.string_index, 3)
     testing.expect_value(t, target.target_note.name, 'G')
 
     // From every note the nearest string, not the low E an octave below or the nearer one by a semitone
     for start in ([][2]int{{-17, 2}, {-26, 1}}) {
-        chromatic := init_note_target(cents_to_note(f32(100 * start.x), 440).frequency, 440, true, 0)
+        chromatic := init_note_target(cents_to_note(f32(100 * start.x), 440).frequency, 440, 0)
         set_target_strings(&chromatic, guitar[:])
         testing.expect_value(t, chromatic.string_index, start.y)
     }
@@ -231,16 +231,17 @@ test_note_target_strings :: proc(t: ^testing.T) {
     update_note_target(&target, test_detection(103.83)) // G#2
     testing.expect_value(t, target.string_index, 1)
 
-    // The low E ringing an octave high is still the low E, read from that octave
+    // The low E ringing an octave high is still the low E, read from that octave. Confirmed, after
+    // NOTE_HARMONIC_SWITCH_S, 3 detections.
     update_note_target(&target, test_detection(E2_HZ))
-    update_note_target(&target, test_detection(2 * E2_HZ))
+    for _ in 0 ..< 3 do update_note_target(&target, test_detection(2 * E2_HZ))
     testing.expect_value(t, target.string_index, 0)
     steady = readout_pitch(&target)
     testing.expect(t, abs(steady.err_cents) < 0.1)
 
     // Another string's note isn't measured against the target string while it's held long enough to be the
     // target, then against its own string
-    held := init_note_target(A3_HZ, 440, true, 0.1)
+    held := init_note_target(A3_HZ, 440, 0.1)
     set_target_strings(&held, guitar[:])
     for _ in 0 ..< 3 do update_note_target(&held, test_detection(196.0)) // G3, the target
 
@@ -268,7 +269,7 @@ test_note_target_strings :: proc(t: ^testing.T) {
 test_note_target_string_steps :: proc(t: ^testing.T) {
     guitar := GUITAR_STRINGS
     drop_d := []int{-31, -24, -19, -14, -10, -5}
-    target := init_note_target(A3_HZ, 440, true, 0)
+    target := init_note_target(A3_HZ, 440, 0)
     set_target_strings(&target, drop_d)
     update_note_target(&target, test_detection(146.83)) // D3
     testing.expect_value(t, target.string_index, 2)

@@ -116,8 +116,6 @@ scancodes := [Key]sdl.Scancode {
     .ESCAPE      = .ESCAPE,
     .G           = .G,
     .H           = .H,
-    .I           = .I,
-    .W           = .W,
     .NUM_0       = ._0,
     .NUM_1       = ._1,
     .NUM_2       = ._2,
@@ -338,9 +336,7 @@ destroy_gpu :: proc() {
 }
 
 should_close :: proc() -> bool {
-    input.keys_pressed = {}
-    input.mouse_clicked = false
-    input.wheel = 0
+    clear_frame_input()
 
     event: sdl.Event
     live_resize.polling = true
@@ -471,9 +467,7 @@ draw_from_os_loop :: proc "c" () {
     live_resize.frame(live_resize.data)
     live_resize.resizing = false
 
-    input.keys_pressed = {}
-    input.mouse_clicked = false
-    input.wheel = 0
+    clear_frame_input()
 }
 
 // Uploads the frame's vertices, draws the render targets, then the window

@@ -24,28 +24,27 @@ import "core:math"
 //
 // A locked note stays, another note played is measured from it like a string, see out_of_range.
 NoteTarget :: struct {
-    target_note:          Note, // what the strobe is tuned to
-    detected_note:        Maybe(Note), // the last confirmed detection, none before the first
-    locked:               bool,
-    active:               bool, // a pitch is being followed, until the detections turn weak
-    pitch:                PitchInfo, // the latest detection
-    last_good_pitch:      PitchInfo, // the latest strong detection
-    steady_freq:          f32, // the strong detections averaged for the readout, 0 before the first
-    readout_smoothing_s:  f32, // steady_freq's time constant, READOUT_SMOOTHING_S, the Readout speed sets it
+    target_note:         Note, // what the strobe is tuned to
+    detected_note:       Maybe(Note), // the last confirmed detection, none before the first
+    locked:              bool,
+    active:              bool, // a pitch is being followed, until the detections turn weak
+    pitch:               PitchInfo, // the latest detection
+    last_good_pitch:     PitchInfo, // the latest strong detection
+    steady_freq:         f32, // the strong detections averaged for the readout, 0 before the first
+    readout_smoothing_s: f32, // steady_freq's time constant, READOUT_SMOOTHING_S, the Readout speed sets it
 
-    recognition:          NoteRecognition,
-    prevent_octave_jumps: bool,
+    recognition:         NoteRecognition,
 
     // Cents each note from A0 up is tuned off equal temperament, e.g. a ukulele's E a little flat so its
     // fretted chords sound right. The strobe and the readout follow, see note_offset_cents.
-    offsets_cents:        [NOTE_COUNT]f32,
+    offsets_cents:       [NOTE_COUNT]f32,
 
     // An instrument's strings in the order they're tuned, in semitones from A4, none for every note. The
     // target is always one of them, the nearest to the detected note or the one stepped to, and the
     // readout measures from it however far off the string is. See set_target_strings.
-    strings:              [MAX_STRINGS]int,
-    string_count:         int,
-    string_index:         int, // the target's
+    strings:             [MAX_STRINGS]int,
+    string_count:        int,
+    string_index:        int, // the target's
 }
 
 MAX_STRINGS :: 8 // an 8-string guitar, the built-in tunings go up to 7
@@ -54,15 +53,10 @@ MAX_STRINGS :: 8 // an 8-string guitar, the built-in tunings go up to 7
 // back, see update_note_target
 NOTE_HOLD_CENTS :: 60
 
-init_note_target :: proc(
-    target_freq_hz, pitch_standard: f32,
-    prevent_octave_jumps: bool,
-    confirm_s: f32 = NOTE_SWITCH_S,
-) -> NoteTarget {
+init_note_target :: proc(target_freq_hz, pitch_standard: f32, confirm_s: f32 = NOTE_SWITCH_S) -> NoteTarget {
     return {
         target_note = freq_to_note(target_freq_hz, pitch_standard),
         recognition = {confirm_s = confirm_s},
-        prevent_octave_jumps = prevent_octave_jumps,
         readout_smoothing_s = READOUT_SMOOTHING_S,
     }
 }
@@ -249,7 +243,7 @@ nearest_string :: proc(self: ^NoteTarget, note: Note) -> int {
     // In semitones, from the target string and from the nearest one
     from_target := abs(semitone - self.strings[self.string_index])
     from_nearest := abs(semitone - self.strings[best])
-    if self.prevent_octave_jumps && abs(from_target - 12) <= 1 && from_nearest > 1 do return self.string_index
+    if abs(from_target - 12) <= 1 && from_nearest > 1 do return self.string_index
 
     return best if from_target - from_nearest > 1 else self.string_index
 }
@@ -260,7 +254,7 @@ target_cents_off :: proc(self: ^NoteTarget, freq: f32) -> f32 {
     if freq <= 0 do return 0
 
     cents := cents_deviation(freq, target_freq(self))
-    if self.string_count > 0 && self.prevent_octave_jumps && abs(abs(cents) - 1200) < 100 {
+    if self.string_count > 0 && abs(abs(cents) - 1200) < 100 {
         cents -= 1200 if cents > 0 else -1200
     }
     return cents

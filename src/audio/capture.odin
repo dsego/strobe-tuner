@@ -33,6 +33,7 @@ import "../core"
 // Building for iOS, see platform/ios/build-sim.sh
 IOS :: #config(IOS, false)
 
+MACOS :: ODIN_OS == .Darwin && !IOS
 ANDROID :: ODIN_PLATFORM_SUBTARGET == .Android
 
 
@@ -342,18 +343,28 @@ allow_microphone :: proc() {
         if !sdl.SendAndroidMessage(OPEN_APP_SETTINGS, 0) {
             fmt.println("Couldn't open the app's settings:", sdl.GetError())
         }
+    } else when MACOS {
+        // The Mac has no page per app, the Microphone list in Privacy & Security
+        MICROPHONE_SETTINGS :: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        if !sdl.OpenURL(MICROPHONE_SETTINGS) do fmt.println("Couldn't open the microphone settings:", sdl.GetError())
     } else {
         if !sdl.OpenURL("app-settings:") do fmt.println("Couldn't open the app's settings:", sdl.GetError())
     }
 }
 
-// iOS gives a denied microphone a silent input, nothing fails
+// iOS and the Mac give a denied microphone a silent input, nothing fails
 microphone_denied :: proc() -> bool {
     when IOS {
         // AVAudioSessionRecordPermissionDenied, 'deny'
         DENIED :: 0x64656e79
         session := intrinsics.objc_send(^AVAudioSession, AVAudioSession, "sharedInstance")
         return intrinsics.objc_send(uint, session, "recordPermission") == DENIED
+    } else when MACOS {
+        // AVAuthorizationStatus, restricted by a parental control or a device profile is as silent
+        RESTRICTED :: 1
+        DENIED :: 2
+        status := intrinsics.objc_send(int, AVCaptureDevice, "authorizationStatusForMediaType:", AVMediaTypeAudio)
+        return status == RESTRICTED || status == DENIED
     } else when ANDROID {
         return intrinsics.atomic_load(&microphone_permission) == .DENIED
     } else {
@@ -435,6 +446,20 @@ when IOS {
             return false
         }
         return true
+    }
+}
+
+when MACOS {
+    @(objc_class = "AVCaptureDevice")
+    AVCaptureDevice :: struct {
+        using _: intrinsics.objc_object,
+    }
+
+    foreign import av_foundation "system:AVFoundation.framework"
+
+    foreign av_foundation {
+        // NSString, the media type whose permission is the microphone's
+        AVMediaTypeAudio: rawptr
     }
 }
 

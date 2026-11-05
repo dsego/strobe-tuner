@@ -43,11 +43,11 @@ NOTE_SWITCH_S :: 0.05
 // The latest detection this close to the one before is settled
 SETTLED_CENTS :: 5
 
-// A new note that's a harmonic or an undertone of the pitch followed is seen this long in a row before the
+// A new note that's a harmonic or an undertone of the confirmed note is seen this long in a row before the
 // strobe switches to it, a steady octave beats one that flips. For about 4 detections after a low note stepped
 // 55 cents the harmonic stack's bass window spans both and the note's own stack comes apart, its 5th harmonic
-// won, held still and was taken for the note: a B0 read D3 and then Bb0. A real octave or a fifth shows about
-// 50 ms later. E.g. -define:NOTE_HARMONIC_SWITCH_S=n
+// won, held still and was taken for the note: a B0 read D3 and then Bb0. A real octave or a twelfth shows about
+// 50 ms later, a fifth isn't a harmonic and doesn't wait. E.g. -define:NOTE_HARMONIC_SWITCH_S=n
 NOTE_HARMONIC_SWITCH_S :: #config(NOTE_HARMONIC_SWITCH_S, 0.1)
 
 // Whether the optional note is this note, by its cents from A4

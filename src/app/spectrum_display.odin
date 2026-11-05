@@ -393,7 +393,7 @@ spectrum_column_db :: proc(shown: []f32, from, to, floor: f32) -> f32 {
 }
 
 // The octaves' lines and the tracks' marks behind the curve, filled solid under it so they stay behind.
-// The curve like the trace's line, a soft glow under a thin line, both of anti-aliased dots.
+// The curve a thin line over a soft glow, both polylines.
 draw_spectrum_plot :: proc(plot: gfx.Rect, points: [][2]f32, octaves: []SpectrumOctave, line_color, band_color, background: gfx.Color) {
     grid := band_color
     grid.a = 70
