@@ -214,6 +214,9 @@ Config :: struct {
     // the scope's beam through the averaged sweeps, a solid line or an analog scope's phosphor, as bright as
     // the beam stays
     scope_beam:                   ScopeBeam,
+    // round the circle, the circle of a moment ago behind the newest, smaller and dimmer, see
+    // SCOPE_AFTERGLOW_SWEEPS
+    scope_afterglow:              bool,
 
     // Trace display: how many seconds it shows, and how many cents from the middle to its edges
     trace_seconds:                f32,
@@ -281,6 +284,7 @@ config_defaults :: Config {
     scope_lowpass                = true,
     scope_averaging_periods      = 18,
     scope_beam                   = .SOLID,
+    scope_afterglow              = true,
     trace_seconds                = 2,
     trace_range_cents            = 25,
     spectrum_windows             = 2,

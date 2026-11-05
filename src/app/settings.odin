@@ -33,7 +33,7 @@ SEGMENT_WIDTH :: 60
 SETTINGS_ROWS :: 7
 
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
-DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 6, .SCOPE = 4, .TRACE = 2, .LAMP = 3, .SPECTRUM = 4}
+DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 6, .SCOPE = 5, .TRACE = 2, .LAMP = 3, .SPECTRUM = 4}
 
 // For the longer labels of the display's options
 WIDE_SEGMENT_WIDTH :: 80
@@ -397,6 +397,10 @@ gui_scope_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
 
     // The averaged sweeps as a solid line or an analog scope's phosphor, bright where the beam lingers
     gui_settings_segmented(sheet_layout, &row, "Beam", {"Solid", "Phosphor"}, &config.scope_beam, WIDE_SEGMENT_WIDTH)
+
+    // The circle of a moment ago behind the newest, round the circle only
+    circle := config.scope_sweep == .CIRCLE
+    gui_settings_segmented(sheet_layout, &row, "Afterglow", {"Off", "On"}, &config.scope_afterglow, enabled = circle)
 }
 
 gui_trace_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
