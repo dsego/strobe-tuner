@@ -56,15 +56,6 @@ SCOPE_BLOOM_PASSES :: #config(SCOPE_BLOOM_PASSES, 3)
 SCOPE_DIVISIONS :: 8
 SCOPE_AXIS_PIXELS :: 2 // the line through zero
 
-// The circle's afterglow, the Afterglow setting: behind the newest line the circle as it was drawn
-// core.SCOPE_AFTERGLOW_PERIODS ago, core.SCOPE_AFTERGLOW_SWEEPS of them, each further back SCOPE_AFTERGLOW_SHRINK
-// times as big and SCOPE_AFTERGLOW_FADE times as bright. Each is the line from that long ago held at its size,
-// not one shrinking as it ages: an in tune note stands still as nested copies of itself, a detuned one turns them apart,
-// the older further round. All the same size they lay on each other and were hard to see. The website's Circle
-// pane draws the same.
-SCOPE_AFTERGLOW_SHRINK :: #config(SCOPE_AFTERGLOW_SHRINK, 0.94)
-SCOPE_AFTERGLOW_FADE :: 0.3 // 0.5 was too much
-
 // What the scope's and the lamp's views keep from one frame to the next
 ScopeDisplay :: struct {
     background:   gfx.Color,
@@ -97,7 +88,7 @@ draw_scope_display :: proc(self: ^ScopeDisplay, targets: ^GlowTargets, scope: ^c
     // The times under the graticule outside the glow, sharp
     if config.strobe_display_type == .SCOPE && config.strobe_glow {
         begin_glow(targets, rect, self.background)
-        draw_scope_screen(self, rect, scope, config.scope_beam, config.scope_afterglow, beam_color, dark_color)
+        draw_scope_screen(self, rect, scope, config.scope_beam, beam_color, dark_color)
         end_glow(targets, rect, SCOPE_BLOOM_PASSES)
         draw_scope_time_labels(rect, scope, self.background)
         return
@@ -113,7 +104,7 @@ draw_scope_display :: proc(self: ^ScopeDisplay, targets: ^GlowTargets, scope: ^c
         heights, dwell := core.scope_from_above(scope, config.lamp_shape)
         draw_lamp(rect, heights, scope.depths, dwell, config.lamp_shape, beam_color, dark_color)
     } else {
-        draw_scope_screen(self, rect, scope, config.scope_beam, config.scope_afterglow, beam_color, dark_color)
+        draw_scope_screen(self, rect, scope, config.scope_beam, beam_color, dark_color)
         draw_scope_time_labels(rect, scope, self.background)
     }
 }
@@ -125,7 +116,6 @@ draw_scope_screen :: proc(
     rect: gfx.Rect,
     scope: ^core.Scope,
     beam: ScopeBeam,
-    afterglow: bool,
     beam_color, grid_color: gfx.Color,
 ) {
     // The circle is round, on a square in the middle
@@ -156,7 +146,7 @@ draw_scope_screen :: proc(
         gfx.draw_rect({rect.x, rect.y + (rect.height - axis) / 2}, {rect.width, axis}, grid_color)
     }
 
-    draw_scope_trace(self, rect, scope, beam, afterglow, beam_color)
+    draw_scope_trace(self, rect, scope, beam, beam_color)
 }
 
 // The graticule's lines, width wide, SCOPE_DIVISIONS apart across and up. The middle one up is where the second
@@ -206,13 +196,11 @@ draw_scope_time_labels :: proc(rect: gfx.Rect, scope: ^core.Scope, background: g
 // see the top of the file. Solid, it's as bright all along. Phosphor, it's as bright as the beam stays like an
 // analog oscilloscope's: the points are as long apart in time, where they're further apart the beam moves
 // faster and is dimmer, the steep edges fade and the crests stay lit. A wide faint line under it glows.
-// Round the circle with the afterglow on, the circle as it was drawn before is behind it, see draw_afterglow.
 draw_scope_trace :: proc(
     self: ^ScopeDisplay,
     rect: gfx.Rect,
     scope: ^core.Scope,
     beam: ScopeBeam,
-    afterglow: bool,
     beam_color: gfx.Color,
 ) {
     // In pieces where the sweep over time starts over on the left
@@ -233,10 +221,8 @@ draw_scope_trace :: proc(
     resize(&self.trace_light, len(self.trace))
     place_trace(rect, scope, beam, self.trace[:], self.trace_light[:])
 
-    if afterglow && scope.sweep == .CIRCLE do draw_afterglow(self, rect, scope, beam, beam_color)
-
     // Solid, as bright all along. Round the circle the ends fade where they overlap. Dimmer is clearer, not
-    // darker: the ring, the graticule and the afterglow under it show through.
+    // darker: the ring and the graticule under it show through.
     if beam == .SOLID {
         for &color, index in self.trace_colors do color = fade_color(beam_color, self.trace_light[index])
         if scope.sweep == .CIRCLE do fade_circle_ends(self.trace_colors[:])
@@ -305,37 +291,6 @@ place_trace :: proc(rect: gfx.Rect, scope: ^core.Scope, beam: ScopeBeam, points:
 // Over time the line starts over on the left between these two points
 trace_wraps :: proc(rect: gfx.Rect, points: [][2]f32, from, to: int) -> bool {
     return abs(points[to].x - points[from].x) >= rect.width / 2
-}
-
-// The afterglow's sweeps, the oldest first so the newer are drawn over it, smaller and dimmer about the middle.
-// None where the scope has none, as when the note has only just come in. Phosphor, each glows under its line
-// like the newest. Dim as clear, the ring and the older sweeps show through, like the newest's.
-draw_afterglow :: proc(self: ^ScopeDisplay, rect: gfx.Rect, scope: ^core.Scope, beam: ScopeBeam, beam_color: gfx.Color) {
-    center := [2]f32{rect.x + rect.width / 2, rect.y + rect.height / 2}
-    points := make([dynamic][2]f32, context.temp_allocator)
-    for sweep := core.SCOPE_AFTERGLOW_SWEEPS; sweep >= 1; sweep -= 1 {
-        core.scope_afterglow_trace(scope, sweep, &points)
-        if len(points) < 2 do continue
-
-        light := make([]f32, len(points), context.temp_allocator)
-        place_trace(rect, scope, beam, points[:], light)
-
-        size := math.pow(f32(SCOPE_AFTERGLOW_SHRINK), f32(sweep))
-        brightness := math.pow(f32(SCOPE_AFTERGLOW_FADE), f32(sweep))
-        colors := make([]gfx.Color, len(points), context.temp_allocator)
-        for &point in points do point = center + size * (point - center)
-
-        if beam == .PHOSPHOR {
-            for &color, index in colors {
-                color = fade_color(beam_color, brightness * light[index] * SCOPE_GLOW)
-            }
-            fade_circle_ends(colors)
-            gfx.draw_soft_polyline(points[:], colors, SCOPE_GLOW_THICKNESS, 0.5 * SCOPE_GLOW_THICKNESS)
-        }
-        for &color, index in colors do color = fade_color(beam_color, brightness * light[index])
-        fade_circle_ends(colors)
-        gfx.draw_soft_polyline(points[:], colors, SCOPE_TRACE_THICKNESS, SCOPE_TRACE_FEATHER)
-    }
 }
 
 // Stripes as bright as the beam is high, the lamp of a mechanical strobe and the first version of this

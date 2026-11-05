@@ -356,8 +356,9 @@ test_scope_newest_sweep :: proc(t: ^testing.T) {
 
 @(test)
 test_scope_trace :: proc(t: ^testing.T) {
-    // A sine's line reaches SCOPE_FILL's height both ways and spans the screen, its points no further apart
-    // across than a cell except where the sweep starts over, once, and as long apart in time
+    // A sine's line reaches SCOPE_FILL's height both ways and spans the screen from one edge to the other without
+    // starting over, the newest whole sweep, its points no further apart across than a cell and as long apart in
+    // time
     FREQ :: 250.0
 
     scope := scope_test_init(FREQ)
@@ -393,7 +394,7 @@ test_scope_trace :: proc(t: ^testing.T) {
             uneven += 1
         }
     }
-    testing.expectf(t, wraps == 1 && uneven == 0, "%v wraps, %v steps uneven", wraps, uneven)
+    testing.expectf(t, wraps == 0 && uneven == 0, "%v wraps, %v steps uneven", wraps, uneven)
 }
 
 @(test)
@@ -515,6 +516,50 @@ test_scope_circle_ends_apart_when_detuned :: proc(t: ^testing.T) {
 
     in_tune, detuned := end_gap(0), end_gap(4)
     testing.expectf(t, in_tune < 0.1 && detuned > 1, "in tune %v rows apart, detuned %v", in_tune, detuned)
+}
+
+@(test)
+test_scope_newest_sweep_drawn_whole_from_its_start :: proc(t: ^testing.T) {
+    // Without the average the line is the newest whole sweep from its start, like a triggered oscilloscope's,
+    // every frame. Over time it runs from one edge to the other without starting over, the sweep's ends off the
+    // screen. Round the circle it starts at the top and runs a turn and its overlap. Ended at the newest sample
+    // instead, a note 1% sharp stepped wherever that fell. A frame that ends at a different point in a sweep each
+    // time, 0.37 of a sweep further on, low (A1, a sweep longer than a frame), in the middle and high (A6).
+    for freq in ([]f64{55, 220, 1760}) {
+        for sweep in ([]ScopeSweep{.TIME, .CIRCLE}) {
+            scope := scope_test_init(freq)
+            defer destroy_scope(&scope)
+            set_scope_sweep(&scope, sweep)
+
+            frame := SCOPE_TEST_FRAME + int(0.37 / scope.step)
+            samples := make([]f32, frame)
+            defer delete(samples)
+            points: [dynamic][2]f32
+            defer delete(points)
+
+            for index in 0 ..< 12 {
+                scope_test_sine(samples, freq * 1.01, scope.sample_clock)
+                audio_capture_write(&scope, samples)
+                update_scope(&scope)
+                if index < 6 do continue
+
+                scope_trace(&scope, &points)
+                if !testing.expectf(t, len(points) > 1, "%v Hz %v: no line", freq, sweep) do break
+
+                first, last := points[0], points[len(points) - 1]
+                if sweep == .TIME {
+                    // The sweep runs right to left on the screen, across here from 0 to 1
+                    restarts := 0
+                    for i in 1 ..< len(points) do if points[i].x < points[i - 1].x do restarts += 1
+                    testing.expectf(t, restarts == 0, "%v Hz frame %v: started over %v times", freq, index, restarts)
+                    testing.expectf(t, first.x < 0.01 && last.x > 0.99, "%v Hz frame %v: from %v to %v across", freq, index, first.x, last.x)
+                } else {
+                    // At the top: in the middle across, above the middle
+                    testing.expectf(t, abs(first.x - 0.5) < 0.01 && first.y < 0.5, "%v Hz frame %v: starts at %v", freq, index, first)
+                }
+            }
+        }
+    }
 }
 
 @(test)
@@ -715,134 +760,11 @@ test_scope_circle_spins_clockwise_when_sharp :: proc(t: ^testing.T) {
 }
 
 @(test)
-test_scope_afterglow_turns_by_the_cents :: proc(t: ^testing.T) {
-    // Round the circle, averaged and the newest sweep only, each of the afterglow's sweeps is turned from the
-    // newest line by the phase the note slips in SCOPE_AFTERGLOW_PERIODS for each, the older further round. In
-    // tune they all point the same way, 10 cents sharp they're turned anticlockwise from it, the newest went on
-    // clockwise.
-    FREQ :: 220.0
-
-    turns :: proc(t: ^testing.T, off_cents: f64, averaged: bool) {
-        scope := scope_test_init(FREQ)
-        defer destroy_scope(&scope)
-        set_scope_sweep(&scope, .CIRCLE)
-        if averaged {
-            scope.persistence_s = 18 / FREQ
-            scope.average_sweeps = true
-        }
-
-        freq_hz := FREQ * math.pow(2, off_cents / 1200)
-        samples: [SCOPE_TEST_FRAME]f32
-        for _ in 0 ..< 60 {
-            scope_test_sine(samples[:], freq_hz, scope.sample_clock)
-            audio_capture_write(&scope, samples[:])
-            update_scope(&scope)
-        }
-
-        points: [dynamic][2]f32
-        defer delete(points)
-        scope_trace(&scope, &points)
-        newest := scope_test_petals_angle(&scope, points[:])
-
-        // In periods, twice the angle the circle turns by, half of them
-        slipped := (freq_hz / FREQ - 1) * SCOPE_AFTERGLOW_PERIODS
-        for sweep in 1 ..= SCOPE_AFTERGLOW_SWEEPS {
-            scope_afterglow_trace(&scope, sweep, &points)
-            if !testing.expectf(t, len(points) > 0, "%v cents, averaged %v: no sweep %v", off_cents, averaged, sweep) do continue
-
-            turned := wrap_phase(newest - scope_test_petals_angle(&scope, points[:]))
-            expected := -math.TAU * slipped * f64(sweep)
-            testing.expectf(
-                t,
-                abs(turned - expected) < 0.02,
-                "%v cents, averaged %v, sweep %v: turned %v, expected %v",
-                off_cents,
-                averaged,
-                sweep,
-                turned,
-                expected,
-            )
-        }
-    }
-
-    for averaged in ([]bool{true, false}) {
-        turns(t, 0, averaged)
-        turns(t, 10, averaged)
-    }
-}
-
-@(test)
-test_scope_afterglow_only_of_the_note :: proc(t: ^testing.T) {
-    // The next note comes in, and 0.1 s later, named, the reference changes to it like in the app. The afterglow's
-    // sweeps come in one by one, each once the note has gone on for as many periods as it reaches back and the
-    // line's from the samples backfilled on, none of them from the note before: in tune, all point the same way
-    // as the newest line.
-    FREQ :: 220.0
-
-    for averaged in ([]bool{true, false}) {
-        scope := scope_test_init(196)
-        defer destroy_scope(&scope)
-        set_scope_sweep(&scope, .CIRCLE)
-        if averaged {
-            scope.persistence_s = 18 / FREQ
-            scope.average_sweeps = true
-        }
-
-        samples: [SCOPE_TEST_FRAME]f32
-        for frame in 0 ..< 36 {
-            scope_test_sine(samples[:], 196 if frame < 30 else FREQ, scope.sample_clock)
-            audio_capture_write(&scope, samples[:])
-            update_scope(&scope)
-        }
-        set_scope_freq(&scope, FREQ)
-        backfilled := f64(scope.backfilled) * FREQ / DEFAULT_SAMPLE_RATE // in periods
-
-        points: [dynamic][2]f32
-        defer delete(points)
-        first_frame := [SCOPE_AFTERGLOW_SWEEPS + 1]int{0 ..= SCOPE_AFTERGLOW_SWEEPS = -1}
-        for frame in 0 ..< 30 {
-            scope_test_sine(samples[:], FREQ, scope.sample_clock)
-            audio_capture_write(&scope, samples[:])
-            update_scope(&scope)
-
-            scope_trace(&scope, &points)
-            newest := scope_test_petals_angle(&scope, points[:])
-            for sweep in 1 ..= SCOPE_AFTERGLOW_SWEEPS {
-                scope_afterglow_trace(&scope, sweep, &points)
-                if len(points) == 0 do continue
-
-                if first_frame[sweep] < 0 do first_frame[sweep] = frame
-                turned := wrap_phase(newest - scope_test_petals_angle(&scope, points[:]))
-                testing.expectf(t, abs(turned) < 0.05, "averaged %v, frame %v, sweep %v: turned %v", averaged, frame, sweep, turned)
-            }
-        }
-
-        // Its periods and the line's 2.2 less the backfilled ones, a sweep more to start on a whole one, two to
-        // end on one averaged
-        periods_a_frame := FREQ / 60
-        for sweep in 1 ..= SCOPE_AFTERGLOW_SWEEPS {
-            periods := f64(sweep * SCOPE_AFTERGLOW_PERIODS) + SCOPE_PERIODS * scope_trace_sweeps(&scope) - backfilled
-            earliest := int(math.ceil(periods / periods_a_frame)) - 1
-            latest := int(math.ceil((periods + 2 * SCOPE_PERIODS) / periods_a_frame))
-            testing.expectf(
-                t,
-                first_frame[sweep] >= earliest && first_frame[sweep] <= latest,
-                "averaged %v, sweep %v: from frame %v, expected %v to %v",
-                averaged,
-                sweep,
-                first_frame[sweep],
-                earliest,
-                latest,
-            )
-        }
-    }
-}
-
-@(test)
 test_scope_pluck_starts_the_average_over :: proc(t: ^testing.T) {
-    // A note fading 30 dB a second in a little noise, the average goes on and keeps all its afterglow. Plucked
-    // again a quarter period on, the first sweep of the pluck starts it over: the line is the new pluck where it
-    // is, not mixed with the faded one.
+    // A note fading 30 dB a second in a little noise, the average goes on. Plucked again a quarter period on,
+    // the first sweep of the pluck starts it over: the line is the new pluck where it is, not mixed with the
+    // faded one. The average's gain grows with every sweep while it goes on and starts from 1 again when it
+    // starts over, see clear_average. It's only divided back in far past what a second of sweeps reaches.
     FREQ :: 220.0
     AMP :: 0.5
     NOISE :: 0.01 // peak, uniform
@@ -875,9 +797,11 @@ test_scope_pluck_starts_the_average_over :: proc(t: ^testing.T) {
 
     state: u32 = 1
     samples: [SCOPE_TEST_FRAME]f32
+    gain := scope.average_gain
     for frame in 0 ..< 60 {
         fading(&scope, samples[:], &state)
-        if frame >= 15 do testing.expectf(t, scope.kept_count == SCOPE_SWEEPS_KEPT, "frame %v: started over", frame)
+        if frame >= 15 do testing.expectf(t, scope.average_gain > gain, "frame %v: started over", frame)
+        gain = scope.average_gain
     }
 
     // Faded up to where a sweep starts, and a frame of the pluck from there, a sweep of it and most of the next
@@ -894,7 +818,7 @@ test_scope_pluck_starts_the_average_over :: proc(t: ^testing.T) {
     defer delete(points)
     scope_trace(&scope, &points)
     off := off_pluck(&scope, points[:])
-    testing.expectf(t, scope.kept_count < SCOPE_SWEEPS_KEPT && off < 0.03, "%v sweeps kept, %v off the pluck", scope.kept_count, off)
+    testing.expectf(t, scope.average_gain < gain && off < 0.03, "gain %v from %v, %v off the pluck", scope.average_gain, gain, off)
 }
 
 @(test)
@@ -933,7 +857,7 @@ test_scope_backfill_shows_a_low_note_at_once :: proc(t: ^testing.T) {
         expected := 0.5 - 0.5 * SCOPE_FILL * math.sin(math.TAU * SCOPE_PERIODS * f64(point.x) + lead)
         worst = max(worst, abs(f64(point.y) - expected) * f64(scope.rows))
     }
-    testing.expectf(t, scope.kept_count > 0 && worst < 2, "%v sweeps in, %v rows off the sine", scope.kept_count, worst)
+    testing.expectf(t, worst < 2, "%v rows off the sine", worst)
 }
 
 @(test)

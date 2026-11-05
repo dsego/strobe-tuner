@@ -56,14 +56,6 @@
     detuned one spins by half the phase it slips, clockwise when sharp like the wheel. It's square,
     as wide as the screen is high, the crests reach out past the square to the screen's sides.
 
-    The circle's afterglow: the line as it was drawn SCOPE_AFTERGLOW_PERIODS ago, and as long before that,
-    behind the newest. Apart in periods, not in seconds, they're turned apart by the cents the note is off
-    and as far on every note. A note in tune and steady draws them all on one line, one detuned turns them
-    apart evenly, one that wavers unevenly, and anything that doesn't repeat, the noise, partials slipping
-    against the fundamental, two strings beating, splits them. Averaged, each is the average as it was, the
-    newest line is the average of many sweeps before it and lags behind as far, a single sweep kept would
-    lie on it. Without persistence each is the newest sweep's samples as far back in the history.
-
  -------------------------------------------------------------------------------------------------*/
 
 
@@ -79,7 +71,7 @@ SCOPE_CHUNK_SIZE :: 4096
 SCOPE_MAX_BEAM_DOTS :: 256 // between two samples
 SCOPE_MAX_FADE_GAIN :: 1e15 // divided back into the cells at this, far under an f32's range, see sweep_samples
 SCOPE_SWEEP_MAX_SAMPLES :: 24576 // two periods of a 16 Hz note at 192 kHz
-// The average's bins, for a sweep and the circle's overlap past it with room over
+// The samples kept, and the average's bins, for a sweep and the circle's overlap past it with room over
 SCOPE_TRACE_MAX_SAMPLES :: 2 * SCOPE_SWEEP_MAX_SAMPLES
 SCOPE_CURVE_SAMPLES :: 3 // the beam's curve to a sample runs through this many before it, see move_beam
 
@@ -138,19 +130,6 @@ SCOPE_CIRCLE_REACH :: 0.7
 SCOPE_CIRCLE_OVERLAP :: #config(SCOPE_CIRCLE_OVERLAP, 0.1)
 #assert(SCOPE_CIRCLE_OVERLAP >= 0 && SCOPE_CIRCLE_OVERLAP <= 0.5)
 
-// The circle's afterglow, see the top of the file: this many sweeps behind the newest line, SCOPE_AFTERGLOW_PERIODS
-// apart. Each is turned from the one after it by about 1.7° a cent at 16. The circle looks the same half a turn
-// on, two periods a turn, so a quarter turn apart they'd lean either way: at 16 that's 53 cents, past the tracks'
-// 50, more periods turn them further for a cent and lean the wrong way sooner.
-SCOPE_AFTERGLOW_SWEEPS :: 3
-SCOPE_AFTERGLOW_PERIODS :: #config(SCOPE_AFTERGLOW_PERIODS, 16)
-#assert(SCOPE_AFTERGLOW_PERIODS % SCOPE_PERIODS == 0)
-// The sweeps kept for it, the newest and the ones as far back as the oldest
-SCOPE_SWEEPS_KEPT :: SCOPE_AFTERGLOW_SWEEPS * SCOPE_AFTERGLOW_PERIODS / SCOPE_PERIODS + 1
-// The samples kept, a sweep and the circle's overlap past it with room over, and as many sweeps before it as
-// the afterglow reaches back
-SCOPE_HISTORY_MAX_SAMPLES :: (SCOPE_SWEEPS_KEPT + 1) * SCOPE_SWEEP_MAX_SAMPLES
-
 // A sweep this much louder than the average is a pluck, the average starts over with it like at another note,
 // see fold_into_average. Faded in, a pluck over the last one's tail drew as much smaller as the tail had faded
 // and grew over 0.1 to 0.2 s. Weighed by how loud they are, the sweeps after a note ended hardly counted, the
@@ -167,12 +146,6 @@ ScopeLowpass :: struct {
     oldest:  int, // where in the history the sample leaving the averages is
     history: [2][SCOPE_LOWPASS_MAX_LENGTH]f32,
     sums:    [2]f64,
-}
-
-// A sweep that's over, kept for the circle's afterglow, see keep_sweep
-ScopeKeptSweep :: struct {
-    sweep: i64, // which, see first_clock_in_sweep
-    level: f32, // the screen's once it was over
 }
 
 
@@ -194,8 +167,7 @@ Scope :: struct {
     // How long the beam stayed in each cell, row 0 on top, scaled up by fade_gain, see sweep_samples
     screen:              []f32,
     fade_gain:           f64,
-    // The newest samples as they're drawn, a ring, for the newest sweep without persistence and the trace, and
-    // the afterglow's sweeps before it
+    // The newest samples as they're drawn, a ring, for the newest sweep without persistence and the trace
     history:             []f32,
     history_next:        int, // where the next sample goes
     history_count:       int, // how many are kept, up to the ring's length
@@ -216,15 +188,6 @@ Scope :: struct {
     restart_average:     bool, // it starts over with the samples that come in next
     averaged_sweep:      i64, // the one the newest of them is in
     average_power:       f64, // the sweeps' mean square, averaged like them, 0 before one is in, see SCOPE_PLUCK_DB
-
-    // The newest sweeps that are over, a ring for the circle's afterglow, kept_newest the newest of kept_count.
-    // Averaged, each one's average, average_bins_used values from the slot's place, see keep_sweep.
-    kept_sweeps:         [SCOPE_SWEEPS_KEPT]ScopeKeptSweep,
-    kept_averages:       [dynamic]f32,
-    kept_newest:         int,
-    kept_count:          int,
-    kept_averaged:       bool, // they were kept with their average, they start over when it changes
-    kept_from:           i64, // the history is of the note from this clock on, as it's drawn, see clear_scope
 
     columns:             int,
     rows:                int,
@@ -265,7 +228,7 @@ init_scope :: proc(columns, rows: int, sample_rate: f32 = DEFAULT_SAMPLE_RATE) -
     self.depths = make([]f32, columns)
     self.dwell = make([]f32, columns)
     self.chunk = make([]f32, SCOPE_CHUNK_SIZE)
-    self.history = make([]f32, SCOPE_HISTORY_MAX_SAMPLES)
+    self.history = make([]f32, SCOPE_TRACE_MAX_SAMPLES)
     self.raw_history = make([]f32, SCOPE_RAW_MAX_SAMPLES)
     self.average_sums = make([]f32, SCOPE_TRACE_MAX_SAMPLES)
     self.average_weights = make([]f32, SCOPE_TRACE_MAX_SAMPLES)
@@ -290,7 +253,6 @@ destroy_scope :: proc(self: ^Scope) {
     delete(self.raw_history)
     delete(self.average_sums)
     delete(self.average_weights)
-    delete(self.kept_averages)
 
     for &dft in self.partial_dfts do destroy_dft(&dft)
 
@@ -308,7 +270,6 @@ set_scope_freq :: proc(self: ^Scope, freq_hz: f64) {
     self.lowpass_filter.primed = false
 
     self.average_bins = clamp(int(1 / self.step) if self.step > 0 else 1, SCOPE_CURVE_SAMPLES + 1, SCOPE_SWEEP_MAX_SAMPLES)
-    resize(&self.kept_averages, SCOPE_SWEEPS_KEPT * average_bins_used(self))
 
     clear_scope(self)
 }
@@ -331,17 +292,15 @@ reset_scope :: proc(self: ^Scope) {
     self.block_peaks, self.screen_peaks, self.block_peak = {}, {}, 0
 }
 
-// The screen and the average, and the afterglow's sweeps: the history from here on is of the new note, from
-// the samples backfilled on
+// The screen and the average: the history from here on is of the new note, from the samples backfilled on
 clear_scope :: proc(self: ^Scope) {
     clear_screen(self)
     clear_average(self)
     self.restart_average = true
     backfill_history(self)
-    self.kept_from = self.sample_clock - lowpass_delay(self) - i64(self.backfilled)
 }
 
-// The average's bins and the afterglow's sweeps kept, they start over with the next sweep in
+// The average's bins, they start over with the next sweep in
 clear_average :: proc(self: ^Scope) {
     used := average_bins_used(self)
     slice.zero(self.average_sums[:used])
@@ -349,7 +308,6 @@ clear_average :: proc(self: ^Scope) {
     self.average_gain = 1
     self.average_power = 0
     self.averaged_sweep = min(i64) // the next one is new
-    self.kept_count = 0
 }
 
 // The newest samples kept go through the low-pass again at the reference now, from the input as it came, and
@@ -361,7 +319,7 @@ clear_average :: proc(self: ^Scope) {
 // sweep they were in stepped where they end. The history older than them was the note before too.
 backfill_history :: proc(self: ^Scope) {
     settle := 2 * self.lowpass_filter.length if self.lowpass else 0
-    needed := settle + int(math.ceil((1 + scope_trace_sweeps(self)) / self.step)) if self.step > 0 else 0
+    needed := settle + int(math.ceil((1 + scope_trace_sweeps(self)) / self.step)) + SCOPE_CURVE_SAMPLES + 1 if self.step > 0 else 0
     count := min(self.raw_count, needed, int(PITCH_WINDOW_S * f64(self.sample_rate)), len(self.raw_history))
     self.backfilled = count
     self.history_count = count
@@ -412,14 +370,6 @@ scope_width :: proc(self: ^Scope) -> int {
 // draws the newest sweep over a cleared one
 update_scope :: proc(self: ^Scope) {
     self.skipping = false
-
-    // The afterglow's sweeps were kept with their average or without, they start over when it's turned on or off
-    averaged := self.average_sweeps && self.persistence_s > 0
-    if averaged != self.kept_averaged {
-        self.kept_averaged = averaged
-        self.kept_count = 0
-    }
-
     if lost := audio_capture_skip_stale(self); lost > 0 {
         // A stall, the beam starts over on the audio after it
         self.sample_clock += lost
@@ -554,10 +504,9 @@ sweeps_to_average :: proc(self: ^Scope, clock, newest: i64) -> (first, unfinishe
 }
 
 // The kept samples of the sweeps from first up to unfinished into the average, each into the two bins around
-// its place across the sweep, a sweep at a time, and each sweep kept for the afterglow once it's in. Round the
-// circle the samples at the start of the next sweep go in once more as its overlap, see SCOPE_CIRCLE_OVERLAP:
-// into the bins after its end, by its weight. The sweep's end runs on into them, the last bin's samples into
-// the bin past it, not round to the first bin.
+// its place across the sweep, a sweep at a time. Round the circle the samples at the start of the next sweep go
+// in once more as its overlap, see SCOPE_CIRCLE_OVERLAP: into the bins after its end, by its weight. The
+// sweep's end runs on into them, the last bin's samples into the bin past it, not round to the first bin.
 fold_into_average :: proc(self: ^Scope, newest, first, unfinished: i64) {
     // Of one sweep. All of a sweep's samples weigh the same: faded by the sample, its end weighed more than
     // its start.
@@ -608,9 +557,6 @@ fold_into_average :: proc(self: ^Scope, newest, first, unfinished: i64) {
             across := f64(sample_clock) * self.step - f64(sweep + 1)
             add_to_average(self, 1 + across, kept_sample(self, newest, sample_clock), self.average_gain)
         }
-
-        keep_sweep(self, sweep)
-        average_values(self, kept_average(self, self.kept_newest))
     }
 }
 
@@ -660,54 +606,14 @@ add_to_average_bin :: proc(self: ^Scope, bin: int, sample, weight: f32) {
     self.average_weights[bin] += weight
 }
 
-// The average in each bin, the sum over the weight, 0 in one that has nothing yet
-average_values :: proc(self: ^Scope, values: []f32) {
-    for &value, bin in values {
-        weight := self.average_weights[bin]
-        value = self.average_sums[bin] / weight if weight > 0 else 0
-    }
-}
-
-// A sweep that's over into the afterglow's ring with the level now, over the oldest. Averaged, its average goes
-// into the slot's values after it.
-keep_sweep :: proc(self: ^Scope, sweep: i64) {
-    self.kept_newest = (self.kept_newest + 1) % SCOPE_SWEEPS_KEPT
-    self.kept_count = min(self.kept_count + 1, SCOPE_SWEEPS_KEPT)
-    self.kept_sweeps[self.kept_newest] = {sweep, self.level}
-}
-
-// The average kept in a slot of the afterglow's ring
-kept_average :: proc(self: ^Scope, slot: int) -> []f32 {
-    used := average_bins_used(self)
-    return self.kept_averages[slot * used:][:used]
-}
-
-// The slot of the afterglow's ring a sweep is kept in, false where it isn't kept
-kept_slot :: proc(self: ^Scope, sweep: i64) -> (slot: int, ok: bool) {
-    if self.kept_count == 0 do return
-
-    back := self.kept_sweeps[self.kept_newest].sweep - sweep
-    if back < 0 || back >= i64(self.kept_count) do return
-
-    slot = (self.kept_newest - int(back) + SCOPE_SWEEPS_KEPT) % SCOPE_SWEEPS_KEPT
-    return slot, self.kept_sweeps[slot].sweep == sweep
-}
-
-// Keeps the samples for redraw_newest_sweep instead of drawing them, with the level followed the same, and
-// the sweeps over since the last ones kept for the afterglow, with the level now. Right after it started over
-// from the first that's of the new note, and no more than the ring holds.
+// Keeps the samples for redraw_newest_sweep instead of drawing them, with the level followed the same
 record_samples :: proc(self: ^Scope, samples: []f32) {
-    clock, ok := begin_samples(self, samples)
+    _, ok := begin_samples(self, samples)
     if !ok do return
 
     for sample in samples do follow_level(self, sample)
 
     keep_samples(self, samples)
-
-    over := i64(math.floor(f64(clock + i64(len(samples))) * self.step)) - 1
-    first := i64(math.ceil(f64(self.kept_from) * self.step))
-    if self.kept_count > 0 do first = self.kept_sweeps[self.kept_newest].sweep + 1
-    for sweep in max(first, over - SCOPE_SWEEPS_KEPT + 1) ..= over do keep_sweep(self, sweep)
 }
 
 // The input before the low-pass for backfill_history, every chunk however the scope draws it
@@ -743,61 +649,27 @@ redraw_newest_sweep :: proc(self: ^Scope) {
     }
 }
 
-// The newest sweep as a line, or the sweeps' average: the points the beam goes through, as fractions of the
-// screen's width and height from its top left corner, in time order. As long apart in time, the distance
-// from one to the next is how fast the beam moves there, and no further apart across than a cell. Over time
-// the sweep starts over on the left, the x jumps back where it does. Round the circle it runs on past where
-// it started, see SCOPE_CIRCLE_OVERLAP.
+// The newest whole sweep as a line from its start, or the sweeps' average: the points the beam goes through, as
+// fractions of the screen's width and height from its top left corner, in time order. As long apart in time,
+// the distance from one to the next is how fast the beam moves there, and no further apart across than a cell.
+// Over time it runs from one edge to the other, round the circle on past where it started, see
+// SCOPE_CIRCLE_OVERLAP. Until the history reaches back to a whole sweep's start, right after a low note came
+// in, the newest samples are drawn as they are, and over time the x jumps back where the sweep starts over.
 scope_trace :: proc(self: ^Scope, points: ^[dynamic][2]f32) {
     clear(points)
-
-    // The average as the newest sweep in it left it, none yet before one is in
     if self.average_sweeps && self.persistence_s > 0 {
-        values: []f32
-        if self.kept_count > 0 do values = kept_average(self, self.kept_newest)
-        trace_average(self, values, self.level, points)
+        trace_average(self, points)
         return
     }
 
-    start, count, clock, ok := newest_sweep(self)
-    if !ok do return
-
-    trace_samples(self, start, count, clock, self.level, points)
-}
-
-// The circle's afterglow, see the top of the file: the line as it was drawn sweeps times SCOPE_AFTERGLOW_PERIODS
-// ago, at the level it was drawn at, like scope_trace. None where that's from before the note or isn't kept.
-scope_afterglow_trace :: proc(self: ^Scope, sweeps: int, points: ^[dynamic][2]f32) {
-    clear(points)
-    if self.kept_count == 0 || self.step <= 0 do return
-
-    back := i64(sweeps * SCOPE_AFTERGLOW_PERIODS / SCOPE_PERIODS)
-    if self.average_sweeps && self.persistence_s > 0 {
-        slot, ok := kept_slot(self, self.kept_sweeps[self.kept_newest].sweep - back)
+    start, count, clock, sweep, whole := newest_whole_sweep(self)
+    if !whole {
+        ok: bool
+        start, count, clock, ok = newest_sweep(self)
         if !ok do return
-
-        trace_average(self, kept_average(self, slot), self.kept_sweeps[slot].level, points)
-        return
     }
 
-    // The newest sweep's samples as many sweeps back, at the level once the sweep the last of them is in was over
-    count := int(math.ceil(scope_trace_sweeps(self) / self.step)) + SCOPE_CURVE_SAMPLES
-    shift := int(math.round(f64(back) / self.step))
-    if count + shift > self.history_count do return
-
-    clock := self.sample_clock - i64(count + shift) - lowpass_delay(self)
-    if clock < self.kept_from do return
-
-    slot, ok := kept_slot(self, i64(math.floor(f64(clock + i64(count) - 1) * self.step)))
-    if !ok do return
-
-    start := (self.history_next - count - shift + len(self.history)) % len(self.history)
-    trace_samples(self, start, count, clock, self.kept_sweeps[slot].level, points)
-}
-
-// A line through count samples from start in the history, through the three before them for its curve, the
-// first one's clock as it's drawn, scaled to level
-trace_samples :: proc(self: ^Scope, start, count: int, clock: i64, level: f32, points: ^[dynamic][2]f32) {
+    sweeps := scope_trace_sweeps(self)
     dots := trace_dots(self)
     for offset in SCOPE_CURVE_SAMPLES ..< count {
         before := history_sample(self, start, offset - 3)
@@ -807,28 +679,56 @@ trace_samples :: proc(self: ^Scope, start, count: int, clock: i64, level: f32, p
         from_position := f64(clock + i64(offset - 2)) * self.step
         for dot in 0 ..< dots {
             progress := f32(dot) / f32(dots)
+            position := from_position + f64(progress) * self.step
+
+            // From the sweep's start to its end, the samples either side only bend the curve into them
+            if whole && (position < sweep || position >= sweep + sweeps) do continue
+
             value := catmull_rom(before, from, to, after, progress)
-            point := sweep_point(self, from_position + f64(progress) * self.step, value, level)
+            point := sweep_point(self, position, value)
             append(points, [2]f32{f32(point.x), f32(point.y)})
         }
     }
 }
 
-// The average in each bin, round the sweep once from its start, where the sweeps it took meet, scaled to level.
-// Over time that's the screen's edge, the line ends there. Round the circle it runs on past the start through
-// the overlap's bins, see SCOPE_CIRCLE_OVERLAP. Without values it's flat, none of the bins has anything yet.
-trace_average :: proc(self: ^Scope, values: []f32, level: f32, points: ^[dynamic][2]f32) {
-    average :: proc(values: []f32, bin: int) -> f32 {
-        return values[bin] if bin < len(values) else 0
+// The newest sweep that's all in, round the circle with its overlap, from its start like a triggered
+// oscilloscope's: where its samples start in the history, how many, the first one's clock as it's drawn, and
+// the sweep's start. They run from the curve's before the sample ahead of the start to the one after the first
+// past the end. Up to a sweep behind the newest sample, two periods, under a frame from B2 up. Ended at the
+// newest sample instead, the line started wherever that fell, and where it came round to the sample a sweep
+// before it, a note that's off or changing stepped: a break wandering about the screen. False while the history
+// doesn't reach back to its start.
+newest_whole_sweep :: proc(self: ^Scope) -> (start, count: int, clock: i64, sweep: f64, ok: bool) {
+    if self.step <= 0 || self.history_count == 0 do return
+
+    // The newest sample's clock as it's drawn. The sweep ends by the one before it, that one's the curve's.
+    newest := self.sample_clock - 1 - lowpass_delay(self)
+    sweeps := scope_trace_sweeps(self)
+    sweep = math.floor(f64(newest - 1) * self.step - sweeps)
+    first := first_clock_in_sweep(self, sweep) - 2
+    last := first_clock_in_sweep(self, sweep + sweeps) + 1
+    if first < newest - i64(self.history_count) + 1 do return
+
+    start = (self.history_next - 1 - int(newest - first) + len(self.history)) % len(self.history)
+    return start, int(last - first + 1), first, sweep, true
+}
+
+// The average round the sweep once from its start, where the sweeps it took meet. Over time that's the
+// screen's edge, the line ends there. Round the circle it runs on past the start through the overlap's bins,
+// see SCOPE_CIRCLE_OVERLAP. Flat before a sweep is in, none of the bins has anything yet.
+trace_average :: proc(self: ^Scope, points: ^[dynamic][2]f32) {
+    average :: proc(self: ^Scope, bin: int) -> f32 {
+        weight := self.average_weights[bin]
+        return self.average_sums[bin] / weight if weight > 0 else 0
     }
 
     // The line ends at last, the bins don't wrap round to the sweep's other end, the one past an end carries
     // the two before it on (a straight line). Wrapped, the last piece ran on to the start's height and drew
     // the step between them at the end.
-    beside :: proc(values: []f32, bin, last: int) -> f32 {
-        if bin < 0 do return 2 * average(values, 0) - average(values, 1)
-        if bin > last do return 2 * average(values, last) - average(values, last - 1)
-        return average(values, bin)
+    beside :: proc(self: ^Scope, bin, last: int) -> f32 {
+        if bin < 0 do return 2 * average(self, 0) - average(self, 1)
+        if bin > last do return 2 * average(self, last) - average(self, last - 1)
+        return average(self, bin)
     }
 
     if self.step <= 0 do return
@@ -840,17 +740,17 @@ trace_average :: proc(self: ^Scope, values: []f32, level: f32, points: ^[dynamic
 
     dots := trace_dots(self)
     for bin in 0 ..< last {
-        before, from := beside(values, bin - 1, last), average(values, bin)
-        to, after := beside(values, bin + 1, last), beside(values, bin + 2, last)
+        before, from := beside(self, bin - 1, last), average(self, bin)
+        to, after := beside(self, bin + 1, last), beside(self, bin + 2, last)
         for dot in 0 ..< dots {
             progress := f32(dot) / f32(dots)
             value := catmull_rom(before, from, to, after, progress)
-            point := sweep_point(self, (f64(bin) + f64(progress)) / f64(bins), value, level)
+            point := sweep_point(self, (f64(bin) + f64(progress)) / f64(bins), value)
             append(points, [2]f32{f32(point.x), f32(point.y)})
         }
     }
 
-    point := sweep_point(self, f64(last) / f64(bins), average(values, last), level)
+    point := sweep_point(self, f64(last) / f64(bins), average(self, last))
     append(points, [2]f32{f32(point.x), f32(point.y)})
 }
 
@@ -1027,7 +927,7 @@ beam_dot :: proc(self: ^Scope, position: f64, value: f32, brightness: f64) {
     }
 
     // In cells, from the middle of the first column and of the top row
-    point := sweep_point(self, position, value, self.level)
+    point := sweep_point(self, position, value)
     x := point.x * f64(scope_width(self)) - 0.5
     y := point.y * f64(self.rows) - 0.5
 
@@ -1042,15 +942,15 @@ beam_dot :: proc(self: ^Scope, position: f64, value: f32, brightness: f64) {
     light_cell(self, left + 1, top + 1, brightness * right_share * bottom_share)
 }
 
-// Where on the screen the beam is at a sample's position with its value scaled to level, as fractions of the
-// screen's width and height from its top left corner
-sweep_point :: proc(self: ^Scope, position: f64, value, level: f32) -> [2]f64 {
+// Where on the screen the beam is at a sample's position with its value, as fractions of the screen's
+// width and height from its top left corner
+sweep_point :: proc(self: ^Scope, position: f64, value: f32) -> [2]f64 {
     across := position - math.floor(position)
 
     // The averaged scope's line runs off the screen, a note louder than the level has caught up with or the
     // circle's crests up and down, see SCOPE_MAX_OVERSHOOT. The lamp's cells keep a crest over the level in the top row.
     reach: f32 = SCOPE_MAX_OVERSHOOT if self.average_sweeps else 1
-    height := f64(clamp(value / level, -reach, reach))
+    height := f64(clamp(value / self.level, -reach, reach))
 
     // Round from the top, anticlockwise with the screen's rows running down. The troughs stop in the middle,
     // the crests go out past the square to the sides.
