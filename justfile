@@ -43,9 +43,10 @@ dev target="": setup
         *) echo "Unknown target '{{target}}', use stats, ios or ipad"; exit 1 ;;
     esac
 
-# Optimized build for this machine
+# Optimized build for this machine, build/strobie
 build: setup
-    odin build src/app -o:speed -microarch:native -vet
+    mkdir -p build
+    odin build src/app -o:speed -microarch:native -vet -out:build/strobie
 
 # Signed .ipa for iPhone: IOS_PROFILE=path/to/profile.mobileprovision [IOS_DEVICE=<name>] just ipa
 ipa: setup

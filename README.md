@@ -98,7 +98,7 @@ The first run clones and compiles the dependencies into `external/`, later runs 
 | `just dev ios` | Builds for the iOS simulator and runs it there, needs Xcode |
 | `just ipa` | Signed build for iPhone, see `platform/ios/build-device.sh`, needs Xcode and a provisioning profile |
 | `just apk` | Debug signed build for Android, see [Android](#android) |
-| `just build` | Optimized build for this machine |
+| `just build` | Optimized build for this machine, `build/strobie` |
 | `just app` | The Mac app as `build/macos/Strobie.app`, signed ad hoc to run on this Mac, needs Xcode for the icon |
 | `just pkg` | Signed build for the Mac App Store, see `platform/macos/build-pkg.sh`, links SDL in statically |
 | `just test` | Unit tests of the pitch detection and strobe code |
