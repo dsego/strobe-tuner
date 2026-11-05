@@ -81,7 +81,7 @@ MIT license <br />
 
 ### Development
 
-You need [Odin](https://odin-lang.org/docs/install/), the [just](https://github.com/casey/just) command runner, git, clang (on macOS from the Xcode command line tools) and SDL3 (`brew install sdl3`). It draws with SDL3 GPU, Metal on macOS and iOS, Vulkan on Linux and Android.
+You need [Odin](https://odin-lang.org/docs/install/) dev-2026-11 or later, the [just](https://github.com/casey/just) command runner, git, clang (on macOS from the Xcode command line tools) and SDL3 (`brew install sdl3`). It draws with SDL3 GPU, Metal on macOS and iOS, Vulkan on Linux and Android.
 
 ```sh
 git clone https://github.com/dsego/strobe-tuner

@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License along
 // with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#+build !darwin
+#+build !darwin, darwin:ios
 package gfx
 
 // Only macOS has a menu bar, see menu_darwin.odin. Everything here does nothing.

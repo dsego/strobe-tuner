@@ -88,12 +88,12 @@ run_app :: proc(config: ^Config) {
     defer stop_app(&app)
 
     // The desktop window keeps drawing while it's dragged or zoomed to another size, the main loop is stuck
-    // in the OS's own loop meanwhile
+    // in the OS's own loop meanwhile. The app outlives it, the main loop returns here.
     when !gfx.MOBILE {
         gfx.live_resize_frames(proc(data: rawptr) {
             defer free_all(context.temp_allocator)
             run_frame((^App)(data))
-        }, &app)
+        }, rawptr(&app))
     }
 
     run_main_loop(&app)

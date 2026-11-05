@@ -29,8 +29,10 @@ import "../gfx"
 
 main :: proc() {
     when gfx.IOS {
-        // UIKit owns the main thread, SDL starts the app from its application delegate
-        sdl.RunApp(c.int(len(runtime.args__)), raw_data(runtime.args__), ios_main, nil)
+        // UIKit owns the main thread, SDL starts the app from its application delegate. The arguments as the C
+        // main got them, cstrings on every Unix.
+        args := runtime.args__.([]cstring)
+        sdl.RunApp(c.int(len(args)), raw_data(args), ios_main, nil)
     } else when gfx.WEB {
         // The browser asks for each frame, see step in web.odin
         start_web_app()
