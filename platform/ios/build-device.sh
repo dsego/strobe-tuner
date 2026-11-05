@@ -59,6 +59,21 @@ fi
 
 # --- app ---------------------------------------------------------------------------------------
 
+# The one-time unlock, see UNLOCK in src/app/store.odin: UNLOCK=storekit sells it through the App Store with
+# platform/apple/Store.swift, UNLOCK=fake pretends to, unset leaves the whole app free
+UNLOCK="${UNLOCK:-}"
+UNLOCK_DEFINE=""
+STORE=""
+if [ -n "$UNLOCK" ]; then
+    UNLOCK_DEFINE="-define:UNLOCK=$UNLOCK"
+fi
+if [ "$UNLOCK" = storekit ]; then
+    echo "Compiling the store"
+    xcrun -sdk iphoneos swiftc -target "$TARGET" -parse-as-library -swift-version 5 -O \
+        -c "$ROOT/platform/apple/Store.swift" -o "$OUT/store.o"
+    STORE="$OUT/store.o -L$(xcrun -sdk iphoneos --show-sdk-path)/usr/lib/swift -framework StoreKit"
+fi
+
 echo "Compiling app"
 odin build "$ROOT/src/app" \
     -build-mode:obj \
@@ -68,6 +83,7 @@ odin build "$ROOT/src/app" \
     -minimum-os-version:$MIN_IOS \
     -define:IOS=true \
     -define:VERSION="$VERSION" \
+    $UNLOCK_DEFINE \
     -o:speed \
     -out:"$OUT/app.o"
 
@@ -75,6 +91,7 @@ echo "Linking"
 mkdir -p "$APP"
 $CC -ObjC \
     "$OUT/app.o" \
+    $STORE \
     "$DEPS/libminiaudio.a" \
     "$DEPS/libstb.a" \
     "$DEPS/sdl3/lib/libSDL3.a" \

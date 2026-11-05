@@ -129,15 +129,20 @@ gui_settings :: proc(
 ) -> (
     close: bool,
     changes: ConfigChanges,
+    unlock: bool, // its button in the header was tapped, built with UNLOCK only
 ) {
     // The controls end short of the ✕, the › after the displays sits in the column under it. The display's
     // options line up with them.
     sheet_layout := sheet_layout
     sheet_layout.end_inset = ICON_SHEET_SIZE + SETTINGS_CHEVRON_GAP
 
-    if display_options^ do return gui_display_options_page(sheet_layout, config, display_options)
+    if display_options^ {
+        close, changes = gui_display_options_page(sheet_layout, config, display_options)
+        return
+    }
 
-    close = draw_sheet_header(sheet_layout, "Settings", VERSION)
+    close = draw_sheet_header(sheet_layout, "Settings", settings_details())
+    when UNLOCK != "" do unlock = gui_settings_unlock(sheet_layout)
 
     // How it looks first, its menu has the rows under it to open over, then what's measured
     row := 0

@@ -38,6 +38,7 @@ MenuCommand :: enum {
     RETRO_GLOW,
     LOCK_NOTE,
     DEFAULT_SIZE,
+    UNLOCK, // built with UNLOCK only
     INPUTS, // and the ones after it, the Input menu's by their place in AudioInput.devices, see build_input_list
 }
 
@@ -61,11 +62,14 @@ COLORWAY_COMMANDS :: [StrobeColorway]MenuCommand {
     .BY_NOTE     = .COLORS_BY_NOTE,
 }
 
-// SDL's app menu gets Settings…, the View menu the displays, the colors, the glow and the lock, the Input
-// menu the inputs, the Window menu the strobe's size back. Resetting stays on the settings sheet, where
-// RESET asks first.
+// SDL's app menu gets Settings… and with UNLOCK Unlock Strobie…, the View menu the displays, the colors, the
+// glow and the lock, the Input menu the inputs, the Window menu the strobe's size back. Resetting stays on the
+// settings sheet, where RESET asks first.
 setup_menu_bar :: proc(app: ^App) {
-    gfx.add_app_menu_items(int(MenuCommand.SETTINGS), {})
+    // The unlock's sheet with the restore, like UNLOCK in the settings' header, greyed out once it's unlocked
+    app_items: []gfx.MenuItem
+    when UNLOCK != "" do app_items = {{title = "Unlock Strobie…", command = int(MenuCommand.UNLOCK)}}
+    gfx.add_app_menu_items(int(MenuCommand.SETTINGS), app_items)
 
     // The displays by their number keys, named like on the settings, and the colors
     view := make([dynamic]gfx.MenuItem, context.temp_allocator)
@@ -112,6 +116,7 @@ update_menu_checks :: proc(app: ^App) {
     }
     gfx.set_menu_checked(int(MenuCommand.RETRO_GLOW), app.config.strobe_glow)
     gfx.set_menu_checked(int(MenuCommand.LOCK_NOTE), app.measurement.note_target.locked)
+    gfx.set_menu_enabled(int(MenuCommand.UNLOCK), store_state() != .UNLOCKED)
 
     for index in 0 ..< min(len(app.input.devices), MAX_INPUT_COMMANDS) {
         gfx.set_menu_checked(int(MenuCommand.INPUTS) + index, index == app.input.device_index)

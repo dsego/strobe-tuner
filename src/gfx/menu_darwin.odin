@@ -35,6 +35,7 @@ Menu :: struct {
     chosen:   int, // the last item chosen, 0 none
     items:    [MAX_MENU_COMMANDS]^AK.MenuItem, // by command, for set_menu_checked
     checked:  [MAX_MENU_COMMANDS]bool,
+    disabled: [MAX_MENU_COMMANDS]bool, // greyed out, see set_menu_enabled
 
     // The app's own menus by what add_menu returned, and what each calls as it opens, see menu_delegate
     menus:    [MAX_MENUS]^AK.Menu,
@@ -154,6 +155,11 @@ set_menu_checked :: proc(command: int, checked: bool) {
     menu.checked[command] = checked
 }
 
+// Greyed out or not, AppKit asks before it shows the item, see menu_target
+set_menu_enabled :: proc(command: int, enabled: bool) {
+    if command > 0 && command < MAX_MENU_COMMANDS do menu.disabled[command] = !enabled
+}
+
 // An open menu keeps the main loop stuck in should_close like a drag does, see live_resize_frames. A timer
 // that only runs in the menu's loop draws the frames meanwhile, a drag's frames are left to the drag.
 MENU_FRAME_S :: 0.016
@@ -214,13 +220,17 @@ attach_item :: proc(item: ^AK.MenuItem, command: int) {
     menu.checked[command] = false
 }
 
-// An object of a class made here at run time, one method keeps the chosen item's tag, the other is the
-// timer's of start_menu_frames
+// An object of a class made here at run time, one method keeps the chosen item's tag, one tells AppKit which
+// items are greyed out, the other is the timer's of start_menu_frames
 menu_target :: proc() -> ^NS.Object {
     if menu.target != nil do return menu.target
 
     chosen :: proc "c" (self: NS.id, selector: NS.SEL, sender: ^AK.MenuItem) {
         menu.chosen = int(AK.MenuItem_tag(sender))
+    }
+    validate :: proc "c" (self: NS.id, selector: NS.SEL, item: ^AK.MenuItem) -> bool {
+        command := int(AK.MenuItem_tag(item))
+        return command <= 0 || command >= MAX_MENU_COMMANDS || !menu.disabled[command]
     }
     frame :: proc "c" (self: NS.id, selector: NS.SEL, timer: ^NS.Timer) {
         if live_resize.frame == nil || !live_resize.polling || live_resize.resizing do return
@@ -231,6 +241,7 @@ menu_target :: proc() -> ^NS.Object {
 
     class := ObjC.objc_allocateClassPair(intrinsics.objc_find_class("NSObject"), "StrobieMenuTarget", 0)
     ObjC.class_addMethod(class, intrinsics.objc_find_selector("menuChosen:"), auto_cast chosen, "v@:@")
+    ObjC.class_addMethod(class, intrinsics.objc_find_selector("validateMenuItem:"), auto_cast validate, "B@:@")
     ObjC.class_addMethod(class, intrinsics.objc_find_selector("menuFrame:"), auto_cast frame, "v@:@")
     ObjC.objc_registerClassPair(class)
 

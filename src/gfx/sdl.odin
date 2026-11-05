@@ -556,9 +556,10 @@ draw_render_targets :: proc(command_buffer: ^sdl.GPUCommandBuffer) {
         commands := pass_commands(pass_index)
         if len(commands) == 0 && pass.clear == nil do continue
 
+        // The draws cover all of it, or go on over what it holds
         color_target := sdl.GPUColorTargetInfo {
             texture  = pass.target,
-            load_op  = .DONT_CARE, // the draws cover all of it
+            load_op  = .LOAD if pass.keep else .DONT_CARE,
             store_op = .STORE,
         }
         if clear, ok := pass.clear.?; ok {

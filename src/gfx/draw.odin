@@ -76,6 +76,7 @@ Pass :: struct {
     target:        TextureHandle, // the render target's, none for one that couldn't be made: its draws are dropped
     target_size:   [2]f32, // in pixels
     clear:         Maybe(Color), // a target's, or the draws cover all of it, the window clears to gpu.drawing.clear
+    keep:          bool, // a target's drawing goes on over what it holds, another was drawn inside it
     offset:        [2]f32,
     zoom:          f32,
     first_command: int,
@@ -91,12 +92,22 @@ GpuFrame :: struct {
 
 // What the next draw call is drawn with
 DrawingState :: struct {
-    program:        Program,
-    blend:          BlendMode,
-    scissor:        Maybe(Rect),
-    window_scissor: Maybe(Rect), // the window's while a render target is drawn, see begin_render_target
-    uniforms:       [Program]UniformRange,
-    clear:          Color,
+    program:  Program,
+    blend:    BlendMode,
+    scissor:  Maybe(Rect),
+    outer:    [MAX_TARGET_DEPTH]OuterTarget, // what drawing goes back to, see begin_render_target
+    depth:    int, // how many of outer, 0 draws into the window
+    uniforms: [Program]UniformRange,
+    clear:    Color,
+}
+
+// A render target drawn while another is, e.g. the strobe's glow inside the reminder's backdrop
+MAX_TARGET_DEPTH :: 4
+
+// Where drawing was when a render target began, and its scissor
+OuterTarget :: struct {
+    pass:    Pass,
+    scissor: Maybe(Rect),
 }
 
 // A scissor in a target's pixels, from its top left corner
@@ -298,15 +309,19 @@ render_target_size :: proc(target: RenderTarget) -> [2]f32 {
 }
 
 // offset is the top left corner of the target in the drawing coordinates, zoom scales them to target pixels.
-// No clear when the draws cover the whole target, its contents aren't loaded then. The window's scissor
-// doesn't apply in the target, it's back after end_render_target.
+// No clear when the draws cover the whole target, its contents aren't loaded then. The scissor of where
+// drawing was doesn't apply in the target, it's back after end_render_target. A target can begin inside
+// another's, up to MAX_TARGET_DEPTH.
 begin_render_target :: proc(
     target: RenderTarget,
     clear: Maybe(Color),
     offset: [2]f32 = {},
     zoom: f32 = 1,
 ) {
-    gpu.drawing.window_scissor = gpu.drawing.scissor
+    assert(gpu.drawing.depth < MAX_TARGET_DEPTH)
+
+    gpu.drawing.outer[gpu.drawing.depth] = {gpu.frame.passes[len(gpu.frame.passes) - 1], gpu.drawing.scissor}
+    gpu.drawing.depth += 1
     gpu.drawing.scissor = nil
     append(
         &gpu.frame.passes,
@@ -322,11 +337,23 @@ begin_render_target :: proc(
     )
 }
 
-// Back to drawing into the window, over what's there already
+// Back to drawing where it was before begin_render_target, the window or the target this one began inside,
+// over what's there already. The offscreen passes are drawn in order, the outer target's draws after this
+// one can draw it.
 end_render_target :: proc() {
-    gpu.drawing.scissor = gpu.drawing.window_scissor
-    gpu.drawing.window_scissor = nil
-    begin_window_pass()
+    gpu.drawing.depth -= 1
+    outer := gpu.drawing.outer[gpu.drawing.depth]
+    gpu.drawing.scissor = outer.scissor
+    if !outer.pass.offscreen {
+        begin_window_pass()
+        return
+    }
+
+    resumed := outer.pass
+    resumed.clear = nil
+    resumed.keep = true
+    resumed.first_command = len(gpu.frame.commands)
+    append(&gpu.frame.passes, resumed)
 }
 
 draw_render_target :: proc(target: RenderTarget, dest: Rect, tint := WHITE) {

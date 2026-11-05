@@ -30,11 +30,12 @@ AppSheets :: struct {
     selected_track:  int,
     instrument:      Sheet, // the instruments and the presets, opened from the bottom left corner
     input:           Sheet, // the picker, the rate and the levels, opened by tapping the input's level
+    unlock:          UnlockReminder, // asks to unlock, built with UNLOCK only, see unlock.odin
     open_dropdown:   Dropdown, // the dropdown whose menu is open, on the settings, the instrument or the input sheet
 }
 
-all_sheets :: proc(sheets: ^AppSheets) -> [4]^Sheet {
-    return {&sheets.settings, &sheets.track, &sheets.instrument, &sheets.input}
+all_sheets :: proc(sheets: ^AppSheets) -> [5]^Sheet {
+    return {&sheets.settings, &sheets.track, &sheets.instrument, &sheets.input, &sheets.unlock.sheet}
 }
 
 // Settings… from the menu bar or Ctrl+, closes the settings when they're up, the sheet covers the strobe
@@ -93,8 +94,14 @@ draw_settings_sheet :: proc(app: ^App, layout: Layout) {
     }
 
     sheet_layout, swiped := begin_sheet(sheet, rows, layout)
-    close, changes := gui_settings(sheet_layout, app.config, &sheets.display_options, &sheets.reset_confirm, &sheets.open_dropdown)
+    close, changes, unlock := gui_settings(sheet_layout, app.config, &sheets.display_options, &sheets.reset_confirm, &sheets.open_dropdown)
     app.config_changes += changes
+
+    // Over the settings, which go, and without the countdown
+    if unlock {
+        open_unlock_sheet(sheets, countdown = false)
+        return
+    }
 
     grab_sheet(sheet, sheet_layout)
 

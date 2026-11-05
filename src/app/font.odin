@@ -21,7 +21,8 @@ import "core:math"
 import "../gfx"
 
 // Missing ones draw as the first, the space too. Inter has no ♯, it comes from Noto.
-FONT_CODEPOINTS :: " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#/+-−±1234567890.,:π!×½()[]¢·%…'’"
+// The labels' characters. The unlock's price comes from the App Store in the buyer's currency, its signs are here.
+FONT_CODEPOINTS :: " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#/+-−±1234567890.,:π!?×½()[]¢·%…'’$€£¥₩₹₽₺₪₫₱₴₦₸"
 
 // The numbers that change while they're read, every digit as wide so they don't shift, and a weight lighter
 // than the labels. Inter Regular from the same 4.1 release
@@ -68,6 +69,7 @@ LABEL_LARGE_SIZE :: 16
 LABEL_SMALL_SIZE :: 12 // the buttons that reset and clear, the debug stats
 LABEL_TIMES_SIZE :: 18 // the × as large as the body of a ¢ in a label
 TITLE_SIZE :: 18
+TITLE_LARGE_SIZE :: 26 // the unlock's reminder, see gui_unlock
 ICON_SIZE :: 16
 ICON_SHEET_SIZE :: 20 // bold, the sheet's ✕, ‹ and ›
 ICON_LARGE_SIZE :: 24
@@ -111,6 +113,7 @@ PixelFonts :: struct {
     label_small:      PixelFont,
     label_times:      PixelFont, // the × after a label's digits, Inter's is only as tall as a lowercase letter
     title:            PixelFont,
+    title_large:      PixelFont,
     icon:             PixelFont,
     icon_large:       PixelFont,
     icon_large_bold:  PixelFont, // the large steppers
@@ -168,6 +171,7 @@ update_pixel_fonts :: proc() {
         label_small      = load(inter_medium, LABEL_SMALL_SIZE, scale, FONT_CODEPOINTS),
         label_times      = load(inter_medium, LABEL_TIMES_SIZE, scale, "×"),
         title            = load(inter_bold, TITLE_SIZE, scale, FONT_CODEPOINTS),
+        title_large      = load(inter_bold, TITLE_LARGE_SIZE, scale, FONT_CODEPOINTS),
         icon             = load(phosphor, ICON_SIZE, scale, ICON_CODEPOINTS),
         icon_large       = load(phosphor, ICON_LARGE_SIZE, scale, ICON_CODEPOINTS),
         icon_large_bold  = load(phosphor_bold, ICON_LARGE_SIZE, scale, ICON_BOLD_CODEPOINTS),

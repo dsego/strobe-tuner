@@ -99,9 +99,13 @@ run_app :: proc(config: ^Config) {
     run_main_loop(&app)
 }
 
-// Nothing measured yet, no track followed
+// Nothing measured yet, no track followed. Opened to tune, the unlock's reminder waits its time first.
 new_app :: proc(config: ^Config) -> App {
-    return {config = config, measurement = {readout_track = -1, traced_track = -1}}
+    return {
+        config = config,
+        measurement = {readout_track = -1, traced_track = -1},
+        sheets = {unlock = {until_next_s = UNLOCK_REMINDER_S}},
+    }
 }
 
 // The window, the measurements, the displays and the input, everything a frame needs. False without a
@@ -119,6 +123,9 @@ start_app :: proc(app: ^App) -> bool {
     open_audio_input(app)
 
     apply_config(app, {.RETUNE})
+
+    // Asks the App Store for the price and an earlier purchase, nothing without UNLOCK
+    store_start()
     return true
 }
 
@@ -128,6 +135,7 @@ stop_app :: proc(app: ^App) {
 
     close_audio_input(app)
     destroy_displays(&app.displays)
+    unload_unlock_backdrop(&app.sheets.unlock.backdrop)
     destroy_measurement(&app.measurement)
     gfx.unload_shapes()
 
@@ -215,6 +223,7 @@ run_frame :: proc(app: ^App) {
 
     reading := measure(app)
     follow_note_colors(app)
+    follow_unlock(app)
 
     when !DEBUG_STATS {
         // A tablet draws in larger points than its own, see ui_scale
@@ -258,6 +267,9 @@ run_frame :: proc(app: ^App) {
 
     feed_scope(app, strobe_shows)
 
+    // The unlock's reminder blurs everything under it, see begin_unlock_backdrop
+    backdrop := begin_unlock_backdrop(&app.sheets.unlock)
+
     // The arrows are on the strobe, they show above the sheet
     if covered {
         if strobe_shows do draw_strobe_area(app, layout)
@@ -268,6 +280,9 @@ run_frame :: proc(app: ^App) {
         draw_main_screen(app, layout, reading, menu)
     }
     draw_sheets(app, layout, reading)
+
+    if backdrop do end_unlock_backdrop(&app.sheets.unlock)
+    draw_unlock_sheet(app)
 
     if config^ != config_before do app.unsaved, app.unsaved_s = true, 0
 
@@ -330,6 +345,8 @@ handle_keys :: proc(app: ^App) -> (menu: MenuCommand) {
         config.strobe_glow = !config.strobe_glow
     case .DEFAULT_SIZE:
         config.window_size = {}
+    case .UNLOCK:
+        open_unlock_sheet(&app.sheets, countdown = false)
     }
     for menu_command, type in DISPLAY_COMMANDS {
         if menu == menu_command do config.strobe_display_type = type

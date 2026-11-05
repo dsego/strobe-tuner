@@ -95,6 +95,7 @@ The first run clones and compiles the dependencies into `external/`, later runs 
 | --- | --- |
 | `just dev` | Debug build, then runs it |
 | `just dev stats` | Also shows the signal stats and NSDF plots |
+| `just dev unlock` | With the one-time unlock's reminder and a pretend store, 10 s free and a reminder every 15 s; `UNLOCK=storekit just ipa` or `just pkg` sells it through the App Store, without `UNLOCK` the whole app is free |
 | `just dev ios` | Builds for the iOS simulator and runs it there, needs Xcode |
 | `just ipa` | Signed build for iPhone, see `platform/ios/build-device.sh`, needs Xcode and a provisioning profile |
 | `just apk` | Debug signed build for Android, see [Android](#android) |

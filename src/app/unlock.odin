@@ -1,0 +1,293 @@
+// Copyright (C) 2026  Davorin Šego
+
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by the Free
+// Software Foundation, either version 3 of the License, or (at your option)
+// any later version.
+
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+// FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+// more details.
+
+// You should have received a copy of the GNU General Public License along
+// with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+package app
+
+import "core:fmt"
+import "core:math"
+
+import "../gfx"
+
+// Free with a reminder, built with UNLOCK only, see store.odin. The whole app works. Once per install it
+// gives UNLOCK_FREE_S from the first lit note, then a reminder over the whole window asks to unlock every
+// UNLOCK_REMINDER_S on screen, closed after a countdown of UNLOCK_CLOSE_AFTER_S. The time waits while a sheet
+// is up. Unlocked, it doesn't come back.
+UNLOCK_FREE_S :: f32(#config(UNLOCK_FREE_S, 120))
+UNLOCK_REMINDER_S :: f32(#config(UNLOCK_REMINDER_S, 30))
+UNLOCK_CLOSE_AFTER_S :: f32(#config(UNLOCK_CLOSE_AFTER_S, 5))
+
+// The reminder's column in the middle of the window, larger than a sheet's to stand out over the blur. Its
+// gaps under the title, the words, the two buttons and over the restore.
+UNLOCK_WIDTH :: 400 // at most
+UNLOCK_SIDE_MARGIN :: 24
+UNLOCK_LINE_HEIGHT :: LABEL_LARGE_SIZE + 9
+UNLOCK_BUTTON_HEIGHT :: 48
+UNLOCK_RESTORE_HEIGHT :: 32
+UNLOCK_GAPS :: [4]f32{18, 24, 12, 20}
+
+// Everything under the reminder is blurred, the strobe can't be read through it while it counts down: drawn
+// offscreen, shrunk by UNLOCK_BLUR_DOWNSCALE, blurred UNLOCK_BLUR_ITERATIONS times with the glow's taps spaced
+// UNLOCK_BLUR_SPACING apart, and the sheet's color over it as much as UNLOCK_TINT, 0.2 is 80% see-through
+UNLOCK_BLUR_DOWNSCALE :: f32(#config(UNLOCK_BLUR_DOWNSCALE, 4))
+UNLOCK_BLUR_ITERATIONS :: #config(UNLOCK_BLUR_ITERATIONS, 3)
+UNLOCK_BLUR_SPACING :: f32(#config(UNLOCK_BLUR_SPACING, 2))
+UNLOCK_TINT :: f32(#config(UNLOCK_TINT, 0.2))
+
+UNLOCK_TEXT :: [?]cstring {
+    "Strobie is free to try, all of it.",
+    "Unlock it once to tune without this",
+    "reminder, on iPhone, iPad and Mac.",
+}
+
+// The reminder's sheet and its times, see UNLOCK_FREE_S
+UnlockReminder :: struct {
+    sheet:         Sheet,
+    until_next_s:  f32, // on screen until the next one, a whole UNLOCK_REMINDER_S after a start, see new_app
+    close_after_s: f32, // left of the countdown, it can be closed at 0
+    asked:         bool, // opened from the settings, it has the restore too
+    backdrop:      UnlockBackdrop,
+}
+
+// The screen under the reminder and its blur, made while it's up, see UNLOCK_BLUR_DOWNSCALE
+UnlockBackdrop :: struct {
+    scene: gfx.RenderTarget,
+    blur:  [2]gfx.RenderTarget,
+    size:  [2]f32, // the window's in points
+    scale: f32, // the DPI scale the scene was made for, 0 while there are none
+}
+
+// Once a frame: the free time, then the reminder when it's due and no other sheet is up
+follow_unlock :: proc(app: ^App) {
+    frame_time := gfx.frame_time()
+    store_update(frame_time)
+
+    reminder := &app.sheets.unlock
+    if reminder.sheet.open do reminder.close_after_s = max(reminder.close_after_s - frame_time, 0)
+    if store_state() == .UNLOCKED do return
+
+    // From the first lit note on, saved, a new start doesn't give it again. The reminder comes as it ends.
+    config := app.config
+    if config.unlock_free_s < UNLOCK_FREE_S {
+        if config.unlock_free_s > 0 || app.measurement.note_target.active do config.unlock_free_s += frame_time
+        reminder.until_next_s = 0
+        return
+    }
+
+    for sheet in all_sheets(&app.sheets) do if sheet.open do return
+
+    reminder.until_next_s -= frame_time
+    if reminder.until_next_s <= 0 do open_unlock_sheet(&app.sheets, countdown = true)
+}
+
+// Over the main screen, the other sheets go. Opened from the settings it closes at once and has the restore.
+open_unlock_sheet :: proc(sheets: ^AppSheets, countdown: bool) {
+    for sheet in all_sheets(sheets) do if sheet != &sheets.unlock.sheet do dismiss_sheet(sheets, sheet)
+    reset_note_offsets_editing()
+
+    reminder := &sheets.unlock
+    reminder.sheet.open = true
+    reminder.close_after_s = UNLOCK_CLOSE_AFTER_S if countdown else 0
+    reminder.until_next_s = UNLOCK_REMINDER_S
+    reminder.asked = !countdown
+}
+
+// Over the whole window and its blurred backdrop. While the countdown runs it stays up, then Close or Escape
+// takes it down.
+draw_unlock_sheet :: proc(app: ^App) {
+    sheets := &app.sheets
+    reminder := &sheets.unlock
+    sheet := &reminder.sheet
+    if sheet.slide == SHEET_DOWN do return
+
+    // Bought, it can go at once
+    if store_state() == .UNLOCKED do reminder.close_after_s = 0
+
+    // Not the tap that opened it, not while it slides away
+    gui.disabled = !(sheet.was_open && sheet.open)
+
+    close := gui_unlock(reminder.close_after_s, sheet.slide, reminder.asked)
+    if reminder.close_after_s > 0 do return
+
+    if close || gfx.key_pressed(.ESCAPE) do dismiss_sheet(sheets, sheet)
+}
+
+// A column in the middle of the window that comes up from under it with slide: the title, the words, the button
+// that buys it, under it the one that closes it after the countdown, and with restore the restore. Returns close
+// when that one is tapped.
+gui_unlock :: proc(close_after_s, slide: f32, restore: bool) -> (close: bool) {
+    state := store_state()
+    counting := close_after_s > 0
+    text, gaps := UNLOCK_TEXT, UNLOCK_GAPS
+
+    window, safe := gfx.window_size(), gfx.safe_area()
+    width := min(safe.width - 2 * UNLOCK_SIDE_MARGIN, UNLOCK_WIDTH)
+    left := safe.x + (safe.width - width) / 2
+    middle := left + width / 2
+
+    height := TITLE_LARGE_SIZE + gaps[0] + f32(len(text)) * UNLOCK_LINE_HEIGHT + gaps[1]
+    height += 2 * UNLOCK_BUTTON_HEIGHT + gaps[2]
+    if restore do height += gaps[3] + UNLOCK_RESTORE_HEIGHT
+    centered := safe.y + (safe.height - height) / 2
+    y := window.y + (centered - window.y) * slide
+
+    draw_centered_text(pixel_fonts.title_large, "Unlock Strobie", middle, y)
+    y += TITLE_LARGE_SIZE + gaps[0]
+
+    for line in text {
+        draw_centered_text(pixel_fonts.label_large, line, middle, y)
+        y += UNLOCK_LINE_HEIGHT
+    }
+    y += gaps[1]
+
+    // The purchase
+    buyable := state == .READY || state == .NOTHING_TO_RESTORE
+    label: cstring
+    switch state {
+    case .READY, .NOTHING_TO_RESTORE:
+        label = fmt.ctprintf("Unlock for %v", store_price())
+    case .LOADING:
+        label = "Asking the App Store…"
+    case .BUSY:
+        label = "Waiting for the App Store…"
+    case .UNAVAILABLE:
+        label = "The App Store can't be reached"
+    case .UNLOCKED:
+        label = "Unlocked, thank you!"
+    }
+
+    unlock := gfx.Rect{left, y, width, UNLOCK_BUTTON_HEIGHT}
+    if gui_unlock_button(unlock, pixel_fonts.label_large, label, buyable, highlight = true) do store_buy()
+    y += UNLOCK_BUTTON_HEIGHT + gaps[2]
+
+    // Under it, the seconds left on the button that closes it, dead until they run out
+    seconds := int(math.ceil(close_after_s))
+    close_label: cstring = "Close"
+    if counting do close_label = "Close in 1 second" if seconds == 1 else fmt.ctprintf("Close in %v seconds", seconds)
+
+    close_button := gfx.Rect{left, y, width, UNLOCK_BUTTON_HEIGHT}
+    close = gui_unlock_button(close_button, pixel_fonts.label_large, close_label, !counting)
+    y += UNLOCK_BUTTON_HEIGHT + gaps[3]
+    if !restore do return
+
+    // Restore, Apple asks for a way to it, as wide as its words. Not on the reminder that interrupts, StoreKit
+    // finds an earlier purchase at every start, and buying again what's bought costs nothing.
+    restore_label: cstring = "No earlier purchase found" if state == .NOTHING_TO_RESTORE else "Restore purchase"
+    restore_width := measure_label(pixel_fonts.label, restore_label, 1).x + 2 * UNLOCK_SIDE_MARGIN
+    restore_button := gfx.Rect{middle - restore_width / 2, y, restore_width, UNLOCK_RESTORE_HEIGHT}
+    restorable := state != .BUSY && state != .UNLOCKED && state != .LOADING
+    if gui_unlock_button(restore_button, pixel_fonts.label, restore_label, restorable) do store_restore()
+    return
+}
+
+// A pill with its label in the middle, a shade lighter while it's held. The purchase's in yellow with dark
+// words while it can be bought. Dead when not enabled, the words stay white.
+gui_unlock_button :: proc(rect: gfx.Rect, font: PixelFont, label: cstring, enabled: bool, highlight := false) -> bool {
+    fill, words := pill_dark, text_color_white
+    if highlight && enabled do fill, words = pill_yellow, text_color_dark
+    if enabled && gui_button_held(rect) do fill = pill_gray
+
+    gfx.draw_pill(rect, fill)
+    width := measure_label(font, label, 1).x
+    draw_label(font, label, {rect.x + (rect.width - width) / 2, rect.y + (rect.height - font.size) / 2}, words, 1)
+    return enabled && gui_button(rect)
+}
+
+// In white, centred on middle, top is the top of its line
+draw_centered_text :: proc(font: PixelFont, text: cstring, middle, top: f32) {
+    width := measure_label(font, text, 1).x
+    draw_label(font, text, {middle - width / 2, top}, text_color_white, 1)
+}
+
+// While the reminder is up, what's under it is drawn into the backdrop until end_unlock_backdrop, which blurs
+// it. False while it's down, its render targets go then.
+begin_unlock_backdrop :: proc(reminder: ^UnlockReminder) -> (began: bool) {
+    backdrop := &reminder.backdrop
+    if reminder.sheet.slide == SHEET_DOWN {
+        unload_unlock_backdrop(backdrop)
+        return false
+    }
+
+    // The scene sharp at the display's scale, the blur in the window's own points like the glow's
+    size, scale := gfx.window_size(), gfx.dpi_scale()
+    if size != backdrop.size || scale != backdrop.scale {
+        unload_unlock_backdrop(backdrop)
+        backdrop.scene = gfx.load_render_target(i32(math.round(size.x * scale)), i32(math.round(size.y * scale)))
+        blur := size * gfx.ui_scale() / UNLOCK_BLUR_DOWNSCALE
+        for &rt in backdrop.blur do rt = gfx.load_render_target(i32(math.round(blur.x)), i32(math.round(blur.y)))
+        backdrop.size, backdrop.scale = size, scale
+    }
+
+    gfx.begin_render_target(backdrop.scene, gfx.hex(panel_bg_color), {}, scale)
+    return true
+}
+
+// The screen as it was drawn, its blur over it as the sheet comes up, and the sheet's color over that
+end_unlock_backdrop :: proc(reminder: ^UnlockReminder) {
+    backdrop := &reminder.backdrop
+    gfx.end_render_target()
+
+    // Shrunk first, a wide blur for the taps of a narrow one
+    gfx.set_blend_mode(.REPLACE)
+    blur_size := gfx.render_target_size(backdrop.blur[0])
+    gfx.begin_render_target(backdrop.blur[0], nil)
+    gfx.draw_render_target(backdrop.scene, {0, 0, blur_size.x, blur_size.y})
+    gfx.end_render_target()
+
+    gfx.begin_shader(.BLOOM)
+    blur_render_targets(backdrop.blur, UNLOCK_BLUR_ITERATIONS, UNLOCK_BLUR_SPACING)
+    gfx.end_shader()
+
+    window := gfx.Rect{0, 0, backdrop.size.x, backdrop.size.y}
+    gfx.draw_render_target(backdrop.scene, window)
+    gfx.set_blend_mode(.ALPHA)
+
+    slide := reminder.sheet.slide
+    gfx.draw_render_target(backdrop.blur[0], window, fade_color(gfx.WHITE, slide))
+    gfx.draw_rect({0, 0}, backdrop.size, fade_color(gfx.hex(sheet_bg_color), UNLOCK_TINT * slide))
+}
+
+unload_unlock_backdrop :: proc(backdrop: ^UnlockBackdrop) {
+    if backdrop.scale == 0 do return
+
+    gfx.unload_render_target(backdrop.scene)
+    for rt in backdrop.blur do gfx.unload_render_target(rt)
+
+    backdrop^ = {}
+}
+
+// The version after the settings' title, and Free until it's unlocked
+settings_details :: proc() -> cstring {
+    if store_state() == .UNLOCKED do return VERSION
+    return fmt.ctprintf("%v · Free", VERSION)
+}
+
+// UNLOCK in the settings' header after Free until it's unlocked, built with UNLOCK only. It opens the reminder,
+// with the restore. Returns true when it's tapped.
+gui_settings_unlock :: proc(sheet_layout: SheetLayout) -> bool {
+    if store_state() == .UNLOCKED do return false
+
+    // After the title and its details as draw_sheet_header lays them out, on the title's middle, a row's height
+    // to tap
+    DETAILS_GAP :: 12
+    BUTTON_GAP :: 10
+    LABEL :: "UNLOCK"
+    title_size := measure_label(pixel_fonts.title, "Settings", 1)
+    details_width := measure_label(pixel_fonts.label, settings_details(), 1).x
+    left := sheet_layout.title.x + title_size.x + DETAILS_GAP + details_width + BUTTON_GAP
+    middle := sheet_layout.title.y + title_size.y / 2
+    control := gfx.Rect{0, middle - SHEET_ROW_HEIGHT / 2, 0, SHEET_ROW_HEIGHT}
+    return gui_small_button(left + small_button_width(LABEL), control, LABEL)
+}

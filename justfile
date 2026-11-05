@@ -31,6 +31,7 @@ sdl platform:
 # just dev [target]
 #   (none) debug build, needs SDL3 (brew install sdl3)
 #   stats  with the signal stats and NSDF plots
+#   unlock with the unlock's reminder and a pretend store, 10 s free and a reminder every 15 s
 #   ios    on the iOS simulator, the first run builds the native deps into external/ios-sim
 #   ipad   on an iPad simulator
 dev target="": setup
@@ -38,9 +39,10 @@ dev target="": setup
     case "{{target}}" in
         "") odin run src/app -debug -vet ;;
         stats) odin run src/app -debug -vet -define:DEBUG_STATS=true ;;
+        unlock) odin run src/app -debug -vet -define:UNLOCK=fake -define:UNLOCK_FREE_S=10 -define:UNLOCK_REMINDER_S=15 ;;
         ios) sh platform/ios/build-sim.sh ;;
         ipad) IOS_SIM_FAMILY=iPad sh platform/ios/build-sim.sh ;;
-        *) echo "Unknown target '{{target}}', use stats, ios or ipad"; exit 1 ;;
+        *) echo "Unknown target '{{target}}', use stats, unlock, ios or ipad"; exit 1 ;;
     esac
 
 # Optimized build for this machine, build/strobie

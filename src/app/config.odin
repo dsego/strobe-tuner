@@ -241,6 +241,11 @@ Config :: struct {
     // and where its top left corner was, in the system's points across the displays. Only with a size, a
     // window not on any display any more opens in the middle of the main one.
     window_position:              [2]int,
+
+    // --- Unlock ---
+
+    // How much of the free time before the reminder is used, kept through a reset, see UNLOCK_FREE_S
+    unlock_free_s:                f32,
 }
 
 // In the order of Config
@@ -289,6 +294,9 @@ config_defaults :: Config {
     // --- Window ---
     window_size                  = {},
     window_position              = {},
+
+    // --- Unlock ---
+    unlock_free_s                = 0,
 }
 
 
@@ -303,6 +311,7 @@ reset_config :: proc(config: ^Config) {
     config.note_offset_counts, config.note_offset_notes = kept.note_offset_counts, kept.note_offset_notes
     config.note_offset_cents = kept.note_offset_cents
     config.input_device = kept.input_device
+    config.unlock_free_s = kept.unlock_free_s
 }
 
 // The config's own copy of the name, the one it had is freed. Not while a copy of the config still points
