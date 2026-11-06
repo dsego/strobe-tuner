@@ -33,7 +33,7 @@ SEGMENT_WIDTH :: 60
 SETTINGS_ROWS :: 7
 
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
-DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 5,.SCOPE = 4, .TRACE = 2, .LAMP = 3, .SPECTRUM = 4}
+DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 5, .SCOPE = 4, .TRACE = 2, .LAMP = 3, .SPECTRUM = 4}
 
 // For the longer labels of the display's options
 WIDE_SEGMENT_WIDTH :: 80

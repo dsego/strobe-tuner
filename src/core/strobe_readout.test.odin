@@ -126,51 +126,39 @@ test_readout_track :: proc(t: ^testing.T) {
 @(test)
 test_note_held_high_in_noise :: proc(t: ^testing.T) {
     FRAME :: 800 // a 60th of a second
-    LEAD_IN :: 2 * 48_000
-    BEFORE :: 3 * 48_000
-    TONE :: 5 * 24_000 // 2.5 s
+    LEAD_IN_S :: 2
+    BEFORE_S :: 3
+    TONE_S :: 2.5
     TONE_RMS :: 0.1
+
+    c8 := cents_to_note(39 * 100, 440)
+    peak := math.SQRT_TWO * TONE_RMS
+    samples := test_samples(LEAD_IN_S + BEFORE_S + TONE_S)
+    in_tune := samples[:int((LEAD_IN_S + BEFORE_S) * f64(DEFAULT_SAMPLE_RATE))]
+    phase := add_partials(in_tune, f64(c8.frequency), {peak}, from_s = LEAD_IN_S)
+    add_partials(samples, f64(freq_at_cents(c8.frequency, 55)), {peak}, from_s = LEAD_IN_S + BEFORE_S, phase = phase)
+    add_noise(samples, 0.1 * TONE_RMS, ACCURACY_NOISE_SEED)
 
     detector := init_pitch_detector(440)
     defer destroy_pitch_detector(&detector)
     note_target := init_note_target(110, 440)
-    lock_in := init_strobe_lock_in(110, {1, 2, 4}, .HARMONIC)
+    lock_in := test_lock_in(note_target.target_note.frequency, {1, 2, 4})
     defer destroy_strobe_lock_in(lock_in)
-    set_strobe_lock_in_freq(lock_in, note_target.target_note.frequency, 440, 0.025, 2, .HARMONIC)
 
-    c8 := cents_to_note(39 * 100, 440)
-    sharp_hz := f64(freq_at_cents(c8.frequency, 55))
-    noise_rms := TONE_RMS * math.pow(f32(10), -20.0 / 20)
-    random := u32(0x9e3779b9)
-    chunk: [FRAME]f32
-    clock := 0
-    cycles: f64 = 0
     wrong := 0
-    for clock < LEAD_IN + BEFORE + TONE {
-        for &sample in chunk {
-            random ~= random << 13
-            random ~= random >> 17
-            random ~= random << 5
-            uniform := f32(random) / f32(max(u32)) * 2 - 1
-            sample = noise_rms * math.SQRT_THREE * uniform
-            if clock >= LEAD_IN {
-                sample += f32(math.SQRT_TWO * TONE_RMS * math.sin(math.TAU * cycles))
-                cycles += (f64(c8.frequency) if clock < LEAD_IN + BEFORE else sharp_hz) / 48_000
-            }
-            clock += 1
-        }
-        audio_capture_write(&detector, chunk[:])
-        audio_capture_write(lock_in, chunk[:])
+    for start := 0; start + FRAME <= len(samples); start += FRAME {
+        frame := samples[start:start + FRAME]
+        audio_capture_write(&detector, frame)
+        audio_capture_write(lock_in, frame)
         pitch := run_pitch_detection(&detector, note_target.pitch)
         run_phase_detection(lock_in)
-        shown := strobe_shows_note(lock_in)
-        retuned := update_note_target(&note_target, pitch, shown)
-        if retuned do set_strobe_lock_in_freq(lock_in, note_target.target_note.frequency, 440, 0.025, 2, .HARMONIC)
+        if update_note_target(&note_target, pitch, strobe_shows_note(lock_in)) {
+            tune_test_lock_in(lock_in, note_target.target_note.frequency)
+        }
 
         // The last second, as sandbox/accuracy measures
-        if clock > LEAD_IN + BEFORE + TONE - 48_000 && (!note_target.active || note_target.target_note.cents != c8.cents) {
-            wrong += 1
-        }
+        last_second := start + FRAME > len(samples) - int(DEFAULT_SAMPLE_RATE)
+        if last_second && (!note_target.active || note_target.target_note.cents != c8.cents) do wrong += 1
     }
     testing.expectf(t, wrong == 0, "no note or the wrong one in %v frames of the last second", wrong)
 }

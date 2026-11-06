@@ -2,6 +2,15 @@
 
 Problems that are seen and understood but not fixed yet.
 
+## A soft re-pluck isn't an onset
+
+A string plucked again at twice the level it rang down to, or 0.15 s after a mute, doesn't count as a new pluck,
+so the readout's fit carries on across both. A pluck is the track's level jumping `ONSET_RATIO` (1.5) over its
+envelope, which follows over `ONSET_ENVELOPE_TIME_S` (0.3 s), and the level comes through the track's window,
+0.22 s at A2: the new pluck rises through it while the envelope follows, the ratio peaks near 1.4. Four times the
+level, or half a second after a mute, is one. The same before and after the stripes moved to the slots'
+level, see `test_onset_on_a_replucked_string`; the slots light the first pluck's onset about 50 ms later.
+
 ## The harmonic stack misses low sines stepping half a semitone
 
 The pitch detection reads the harmonic stack since 2026-11-05 (`PitchMethod.HARMONICS`). On the generated

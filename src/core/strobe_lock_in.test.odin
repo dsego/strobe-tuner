@@ -20,6 +20,65 @@ package core
 import "core:math"
 import "core:testing"
 
+// A lock-in on note_hz with these tracks, harmonic, see tune_test_lock_in
+test_lock_in :: proc(note_hz: f32, intervals: []f32) -> ^StrobeLockIn {
+    lock_in := init_strobe_lock_in(note_hz, intervals, .HARMONIC)
+    tune_test_lock_in(lock_in, note_hz)
+    return lock_in
+}
+
+// Retuned to note_hz as the app retunes it at A4 440, harmonic
+tune_test_lock_in :: proc(lock_in: ^StrobeLockIn, note_hz: f32) {
+    set_strobe_lock_in_freq(lock_in, note_hz, 440, 0.025, 2, .HARMONIC)
+}
+
+// The next frame of the samples through the lock-in as the app's loop runs it, played the samples so far. A loop:
+// for end_s in play_frames(lock_in, samples, &played, FRAME), end_s where the frame ends.
+play_frames :: proc(lock_in: ^StrobeLockIn, samples: []f32, played: ^int, frame: int) -> (end_s: f64, ok: bool) {
+    if played^ + frame > len(samples) do return 0, false
+
+    audio_capture_write(lock_in, samples[played^:played^ + frame])
+    run_phase_detection(lock_in)
+    played^ += frame
+    return f64(played^) / f64(lock_in.sample_rate), true
+}
+
+// This long a silence for the tests to add to, see add_partials and add_noise
+test_samples :: proc(seconds: f64) -> []f32 {
+    return make([]f32, int(seconds * f64(DEFAULT_SAMPLE_RATE)), context.temp_allocator)
+}
+
+// A note added from from_s on, its nth partial amplitudes[n - 1] high, from phase radians of the fundamental and
+// fading to a third every decay_s past 0. Where the fundamental's phase ends, for a note going on from there.
+add_partials :: proc(
+    samples: []f32,
+    freq_hz: f64,
+    amplitudes: []f64,
+    from_s: f64 = 0,
+    phase: f64 = 0,
+    decay_s: f64 = 0,
+) -> (
+    end_phase: f64,
+) {
+    first := int(from_s * f64(DEFAULT_SAMPLE_RATE))
+    for &sample, index in samples[first:] {
+        time_s := f64(index) / f64(DEFAULT_SAMPLE_RATE)
+        level := math.exp(-time_s / decay_s) if decay_s > 0 else 1
+        angle := phase + math.TAU * freq_hz * time_s
+        for amplitude, partial in amplitudes do sample += f32(level * amplitude * math.sin(f64(partial + 1) * angle))
+    }
+    return phase + math.TAU * freq_hz * f64(len(samples) - first) / f64(DEFAULT_SAMPLE_RATE)
+}
+
+// White noise of this RMS added, uniform, the same every run from the seed. From sandbox/accuracy's seed it's
+// that harness's noise.
+add_noise :: proc(samples: []f32, rms: f32, seed: u32 = 1) {
+    state := seed
+    for &sample in samples do sample += rms * math.SQRT_THREE * test_noise(&state)
+}
+
+ACCURACY_NOISE_SEED :: 0x9e3779b9 // sandbox/accuracy's
+
 
 @(test)
 test_dft_window_size :: proc(t: ^testing.T) {
@@ -205,4 +264,73 @@ test_strobe_turn_rate :: proc(t: ^testing.T) {
             }
         }
     }
+}
+
+// A string plucked again: while it still rings, four times the level it rang down to and its phase jumped, and half
+// a second after a mute at the level it had. Each pluck is an onset, the readout's fit starts over, as is the first
+// one, though the onsets wait for the slots' level, which a re-pluck's phase jump can drop for a few periods. A
+// softer re-pluck, twice the level, or one 0.15 s after a mute isn't one, nor was it by the SNR: the level rises
+// through the window while the envelope follows and doesn't reach ONSET_RATIO over it.
+@(test)
+test_onset_on_a_replucked_string :: proc(t: ^testing.T) {
+    FRAME :: 800 // a 60th of a second
+    A2 :: 110.0
+    DECAY_S :: 1.5
+    LEVEL :: 0.3
+    HISS :: 1e-4 // the room's, over 70 dB under the string
+    PLAYED_S :: 3
+    FOUND_WITHIN_S :: 0.4
+
+    // A pluck's level and phase from when it starts, the string rings down from it until the next one
+    Pluck :: struct {
+        at_s:  f64,
+        level: f64,
+        phase: f64,
+    }
+
+    // When the onsets came, the plucks and a mute before the last one if mute_s is past 0
+    onsets_of :: proc(plucks: []Pluck, mute_s: f64) -> [dynamic]f64 {
+        lock_in := test_lock_in(A2, {1, 2, 4})
+        defer destroy_strobe_lock_in(lock_in)
+
+        samples := test_samples(PLAYED_S)
+        add_noise(samples, HISS)
+        for pluck, index in plucks {
+            rings_to_s := plucks[index + 1].at_s if index + 1 < len(plucks) else PLAYED_S
+            if mute_s > pluck.at_s do rings_to_s = min(rings_to_s, mute_s)
+
+            ringing := samples[:int(rings_to_s * f64(DEFAULT_SAMPLE_RATE))]
+            level := pluck.level
+            add_partials(ringing, A2, {level, 0.5 * level, 0, 0.25 * level}, pluck.at_s, pluck.phase, DECAY_S)
+        }
+
+        onsets: [dynamic]f64
+        played := 0
+        for end_s in play_frames(lock_in, samples, &played, FRAME) {
+            if lock_in.bands[0].onset do append(&onsets, end_s)
+        }
+        return onsets
+    }
+
+    // Whether an onset came within FOUND_WITHIN_S of each pluck
+    expect_onsets :: proc(t: ^testing.T, name: string, plucks: []Pluck, onsets: []f64) {
+        for pluck in plucks {
+            found := false
+            for onset in onsets {
+                if onset >= pluck.at_s && onset - pluck.at_s <= FOUND_WITHIN_S do found = true
+            }
+            testing.expectf(t, found, "%v: no onset for the pluck at %.2f s, onsets at %v", name, pluck.at_s, onsets)
+        }
+    }
+
+    rung_down := LEVEL * math.exp(-1 / DECAY_S) // at 1 s
+    soft := []Pluck{{0, LEVEL, 0}, {1, 4 * rung_down, 2}}
+    soft_onsets := onsets_of(soft, -1)
+    defer delete(soft_onsets)
+    expect_onsets(t, "re-plucked while ringing", soft, soft_onsets[:])
+
+    muted := []Pluck{{0, LEVEL, 0}, {1.5, rung_down, 2}}
+    muted_onsets := onsets_of(muted, 1)
+    defer delete(muted_onsets)
+    expect_onsets(t, "re-plucked after a mute", muted, muted_onsets[:])
 }

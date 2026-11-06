@@ -35,14 +35,19 @@ test_strobe_slat_level :: proc(t: ^testing.T) {
     }
 
     testing.expect(t, level_of(0) > 0.99)
-    testing.expect(t, level_of(0.3) > 0.99)
-    middle := level_of(0.7)
+    testing.expect(t, level_of(0.2) > 0.99)
+    middle := level_of(0.5)
     testing.expect(t, middle > 0.1 && middle < 0.9)
-    testing.expect_value(t, level_of(1.2), 0)
+    testing.expect_value(t, level_of(1), 0)
 
     one: StrobeSlats
     add_slat_measurement(&one.measurements[0], 1, 0, 1)
     testing.expect_value(t, strobe_slat_level(&one, 0), 0)
+
+    // An attack: one direction growing from a tenth of the partial to all of it isn't scatter
+    attack: StrobeSlats
+    for measurement in 0 ..< 8 do add_slat_measurement(&attack.measurements[0], min(0.1 + 0.3 * f32(measurement), 1), 0, 1)
+    testing.expect(t, strobe_slat_level(&attack, 0) > 0.99)
 }
 
 // A clean note off the reference: its partials go round steadily in the measurements, the drift the stripes show.
@@ -53,22 +58,13 @@ test_slat_level_off_the_reference :: proc(t: ^testing.T) {
     E2 :: 82.41
 
     for detune_cents in ([]f32{-30, 10, 30}) {
-        lock_in := init_strobe_lock_in(E2, {1, 2, 4}, .HARMONIC)
+        lock_in := test_lock_in(E2, {1, 2, 4})
         defer destroy_strobe_lock_in(lock_in)
-        set_strobe_lock_in_freq(lock_in, E2, 440, 0.025, 2, .HARMONIC)
 
-        freq_hz := f64(freq_at_cents(E2, detune_cents))
-        chunk: [FRAME]f32
-        clock := 0
-        for _ in 0 ..< 2 * int(DEFAULT_SAMPLE_RATE) / FRAME {
-            for &sample in chunk {
-                phase := math.TAU * freq_hz * f64(clock) / f64(DEFAULT_SAMPLE_RATE)
-                sample = f32(0.2 * math.sin(phase) + 0.1 * math.sin(2 * phase) + 0.05 * math.sin(4 * phase))
-                clock += 1
-            }
-            audio_capture_write(lock_in, chunk[:])
-            run_phase_detection(lock_in)
-        }
+        samples := test_samples(2)
+        add_partials(samples, f64(freq_at_cents(E2, detune_cents)), {0.2, 0.1, 0, 0.05})
+        played := 0
+        for _ in play_frames(lock_in, samples, &played, FRAME) {}
 
         for band, index in lock_in.bands {
             testing.expectf(t, band.slat_level == 1, "%+.0f cents: track %v lit at %.2f", detune_cents, index, band.slat_level)
@@ -84,33 +80,50 @@ test_slat_level_high_note_in_noise :: proc(t: ^testing.T) {
     C8 :: 4186.01
     TONE_RMS :: 0.1
 
-    lock_in := init_strobe_lock_in(C8, {1, 2, 4}, .HARMONIC)
+    lock_in := test_lock_in(C8, {1, 2, 4})
     defer destroy_strobe_lock_in(lock_in)
-    set_strobe_lock_in_freq(lock_in, C8, 440, 0.025, 2, .HARMONIC)
 
-    freq_hz := f64(freq_at_cents(C8, 55))
-    noise_rms := TONE_RMS * math.pow(f32(10), -20.0 / 20)
-    random := u32(0x9e3779b9)
-    chunk: [FRAME]f32
-    clock := 0
+    samples := test_samples(2.5)
+    add_partials(samples, f64(freq_at_cents(C8, 55)), {math.SQRT_TWO * TONE_RMS})
+    add_noise(samples, 0.1 * TONE_RMS, ACCURACY_NOISE_SEED)
+
     lowest: f32 = 1
-    for frame in 0 ..< 150 {
-        for &sample in chunk {
-            random ~= random << 13
-            random ~= random >> 17
-            random ~= random << 5
-            uniform := f32(random) / f32(max(u32)) * 2 - 1
-            tone := math.SQRT_TWO * TONE_RMS * math.sin(math.TAU * freq_hz * f64(clock) / f64(DEFAULT_SAMPLE_RATE))
-            sample = f32(tone) + noise_rms * math.SQRT_THREE * uniform
-            clock += 1
-        }
-        audio_capture_write(lock_in, chunk[:])
-        run_phase_detection(lock_in)
-
+    played := 0
+    for end_s in play_frames(lock_in, samples, &played, FRAME) {
         // Past the first second, the stripes lit by then
-        if frame >= 60 do lowest = min(lowest, lock_in.bands[0].visibility)
+        if end_s > 1 do lowest = min(lowest, lock_in.bands[0].visibility)
     }
     testing.expectf(t, lowest >= 0.5, "the 1× track's stripes went down to %.2f", lowest)
+}
+
+// A clean pluck after a little hiss: how soon its stripes light, at A2 a period of the note is 9.1 ms. Its first
+// windows only partly hold the note, their measurements grow into it as they point the same way.
+@(test)
+test_slat_level_lights_a_pluck :: proc(t: ^testing.T) {
+    FRAME :: 400 // a 120th of a second
+    A2 :: 110.0
+    PLUCK_S :: 0.5
+
+    lock_in := test_lock_in(A2, {1, 2, 4})
+    defer destroy_strobe_lock_in(lock_in)
+
+    samples := test_samples(1)
+    add_noise(samples, 1e-4)
+    add_partials(samples, A2, {0.3, 0.15, 0, 0.075}, from_s = PLUCK_S, decay_s = 1.5)
+
+    lit_s, full_s, half_drawn_s: f64 = -1, -1, -1
+    played := 0
+    for end_s in play_frames(lock_in, samples, &played, FRAME) {
+        since_s := end_s - PLUCK_S
+        if since_s < 0 do continue
+
+        first := lock_in.bands[0]
+        if lit_s < 0 && first.slat_level > 0 do lit_s = since_s
+        if full_s < 0 && first.slat_level >= 1 do full_s = since_s
+        if half_drawn_s < 0 && first.visibility >= 0.5 do half_drawn_s = since_s
+    }
+    log.infof("A2 plucked, 1×: lit after %.0f ms, full %.0f ms, half drawn %.0f ms", 1000 * lit_s, 1000 * full_s, 1000 * half_drawn_s)
+    testing.expectf(t, half_drawn_s >= 0, "the 1× track never lit")
 }
 
 // Windows SLAT_WINDOW_SPANS spans long, one closing every span, share the noise where they overlap: white noise
@@ -137,9 +150,9 @@ test_slat_window_overlap :: proc(t: ^testing.T) {
     testing.expectf(t, abs(overlap - SLAT_WINDOW_OVERLAP) < 0.005, "the windows overlap by %.3f", overlap)
 }
 
-// A low note's 2nd partial alone, no fundamental: the 1× track has nothing of its own and stays gray. A span is a
-// period of the reference, it cancels the 2× only while the note is on the reference. Off it, as on the P-bass
-// recordings shifted by 7 and 23 cents, the 2× leaks in and turns slowly from span to span.
+// A low note's 2nd partial alone, no fundamental: the 1× track has nothing of its own and stays gray. Measured
+// over one span, a box, the 2× cancelled only on the reference: 7 and 23 cents off, as on the P-bass recordings
+// shifted that far, it leaked in 40 dB under, louder than a bass's fundamental. The windows keep it out.
 @(test)
 test_slat_level_without_the_fundamental :: proc(t: ^testing.T) {
     FRAME :: 400
@@ -147,21 +160,13 @@ test_slat_level_without_the_fundamental :: proc(t: ^testing.T) {
     LEVEL :: 0.5 // the 2nd partial's peak
 
     for detune_cents in ([]f32{0, -7, 23}) {
-        lock_in := init_strobe_lock_in(C1, {1, 2}, .HARMONIC)
+        lock_in := test_lock_in(C1, {1, 2})
         defer destroy_strobe_lock_in(lock_in)
-        set_strobe_lock_in_freq(lock_in, C1, 440, 0.025, 2, .HARMONIC)
 
-        freq_hz := f64(freq_at_cents(2 * C1, detune_cents))
-        chunk: [FRAME]f32
-        clock := 0
-        for _ in 0 ..< 3 * int(DEFAULT_SAMPLE_RATE) / FRAME {
-            for &sample in chunk {
-                sample = f32(LEVEL * math.sin(math.TAU * freq_hz * f64(clock) / f64(DEFAULT_SAMPLE_RATE)))
-                clock += 1
-            }
-            audio_capture_write(lock_in, chunk[:])
-            run_phase_detection(lock_in)
-        }
+        samples := test_samples(3)
+        add_partials(samples, f64(freq_at_cents(2 * C1, detune_cents)), {LEVEL})
+        played := 0
+        for _ in play_frames(lock_in, samples, &played, FRAME) {}
 
         // What the 1× track's slots and its lock-in hear of the 2×, in dB under it
         sums := lock_in.slats.measurements[0]
@@ -176,6 +181,9 @@ test_slat_level_without_the_fundamental :: proc(t: ^testing.T) {
             first.slat_level,
             first.visibility,
         )
+        // Well under a low string's fundamental, 58 to 65 dB under its 2nd partial on a bass. Gray too, though
+        // that's the silence under STROBE_SLATS_SILENCE_DBFS this far down.
+        testing.expectf(t, slots_db < -75, "%+.0f cents: the 2× leaks into the 1× slots %.1f dB under", detune_cents, slots_db)
         testing.expectf(t, first.slat_level == 0, "%+.0f cents: the 1× track lit at %.2f", detune_cents, first.slat_level)
     }
 }

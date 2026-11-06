@@ -41,8 +41,9 @@ scope_test_sine :: proc(samples: []f32, freq_hz: f64, clock: i64) {
 
 SCOPE_TEST_FRAME :: DEFAULT_SAMPLE_RATE / 60
 
-// Uniform noise between -1 and 1 from a xorshift, the same noise every run from the same state
-scope_test_noise :: proc(state: ^u32) -> f32 {
+// White noise for the tests, a sample of it between -1 and 1, the same noise every run from the same state. A
+// xorshift: the shifts and XORs scramble the state into the next number, evenly spread over a u32.
+test_noise :: proc(state: ^u32) -> f32 {
     state^ ~= state^ << 13
     state^ ~= state^ >> 17
     state^ ~= state^ << 5
@@ -428,7 +429,7 @@ test_scope_average :: proc(t: ^testing.T) {
     samples: [SCOPE_TEST_FRAME]f32
     for _ in 0 ..< 60 {
         scope_test_sine(samples[:], FREQ, newest.sample_clock)
-        for &sample in samples do sample = AMP * sample + NOISE * scope_test_noise(&state)
+        for &sample in samples do sample = AMP * sample + NOISE * test_noise(&state)
         for scope in ([]^Scope{&newest, &averaged}) {
             audio_capture_write(scope, samples[:])
             update_scope(scope)
@@ -645,7 +646,7 @@ test_scope_circle_ends_smoothly_on_a_string :: proc(t: ^testing.T) {
                 freq := partial * (FREQ + OFF_HZ) * math.sqrt(1 + INHARMONICITY * partial * partial)
                 value += math.exp(-time * (0.5 + 0.4 * partial)) / partial * math.sin(math.TAU * freq * time + partial)
             }
-            sample = 0.5 * f32(value) + NOISE * scope_test_noise(&state)
+            sample = 0.5 * f32(value) + NOISE * test_noise(&state)
         }
         audio_capture_write(&scope, samples[:])
         update_scope(&scope)
@@ -697,7 +698,7 @@ test_scope_average_has_no_seam :: proc(t: ^testing.T) {
     samples: [SCOPE_TEST_FRAME]f32
     for _ in 0 ..< 60 {
         scope_test_sine(samples[:], FREQ, scope.sample_clock)
-        for &sample in samples do sample = 0.5 * sample + NOISE * scope_test_noise(&state)
+        for &sample in samples do sample = 0.5 * sample + NOISE * test_noise(&state)
         audio_capture_write(&scope, samples[:])
         update_scope(&scope)
     }
@@ -773,7 +774,7 @@ test_scope_pluck_starts_the_average_over :: proc(t: ^testing.T) {
     fading :: proc(scope: ^Scope, samples: []f32, state: ^u32) {
         for &sample, index in samples {
             time := f64(scope.sample_clock + i64(index)) / DEFAULT_SAMPLE_RATE
-            sample = f32(AMP * math.pow(10, -1.5 * time) * math.sin(math.TAU * FREQ * time)) + NOISE * scope_test_noise(state)
+            sample = f32(AMP * math.pow(10, -1.5 * time) * math.sin(math.TAU * FREQ * time)) + NOISE * test_noise(state)
         }
         audio_capture_write(scope, samples)
         update_scope(scope)
@@ -809,7 +810,7 @@ test_scope_pluck_starts_the_average_over :: proc(t: ^testing.T) {
     fading(&scope, samples[:boundary - scope.sample_clock], &state)
     for &sample, index in samples {
         time := f64(scope.sample_clock + i64(index)) / DEFAULT_SAMPLE_RATE
-        sample = f32(AMP * math.sin(math.TAU * FREQ * time + PLUCK_PHASE)) + NOISE * scope_test_noise(&state)
+        sample = f32(AMP * math.sin(math.TAU * FREQ * time + PLUCK_PHASE)) + NOISE * test_noise(&state)
     }
     audio_capture_write(&scope, samples[:])
     update_scope(&scope)

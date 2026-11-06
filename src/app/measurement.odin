@@ -59,6 +59,7 @@ HeldReadout :: struct {
 init_measurement :: proc(measurement: ^Measurement, config: ^Config) {
     measurement.note_target = core.init_note_target(config.target_freq_hz, config.pitch_standard)
     measurement.strobe_lock_in = core.init_strobe_lock_in(config.target_freq_hz, config.strobe_intervals[:], config.strobe_mode)
+    set_strobe_tracks(measurement, config)
     measurement.pitch_detector = core.init_pitch_detector(config.pitch_standard)
     measurement.scope = core.init_scope(SCOPE_COLUMNS, SCOPE_ROWS)
 
@@ -100,10 +101,11 @@ set_strobe_speed :: proc(measurement: ^Measurement, config: ^Config) {
 set_strobe_tracks :: proc(measurement: ^Measurement, config: ^Config) {
     lock_in := measurement.strobe_lock_in
     if config.strobe_mode == .VERNIER {
-        fundamentals, no_offsets: [VERNIER_TRACKS]f32
-        for &interval in fundamentals do interval = 1
+        // Every one on the fundamental at the base speed, vernier mode turns each faster, see VERNIER_SPEED_MULTIPLIER
+        intervals, offsets_cents, speeds: [VERNIER_TRACKS]f32
+        for index in 0 ..< VERNIER_TRACKS do intervals[index], speeds[index] = 1, 1
 
-        core.set_strobe_lock_in_tracks(lock_in, fundamentals[:], no_offsets[:], fundamentals[:])
+        core.set_strobe_lock_in_tracks(lock_in, intervals[:], offsets_cents[:], speeds[:])
         return
     }
     core.set_strobe_lock_in_tracks(lock_in, config.strobe_intervals[:], config.strobe_offsets_cents[:], config.strobe_speeds[:])

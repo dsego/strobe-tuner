@@ -13,9 +13,8 @@ the note hold and the trace go by it too. What's still open:
   sung note: a phase coherence fade tried on 2026-10-05 took a voice's waver for noise and grayed a hum's 4×
   (it compared windows apart without following the drift, the measurements here turn with the frame's advance).
 - Gone with the SNR fade and not missed so far: the fade of stripes moving too fast for the screen (on a fast
-  drift they could seem to turn backwards), the off-note fade of the brightness (the edges still soften by the
-  shader's amp), and the envelope dropping to the level under the noise (a re-pluck right after a mute might
-  not count as an onset).
+  drift they could seem to turn backwards) and the off-note fade of the brightness (the edges still soften by
+  the shader's amp).
 - Tried and dropped on the way: a strobe drawn from the slots alone (it vibrated on bass at the lock-in's
   speed), the noise from the positive and negative halves of 64 slots a period (it doesn't average down and
   let fading partials go early), and measurements one period long (a box lets a 2nd partial a few cents off

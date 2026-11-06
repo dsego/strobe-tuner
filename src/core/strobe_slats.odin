@@ -85,11 +85,11 @@ SlatWindow :: struct {
 
 // The measurements summed, each fading by the note's periods since, see add_slat_measurement
 SlatMeasurements :: struct {
-    cosine:         f32,
-    sine:           f32,
-    power:          f32, // each one's squared size
-    weight:         f32,
-    weight_squared: f32, // how many measurements the sums are worth, weight² ÷ this
+    cosine:       f32,
+    sine:         f32,
+    weight:       f32, // how many, faded
+    size:         f32, // each one's size
+    size_squared: f32, // how many measurements the sums are worth by size, size² ÷ this
 }
 
 // The Blackman window at place, 0 to 1 across it
@@ -118,9 +118,10 @@ add_slat_measurement :: proc(sums: ^SlatMeasurements, cosine, sine: f32, note_pe
     sums.cosine, sums.sine =
         (sums.cosine * turn_cosine - sums.sine * turn_sine) * keep + cosine,
         (sums.sine * turn_cosine + sums.cosine * turn_sine) * keep + sine
-    sums.power = sums.power * keep + cosine * cosine + sine * sine
+    size := math.sqrt(cosine * cosine + sine * sine)
     sums.weight = sums.weight * keep + 1
-    sums.weight_squared = sums.weight_squared * keep * keep + 1
+    sums.size = sums.size * keep + size
+    sums.size_squared = sums.size_squared * keep * keep + size * size
 }
 
 // As many of the track's own periods as fit a whole number of the note's, its partial or three for a fifth.
@@ -135,7 +136,8 @@ slat_fold_periods :: proc(band: PhaseBand, mode: StrobeMode) -> int {
     return clamp(int(math.round(band.interval)), 1, SLAT_MAX_PERIODS)
 }
 
-// The lock-in's new samples into every track's windows, after run_phase_detection
+// The lock-in's new samples into every measured track's windows, after run_phase_detection. Vernier mode's
+// faster tracks copy the first one's level, see run_phase_detection.
 fill_strobe_slats :: proc(self: ^StrobeSlats, lock_in: ^StrobeLockIn) {
     new_samples := min(lock_in.available, lock_in.buffer_len)
     if new_samples <= 0 do return
@@ -148,15 +150,13 @@ fill_strobe_slats :: proc(self: ^StrobeSlats, lock_in: ^StrobeLockIn) {
     self.clock = lock_in.sample_clock
 
     for band, index in lock_in.bands {
-        if index >= MAX_BANDS do break
-
         periods := slat_fold_periods(band, lock_in.mode)
         if self.freq_hz[index] != band.freq_hz || self.periods[index] != periods {
             self.open[index], self.measurements[index] = {}, {}
             self.freq_hz[index] = band.freq_hz
             self.periods[index] = periods
         }
-        if !band.in_range do continue
+        if !measures_band(lock_in, index) || !band.in_range do continue
 
         // The span, in its own turns, of the first new sample and a sample's step. The note's periods in a span,
         // and how far the partial turns in one by the lock-in's phase advance over the new samples, as the stripes
@@ -217,14 +217,14 @@ fill_strobe_slats :: proc(self: ^StrobeSlats, lock_in: ^StrobeLockIn) {
     }
 }
 
-// Every track's level from its slots after fill_strobe_slats, and how lit its stripes are, the level eased
-// over the new samples. Dark all the way in the end, a dark strobe's glow is drawn again as it was.
+// Every measured track's level from its slots after fill_strobe_slats, and how lit its stripes are, the level
+// eased over the new samples. Dark all the way in the end, a dark strobe's glow is drawn again as it was.
 update_band_levels :: proc(self: ^StrobeLockIn) {
     elapsed_s := f32(self.available) / self.sample_rate
     ease := 1 - math.exp(-elapsed_s / STROBE_SLATS_LEVEL_S)
 
     for &band, index in self.bands {
-        if index >= MAX_BANDS do break
+        if !measures_band(self, index) do continue
 
         band.slat_level = strobe_slat_level(&self.slats, index) if band.in_range else 0
         band.visibility += ease * (band.slat_level - band.visibility)
@@ -232,25 +232,32 @@ update_band_levels :: proc(self: ^StrobeLockIn) {
     }
 }
 
-// How bright one track's stripes are, 0 gray to 1 full: how sure the partial's average over the measurements
-// is. Each window measures the partial, the note's other partials fall in its nulls. The measurements scatter
-// around their average by the noise near the track's own frequency, and the average is as uncertain as that
-// scatter over how many measurements it holds, in radians of its phase near enough. Gray at
+// How bright one track's stripes are, 0 gray to 1 full: how sure the partial's phase is over the measurements.
+// Each window measures the partial, the note's other partials fall in its nulls. Noise near the track's own
+// frequency scatters the measurements' directions, and their average is as uncertain as that scatter over how
+// many measurements it holds, in radians near enough. By direction, each measurement as much as its size: an
+// attack's first windows only partly hold the note and grow into it, they agree and aren't scatter. Gray at
 // STROBE_SLATS_NOISE_RAD, as much of the way as STROBE_SLATS_GAIN allows. All gray before two measurements' worth
 // came in and in silence.
 strobe_slat_level :: proc(self: ^StrobeSlats, band_index: int) -> f32 {
     sums := self.measurements[band_index]
-    count := sums.weight * sums.weight / sums.weight_squared if sums.weight_squared > 0 else 0
+    if sums.weight <= 0 || sums.size_squared <= 0 do return 0
+
+    // Weighed by size, an attack's small first measurements count for less
+    count := sums.size * sums.size / sums.size_squared
     if count < 2 * SLAT_WINDOW_OVERLAP do return 0
 
-    cosine, sine := sums.cosine / sums.weight, sums.sine / sums.weight
-    height := math.sqrt(cosine * cosine + sine * sine)
+    length := math.sqrt(sums.cosine * sums.cosine + sums.sine * sums.sine)
+    height := length / sums.weight
     if height <= 0 || 20 * math.log10(height) < STROBE_SLATS_SILENCE_DBFS do return 0
 
-    // The measurements' scatter around their average. Neighbours share noise, the scatter is smaller than one
-    // measurement's noise by SLAT_WINDOW_OVERLAP of count, and the average holds count / SLAT_WINDOW_OVERLAP
+    // How far their directions agree, 1 all one way, and their scatter around it. Noise moves a measurement's size
+    // as much as its direction, the direction alone scatters half as much as the measurement did: doubled, a
+    // steady partial in noise is as sure as before. Neighbours share noise, the scatter is smaller than one
+    // measurement's by SLAT_WINDOW_OVERLAP of count, and the average holds count / SLAT_WINDOW_OVERLAP
     // measurements' worth. With no overlap it's the scatter over count - 1.
-    spread := max(sums.power / sums.weight - height * height, 0)
-    uncertainty := math.sqrt(spread * SLAT_WINDOW_OVERLAP / (count - SLAT_WINDOW_OVERLAP)) / height
+    agreement := length / sums.size
+    spread := 2 * max(1 - agreement * agreement, 0)
+    uncertainty := math.sqrt(spread * SLAT_WINDOW_OVERLAP / (count - SLAT_WINDOW_OVERLAP)) / agreement
     return min(STROBE_SLATS_GAIN * max(1 - uncertainty / STROBE_SLATS_NOISE_RAD, 0), 1)
 }

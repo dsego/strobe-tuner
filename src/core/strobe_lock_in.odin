@@ -210,7 +210,7 @@ append_phase_band :: proc(self: ^StrobeLockIn, interval: f32) {
 }
 
 // Like init_strobe_lock_in, a band per interval of 1 or more, the rest are padding. Adds or removes bands
-// on top to match. Kept in vernier mode too, for switching back to harmonic mode.
+// on top to match. Vernier mode has tracks of its own, see the app's VERNIER_TRACKS.
 // The partial, target offset and speed of each track, the offsets and speeds line up with the intervals.
 // Takes effect with the next set_strobe_lock_in_freq.
 set_strobe_lock_in_tracks :: proc(
@@ -411,6 +411,7 @@ run_phase_detection :: proc(self: ^StrobeLockIn) {
             band.amp, band.envelope, band.onset = base_band.amp, base_band.envelope, base_band.onset
             band.phase_diff, band.rate, band.err_cents = base_band.phase_diff, base_band.rate, base_band.err_cents
             band.drift_hz, band.drift_cents = base_band.drift_hz, base_band.drift_cents
+            band.slat_level, band.visibility = base_band.slat_level, base_band.visibility
             turn_strobe(&band.scaled_phase, band.phase_diff, band.speed)
         } else if !band.in_range {
             // Nothing to measure up there, quiet so the track stays dark
