@@ -14,6 +14,7 @@ import "core:fmt"
 import "core:math"
 import "core:os"
 import "core:slice"
+import "core:strings"
 import "core:sync"
 import "core:thread"
 import "core:unicode/utf8"
@@ -26,6 +27,12 @@ INTERVALS :: [?]f32{1, 2, 4}
 STROBE_SPEED :: 0.025
 // The app draws at 60 fps, e.g. -define:FRAME_SAMPLES=1024 for iOS's chunks of audio arriving every other frame
 FRAME_SAMPLES :: #config(FRAME_SAMPLES, SAMPLERATE / 60)
+// -define:SHOW_WRONG_NOTE=true prints every measured detection with no note or the wrong one, like
+// sandbox/recordings' SHOW_WRONG_WAY
+SHOW_WRONG_NOTE :: #config(SHOW_WRONG_NOTE, false)
+// -define:SHOW_CASE="WEAK_FUNDAMENTAL B0→B0↺ -50.0¢" prints every detection of the cases whose label has this
+// in it, from the tone on, see case_label
+SHOW_CASE :: #config(SHOW_CASE, "")
 
 TOLERANCE_CENTS :: 1
 
@@ -246,6 +253,8 @@ run_case :: proc(test_case: Case) -> (result: Result) {
     measure_from := len(samples) - int(MEASURE_S * SAMPLERATE)
     readout_track := -1
     readout_ready := false
+    label := case_label(test_case)
+    traced := SHOW_CASE != "" && strings.contains(label, SHOW_CASE)
     for start := 0; start + FRAME_SAMPLES <= len(samples); start += FRAME_SAMPLES {
         // Like sandbox/replay, the app's loop
         frame := samples[start:start + FRAME_SAMPLES]
@@ -254,14 +263,19 @@ run_case :: proc(test_case: Case) -> (result: Result) {
         pitch := core.run_pitch_detection(&detector, note_target.pitch)
         core.run_phase_detection(strobe)
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
-        if core.update_note_target(&note_target, pitch, core.strobe_shows_note(strobe)) {
+        strobe_shows := core.strobe_shows_note(strobe)
+        if core.update_note_target(&note_target, pitch, strobe_shows) {
             retune(strobe, note_target.target_note.frequency, test_case.pitch_standard)
             readout_ready = false
+        }
+        if traced && pitch.fresh && start >= int(LEAD_IN_S * SAMPLERATE) {
+            show_detection(label, start, pitch, note_target, strobe_shows)
         }
         if !pitch.fresh || start < measure_from do continue
 
         if !note_target.active || note_target.target_note.cents != note.cents {
             result.wrong_note += 1
+            when SHOW_WRONG_NOTE do show_detection(label, start, pitch, note_target, strobe_shows)
             continue
         }
 
@@ -509,20 +523,56 @@ print_by_offset :: proc(results: []Result) {
     }
 }
 
-print_case :: proc(result: Result) {
-    // Characters for the note's name, as long as A#1→A#2↺
-    NAME_COLUMN :: 8
-
+// The case's note, the one before it too, e.g. A#1→A#2↺, ↺ where the tone restarted its phase at the switch
+case_name :: proc(test_case: Case) -> string {
     note_name :: proc(semitones: int, pitch_standard: f32) -> string {
         return core.note_name(core.cents_to_note(f32(100 * semitones), pitch_standard))
     }
 
-    name := note_name(result.note_semitones, result.pitch_standard)
-    if before, ok := result.before_semitones.?; ok {
-        // ↺ where the tone restarted its phase at the switch
-        restart := "↺" if result.restart_phase else ""
-        name = fmt.tprintf("%v→%v%v", note_name(before, result.pitch_standard), name, restart)
+    name := note_name(test_case.note_semitones, test_case.pitch_standard)
+    if before, ok := test_case.before_semitones.?; ok {
+        restart := "↺" if test_case.restart_phase else ""
+        name = fmt.tprintf("%v→%v%v", note_name(before, test_case.pitch_standard), name, restart)
     }
+    return name
+}
+
+// A case on one line, e.g. SAW A#1→A#2↺ +7.0¢ A=440 clean
+case_label :: proc(test_case: Case) -> string {
+    noise := "clean" if test_case.noise_snr_db == 0 else fmt.tprintf("%.0fdB", test_case.noise_snr_db)
+    return fmt.tprintf(
+        "%v %v %+.1f¢ A=%.0f %v",
+        test_case.waveform,
+        case_name(test_case),
+        test_case.offset_cents,
+        test_case.pitch_standard,
+        noise,
+    )
+}
+
+// A detection of the case, see SHOW_WRONG_NOTE and SHOW_CASE: the pitch detection's, the note shown and whether
+// the strobe holds it
+show_detection :: proc(label: string, start: int, pitch: core.PitchInfo, note_target: core.NoteTarget, strobe_shows: bool) {
+    detected := core.note_name(pitch.detected_note) if pitch.detected_freq > 0 else "-"
+    strength := " strong" if pitch.is_strong_pitch else " weak" if pitch.is_weak_pitch else ""
+    shown := core.note_name(note_target.target_note) if note_target.active else "none"
+    fmt.eprintfln(
+        "  %v at %.2fs: pitch %.1f Hz %v%v, %v shown%v",
+        label,
+        f32(start) / SAMPLERATE,
+        pitch.detected_freq,
+        detected,
+        strength,
+        shown,
+        ", the strobe holds it" if strobe_shows else "",
+    )
+}
+
+print_case :: proc(result: Result) {
+    // Characters for the note's name, as long as A#1→A#2↺
+    NAME_COLUMN :: 8
+
+    name := case_name(result.test_case)
     // A string's width counts bytes, → and ↺ take three each
     name_width := NAME_COLUMN + len(name) - utf8.rune_count_in_string(name)
 

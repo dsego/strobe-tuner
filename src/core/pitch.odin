@@ -229,7 +229,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
         clear = info.clarity >= PITCH_CLARITY_HIGH
 
         if self.stack_shown {
-            run_harmonic_stack(&self.stack, self.samples, min_freq, pitch_lowpass_hz(self.sample_rate))
+            run_harmonic_stack(&self.stack, self.samples, min_freq, pitch_lowpass_hz(self.sample_rate), hop = int(elapsed))
         }
 
     case .HARMONICS:
@@ -240,6 +240,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
             min_freq,
             top_hz,
             prev_info.followed_hz,
+            int(elapsed),
         )
 
         // The stack's own fundamental, no multiple of a period to guess at

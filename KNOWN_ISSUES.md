@@ -11,13 +11,21 @@ envelope, which follows over `ONSET_ENVELOPE_TIME_S` (0.3 s), and the level come
 level, or half a second after a mute, is one. The same before and after the stripes moved to the slots'
 level, see `test_onset_on_a_replucked_string`; the slots light the first pluck's onset about 50 ms later.
 
-## The harmonic stack misses low sines stepping half a semitone
+## A B0 with a weak fundamental stepping half a semitone holds a wrong note
 
-The pitch detection reads the harmonic stack since 2026-11-05 (`PitchMethod.HARMONICS`). On the generated
-tones it fails 6 of 4,371 cases where the whole wave fails none: a sine at B0 or E1 that steps 50 to 55¢
-shows the wrong note or none within 60 detections, and so does a B0 with a weak fundamental. A B0 sine in
-20 dB noise fails more under stress (report only). Why isn't worked out yet. Real bass strings have
-harmonics, and all the bass recordings pass.
+The pitch detection reads the harmonic stack since 2026-11-05 (`PitchMethod.HARMONICS`), its peaks weighed by
+how steady their phase is since 2026-11-06 (`HARMONICS_PHASE_STEADY`). On the generated tones it fails 3 of
+4,371 cases where the whole wave fails none, a B0 with a weak fundamental stepping 50 or 55¢ with its phase
+restarted. Before the steadiness 6 failed, B0 and E1 sines too.
+
+Traced with `-define:SHOW_CASE` in sandbox/accuracy: for about 50 ms after the step the window holds both the old
+tone and the new. Low down they share a bin and come apart, up high they don't, and the stack reads a note from
+the high harmonics, B♭6. Four of those in a row confirm it. The real pitch, 30.0 Hz, is exactly halfway and
+alternates B♭0 and B0, so no note confirms against it and B♭6 stays, six octaves off a strong pitch. Without
+the steadiness the same high notes came, broken by one B6, and three weren't enough.
+
+Real bass strings have harmonics and don't restart their phase, and all the bass recordings pass. A strong pitch
+far from the note shown could take over even while it alternates between two neighbours.
 
 ## A ukulele's attack reads a third or a half of the note with the whole wave
 

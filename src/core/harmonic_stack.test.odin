@@ -194,3 +194,43 @@ samples_with :: proc(fundamental: f32, amplitudes: []f32, noise_rms: f64) -> []f
     }
     return samples
 }
+
+// With HARMONICS_PHASE_STEADY: a sine's peak lands where its frequency says from one detection to the next, 800
+// samples on. Noise's bins wander, though not far: the two windows share 80% of their samples, 0.73 on average.
+@(test)
+test_phase_steadiness :: proc(t: ^testing.T) {
+    when !HARMONICS_PHASE_STEADY do return
+
+    WINDOW :: 4096
+    HOP :: 800
+    A4 :: 440.0
+
+    // The two detections' bins of these samples, HOP apart
+    detect_twice :: proc(transform: ^StackTransform, samples: []f32) {
+        copy(transform.spectrum.samples, samples[:WINDOW])
+        run_windowed_spectrum(&transform.spectrum, transform.bins)
+        copy(transform.previous_bins, transform.bins)
+        transform.has_previous = true
+
+        copy(transform.spectrum.samples, samples[HOP:HOP + WINDOW])
+        run_windowed_spectrum(&transform.spectrum, transform.bins)
+    }
+
+    sine := test_samples(f64(WINDOW + HOP) / f64(DEFAULT_SAMPLE_RATE))
+    add_partials(sine, A4, {0.5})
+    sine_transform := init_stack_transform(WINDOW, DEFAULT_SAMPLE_RATE)
+    defer destroy_stack_transform(&sine_transform)
+    detect_twice(&sine_transform, sine)
+    bin := int(math.round(A4 / sine_transform.bin_hz))
+    testing.expectf(t, phase_steadiness(&sine_transform, bin, A4, HOP) > 0.99, "A4's peak")
+
+    noise := test_samples(f64(WINDOW + HOP) / f64(DEFAULT_SAMPLE_RATE))
+    add_noise(noise, 0.1)
+    noise_transform := init_stack_transform(WINDOW, DEFAULT_SAMPLE_RATE)
+    defer destroy_stack_transform(&noise_transform)
+    detect_twice(&noise_transform, noise)
+    sum: f32 = 0
+    for noise_bin in 100 ..< 1100 do sum += phase_steadiness(&noise_transform, noise_bin, f32(noise_bin) * noise_transform.bin_hz, HOP)
+    average := sum / 1000
+    testing.expectf(t, average > 0.6 && average < 0.85, "noise's bins %.2f steady on average", average)
+}
