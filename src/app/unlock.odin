@@ -40,10 +40,13 @@ UNLOCK_GAPS :: [4]f32{18, 24, 12, 20}
 
 // Everything under the reminder is blurred, the strobe can't be read through it while it counts down: drawn
 // offscreen, shrunk by UNLOCK_BLUR_DOWNSCALE, blurred UNLOCK_BLUR_ITERATIONS times with the glow's taps spaced
-// UNLOCK_BLUR_SPACING apart, and the sheet's color over it as much as UNLOCK_TINT, 0.2 is 80% see-through
+// UNLOCK_BLUR_SPACING apart, and the sheet's color over it as much as UNLOCK_TINT, 0.2 is 80% see-through.
+// Taps 2 apart fall on texel centres and only ever mix every other texel, odd with odd and even with even,
+// and the ruler's ticks and the note's strokes left a checker of 4 point squares on the iPhone. 1.5 falls
+// between texels like the glow's, 5 times about as wide as 3 at 2.
 UNLOCK_BLUR_DOWNSCALE :: f32(#config(UNLOCK_BLUR_DOWNSCALE, 4))
-UNLOCK_BLUR_ITERATIONS :: #config(UNLOCK_BLUR_ITERATIONS, 3)
-UNLOCK_BLUR_SPACING :: f32(#config(UNLOCK_BLUR_SPACING, 2))
+UNLOCK_BLUR_ITERATIONS :: #config(UNLOCK_BLUR_ITERATIONS, 5)
+UNLOCK_BLUR_SPACING :: f32(#config(UNLOCK_BLUR_SPACING, 1.5))
 UNLOCK_TINT :: f32(#config(UNLOCK_TINT, 0.2))
 
 UNLOCK_TEXT :: [?]cstring {
