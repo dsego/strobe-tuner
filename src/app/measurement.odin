@@ -24,6 +24,9 @@ import "../gfx"
 // Vernier mode, each track turns this much faster than the one under it
 VERNIER_SPEED_MULTIPLIER :: 2
 
+// Vernier mode's tracks, the first turning as fast as harmonic mode's fundamental, the top one 4 times as fast
+VERNIER_TRACKS :: 3
+
 
 // What hears the input and what's read from it, from one frame to the next, see measure
 Measurement :: struct {
@@ -74,12 +77,7 @@ retune :: proc(measurement: ^Measurement, config: ^Config) {
     measurement.traced_track = -1 // the tracks are at another note now
     measurement.held_readout = {}
     set_readout_speed(measurement, config)
-    core.set_strobe_lock_in_tracks(
-        measurement.strobe_lock_in,
-        config.strobe_intervals[:],
-        config.strobe_offsets_cents[:],
-        config.strobe_speeds[:],
-    )
+    set_strobe_tracks(measurement, config)
     core.set_strobe_lock_in_freq(
         measurement.strobe_lock_in,
         core.target_freq(&measurement.note_target),
@@ -93,13 +91,22 @@ retune :: proc(measurement: ^Measurement, config: ^Config) {
 // The strobe's spin rate and each track's own, the tracks keep measuring. Their partials and offsets are the
 // ones measured, a change to those retunes.
 set_strobe_speed :: proc(measurement: ^Measurement, config: ^Config) {
-    core.set_strobe_lock_in_tracks(
-        measurement.strobe_lock_in,
-        config.strobe_intervals[:],
-        config.strobe_offsets_cents[:],
-        config.strobe_speeds[:],
-    )
+    set_strobe_tracks(measurement, config)
     core.set_strobe_lock_in_speed(measurement.strobe_lock_in, strobe_speed(config))
+}
+
+// The tracks of the strobe's mode. Harmonic has the setup's partials, offsets and speeds. Vernier has its own,
+// VERNIER_TRACKS on the fundamental, the harmonic setup's tracks don't carry over.
+set_strobe_tracks :: proc(measurement: ^Measurement, config: ^Config) {
+    lock_in := measurement.strobe_lock_in
+    if config.strobe_mode == .VERNIER {
+        fundamentals, no_offsets: [VERNIER_TRACKS]f32
+        for &interval in fundamentals do interval = 1
+
+        core.set_strobe_lock_in_tracks(lock_in, fundamentals[:], no_offsets[:], fundamentals[:])
+        return
+    }
+    core.set_strobe_lock_in_tracks(lock_in, config.strobe_intervals[:], config.strobe_offsets_cents[:], config.strobe_speeds[:])
 }
 
 // The tracks' fit, and the whole wave's readout averaging as much longer, see core.READOUT_SMOOTHING_S
