@@ -24,6 +24,10 @@ the high harmonics, B♭6. Four of those in a row confirm it. The real pitch, 30
 alternates B♭0 and B0, so no note confirms against it and B♭6 stays, six octaves off a strong pitch. Without
 the steadiness the same high notes came, broken by one B6, and three weren't enough.
 
+The B♭6 wins because a note under `HARMONICS_BASS_HZ` only comes from the bass window when it scores
+`HARMONICS_HIGH_DB` (65). Without that, all three passed: the B0's own stack was in the bass window through the
+step, under 65. Dropped for a ukulele's fade that then lit its room's rumble, see IDEAS.md, Pitch detection 6.
+
 Real bass strings have harmonics and don't restart their phase, and all the bass recordings pass. A strong pitch
 far from the note shown could take over even while it alternates between two neighbours.
 

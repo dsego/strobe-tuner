@@ -196,7 +196,8 @@ run_harmonic_stack :: proc(
     // background there: a bass's C2 read C1 and a ukulele's Bb2 a third of it now and then, a stack with every
     // other or every third harmonic outscoring the whole one in the short transform. And only a strong one: a
     // song's chords made up stacks under them, an F#1 under F#2 and C#3 and a B0 under B1, at up to 58 dB, a bass
-    // guitar's E1 to G1 scored 160 and more.
+    // guitar's E1 to G1 scored 160 and more. Without it a ukulele's Bb4 let go into the room's rumble, the bass
+    // transform's Bb0, Eb1, B0 and D1 at 20 to 40 dB outscored its fade and lit the tuner with nothing playing.
     short_in_bass, _ := score_stack(self.bass.peaks[:], short_freq, bass_top)
     bass_wins := bass_db >= HARMONICS_HIGH_DB && bass_db > short_db && bass_db > short_in_bass
 

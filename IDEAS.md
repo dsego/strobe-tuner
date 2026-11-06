@@ -162,12 +162,33 @@ What falls short is around it, in this order:
    - After 8 s the E1 really repeats at E2, both show E2.
 
    The HMM as a whole isn't a win, its continuity on the octave is.
-6. A pure sine under the 60 Hz high-pass needs more level than a string. B0's 31 Hz loses about 9 dB
-   in it, under white noise 10 dB down the NSDF finds the period at clarity 0.75, under 0.9, the floor
-   learns the tone and no note shows. Live with a tone generator and white noise B0 shows at 10% and
-   not at 4%. Strings, saw and square read from their harmonics, it's sub-bass synths and organ pedal
-   flutes. A cutoff nearer A0 (27.5 Hz) would help them and let more rumble in, `sandbox/accuracy`
-   reports these cases as stress.
+6. A pure sine under 50 Hz in noise shows no note: B0 and E1 with white noise 20 or 10 dB down, all 92
+   of their cases in `sandbox/accuracy`'s stress. The harmonic stack takes a note under
+   `HARMONICS_BASS_HZ` from the bass window only when it scores `HARMONICS_HIGH_DB` (65), and a sine is
+   one harmonic, its score is how far that one peak stands over the noise. It reads noise stacks in the
+   short window instead, weak. Moved into the short window, under `HARMONICS_BASS_HZ=35`, the E1 sine
+   showed on 143 of 150 detections. Strings, saw and square read from their harmonics, it's sub-bass
+   synths and organ pedal flutes.
+
+   Tried and dropped, 2026-11-06, the bass note without the 65: the generated tones all passed, the 3 B0
+   cases in KNOWN_ISSUES.md too, and the lowest two octaves showed about 17 ms sooner. But the ukulele's
+   Bb4 (`ukulele_A#3.wav`) let go into the room's rumble: from 4.4 s the bass window's stacks, Bb0, Eb1,
+   B0 and D1 at 20 to 40 dB, outscored its fade, and from 5.4 to 5.9 s the tuner lit again with nothing
+   playing, 927 wrong detections over its 14 runs instead of none. In summed dB one peak far over the
+   noise and a few peaks a little over it can score the same, the 65 is what tells them apart.
+
+   Tried and dropped, 2026-11-06, the stack scored like a likelihood (Shi et al., "Robust Bayesian Pitch
+   Tracking Based on the Harmonic Model", 2019): each harmonic its peak's power over the background less
+   ln 4096, a sinusoid's charge in BIC, a harmonic without a peak costing as much, and a candidate's stack
+   only as far up as it adds the most. The gates at 30 and 40 dB of that. 72 of the 92 low sines in noise
+   read right, but 500 of the 4,371 generated tones failed and 1,440 of the 1,946 recording runs showed
+   another note instead of 110, the Strat's E2 read E3, the bass's E1 E2 and `paramount_A1.wav` A2 all the
+   way through. As a power a few loud peaks outweigh the rest, and an octave up's 10 harmonics reach twice
+   as high, so a string's loud upper partials would outvote its fundamental and odd harmonics, not traced
+   score by score. The fading ukulele scored 27,
+   its room's rumble 15 to 29. The paper's speech, 70 to 400 Hz in 25 ms, doesn't meet this. Summed in dB
+   the stack trusts a peak far over the background less than a Gaussian likelihood does, and a room makes
+   10 to 15 dB peaks far more often than Gaussian noise.
 
    Tried and dropped, the smaller version: a detection an octave or two above the followed note
    left out while the wave repeats better at the followed period and nothing was plucked for
@@ -427,3 +448,18 @@ Open:
   purpose, a setting isn't.
 - On the display sheet, as small pictures like the colors' swatches, nothing on the main screen.
 - Built-in looks first, the musician's own saved ones later if they catch on.
+
+## Which preset is on
+
+Two guitars in the same tuning, each with its own note offsets, look the same on the main screen: only
+the corner's "P1 - GUITAR" tells them apart, and one tuned on the other's preset reads the wrong offsets
+with nothing looking wrong. Something to notice from a step away, not a name that changes. A strobe pedal
+shown in 2026 lights its whole display in a color picked for each preset, ten to pick from.
+
+- The preset's own colors: each preset remembers a colorway like its tuning and capo, the Colors row sets
+  the selected preset's and the built-in instruments share the app's. Said in the row, e.g. "Colors · P1",
+  or a change made on a preset looks lost on Guitar. By note already colors the note, a preset on it says
+  nothing about the preset.
+- Something other than the strobe's colors, so it keeps the look picked: a pill around the corner's preset
+  name, or a mark in a color of each preset's own. The main screen's controls are their labels alone so far,
+  dots on the display button were dropped as too much.
