@@ -170,6 +170,8 @@ The pitch detection looks for the best stack of harmonics in the spectrum of the
 
 The period of the whole wave, by autocorrelation via FFT after _"A Smarter Way to Find Pitch" (Philip McLeod, Geoff Wyvill)_, is still in the code, H flips to it in a debug build. It weighs everything by its power: a ukulele's pluck thumps its body near 215 Hz as loud as the note, the two repeat every three of the note's periods, and it read E5 as A3 for 0.15 s. The stack misses a low note with a weak fundamental stepping exactly half a semitone, see [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
+<img src="docs/pitch-detection.svg" alt="A ukulele's E5 at the pluck, its body thumping near 215 Hz, read two ways. The harmonic stack: E5's harmonics stand far over the background and add up, weighted down the stack, the thump's broad hump lifts its own background and is no peak, and a window's side peak, its phase moving at the partial's frequency, is left out. The whole wave, McLeod's NSDF: with the thump the wave repeats every three of the note's periods, that peak stands highest and it reads A3, a third of E5.">
+
 A new note has to hold for 50 ms before the strobe switches to it, so a single noisy detection of a decaying note doesn't reset the display, and its last two detections have to agree within 5 cents. An octave or another harmonic of the lit note holds for 100 ms. A window across a jump in the wave's phase, a tone generator starting a new note from zero, reads past the new pitch for as long as the window, and that overshoot could carry a note held 55 cents sharp over to the next one.
 
 #### Stroboscopic effect
@@ -181,7 +183,7 @@ The strobe is driven by a lock-in amplifier (heterodyne): a single-bin DFT tuned
 - Demodulation: the DFT result is rotated by the phase of a reference oscillator on an absolute sample clock. In tune this phase stands still, detuned it rotates at the frequency difference.
 - Strobe motion: the stripes turn by the measured phase, times the track's speed.
 - Readout: each track's cents are the slope of a least squares line through its phase, older measurements weighted down, restarted after each pluck.
-- Stripe brightness: the stripes are as bright as the track's partial is sure, and fade out as the noise makes it unsure, see [Stripe fade](#stripe-fade). Their edges also soften as the track drifts off the note.
+- Stripe brightness: the stripes are as bright as the track's partial is sure, and fade out as the noise makes it unsure, see [Stripe fade](#stripe-fade). Far off the note their edges soften too, from about 35 cents, and they're gone at 75.
 
 Every track's window is sized for a band 70 cents wide around the fundamental, about 0.22 s at 110 Hz, gamma shaped and weighted toward the newest samples like an analog lock-in's low-pass, so the phase is as of about 60 ms ago instead of half the window. It's also smoothed with a box one period of the note long (two for a fifth), a comb whose nulls fall on the other partials.
 

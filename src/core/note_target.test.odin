@@ -41,6 +41,25 @@ test_note_target_switches_note :: proc(t: ^testing.T) {
     testing.expect_value(t, target.target_note.name, 'E')
 }
 
+// From dark another note lights once it's confirmed, the target from before isn't shown while it's on its way. The
+// target's own note lights at once.
+@(test)
+test_note_target_lights_the_note_heard :: proc(t: ^testing.T) {
+    // 0.1 s is 3 detections 0.05 s apart
+    target := init_note_target(E2_HZ, 440, 0.1)
+    update_note_target(&target, test_detection(A2_HZ))
+    testing.expect(t, !target.active)
+    update_note_target(&target, test_detection(A2_HZ))
+    testing.expect(t, !target.active)
+    update_note_target(&target, test_detection(A2_HZ))
+    testing.expect(t, target.active)
+    testing.expect_value(t, target.target_note.name, 'A')
+
+    same := init_note_target(E2_HZ, 440, 0.1)
+    update_note_target(&same, test_detection(E2_HZ))
+    testing.expect(t, same.active)
+}
+
 // Medium clarity detections follow a note once they've held steady, not before
 @(test)
 test_note_target_holds_between_notes :: proc(t: ^testing.T) {

@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 520" width="1100" height="520" role="img" aria-labelledby="title desc">
+  <title id="title">Strobie pitch detection</title>
+  <desc id="desc">A ukulele's E5 at the pluck, its body thumping near 215 Hz as loud as the note, read two ways. The harmonic stack: the spectrum over log frequency with the background under it, a quarter of the bins around each point. E5's seven harmonics under 5 kHz stand far over their background and add up, weighted 1, 0.84, 0.71 and on down the stack. The thump is a broad hump whose background rises with it, under 6 dB over it, so it's no peak and adds nothing. A side peak of the window next to a partial moves its phase at the partial's frequency and not its own, and is left out. The whole wave, the NSDF after McLeod: the curve over lags in periods of E5 peaks at every period, and with the thump the wave repeats every three of them, so the peak at three periods stands highest. The first over a share of the highest is picked, three periods, 220 Hz, A3, a third of the note, for the first 0.15 s.</desc>
+  <style>
+    text { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #111; }
+    .bg { fill: #fff; }
+    .frame { fill: #fff; stroke: #222; stroke-width: 1; }
+    .tab { font-size: 12px; font-weight: 600; }
+    .sub { font-size: 11px; fill: #444; }
+    .label { font-size: 12px; }
+    .curve { fill: none; stroke: #222; stroke-width: 1.2; }
+    .background { fill: none; stroke: #999; stroke-width: 1.2; stroke-dasharray: 5 3; }
+    .axis { stroke: #222; stroke-width: 1; }
+    .tick { stroke: #222; stroke-width: 1; }
+    .guide { stroke: #999; stroke-width: 1; stroke-dasharray: 4 4; }
+    .zero { stroke: #ccc; stroke-width: 1; }
+    .dot { fill: #222; }
+    .hollow { fill: #fff; stroke: #222; stroke-width: 1.2; }
+    .ring { fill: none; stroke: #222; stroke-width: 1.5; }
+    .cross { stroke: #222; stroke-width: 1.2; }
+    .inset { fill: #fff; stroke: #999; stroke-width: 1; }
+  </style>
+
+  <rect class="bg" width="1100" height="520"/>
+
+  <!-- The harmonic stack -->
+  <rect class="frame" x="10" y="30" width="540" height="480"/>
+  <path class="frame" d="M10,30 H310 V42 L302,50 H10 Z"/>
+  <text class="tab" x="18" y="45">the harmonic stack: peaks over the sound around</text>
+  <text class="sub" x="530" y="72" text-anchor="end">a ukulele's E5 at the pluck, 659 Hz</text>
+
+  <line class="axis" x1="70" y1="300" x2="545" y2="300"/>
+  <path class="tick" d="M124.2,296 V304 M368.7,296 V304 M539.6,296 V304"/>
+  <text class="sub" x="124.2" y="316" text-anchor="middle">100 Hz</text>
+  <text class="sub" x="368.7" y="316" text-anchor="middle">1 kHz</text>
+  <text class="sub" x="539.6" y="316" text-anchor="middle">5 kHz</text>
+
+  <!-- The spectrum, and its background a quarter of the bins around each point -->
+  <path class="background" d="M70,290 L150,288 C175,262 192,202 212,200 C236,198 256,236 286,262 L320,287 L540,289"/>
+  <path class="curve" d="M70,284 L100,281 L130,285 L160,270 C175,240 190,183 205.5,183 C222,183 245,215 271,222 L290,262 L310,280 L320.5,282
+    L324.5,133 L328.5,282 L360,279 L394.1,283 L398.1,153 L402.1,283 L437.2,281 L441.2,167 L445.2,283 L467.7,282 L471.7,187
+    L475.7,283 L491.4,282 L495.4,200 L499.4,283 L510.8,284 L514.8,213 L518.8,284 L527.1,283 L531.1,227 L535.1,284 L540,285"/>
+
+  <!-- E5's harmonics, numbered, and their weights -->
+  <circle class="dot" cx="324.5" cy="133" r="3"/>
+  <circle class="dot" cx="398.1" cy="153" r="3"/>
+  <circle class="dot" cx="441.2" cy="167" r="3"/>
+  <circle class="dot" cx="471.7" cy="187" r="3"/>
+  <circle class="dot" cx="495.4" cy="200" r="3"/>
+  <circle class="dot" cx="514.8" cy="213" r="3"/>
+  <circle class="dot" cx="531.1" cy="227" r="3"/>
+  <text class="sub" x="324.5" y="124" text-anchor="middle">1</text>
+  <text class="sub" x="398.1" y="144" text-anchor="middle">2</text>
+  <text class="sub" x="441.2" y="158" text-anchor="middle">3</text>
+  <text class="sub" x="471.7" y="178" text-anchor="middle">4</text>
+  <text class="sub" x="495.4" y="191" text-anchor="middle">5</text>
+  <text class="sub" x="514.8" y="204" text-anchor="middle">6</text>
+  <text class="sub" x="531.1" y="218" text-anchor="middle">7</text>
+
+  <path class="guide" d="M316,133 V287"/>
+  <text class="sub" x="310" y="146" text-anchor="end">over its</text>
+  <text class="sub" x="310" y="160" text-anchor="end">background</text>
+
+  <text class="sub" x="205.5" y="174" text-anchor="middle">the thump</text>
+
+  <text class="sub" x="70" y="334">weight</text>
+  <text class="sub" x="324.5" y="334" text-anchor="middle">1</text>
+  <text class="sub" x="398.1" y="334" text-anchor="middle">.84</text>
+  <text class="sub" x="441.2" y="334" text-anchor="middle">.71</text>
+  <text class="sub" x="471.7" y="334" text-anchor="middle">.59</text>
+  <text class="sub" x="510" y="334" text-anchor="middle">…</text>
+
+  <!-- A partial up close, the window's side peaks -->
+  <rect class="inset" x="70" y="352" width="180" height="84"/>
+  <line class="axis" x1="78" y1="426" x2="242" y2="426"/>
+  <path class="curve" d="M80,425 C100,424 112,412 122,406 C128,402 132,420 136,424 C142,412 150,364 160,362 C170,364 178,412 184,424 C188,420 192,402 198,406 C208,412 220,424 240,425"/>
+  <circle class="dot" cx="160" cy="362" r="3"/>
+  <circle class="hollow" cx="122" cy="406" r="3"/>
+  <circle class="hollow" cx="198" cy="406" r="3"/>
+  <text class="sub" x="78" y="366">the 1× up close</text>
+
+  <text class="sub" x="262" y="372">A side peak of the window's, either side of a partial:</text>
+  <text class="sub" x="262" y="387">its phase goes on at the partial's frequency, not its own,</text>
+  <text class="sub" x="262" y="402">and it's left out. Side peaks made up stacks of their</text>
+  <text class="sub" x="262" y="417">own, now 43 sines fewer fail on the generated tones.</text>
+
+  <text class="label" x="28" y="466">E5 scores its harmonics' dB over the background, weighted down the stack.</text>
+  <text class="sub" x="28" y="484">The thump's hump lifts its own background, it stands under 6 dB over it and is no peak.</text>
+  <text class="sub" x="28" y="499">A candidate an octave down catches every other harmonic and scores less.</text>
+
+  <!-- The whole wave -->
+  <rect class="frame" x="570" y="30" width="520" height="480"/>
+  <path class="frame" d="M570,30 H806 V42 L798,50 H570 Z"/>
+  <text class="tab" x="578" y="45">the whole wave: the NSDF, McLeod's</text>
+  <text class="sub" x="1070" y="72" text-anchor="end">the same pluck, the period it repeats with</text>
+
+  <line class="zero" x1="630" y1="200" x2="1060" y2="200"/>
+  <line class="axis" x1="630" y1="90" x2="630" y2="300"/>
+  <line class="axis" x1="630" y1="300" x2="1065" y2="300"/>
+  <path class="tick" d="M626,100 H634 M626,200 H634 M626,300 H634 M737.5,296 V304 M845,296 V304 M952.5,296 V304 M1060,296 V304"/>
+  <text class="sub" x="622" y="104" text-anchor="end">1</text>
+  <text class="sub" x="622" y="204" text-anchor="end">0</text>
+  <text class="sub" x="622" y="304" text-anchor="end">−1</text>
+  <text class="sub" x="737.5" y="316" text-anchor="middle">1</text>
+  <text class="sub" x="845" y="316" text-anchor="middle">2</text>
+  <text class="sub" x="952.5" y="316" text-anchor="middle">3</text>
+  <text class="sub" x="1060" y="316" text-anchor="middle">4</text>
+  <text class="sub" x="845" y="334" text-anchor="middle">lag, in periods of E5</text>
+
+  <line class="guide" x1="630" y1="112" x2="1060" y2="112"/>
+  <text class="sub" x="760" y="107">a share of the highest</text>
+
+  <path class="curve" d="M630,100 C651.5,100 662.25,245 683.75,245 C705.25,245 716,120 737.5,120 C759,120 769.75,250 791.25,250
+    C812.75,250 823.5,122 845,122 C866.5,122 877.25,240 898.75,240 C920.25,240 931,105 952.5,105 C974,105 984.75,255 1006.25,255
+    C1027.75,255 1038.5,130 1060,130"/>
+
+  <path class="cross" d="M733.5,116 L741.5,124 M741.5,116 L733.5,124 M841,118 L849,126 M849,118 L841,126 M1056,126 L1064,134 M1064,126 L1056,134"/>
+  <circle class="ring" cx="952.5" cy="105" r="7"/>
+  <text class="sub" x="737.5" y="140" text-anchor="middle">E5</text>
+  <text class="sub" x="964" y="88">picked: 220 Hz, A3</text>
+
+  <text class="label" x="588" y="372">With the thump, E5 and the body's 215 Hz repeat together</text>
+  <text class="label" x="588" y="389">every three of the note's periods.</text>
+  <text class="sub" x="588" y="414">The whole wave weighs everything by its power, and for the first 0.15 s</text>
+  <text class="sub" x="588" y="429">the thump is as loud as the note: the peak at three periods stands highest,</text>
+  <text class="sub" x="588" y="444">the first over a share of the highest, and it reads A3, a third of E5.</text>
+  <text class="sub" x="588" y="469">The stack read E5 on its first detection. The whole wave is still in the</text>
+  <text class="sub" x="588" y="484">code, H in a debug build switches to it.</text>
+</svg>

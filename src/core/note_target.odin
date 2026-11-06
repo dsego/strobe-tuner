@@ -27,7 +27,8 @@ NoteTarget :: struct {
     target_note:         Note, // what the strobe is tuned to
     detected_note:       Maybe(Note), // the last confirmed detection, none before the first
     locked:              bool,
-    active:              bool, // a pitch is being followed, until the detections turn weak
+    active:              bool, // the target's note is lit, until the detections turn weak
+    following:           bool, // a strong pitch is followed, lit or on its way to it, see followed_hz in PitchInfo
     pitch:               PitchInfo, // the latest detection
     last_good_pitch:     PitchInfo, // the latest strong detection
     steady_freq:         f32, // the strong detections averaged for the readout, 0 before the first
@@ -95,17 +96,30 @@ update_note_target :: proc(self: ^NoteTarget, pitch: PitchInfo, strobe_hears := 
 
             self.last_good_pitch = pitch
         }
-        self.active = true
+
+        // From dark, lit once the note shown is the one heard. A strong detection before its confirmation lit the
+        // target from before, the previous note, for a frame or two. It's followed from the first, its harmonics
+        // held against it on the way: a square's 5th and its note took turns and neither held long enough.
+        self.following = true
+        if self.active || confirmed || target_stays(self, pitch.detected_note) do self.active = true
     }
 
-    if pitch.is_weak_pitch && !strobe_hears do self.active = false
+    if pitch.is_weak_pitch && !strobe_hears do self.active, self.following = false, false
 
     // The next detection holds the octave of the latest strong one, see nsdf_choose_peak and
     // HARMONICS_HOLD_RATIO. On a hummed glide it held back more drops than the latest that wasn't weak, a drop
     // that got through became the one to hold, and than the confirmed note.
-    self.pitch.followed_hz = self.last_good_pitch.detected_freq if self.active else 0
+    self.pitch.followed_hz = self.last_good_pitch.detected_freq if self.following else 0
 
     return
+}
+
+// Whether a confirmed note would leave the target where it is: locked, on the note's string, or the note itself
+target_stays :: proc(self: ^NoteTarget, note: Note) -> bool {
+    if self.locked do return true
+    if self.string_count > 0 do return nearest_string(self, note) == self.string_index
+
+    return note.cents == self.target_note.cents
 }
 
 // A newly confirmed note, the target moves to it or to its string. A locked note stays. A locked string too,
