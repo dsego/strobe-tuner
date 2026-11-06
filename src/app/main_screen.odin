@@ -375,8 +375,7 @@ shown_transpose :: proc(config: ^Config) -> int {
 
 draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading, menu: MenuCommand) {
     config, note_target := app.config, &app.measurement.note_target
-    setup := current_setup(config)
-    string_mode := setup.instrument != .CHROMATIC
+    string_mode := note_target.string_count > 0 // a custom preset's every note before its first row
 
     transpose := shown_transpose(config)
     shown_cents := note_target.target_note.cents

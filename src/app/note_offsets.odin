@@ -31,15 +31,17 @@ import "../gfx"
 // On the main screen the offset of the note being tuned is under its letter. On the instrument's sheet the
 // rows of the selected preset are under its instrument, each a note, its octave and the cents, on a
 // stringed instrument a string and its cents. The rows are kept as they are, in their order and at 0 cents
-// too, see Config.note_offset_notes.
+// too, see Config.note_offset_notes. A custom instrument's rows are its strings, see custom_strings.
 
 NOTE_OFFSET_STEP_CENTS :: 0.5
 
 // A string this far from its note is still detected as that note once it's nearly in tune
 NOTE_OFFSET_MAX_CENTS :: 25
 
-// Rows in a preset, a 12 string guitar has 10 notes. The sheet shows them all without scrolling.
+// Rows in a preset, a 12 string guitar has 10 notes. The sheet shows them all without scrolling. A custom
+// instrument's are its strings.
 MAX_NOTE_OFFSETS :: 10
+#assert(MAX_NOTE_OFFSETS <= core.MAX_STRINGS)
 
 // What each note from A0 is tuned off by, from the rows of the selected preset, a stringed instrument's
 // strings as they sound with the capo. None on a built-in instrument.
@@ -48,15 +50,15 @@ active_note_offsets :: proc(config: ^Config) -> (offsets: [core.NOTE_COUNT]f32) 
     if !ok do return
 
     cents := config.note_offset_cents[preset]
-    if strings := tuning_strings(config); len(strings) > 0 {
-        for semitone, row in strings {
+    if tuning, _ := setup_tuning(preset_setup(config, preset)); len(tuning.strings) > 0 {
+        for semitone, row in tuning_strings(config) {
             index := semitone - core.LOWEST_NOTE
             if row < MAX_NOTE_OFFSETS && index >= 0 && index < core.NOTE_COUNT do offsets[index] = cents[row]
         }
         return
     }
 
-    // A note in more than one row is tuned by the first
+    // Chromatic or custom, a note in more than one row is tuned by the first
     for row := clamp(config.note_offset_counts[preset], 0, MAX_NOTE_OFFSETS) - 1; row >= 0; row -= 1 {
         index := config.note_offset_notes[preset][row]
         if index >= 0 && index < core.NOTE_COUNT do offsets[index] = cents[row]
@@ -539,8 +541,9 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
     count := offset_row_count(rows)
 
     // Taller rows where all of them fit, on a phone, shorter ones for the mouse on the desktop. As tall as the
-    // most rows there can be, a row added doesn't move the others.
-    header := settings_row(sheet_layout, first_row, "Note offsets", 0)
+    // most rows there can be, a row added doesn't move the others. A custom instrument's rows are its notes.
+    title: cstring = "Notes" if setup.instrument == .CUSTOM else "Note offsets"
+    header := settings_row(sheet_layout, first_row, title, 0)
     top := header.y - SHEET_CONTROL_MARGIN
     rows_top := top + sheet_layout.row_height
     most := count if len(rows.strings) > 0 else MAX_NOTE_OFFSETS

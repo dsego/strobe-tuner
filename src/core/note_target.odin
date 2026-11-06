@@ -47,7 +47,7 @@ NoteTarget :: struct {
     string_index:        int, // the target's
 }
 
-MAX_STRINGS :: 8 // an 8-string guitar, the built-in tunings go up to 7
+MAX_STRINGS :: 10 // a custom instrument's notes, the built-in tunings go up to 7
 
 // The note confirmed holds this far, 10 cents past halfway to the next, and the next one held holds as far
 // back, see update_note_target
@@ -232,7 +232,8 @@ string_note :: proc(self: ^NoteTarget, index: int) -> Note {
 
 // The string to tune to the note, the target string until another is more than a semitone closer so it
 // doesn't flip back and forth halfway between two. A note an octave off the target string and not near
-// another one is the string ringing an octave high, like a low string's harmonic.
+// another one is the string ringing an octave high, like a low string's harmonic. Another string's own note
+// is that string, a custom instrument's notes can be a semitone apart.
 nearest_string :: proc(self: ^NoteTarget, note: Note) -> int {
     semitone := note.cents / 100
     best := self.string_index
@@ -244,6 +245,7 @@ nearest_string :: proc(self: ^NoteTarget, note: Note) -> int {
     from_target := abs(semitone - self.strings[self.string_index])
     from_nearest := abs(semitone - self.strings[best])
     if abs(from_target - 12) <= 1 && from_nearest > 1 do return self.string_index
+    if from_nearest == 0 do return best
 
     return best if from_target - from_nearest > 1 else self.string_index
 }

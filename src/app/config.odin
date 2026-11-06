@@ -138,7 +138,7 @@ Config :: struct {
     pitch_standard:               f32,
 
     // What's tuned to: the built-in instrument, or a preset counted from 0. See gui_instrument.
-    // Every note, or only an instrument's strings in one of its TUNINGS.
+    // Every note, or only an instrument's strings in one of its TUNINGS, or a custom preset's notes.
     instrument:                   Instrument,
     preset:                       Maybe(int),
     // per built-in instrument: the tuning counted from 0 in its TUNINGS, and the fret a capo is on, the

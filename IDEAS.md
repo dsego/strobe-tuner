@@ -78,6 +78,10 @@ path to real VoiceOver support later.
 
 ## Piano stretch tuning
 
+- A note's offset stops at ±25 cents, a stretched treble runs to +30 cents and more at the top. The
+  tracks' offsets reach ±50 but are the same for every note.
+- The curve depends on the piano, its strings' inharmonicity measured on a few notes.
+
 ## Desktop on SDL
 
 SDL3 is the one renderer now, it brings what the desktop is missing: text input, dropped files, open
@@ -179,6 +183,40 @@ the note from 12 dB. 25 dB over is about 13 s of stripes on noise.
 - Resetting the floors on a retune would learn whatever still rings once the pitch detection lets
   go, a string fading under the room goes dark early.
 - A faster creep only shortens it, and cuts real tails in a noisy room too.
+
+## Handpans on a custom instrument
+
+The custom instrument is built since 2026-11-06, a preset of up to 10 notes picked by hand. What's left for
+a handpan or a pan:
+
+- The larger handpans and a kalimba have 17 notes, the sheet shows 10 rows without scrolling
+  (`MAX_NOTE_OFFSETS`). A D Kurd's 9 fit.
+- A handpan's note is tuned on three partials at once, the fundamental, the octave and the compound fifth:
+  tracks at 1×, 2×, 3× instead of the default 1×, 2×, 4×, the octave's offset for a maker who tunes it a
+  few cents sharp. A steel pan the same, timpani 1×, 1½×, 2×, a xylophone bar's 3×, a marimba's 4×. Does
+  a preset keep its own tracks, a handpan's beside a guitar's? Today they're the display's, see Looks for a
+  purpose.
+- While it's hammered a partial can be 100 cents off, past its track's band, and the track goes dark when
+  the maker most needs a direction. The spectrum shows where it is against the track's mark. A marimba
+  bar's overtone starts near 2.76× before it's tuned to 4×.
+
+## Instruments the setup doesn't fit
+
+Looked at on 2026-11-06, besides Polyphonic tuning, Piano stretch tuning and Temperaments.
+
+- Courses and unisons, a 12-string's pairs, a mandolin, a piano's two or three strings, an accordion's
+  reeds: two strings inside one track's band can't be parted, the stripes pulse at the beat rate and stop
+  in unison. Tuned one at a time with the others muted. An accordion's tremolo is a beat rate in hertz,
+  fewer cents for the same beat up high, so a preset's offsets note by note.
+- Other grids than 12 notes: a maqam's quarter tones on an oud or a qanun sit at ±50 cents, past the note
+  offsets' ±25 and halfway to the next note. A 7/4 seventh is -31 cents, and every gamelan has its own
+  tuning. Temperaments above loads only 12-note scales.
+- Bells, gongs and singing bowls aren't harmonic. A bell rings a hum at 0.5× and a minor third at 1.2×, no
+  track goes under 1× or to 1.2×, and the harmonic stack may name the wrong note for the strike. Locking
+  the note helps.
+- Drums: a tap rings for 0.1 to 0.5 s and isn't harmonic, the readout's 0.6 s settling doesn't finish.
+  Tuning a head compares the taps at each tension rod with each other, where a hold of the last reading
+  fits, unlike a ringing string. A drum tuner is a product of its own.
 
 ## Temperaments
 
@@ -314,6 +352,9 @@ best stack, drop its peaks and take the next, a stack per string.
   both.
 - The 85 ms window parts peaks 23 Hz apart and more, a low string's partials crowd its neighbour's up high.
 - The cents per string want the strobe's tracks on six notes at once, it has 5 tracks.
+- The tracks can't part them either: E2's 3rd is 2 cents from the B3 string, A2's 3rd and E2's 4th sit on
+  E4, so a track on B3 or E4 beats in a strum. A strum can say which string is out, the strobe tunes them
+  one at a time.
 
 ## Phone landscape
 

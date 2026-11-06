@@ -41,10 +41,7 @@ TABULAR_CODEPOINTS :: "0123456789.+-×½#ABCDEFGHbz¢"
 //   uvx --from fonttools pyftsubset Phosphor.ttf --unicodes=U+E272,U+E326,... --no-hinting \
 //       --output-file=assets/fonts/phosphor/Phosphor-Icons.ttf
 // The codepoints are in the style.css of the @phosphor-icons/web package.
-ICON_SLIDERS: cstring : "\ue432"
 ICON_CARET_UP: cstring : "\ue13c"
-ICON_PIANO_KEYS: cstring : "\ue9c8"
-ICON_GUITAR: cstring : "\uea8a"
 ICON_MICROPHONE: cstring : "\ue326"
 ICON_CARET_DOWN: cstring : "\ue136"
 ICON_MINUS: cstring : "\ue32a"
@@ -63,6 +60,16 @@ ICON_CODEPOINTS :: "\ue432\ue13c\ue9c8\uea8a\ue326\ue136\ue32a\ue3d4\ue4e0"
 // sheet's ✕, ‹ and ›, larger than the controls' icons to read as something to tap.
 ICON_SHEET_CODEPOINTS :: "\ue4f6\ue138\ue13a"
 ICON_BOLD_CODEPOINTS :: "\ue13c\ue136\ue32a\ue3d4"
+
+// Phosphor Light, cut down the same way from Phosphor-Light.ttf to Phosphor-Light-Icons.ttf, for the main
+// screen's icons at ICON_LARGE_SIZE: the settings and what's tuned to. A glyph's line grows with its size,
+// the regular one there is half again as thick as the 16pt icons' and the labels' stems beside it, the light
+// one about as thick.
+ICON_SLIDERS: cstring : "\U0000e432"
+ICON_PIANO_KEYS: cstring : "\U0000e9c8"
+ICON_GUITAR: cstring : "\U0000ea8a"
+ICON_PINWHEEL: cstring : "\U0000eb9c" // a custom instrument
+ICON_LARGE_CODEPOINTS :: "\U0000e432\U0000e9c8\U0000ea8a\U0000eb9c"
 
 // All the text is rasterized at exactly the size it's drawn at on this screen, a scaled atlas is soft or
 // jagged. Point sizes, whole pixels at 1x, 2x and 3x.
@@ -161,6 +168,7 @@ update_pixel_fonts :: proc() {
     noto_sans_mono := #load("../../assets/fonts/noto/NotoSansMono-Medium.ttf")
     phosphor := #load("../../assets/fonts/phosphor/Phosphor-Icons.ttf")
     phosphor_bold := #load("../../assets/fonts/phosphor/Phosphor-Bold-Icons.ttf")
+    phosphor_light := #load("../../assets/fonts/phosphor/Phosphor-Light-Icons.ttf")
     load :: proc(ttf: []u8, points, scale: f32, codepoints: string) -> PixelFont {
         pixels := math.round(points * scale)
         return {gfx.load_font(ttf, i32(pixels), codepoints), pixels / scale}
@@ -175,7 +183,7 @@ update_pixel_fonts :: proc() {
         title            = load(inter_bold, TITLE_SIZE, scale, FONT_CODEPOINTS),
         title_large      = load(inter_bold, TITLE_LARGE_SIZE, scale, TITLE_LARGE_CODEPOINTS),
         icon             = load(phosphor, ICON_SIZE, scale, ICON_CODEPOINTS),
-        icon_large       = load(phosphor, ICON_LARGE_SIZE, scale, ICON_CODEPOINTS),
+        icon_large       = load(phosphor_light, ICON_LARGE_SIZE, scale, ICON_LARGE_CODEPOINTS),
         icon_large_bold  = load(phosphor_bold, ICON_LARGE_SIZE, scale, ICON_BOLD_CODEPOINTS),
         icon_sheet       = load(phosphor_bold, ICON_SHEET_SIZE, scale, ICON_SHEET_CODEPOINTS),
         note             = load(inter_medium, RULER_SCALE * RULER_NOTE_SIZE, scale, "ABCDEFG"),
@@ -214,7 +222,7 @@ snap_to_pixels :: proc(position: [2]f32) -> [2]f32 {
 // Which of the icon fonts an icon is drawn in
 IconStyle :: enum {
     REGULAR, // ICON_SIZE, on the controls
-    LARGE, // ICON_LARGE_SIZE, on the main screen
+    LARGE, // ICON_LARGE_SIZE in light, on the main screen
     LARGE_BOLD, // ICON_LARGE_SIZE, the steppers in the popup of the note offsets
     SHEET, // ICON_SHEET_SIZE, the sheet's ✕, ‹ and ›
 }

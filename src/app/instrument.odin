@@ -27,6 +27,10 @@ import "../gfx"
 // each, anything else is tuned on the chromatic ruler. A capo moves the strings up, they keep the names of
 // the open strings like the chord shapes do. The transpose only renames notes, it's for chromatic.
 //
+// A custom instrument's strings are notes picked by hand, a tuning that isn't built in or a handpan's scale.
+// They're a preset's note offsets, so only a preset is custom, with no capo or transpose: a note is picked as
+// it sounds.
+//
 // The built-in instruments are picked and tuned to straight away, each remembers its tuning and capo,
 // chromatic its transpose. A preset is one of yours as it's tuned: an instrument with its options like the
 // built-ins and its own note offsets, two guitars in the same tuning have one each. The slots are fixed,
@@ -41,7 +45,12 @@ Instrument :: enum {
     BASS,
     UKULELE,
     BARITONE_UKULELE,
+    CUSTOM, // the last, only a preset is custom
 }
+
+// On top of the sheet's menu, all but CUSTOM
+BUILT_IN_INSTRUMENTS :: len(Instrument) - 1
+#assert(int(Instrument.CUSTOM) == BUILT_IN_INSTRUMENTS)
 
 INSTRUMENT_NAMES :: [Instrument]string {
     .CHROMATIC        = "Chromatic",
@@ -50,6 +59,7 @@ INSTRUMENT_NAMES :: [Instrument]string {
     .BASS             = "Bass",
     .UKULELE          = "Ukulele",
     .BARITONE_UKULELE = "Baritone ukulele",
+    .CUSTOM           = "Custom",
 }
 
 // In the bottom left corner before a tuning other than the standard one or a transpose, letters would read
@@ -61,6 +71,7 @@ INSTRUMENT_ABBREVIATIONS :: [Instrument]string {
     .BASS             = "BASS",
     .UKULELE          = "UKE",
     .BARITONE_UKULELE = "BARI",
+    .CUSTOM           = "CUSTOM",
 }
 
 // The standard tuning first, the others' names are in the bottom left corner too
@@ -100,6 +111,7 @@ TUNINGS := [Instrument][]Tuning {
     .BARITONE_UKULELE = {
         {"Standard", {"D3", "G3", "B3", "E4"}},
     },
+    .CUSTOM = {}, // the preset's notes, see custom_strings
 }
 
 // An instrument as it's tuned, a built-in one with what it remembers or a preset, see current_setup
@@ -143,9 +155,11 @@ setup_tuning :: proc(setup: Setup) -> (tuning: Tuning, index: int) {
 
 CAPO_MAX_FRET :: 7
 
-// None on the chromatic ruler
+// None on the chromatic ruler or a custom instrument
 capo_fret :: proc(setup: Setup) -> int {
-    return 0 if setup.instrument == .CHROMATIC else clamp(setup.capo, 0, CAPO_MAX_FRET)
+    if setup.instrument == .CHROMATIC || setup.instrument == .CUSTOM do return 0
+
+    return clamp(setup.capo, 0, CAPO_MAX_FRET)
 }
 
 // The key of a transposing instrument, a Bb instrument sounds a tone below the written note and the note
@@ -157,10 +171,12 @@ transpose_key :: proc(setup: Setup) -> int {
     return setup.transpose %% 12 if setup.instrument == .CHROMATIC else 0
 }
 
-// The strings of the tuning that's tuned to as they sound with the capo, in semitones from A4, none for the
-// chromatic ruler. Lives until the end of the frame.
+// The strings of the tuning that's tuned to as they sound with the capo, or a custom preset's notes, in
+// semitones from A4, none for the chromatic ruler. Lives until the end of the frame.
 tuning_strings :: proc(config: ^Config) -> []int {
     setup := current_setup(config)
+    if preset, ok := setup.preset.?; ok && setup.instrument == .CUSTOM do return custom_strings(config, preset)
+
     tuning, _ := setup_tuning(setup)
     if len(tuning.strings) == 0 do return nil
 
@@ -168,6 +184,18 @@ tuning_strings :: proc(config: ^Config) -> []int {
     for name, index in tuning.strings {
         note, _ := core.parse_note(name)
         semitones[index] = note.cents / 100 + capo_fret(setup)
+    }
+    return semitones
+}
+
+// A custom preset's note offsets in their rows' order, a note in two rows is two strings. None before the
+// first row is added, every note like chromatic. Lives until the end of the frame.
+custom_strings :: proc(config: ^Config, preset: int) -> []int {
+    count := clamp(config.note_offset_counts[preset], 0, MAX_NOTE_OFFSETS)
+    semitones := make([]int, count, context.temp_allocator)
+    for &semitone, row in semitones {
+        note := clamp(config.note_offset_notes[preset][row], 0, core.NOTE_COUNT - 1) // counted from A0
+        semitone = note + core.LOWEST_NOTE
     }
     return semitones
 }
@@ -198,15 +226,18 @@ setup_label :: proc(setup: Setup) -> string {
     return strings.concatenate({prefix, name}, context.temp_allocator)
 }
 
-// In the bottom left corner, the piano for every note or the guitar for an instrument's strings, and the
-// label of what's tuned to after it, the icons alone don't say which. pos is the left edge and the middle.
-// Tapping either opens the sheet.
+// In the bottom left corner, the piano for every note, the guitar for an instrument's strings or the pinwheel
+// for a custom one's notes, and the label of what's tuned to after it, the icons alone don't say which. pos is
+// the left edge and the middle. Tapping either opens the sheet.
 gui_instrument_button :: proc(pos: [2]f32, config: ^Config) -> bool {
     LABEL_GAP :: 10
     TOUCH_HEIGHT :: 48
 
     setup := current_setup(config)
-    icon := ICON_PIANO_KEYS if setup.instrument == .CHROMATIC else ICON_GUITAR
+    icon := ICON_GUITAR
+    if setup.instrument == .CHROMATIC do icon = ICON_PIANO_KEYS
+    if setup.instrument == .CUSTOM do icon = ICON_PINWHEEL
+
     draw_icon(icon, {pos.x, pos.y - ICON_LARGE_SIZE / 2}, icon_color, .LARGE)
 
     label := fmt.ctprintf("%s", setup_label(setup))
@@ -222,9 +253,9 @@ INSTRUMENT_WIDTH :: 240 // the dropdown of what's tuned to
 
 // The sheet, it covers the window. On top with no label what's tuned to: the built-in instruments and the
 // presets. Under it a preset's instrument, then a stringed instrument's tuning and capo, the
-// strings next to the title, or the transpose for chromatic, and a preset's note offsets under them. target
-// is the note the tuner is on, see gui_note_offsets. Returns close when ✕ is tapped, changed when the tuner
-// needs the new strings or offsets or the ruler the new names.
+// strings next to the title, or the transpose for chromatic, and a preset's note offsets under them, a custom
+// instrument's notes. target is the note a new row starts on, see gui_note_offsets. Returns close when ✕ is
+// tapped, changed when the tuner needs the new strings or offsets or the ruler the new names.
 gui_instrument :: proc(
     sheet_layout: SheetLayout,
     config: ^Config,
@@ -251,11 +282,13 @@ gui_instrument :: proc(
 
     // On top with no label what's tuned to. Under a preset its instrument. Then a stringed instrument's
     // tuning, no row with only the standard one like a baritone ukulele's, and its capo, or the transpose.
+    // A custom instrument has neither, its notes come next.
     top_row := settings_row(sheet_layout, 0, "", 0)
     instrument_rect := gfx.Rect{sheet_layout.rows.x, top_row.y, INSTRUMENT_WIDTH, top_row.height}
     tunable := len(TUNINGS[setup.instrument]) > 1
     tuning_row := 2 if is_preset else 1
     options_row := tuning_row + 1 if tunable else tuning_row
+    offsets_row := options_row if setup.instrument == .CUSTOM else options_row + 1
 
     // The strings next to the title
     details: cstring
@@ -265,11 +298,11 @@ gui_instrument :: proc(
 
     if stringed {
         if gui_capo_row(sheet_layout, options_row, setup, capo_value) do changed = true
-    } else {
+    } else if setup.instrument == .CHROMATIC {
         if gui_transpose_row(sheet_layout, options_row, setup, transpose_value) do changed = true
     }
 
-    if is_preset && gui_note_offsets(sheet_layout, options_row + 1, config, preset, target) do changed = true
+    if is_preset && gui_note_offsets(sheet_layout, offsets_row, config, preset, target) do changed = true
 
     // The dropdowns from the bottom up, their menus open down over the rows under them
     if tunable && gui_tuning_dropdown(open, sheet_layout, tuning_row, setup.instrument, tuning_index, tuning_value) {
@@ -343,21 +376,27 @@ gui_tuning_dropdown :: proc(
 }
 
 // A preset's instrument, another one starts the preset over, offsets and a capo are on one instrument and
-// not the next. True when it changed.
+// not the next. Chromatic's rows and a custom instrument's are both notes, they stay. True when it changed.
 gui_preset_instrument_dropdown :: proc(
     open: ^Dropdown,
     sheet_layout: SheetLayout,
     config: ^Config,
     preset: int,
 ) -> bool {
-    options := instrument_options(0)
+    options := instrument_options(len(Instrument), 0)
     rect := settings_row(sheet_layout, 1, "Instrument", dropdown_width(options))
     current := int(config.preset_instruments[preset])
     selected := current
     gui_settings_dropdown(open, .PRESET_INSTRUMENT, rect, options, &selected, down = true)
     if selected == current do return false
 
-    clear_preset(config, preset, Instrument(selected))
+    previous, instrument := config.preset_instruments[preset], Instrument(selected)
+    if (previous == .CHROMATIC || previous == .CUSTOM) && (instrument == .CHROMATIC || instrument == .CUSTOM) {
+        config.preset_instruments[preset] = instrument
+        config.preset_transposes[preset] = 0
+    } else {
+        clear_preset(config, preset, instrument)
+    }
     reset_note_offsets_editing()
     return true
 }
@@ -376,18 +415,18 @@ clear_preset :: proc(config: ^Config, preset: int, instrument: Instrument) {
 // What's tuned to, a built-in instrument or a preset, the one that is is preset. True when it changed.
 gui_instrument_dropdown :: proc(open: ^Dropdown, rect: gfx.Rect, config: ^Config, preset: Maybe(int)) -> bool {
     current := int(config.instrument)
-    if slot, ok := preset.?; ok do current = len(Instrument) + slot
+    if slot, ok := preset.?; ok do current = BUILT_IN_INSTRUMENTS + slot
 
     // A line between the built-in instruments and the presets
-    dividers := []int{len(Instrument)}
+    dividers := []int{BUILT_IN_INSTRUMENTS}
 
     options := instrument_and_preset_options(config)
     selected := current
     gui_settings_dropdown(open, .INSTRUMENT, rect, options, &selected, down = true, dividers = dividers)
     if selected == current do return false
 
-    if selected >= len(Instrument) {
-        config.preset = selected - len(Instrument)
+    if selected >= BUILT_IN_INSTRUMENTS {
+        config.preset = selected - BUILT_IN_INSTRUMENTS
     } else {
         config.instrument = Instrument(selected)
         config.preset = nil
@@ -399,9 +438,9 @@ gui_instrument_dropdown :: proc(open: ^Dropdown, rect: gfx.Rect, config: ^Config
 // The built-in instruments, then the preset slots by number with what's in them like the corner. An unused
 // slot is chromatic as it starts, its instrument is picked under it.
 instrument_and_preset_options :: proc(config: ^Config) -> []GuiOption {
-    options := instrument_options(PRESET_SLOTS)
+    options := instrument_options(BUILT_IN_INSTRUMENTS, PRESET_SLOTS)
     for slot in 0 ..< PRESET_SLOTS {
-        option := len(Instrument) + slot
+        option := BUILT_IN_INSTRUMENTS + slot
         held := preset_setup(config, slot)
         empty := held.instrument == .CHROMATIC && transpose_key(held) == 0 && config.note_offset_counts[slot] == 0
         held.preset = nil // without the P1 in front
@@ -411,11 +450,11 @@ instrument_and_preset_options :: proc(config: ^Config) -> []GuiOption {
     return options
 }
 
-// The built-in instruments by name, and room after them for extra options. Lives until the end of the frame.
-instrument_options :: proc(extra: int) -> []GuiOption {
+// The first count instruments by name, and room after them for extra options. Lives until the end of the frame.
+instrument_options :: proc(count, extra: int) -> []GuiOption {
     names := INSTRUMENT_NAMES
-    options := make([]GuiOption, len(Instrument) + extra, context.temp_allocator)
-    for instrument in Instrument do options[int(instrument)] = {i32(instrument), names[instrument]}
+    options := make([]GuiOption, count + extra, context.temp_allocator)
+    for index in 0 ..< count do options[index] = {i32(index), names[Instrument(index)]}
 
     return options
 }

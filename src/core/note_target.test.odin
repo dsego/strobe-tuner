@@ -305,3 +305,26 @@ test_note_target_string_steps :: proc(t: ^testing.T) {
     step_target_note(&target, 10)
     testing.expect_value(t, target.target_note.cents, -500)
 }
+
+// A custom instrument's notes a semitone apart, a handpan in D Kurd: D3 and A3 B♭3 C4 D4 E4 F4 G4 A4 with
+// a C5 on top. Each note played is its own string, a semitone from the target too.
+@(test)
+test_note_target_semitone_strings :: proc(t: ^testing.T) {
+    kurd := []int{-19, -12, -11, -9, -7, -5, -4, -2, 0, 3}
+    target := init_note_target(A3_HZ, 440, 0)
+    set_target_strings(&target, kurd)
+    testing.expect_value(t, target.string_count, 10)
+    testing.expect_value(t, target.string_index, 1)
+
+    update_note_target(&target, test_detection(233.08)) // B♭3
+    testing.expect_value(t, target.string_index, 2)
+    update_note_target(&target, test_detection(A3_HZ))
+    testing.expect_value(t, target.string_index, 1)
+
+    // Between two notes it's still the target's, the B3 a semitone over B♭3 is B♭3 tuned sharp
+    update_note_target(&target, test_detection(233.08))
+    update_note_target(&target, test_detection(246.94)) // B3
+    testing.expect_value(t, target.string_index, 2)
+    steady := readout_pitch(&target)
+    testing.expect(t, abs(steady.err_cents - 100) < 0.1)
+}

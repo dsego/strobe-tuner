@@ -147,9 +147,16 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
     // Over the whole window, room for every note offset of a preset
     sheet_layout, swiped := begin_sheet(sheet, 0, layout, gfx.window_size().y)
 
-    // A new offset starts on the note the strobe is on
+    // A new offset starts on the note the strobe is on. On a custom instrument it's on the nearest of its notes,
+    // a new one starts on the note played, a scale is entered a note at a time.
+    note_target := &app.measurement.note_target
+    note := note_target.target_note
+    if current_setup(app.config).instrument == .CUSTOM {
+        if detected, has_detected := note_target.detected_note.?; has_detected do note = detected
+    }
+
     target := -1
-    if index, in_range := core.note_index(app.measurement.note_target.target_note); in_range {
+    if index, in_range := core.note_index(note); in_range {
         target = index
     }
     close, changed := gui_instrument(sheet_layout, app.config, &sheets.open_dropdown, target)

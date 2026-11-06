@@ -31,6 +31,7 @@ Strobie is coming to the App Store for Mac and iPhone. [Try it in your browser](
 - Note offsets: tune a note up to ±25 cents off pitch, the strobe stands still at the offset note.
 - Transpose for B♭, E♭, F and other transposing instruments.
 - Guitar, bass and ukulele tunings with an optional capo, the ruler shows only their strings.
+- Custom instrument: a preset of up to 10 notes of your own, e.g. a handpan's scale or a tuning that isn't built in, the ruler shows only them.
 - Concert A from 390 to 480 Hz, with 440, 442 and 432 in a menu.
 - Hertz/Cents display.
 - Four colorways (red, mint, amber, mono) and By note, a color per note. An optional retro glow.
