@@ -91,6 +91,7 @@ Result :: struct {
     worst_cents:     f32, // the readout's furthest from the offset
     unread:          int, // measured detections without a readout, no track settled or one too far off
     wrong_way:       int, // measured detections with a lit track drifting the other way
+    shown_after_s:   f32, // from silence, how long the tone took to show its note, -1 if it never did or came after another
 }
 
 main :: proc() {
@@ -133,6 +134,7 @@ main :: proc() {
 
     print_summary(results[:])
     print_by_offset(results[:])
+    print_lock_on(results[:])
 
     fmt.println("\noctave switches:")
     for switch_notes in OCTAVE_SWITCHES {
@@ -255,6 +257,11 @@ run_case :: proc(test_case: Case) -> (result: Result) {
     readout_ready := false
     label := case_label(test_case)
     traced := SHOW_CASE != "" && strings.contains(label, SHOW_CASE)
+
+    // How long a tone out of the lead-in's silence takes to show its note, see print_lock_on
+    result.shown_after_s = -1
+    _, after_another := test_case.before_semitones.?
+    tone_start := int(LEAD_IN_S * SAMPLERATE)
     for start := 0; start + FRAME_SAMPLES <= len(samples); start += FRAME_SAMPLES {
         // Like sandbox/replay, the app's loop
         frame := samples[start:start + FRAME_SAMPLES]
@@ -268,8 +275,12 @@ run_case :: proc(test_case: Case) -> (result: Result) {
             retune(strobe, note_target.target_note.frequency, test_case.pitch_standard)
             readout_ready = false
         }
-        if traced && pitch.fresh && start >= int(LEAD_IN_S * SAMPLERATE) {
+        if traced && pitch.fresh && start >= tone_start {
             show_detection(label, start, pitch, note_target, strobe_shows)
+        }
+        shown := note_target.active && note_target.target_note.cents == note.cents
+        if !after_another && result.shown_after_s < 0 && start >= tone_start && shown {
+            result.shown_after_s = f32(start + FRAME_SAMPLES - tone_start) / SAMPLERATE
         }
         if !pitch.fresh || start < measure_from do continue
 
@@ -481,6 +492,36 @@ print_summary :: proc(results: []Result) {
 
 // How far off its note a track still reads: the readout's worst by the tone's distance from the note, the tracks
 // stay on it. Report only, without the stress cases and the ones on another note.
+// How long a clean tone out of silence took to show its note, by octave: the fastest to the slowest and the median,
+// every waveform, in frames of FRAME_SAMPLES. The note shows NOTE_SWITCH_S after its first detection.
+print_lock_on :: proc(results: []Result) {
+    fmt.println("\nfrom silence to the note shown, clean, ms")
+    for octave in 0 ..= 8 {
+        times: [dynamic]f32
+        defer delete(times)
+
+        missed := 0
+        for result in results {
+            // C to B, A4 is 9 semitones over C4
+            note_octave := 4 + int(math.floor(f64(result.note_semitones + 9) / 12))
+            _, after_another := result.before_semitones.?
+            if note_octave != octave || result.noise_snr_db != 0 || after_another do continue
+
+            if result.shown_after_s < 0 {
+                missed += 1
+            } else {
+                append(&times, 1000 * result.shown_after_s)
+            }
+        }
+        if len(times) == 0 do continue
+
+        slice.sort(times[:])
+        fmt.printf("  octave %v  %3.0f to %3.0f, median %3.0f", octave, times[0], times[len(times) - 1], times[len(times) / 2])
+        if missed > 0 do fmt.printf(", %v never", missed)
+        fmt.println()
+    }
+}
+
 print_by_offset :: proc(results: []Result) {
     fmt.println("\nworst readout cents by the tone's distance from the note")
     names := [Waveform]string {
