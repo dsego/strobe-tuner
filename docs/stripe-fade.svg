@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 610" width="1100" height="610" role="img" aria-labelledby="title desc">
+  <title id="title">Strobie stripe fade</title>
+  <desc id="desc">How a strobe track's stripes fade. The track's samples are cut into spans of one period of the note, where every partial of the note goes whole periods. A Blackman window three spans long closes at the end of every span and measures the track's partial, a size and a direction. Turned back by the track's drift, a partial's measurements point one way, an attack's growing ones too, while noise near the track scatters them. How unsure their average direction is sets the stripes: full up to about 0.16 radians, about 16 dB over the noise in the track's band, dark from 0.4, about 8 dB, eased over 0.05 s. The readout fits and follows only fully lit tracks, and the note stays lit while any track is at least half lit.</desc>
+  <style>
+    text { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #111; }
+    .bg { fill: #fff; }
+    .frame { fill: #fff; stroke: #222; stroke-width: 1; }
+    .tab { font-size: 12px; font-weight: 600; }
+    .row { font-size: 11px; font-style: italic; fill: #666; }
+    .sub { font-size: 11px; fill: #444; }
+    .label { font-size: 12px; }
+    .wave { fill: none; stroke: #222; stroke-width: 1.2; }
+    .ramp { fill: none; stroke: #222; stroke-width: 2; }
+    .axis { stroke: #222; stroke-width: 1; }
+    .tick { stroke: #222; stroke-width: 1; }
+    .guide { stroke: #999; stroke-width: 1; stroke-dasharray: 4 4; }
+    .window { fill: #fff; stroke: #222; stroke-width: 1; }
+    .blackman { fill: #ddd; stroke: none; }
+    .dot { fill: #222; }
+    .dial { fill: #fff; stroke: #222; stroke-width: 1; }
+    .vector { stroke: #222; stroke-width: 1.4; }
+  </style>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M1,1 L9,5 L1,9" fill="none" stroke="#222" stroke-width="1"/>
+    </marker>
+    <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M1,1 L9,5 L1,9" fill="none" stroke="#222" stroke-width="1.4"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1100" height="610"/>
+
+  <!-- The measurements, one a period of the note -->
+  <rect class="frame" x="10" y="30" width="1080" height="270"/>
+  <path class="frame" d="M10,30 H372 V42 L364,50 H10 Z"/>
+  <text class="tab" x="18" y="45">a track's samples, a measurement a period of the note</text>
+
+  <line class="axis" x1="100" y1="70" x2="900" y2="70" marker-end="url(#arrow)"/>
+  <path class="tick" d="M100,66 V74 M180,66 V74 M260,66 V74 M340,66 V74 M420,66 V74 M500,66 V74 M580,66 V74 M660,66 V74 M740,66 V74 M820,66 V74"/>
+  <text class="row" x="20" y="74">spans</text>
+  <text class="sub" x="912" y="68">a period of the note each,</text>
+  <text class="sub" x="912" y="82">every partial goes whole periods</text>
+
+  <text class="row" x="20" y="114">the note</text>
+  <path class="wave" d="M100,98
+    c7.24,0 13.47,5.85 20,12 c6.53,6.15 12.76,12 20,12 c7.24,0 13.47,-5.85 20,-12 c6.53,-6.15 12.76,-12 20,-12
+    c7.24,0 13.47,5.85 20,12 c6.53,6.15 12.76,12 20,12 c7.24,0 13.47,-5.85 20,-12 c6.53,-6.15 12.76,-12 20,-12
+    c7.24,0 13.47,5.85 20,12 c6.53,6.15 12.76,12 20,12 c7.24,0 13.47,-5.85 20,-12 c6.53,-6.15 12.76,-12 20,-12
+    c7.24,0 13.47,5.85 20,12 c6.53,6.15 12.76,12 20,12 c7.24,0 13.47,-5.85 20,-12 c6.53,-6.15 12.76,-12 20,-12
+    c7.24,0 13.47,5.85 20,12 c6.53,6.15 12.76,12 20,12 c7.24,0 13.47,-5.85 20,-12 c6.53,-6.15 12.76,-12 20,-12
+    c7.24,0 13.47,5.85 20,12 c6.53,6.15 12.76,12 20,12 c7.24,0 13.47,-5.85 20,-12 c6.53,-6.15 12.76,-12 20,-12
+    c7.24,0 13.47,5.85 20,12 c6.53,6.15 12.76,12 20,12 c7.24,0 13.47,-5.85 20,-12 c6.53,-6.15 12.76,-12 20,-12
+    c7.24,0 13.47,5.85 20,12 c6.53,6.15 12.76,12 20,12 c7.24,0 13.47,-5.85 20,-12 c6.53,-6.15 12.76,-12 20,-12
+    c7.24,0 13.47,5.85 20,12 c6.53,6.15 12.76,12 20,12 c7.24,0 13.47,-5.85 20,-12 c6.53,-6.15 12.76,-12 20,-12
+    c7.24,0 13.47,5.85 20,12 c6.53,6.15 12.76,12 20,12 c7.24,0 13.47,-5.85 20,-12 c6.53,-6.15 12.76,-12 20,-12"/>
+  <text class="sub" x="912" y="108">its fundamental here,</text>
+  <text class="sub" x="912" y="122">the partial the track hears</text>
+
+  <!-- Blackman windows three spans long, one closing at the end of every span -->
+  <text class="row" x="20" y="184">windows</text>
+  <rect class="window" x="180" y="140" width="240" height="14"/>
+  <path class="blackman" d="M180,153 C250,153 265,141 300,141 C335,141 350,153 420,153 Z"/>
+  <rect class="window" x="260" y="162" width="240" height="14"/>
+  <path class="blackman" d="M260,175 C330,175 345,163 380,163 C415,163 430,175 500,175 Z"/>
+  <rect class="window" x="340" y="184" width="240" height="14"/>
+  <path class="blackman" d="M340,197 C410,197 425,185 460,185 C495,185 510,197 580,197 Z"/>
+  <rect class="window" x="420" y="206" width="240" height="14"/>
+  <path class="blackman" d="M420,219 C490,219 505,207 540,207 C575,207 590,219 660,219 Z"/>
+
+  <circle class="dot" cx="420" cy="147" r="3"/>
+  <circle class="dot" cx="500" cy="169" r="3"/>
+  <circle class="dot" cx="580" cy="191" r="3"/>
+  <circle class="dot" cx="660" cy="213" r="3"/>
+  <text class="sub" x="430" y="151">m1</text>
+  <text class="sub" x="510" y="173">m2</text>
+  <text class="sub" x="590" y="195">m3</text>
+  <text class="sub" x="670" y="217">m4 …</text>
+
+  <text class="sub" x="912" y="170">one closes every span:</text>
+  <text class="sub" x="912" y="184">a measurement of the partial,</text>
+  <text class="sub" x="912" y="198">a size and a direction</text>
+
+  <text class="label" x="110" y="252">each window: the samples times the window and a cosine and a sine of the track's partial, added up</text>
+  <text class="sub" x="110" y="270">Three periods of the note, Blackman shaped: the note's other partials fall in its nulls, a 2nd partial a few cents off</text>
+  <text class="sub" x="110" y="285">stays 90 dB under the 1× track's measurements. A window one period long let it in only 40 dB under.</text>
+
+  <!-- How sure, by direction -->
+  <rect class="frame" x="10" y="320" width="540" height="280"/>
+  <path class="frame" d="M10,320 H278 V332 L270,340 H10 Z"/>
+  <text class="tab" x="18" y="335">how sure: the measurements' directions</text>
+
+  <circle class="dial" cx="150" cy="440" r="62"/>
+  <line class="vector" x1="150" y1="440" x2="171.57" y2="429.48" marker-end="url(#head)"/>
+  <line class="vector" x1="150" y1="440" x2="196.77" y2="413.00" marker-end="url(#head)"/>
+  <line class="vector" x1="150" y1="440" x2="179.85" y2="419.87" marker-end="url(#head)"/>
+  <line class="vector" x1="150" y1="440" x2="195.71" y2="404.27" marker-end="url(#head)"/>
+  <line class="vector" x1="150" y1="440" x2="184.18" y2="409.22" marker-end="url(#head)"/>
+  <text class="label" x="150" y="526" text-anchor="middle">a partial: they agree,</text>
+  <text class="sub" x="150" y="541" text-anchor="middle">growing in an attack, full</text>
+
+  <circle class="dial" cx="400" cy="440" r="62"/>
+  <line class="vector" x1="400" y1="440" x2="441.35" y2="424.95" marker-end="url(#head)"/>
+  <line class="vector" x1="400" y1="440" x2="388.37" y2="408.05" marker-end="url(#head)"/>
+  <line class="vector" x1="400" y1="440" x2="353.02" y2="457.10" marker-end="url(#head)"/>
+  <line class="vector" x1="400" y1="440" x2="403.49" y2="479.85" marker-end="url(#head)"/>
+  <line class="vector" x1="400" y1="440" x2="375.57" y2="431.11" marker-end="url(#head)"/>
+  <line class="vector" x1="400" y1="440" x2="425.98" y2="455.00" marker-end="url(#head)"/>
+  <text class="label" x="400" y="526" text-anchor="middle">noise near the track:</text>
+  <text class="sub" x="400" y="541" text-anchor="middle">they scatter, gray</text>
+
+  <text class="sub" x="28" y="570">Turned back by the track's drift before they add up, so a note a few cents off lines up too.</text>
+  <text class="sub" x="28" y="585">Each counts by its size: an attack's first, smaller ones agree as well, they aren't scatter.</text>
+
+  <!-- How bright -->
+  <rect class="frame" x="570" y="320" width="520" height="280"/>
+  <path class="frame" d="M570,320 H652 V332 L644,340 H570 Z"/>
+  <text class="tab" x="578" y="335">how bright</text>
+
+  <line class="axis" x1="630" y1="540" x2="1062" y2="540" marker-end="url(#arrow)"/>
+  <line class="axis" x1="630" y1="540" x2="630" y2="378" marker-end="url(#arrow)"/>
+  <path class="tick" d="M764.4,536 V544 M966,536 V544 M626,400 H634 M626,470 H634"/>
+  <line class="guide" x1="764.4" y1="400" x2="764.4" y2="540"/>
+  <line class="guide" x1="630" y1="470" x2="865.2" y2="470"/>
+  <line class="guide" x1="865.2" y1="470" x2="865.2" y2="540"/>
+  <path class="ramp" d="M630,400 H764.4 L966,540 H1040"/>
+  <circle class="dot" cx="865.2" cy="470" r="3"/>
+
+  <text class="sub" x="622" y="376" text-anchor="end">stripes</text>
+  <text class="sub" x="622" y="404" text-anchor="end">full</text>
+  <text class="sub" x="622" y="474" text-anchor="end">half</text>
+  <text class="sub" x="622" y="544" text-anchor="end">dark</text>
+
+  <text class="sub" x="640" y="392">the readout fits and follows</text>
+  <text class="sub" x="875" y="458">the note stays lit while</text>
+  <text class="sub" x="875" y="472">any track is this lit</text>
+
+  <text class="sub" x="630" y="556" text-anchor="middle">0</text>
+  <text class="sub" x="764.4" y="556" text-anchor="middle">0.16</text>
+  <text class="sub" x="966" y="556" text-anchor="middle">0.4 rad</text>
+  <text class="sub" x="764.4" y="570" text-anchor="middle">≈ 16 dB</text>
+  <text class="sub" x="966" y="570" text-anchor="middle">≈ 8 dB</text>
+  <text class="sub" x="630" y="590">how unsure the average direction is, its level over the noise in the band, eased over 0.05 s</text>
+</svg>
