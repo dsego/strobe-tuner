@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 565" width="1100" height="565" role="img" aria-labelledby="title desc">
   <title id="title">Strobie audio signal path</title>
-  <desc id="desc">On the audio thread the input comes from miniaudio as mono at the device's own rate, never resampled, a rate of 88.2 kHz or more halved through halfband filters, and is written into three lock-free ring buffers, one per reader. On the main thread, every display frame: the pitch lane filters its samples, runs the NSDF, picks the peak and holds the target note for 50 ms, which sets the reference frequency of the lock-in and the lamp. The lock-in lane runs a single-bin DFT per track and rotates it by the reference on the sample clock, its phase advance times the track speed turns the strobe tracks, and a least squares fit of the phase gives the cents for the readout and the trace. The lamp lane folds every sample onto two periods of the reference on a fading screen, which the scope view draws as it is and the lamp view from above.</desc>
+  <desc id="desc">On the audio thread the input comes from miniaudio as mono at the device's own rate, never resampled, a rate of 88.2 kHz or more halved through halfband filters, and is written into three lock-free ring buffers, one per reader. On the main thread, every display frame: the pitch lane filters its samples, takes the spectrum of the newest of them under a Hann window, scores stacks of harmonics from the peaks standing over their background with a steady phase, and holds the best one's note for 50 ms as the target, which sets the reference frequency of the lock-in and the lamp. The lock-in lane runs a single-bin DFT per track and rotates it by the reference on the sample clock, its phase advance times the track speed turns the strobe tracks, and a least squares fit of the phase gives the cents for the readout and the trace. Beside it, how sure each track's partial is from the samples lights its stripes and lets the readout follow it. The lamp lane folds every sample onto two periods of the reference on a fading screen, which the scope view draws as it is and the lamp view from above.</desc>
   <style>
     text { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #111; }
     .bg { fill: #fff; }
@@ -117,13 +117,13 @@
     <text class="sub" x="310" y="119">60 Hz high-pass</text>
     <text class="sub" x="310" y="132">5 kHz low-pass</text>
 
-    <text class="title" x="480" y="102">NSDF</text>
-    <text class="sub" x="480" y="119">newest 4096 samples</text>
-    <text class="sub" x="480" y="132">8192-point FFT</text>
+    <text class="title" x="480" y="102">Spectrum</text>
+    <text class="sub" x="480" y="119">Hann, 4096 samples</text>
+    <text class="sub" x="480" y="132">8192 for the bass</text>
 
-    <text class="title" x="650" y="102">Peak pick</text>
-    <text class="sub" x="650" y="119">parabolic peak</text>
-    <text class="sub" x="650" y="132">clarity, SNR</text>
+    <text class="title" x="650" y="102">Harmonic stack</text>
+    <text class="sub" x="650" y="119">prominent peaks</text>
+    <text class="sub" x="650" y="132">with a steady phase</text>
 
     <text class="title" x="820" y="102">Target note</text>
     <text class="sub" x="820" y="119">held for 50 ms</text>
@@ -147,8 +147,8 @@
     <text class="sub" x="650" y="332">through the phase</text>
 
     <text class="title" x="310" y="302">Stripe fade</text>
-    <text class="sub" x="310" y="319">3-period windows agree,</text>
-    <text class="sub" x="310" y="332">how sure fades the stripes</text>
+    <text class="sub" x="310" y="319">how sure each partial is,</text>
+    <text class="sub" x="310" y="332">lights stripes and readout</text>
 
     <text class="stereotype" x="990" y="216">«display»</text>
     <text class="title" x="990" y="233">Strobe tracks</text>
