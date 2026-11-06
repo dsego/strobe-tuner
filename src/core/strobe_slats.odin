@@ -22,10 +22,8 @@ import "core:math"
 // spans, a period of the note, as many of the track's own as its partial, two of the note's for a fifth, so
 // every partial of the note goes whole periods in one. The track's partial is measured over windows of spans,
 // one closing at the end of every span, and the stripes are as bright as the measurements agree, see
-// strobe_slat_level. Tried on the slat-strobe branch instead of the SNR fade, see STROBE_SNR_FADE.
-
-// How long the slots of STROBE_SLATS_HALVES remember, in periods of the note, they fade to a third over this many
-STROBE_SLATS_PERIODS :: #config(STROBE_SLATS_PERIODS, 4.0)
+// strobe_slat_level. The readout, the note hold and the trace go by it too. It replaced an SNR against a noise
+// floor and the noise between the note's partials: the stripes let go of a partial as soon as it shimmers.
 
 // How long the measurements are remembered, in periods of the note, they fade to a third over this many. As
 // steady as one span's measurements were over 4, the windows overlap, see SLAT_WINDOW_OVERLAP.
@@ -40,47 +38,29 @@ SLAT_WINDOW_SPANS :: 3
 // The measurements overlap, as many as this share as much noise as one, see test_slat_window_overlap
 SLAT_WINDOW_OVERLAP :: 1.737
 
-// How hard the noise pulls the stripes toward gray
-STROBE_SLATS_SHADE :: #config(STROBE_SLATS_SHADE, 1.0)
+// The stripes are dark where the partial's average is this uncertain, in radians of its phase: the average 2.5
+// times the noise in its band, about 8 dB
+STROBE_SLATS_NOISE_RAD :: #config(STROBE_SLATS_NOISE_RAD, 0.4)
 
-// What's left of the stripes after the pull is multiplied by this: full where the partial's phase is uncertain by
-// 0.16 radians or less, its average about 16 dB over the noise in its band, and dark at STROBE_SLATS_NOISE_RAD,
-// the SNR fade's range. At 4 the fade was 2.5 dB wide, a partial near the noise blinked.
+// What's left of the stripes under STROBE_SLATS_NOISE_RAD is multiplied by this: full where the partial's phase
+// is uncertain by 0.16 radians or less, its average about 16 dB over the noise in its band, a fade as wide as
+// the SNR fade's was. At 4 it was 2.5 dB wide, a partial near the noise blinked.
 STROBE_SLATS_GAIN :: #config(STROBE_SLATS_GAIN, 1.67)
 
-// Under this the slots are gray, in digital silence they'd keep the last note as they fade, every slot alike
+// Under this the measurements are dark, in digital silence they'd keep the last note as they fade
 STROBE_SLATS_SILENCE_DBFS :: -80
-
-// The noise from the slots' two halves, as first tried, instead of the scatter of the partial from one period
-// of the note to the next. The halves count the noise at every frequency, sample by sample, and it doesn't
-// average down: a fading 4× partial let go 1.7 s before the SNR fade did.
-STROBE_SLATS_HALVES :: #config(STROBE_SLATS_HALVES, false)
-
-// The stripes are dark where the partial's average is this uncertain, in radians of its phase: the average 2.5
-// times the noise in its band, about 8 dB, where the SNR fade ends
-STROBE_SLATS_NOISE_RAD :: #config(STROBE_SLATS_NOISE_RAD, 0.4)
 
 // The stripes are lit by the slots' level eased toward each frame's over this long, see update_band_levels.
 // Decided afresh every frame from a few periods, a note where the noise starts to gray it flips between full
-// and gray. As long as the SNR fade's, 0.1 s lit them later for no calmer look.
+// and gray. 0.1 s lit them later for no calmer look.
 STROBE_SLATS_LEVEL_S :: #config(STROBE_SLATS_LEVEL_S, 0.05)
 
-// Tried on the slat-strobe branch: true fades the stripes by the SNR instead, as on main, and the readout, the
-// note hold, the trace, the onsets and the frame rate go by it too, to compare side by side
-STROBE_SNR_FADE :: #config(STROBE_SNR_FADE, false)
-
-SLAT_BINS :: 64 // along a period of a track's reference
-
-// The most of a track's own periods its bins span, an 8× track's in a period of the note
+// The most of a track's own periods in a span, an 8× track's in a period of the note
 SLAT_MAX_PERIODS :: 8
-SLAT_FOLD_BINS :: SLAT_BINS * SLAT_MAX_PERIODS
 
 StrobeSlats :: struct {
-    positive: [MAX_BANDS][SLAT_FOLD_BINS]f32, // the positive half of the samples in each bin, summed and fading
-    negative: [MAX_BANDS][SLAT_FOLD_BINS]f32, // the negative half's, by size
-    weight:   [MAX_BANDS][SLAT_FOLD_BINS]f32, // how many samples, fading alike
-    freq_hz:  [MAX_BANDS]f32, // the reference each track's bins were filled at, another starts them over
-    periods:  [MAX_BANDS]int, // the track's own periods its bins span, see slat_fold_periods
+    freq_hz:  [MAX_BANDS]f32, // the reference each track's spans were measured at, another starts them over
+    periods:  [MAX_BANDS]int, // the track's own periods in a span, see slat_fold_periods
     clock:    i64, // the lock-in's sample clock after the samples so far, a gap starts every track over
 
     // Per track, the windows still open and the closed ones' measurements, see add_slat_measurement
@@ -155,8 +135,7 @@ slat_fold_periods :: proc(band: PhaseBand, mode: StrobeMode) -> int {
     return clamp(int(math.round(band.interval)), 1, SLAT_MAX_PERIODS)
 }
 
-// The lock-in's new samples into every track's windows and bins, after run_phase_detection. A sample falls
-// between two bins and they share it, like a dot of the scope's beam.
+// The lock-in's new samples into every track's windows, after run_phase_detection
 fill_strobe_slats :: proc(self: ^StrobeSlats, lock_in: ^StrobeLockIn) {
     new_samples := min(lock_in.available, lock_in.buffer_len)
     if new_samples <= 0 do return
@@ -164,34 +143,20 @@ fill_strobe_slats :: proc(self: ^StrobeSlats, lock_in: ^StrobeLockIn) {
     samples := lock_in.sample_buffer[lock_in.buffer_len - new_samples:lock_in.buffer_len]
     first := lock_in.sample_clock - i64(new_samples) // the absolute index of samples[0]
 
-    // A stall, a reset or skipped samples, the bins' phases don't carry on
+    // A stall, a reset or skipped samples, the spans' phases don't carry on
     if first != self.clock do self^ = {}
     self.clock = lock_in.sample_clock
 
     for band, index in lock_in.bands {
         if index >= MAX_BANDS do break
 
-        positive, negative, weight := &self.positive[index], &self.negative[index], &self.weight[index]
         periods := slat_fold_periods(band, lock_in.mode)
         if self.freq_hz[index] != band.freq_hz || self.periods[index] != periods {
-            positive^, negative^, weight^ = {}, {}, {}
             self.open[index], self.measurements[index] = {}, {}
             self.freq_hz[index] = band.freq_hz
             self.periods[index] = periods
         }
         if !band.in_range do continue
-
-        // The bins faded by the note's periods over the new samples, once a frame
-        when STROBE_SLATS_HALVES {
-            bins := SLAT_BINS * periods
-            elapsed_s := f32(new_samples) / lock_in.sample_rate
-            keep := math.exp(-elapsed_s * lock_in.base_freq_hz / STROBE_SLATS_PERIODS)
-            for bin in 0 ..< bins {
-                positive[bin] *= keep
-                negative[bin] *= keep
-                weight[bin] *= keep
-            }
-        }
 
         // The span, in its own turns, of the first new sample and a sample's step. The note's periods in a span,
         // and how far the partial turns in one by the lock-in's phase advance over the new samples, as the stripes
@@ -248,21 +213,6 @@ fill_strobe_slats :: proc(self: ^StrobeSlats, lock_in: ^StrobeLockIn) {
             }
             track_turn *= track_step
             window_turn *= window_step
-
-            when STROBE_SLATS_HALVES {
-                position := place * f64(bins)
-                lower := int(position) % bins
-                upper := (lower + 1) % bins
-                upper_share := f32(position - math.floor(position))
-                rise, fall := max(sample, 0), max(-sample, 0)
-
-                positive[lower] += (1 - upper_share) * rise
-                positive[upper] += upper_share * rise
-                negative[lower] += (1 - upper_share) * fall
-                negative[upper] += upper_share * fall
-                weight[lower] += 1 - upper_share
-                weight[upper] += upper_share
-            }
         }
     }
 }
@@ -287,63 +237,20 @@ update_band_levels :: proc(self: ^StrobeLockIn) {
 // around their average by the noise near the track's own frequency, and the average is as uncertain as that
 // scatter over how many measurements it holds, in radians of its phase near enough. Gray at
 // STROBE_SLATS_NOISE_RAD, as much of the way as STROBE_SLATS_GAIN allows. All gray before two measurements' worth
-// came in and in silence. With STROBE_SLATS_HALVES the noise is the slots' two halves instead, see
-// slat_halves_level.
+// came in and in silence.
 strobe_slat_level :: proc(self: ^StrobeSlats, band_index: int) -> f32 {
-    when STROBE_SLATS_HALVES {
-        return slat_halves_level(self, band_index)
-    } else {
-        sums := self.measurements[band_index]
-        count := sums.weight * sums.weight / sums.weight_squared if sums.weight_squared > 0 else 0
-        if count < 2 * SLAT_WINDOW_OVERLAP do return 0
+    sums := self.measurements[band_index]
+    count := sums.weight * sums.weight / sums.weight_squared if sums.weight_squared > 0 else 0
+    if count < 2 * SLAT_WINDOW_OVERLAP do return 0
 
-        cosine, sine := sums.cosine / sums.weight, sums.sine / sums.weight
-        height := math.sqrt(cosine * cosine + sine * sine)
-        if height <= 0 || 20 * math.log10(height) < STROBE_SLATS_SILENCE_DBFS do return 0
-
-        // The measurements' scatter around their average. Neighbours share noise, the scatter is smaller than one
-        // measurement's noise by SLAT_WINDOW_OVERLAP of count, and the average holds count / SLAT_WINDOW_OVERLAP
-        // measurements' worth. With no overlap it's the scatter over count - 1.
-        spread := max(sums.power / sums.weight - height * height, 0)
-        uncertainty := math.sqrt(spread * SLAT_WINDOW_OVERLAP / (count - SLAT_WINDOW_OVERLAP)) / height
-        return min(STROBE_SLATS_GAIN * max(1 - STROBE_SLATS_SHADE * uncertainty / STROBE_SLATS_NOISE_RAD, 0), 1)
-    }
-}
-
-// The level from the slots' two halves. The track's own wave is its periods in the slots added up: the note's
-// partials that aren't the track's multiples cancel, the 2× track keeps the 2×, 4×, 6×. Its partial alone is
-// the wave times a cosine and a sine of one period added up, a DFT bin, how high it is the size of that. The
-// stripes are pulled toward gray by the noise, what lands on both halves of a slot averaged over the track, as
-// much as it weighs against the partial, then STROBE_SLATS_GAIN.
-slat_halves_level :: proc(self: ^StrobeSlats, band_index: int) -> f32 {
-    positive, negative, weight := &self.positive[band_index], &self.negative[band_index], &self.weight[band_index]
-    periods := max(self.periods[band_index], 1)
-
-    // Each half's average in a bin, the wave's periods averaged into one, and the noise over all of them
-    wave: [SLAT_BINS]f32
-    noise: f32 = 0
-    filled := 0
-    for bin in 0 ..< SLAT_BINS * periods {
-        if weight[bin] <= 0 do continue
-
-        rise := positive[bin] / weight[bin]
-        fall := negative[bin] / weight[bin]
-        wave[bin % SLAT_BINS] += (rise - fall) / f32(periods)
-        noise += min(rise, fall)
-        filled += 1
-    }
-    if filled > 0 do noise /= f32(filled)
-
-    cosine_sum, sine_sum: f32
-    for value, bin in wave {
-        angle := math.TAU * f32(bin) / SLAT_BINS
-        cosine_sum += value * math.cos(angle)
-        sine_sum += value * math.sin(angle)
-    }
-
-    // A sine's peak, a cosine's square sums to half the bins
-    height := 2 * math.sqrt(cosine_sum * cosine_sum + sine_sum * sine_sum) / SLAT_BINS
+    cosine, sine := sums.cosine / sums.weight, sums.sine / sums.weight
+    height := math.sqrt(cosine * cosine + sine * sine)
     if height <= 0 || 20 * math.log10(height) < STROBE_SLATS_SILENCE_DBFS do return 0
 
-    return min(STROBE_SLATS_GAIN * max(1 - STROBE_SLATS_SHADE * noise / height, 0), 1)
+    // The measurements' scatter around their average. Neighbours share noise, the scatter is smaller than one
+    // measurement's noise by SLAT_WINDOW_OVERLAP of count, and the average holds count / SLAT_WINDOW_OVERLAP
+    // measurements' worth. With no overlap it's the scatter over count - 1.
+    spread := max(sums.power / sums.weight - height * height, 0)
+    uncertainty := math.sqrt(spread * SLAT_WINDOW_OVERLAP / (count - SLAT_WINDOW_OVERLAP)) / height
+    return min(STROBE_SLATS_GAIN * max(1 - uncertainty / STROBE_SLATS_NOISE_RAD, 0), 1)
 }

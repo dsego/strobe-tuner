@@ -181,7 +181,7 @@ The strobe is driven by a lock-in amplifier (heterodyne): a single-bin DFT tuned
 - Demodulation: the DFT result is rotated by the phase of a reference oscillator on an absolute sample clock. In tune this phase stands still, detuned it rotates at the frequency difference.
 - Strobe motion: the stripes turn by the measured phase, times the track's speed.
 - Readout: each track's cents are the slope of a least squares line through its phase, older measurements weighted down, restarted after each pluck.
-- Stripe sharpness: the stripes are as sharp as the band's SNR allows and fade out into the noise, see [Noise floor](#noise-floor). They fade by the track's envelope, so a weak partial's swinging level doesn't flicker them, and also by how far the track drifts off the note.
+- Stripe brightness: the stripes are as bright as the track's partial is sure, and fade out as the noise makes it unsure, see [Stripe fade](#stripe-fade). Their edges also soften as the track drifts off the note.
 
 Every track's window is sized for a band 70 cents wide around the fundamental, about 0.22 s at 110 Hz, gamma shaped and weighted toward the newest samples like an analog lock-in's low-pass, so the phase is as of about 60 ms ago instead of half the window. It's also smoothed with a box one period of the note long (two for a fifth), a comb whose nulls fall on the other partials.
 
@@ -216,8 +216,8 @@ The ways to turn the samples into a strobe display, what goes wrong with each, a
 5. **Simulated from a pitch detector**: a pitch detector like NSDF or YIN gives the period but not where the wave is. Stripes turned by the detected cents drift with its noise while the note holds, a jump in phase doesn't show, and harmonic tracks can only be multiples of one f0. Here the pitch detector only picks the note.
 
 
-#### Noise floor
+#### Stripe fade
 
-Each strobe band keeps an estimate of the background noise at its frequency, which gives the SNR for the stripes and the readout; the pitch detector keeps one for the whole signal. It follows the level while nothing louder plays and only creeps up slowly to catch a noisier room. It never goes up on a pitch, so a held note doesn't become the background, and it's relearned when the input changes or reopens.
+Each track also measures its partial over short windows, Blackman shaped and three periods of the note long, one closing every period. Over whole periods of the note its other partials cancel, and the smooth window keeps them out even when the note is a little off. While the partial is there the measurements agree, turned by the track's own drift. Noise scatters them, and the stripes fade by how unsure that makes their average: full while it's within about a sixth of a radian, dark from 0.4. A partial that shimmers lets go at once, a steady one stays lit to the end of its decay however quiet. The readout fits and follows only fully lit tracks, and the note stays lit while any track's stripes are at least half there.
 
-An instrument also brings noise of its own, an acoustic guitar's body and the room ringing with the attack, rising with the pluck and fading with the note. So each band also measures the noise between the note's partials, the median of an FFT's bins in the gaps over the last half second. The two noises add as powers.
+The pitch detection keeps a noise floor of its own for the whole signal. It follows the level while nothing louder plays and only creeps up slowly to catch a noisier room, never on a pitch, and it's relearned when the input changes or reopens.

@@ -31,8 +31,8 @@ FPS :: #config(FPS, 60)
 PRINT_EVERY_MS :: #config(PRINT_EVERY_MS, 250)
 // e.g. -define:PITCH_STANDARD=443 to tune the notes to a hum or an instrument off 440
 PITCH_STANDARD :: f32(#config(PITCH_STANDARD, 440))
-// -define:SHOW_LEVELS=true prints each track's readout SNR, level and envelope in dBFS, and how long it fitted,
-// what the readout picks its track by, see core.strobe_readout_track
+// -define:SHOW_LEVELS=true prints each track's level and envelope in dBFS, and how long it fitted, what the
+// readout picks its track by, see core.strobe_readout_track
 SHOW_LEVELS :: #config(SHOW_LEVELS, false)
 // The partial whose track the readout prefers, -define:READOUT_PARTIAL=2 like the Readout setting's 2×
 READOUT_PARTIAL :: f32(#config(READOUT_PARTIAL, 1))
@@ -71,7 +71,7 @@ main :: proc() {
     retune(strobe, note_target.target_note.frequency)
 
     fmt.println(
-        "   time      Hz  cents  note  clarity     SNR  pitch   tuner   readout   tracks: SNR, cents, drift, stripes a second, jitter",
+        "   time      Hz  cents  note  clarity     SNR  pitch   tuner   readout   tracks: lit, level, cents, drift, stripes a second, jitter",
     )
 
     next_print: f32 = 0
@@ -95,7 +95,7 @@ main :: proc() {
         core.audio_capture_write(&detector, frame)
         core.audio_capture_write(strobe, frame)
         pitch := core.run_pitch_detection(&detector, note_target.pitch)
-        core.run_phase_detection(strobe, pitch.is_tonal)
+        core.run_phase_detection(strobe)
         // Like the app's readout, and the strobe keeps the note lit while it shows it
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track, READOUT_PARTIAL)
         retuned := core.update_note_target(&note_target, pitch, core.strobe_shows_note(strobe))
@@ -152,19 +152,17 @@ main :: proc() {
             readout = fmt.tprintf("%+.1f¢ %v× %v", band.err_cents, band.interval, core.note_name(note_target.target_note))
         }
         fmt.printf("%-13v ", readout)
-        // How lit the stripes are, by the slots, see core.update_band_levels, and the envelope's SNR, the stripes
-        // fade out between 16 and 8 dB of it with STROBE_SNR_FADE, see core.STROBE_FADE_SNR_DB. And by their speed,
-        // the desktop's stripes a second by the drift, they fade from a quarter of a stripe a frame, see the app's
-        // STROBE_ALIAS_FADE_STRIPES. The jitter the RMS of the frames' changes.
+        // How lit the stripes are and the slots' level this frame, see core.update_band_levels. The desktop's stripes
+        // a second by the drift, the jitter the RMS of the frames' changes.
         for band, index in strobe.bands {
             drift_hz := core.freq_at_cents(band.freq_hz, band.drift_cents) - band.freq_hz
             stripes_per_s := DESKTOP_PERIODS * drift_hz * f32(core.strobe_rescale(band.freq_hz)) * band.speed
             jitter := math.sqrt(jitter_squares[index] / f32(max(jitter_frames, 1)))
             fmt.printf(
-                "  %v× %-8v %-7v %-6v %-6v %-6v %-5v",
+                "  %v× %-8v %-10v %-6v %-6v %-6v %-5v",
                 band.interval,
                 fmt.tprintf("lit %.2f", band.visibility),
-                fmt.tprintf("%.1fdB", band.envelope_snr_db),
+                fmt.tprintf("level %.2f", band.slat_level),
                 fmt.tprintf("%+.1f¢", band.err_cents),
                 fmt.tprintf("~%.0f¢", band.drift_cents),
                 fmt.tprintf("%.1f/s", stripes_per_s),
@@ -172,8 +170,7 @@ main :: proc() {
             )
             when SHOW_LEVELS {
                 fmt.printf(
-                    " [%v %v %v %v]",
-                    fmt.tprintf("%.1fdB", band.snr_db),
+                    " [%v %v %v]",
                     fmt.tprintf("%.0fdBFS", 20 * math.log10(max(band.amp, core.MIN_NOISE_FLOOR))),
                     fmt.tprintf("env %.0f", 20 * math.log10(max(band.envelope, core.MIN_NOISE_FLOOR))),
                     fmt.tprintf("%.2fs", band.rate_time_s),

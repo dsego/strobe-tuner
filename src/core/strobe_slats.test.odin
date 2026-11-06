@@ -34,25 +34,21 @@ test_strobe_slat_level :: proc(t: ^testing.T) {
         return strobe_slat_level(&slats, 0)
     }
 
-    when !STROBE_SLATS_HALVES {
-        testing.expect(t, level_of(0) > 0.99)
-        testing.expect(t, level_of(0.3) > 0.99)
-        middle := level_of(0.7)
-        testing.expect(t, middle > 0.1 && middle < 0.9)
-        testing.expect_value(t, level_of(1.2), 0)
+    testing.expect(t, level_of(0) > 0.99)
+    testing.expect(t, level_of(0.3) > 0.99)
+    middle := level_of(0.7)
+    testing.expect(t, middle > 0.1 && middle < 0.9)
+    testing.expect_value(t, level_of(1.2), 0)
 
-        one: StrobeSlats
-        add_slat_measurement(&one.measurements[0], 1, 0, 1)
-        testing.expect_value(t, strobe_slat_level(&one, 0), 0)
-    }
+    one: StrobeSlats
+    add_slat_measurement(&one.measurements[0], 1, 0, 1)
+    testing.expect_value(t, strobe_slat_level(&one, 0), 0)
 }
 
 // A clean note off the reference: its partials go round steadily in the measurements, the drift the stripes show.
 // It isn't noise, every track stays fully lit, the 4× one turning four times as fast as the 1×.
 @(test)
 test_slat_level_off_the_reference :: proc(t: ^testing.T) {
-    when STROBE_SLATS_HALVES do return
-
     FRAME :: 400
     E2 :: 82.41
 
@@ -71,7 +67,7 @@ test_slat_level_off_the_reference :: proc(t: ^testing.T) {
                 clock += 1
             }
             audio_capture_write(lock_in, chunk[:])
-            run_phase_detection(lock_in, is_tonal = true)
+            run_phase_detection(lock_in)
         }
 
         for band, index in lock_in.bands {
@@ -84,8 +80,6 @@ test_slat_level_off_the_reference :: proc(t: ^testing.T) {
 // least half lit, the strobe keeps the note when the pitch detection loses it
 @(test)
 test_slat_level_high_note_in_noise :: proc(t: ^testing.T) {
-    when STROBE_SLATS_HALVES do return
-
     FRAME :: 800 // a 60th of a second
     C8 :: 4186.01
     TONE_RMS :: 0.1
@@ -111,20 +105,10 @@ test_slat_level_high_note_in_noise :: proc(t: ^testing.T) {
             clock += 1
         }
         audio_capture_write(lock_in, chunk[:])
-        run_phase_detection(lock_in, is_tonal = true)
+        run_phase_detection(lock_in)
 
-        first := lock_in.bands[0]
-        if frame >= 60 do lowest = min(lowest, first.visibility)
-        if frame % 15 == 14 {
-            log.infof(
-                "%.2f s: 1× level %.2f, stripes %.2f, drift %.1f cents, envelope SNR %.1f dB",
-                f32(clock) / DEFAULT_SAMPLE_RATE,
-                first.slat_level,
-                first.visibility,
-                first.drift_cents,
-                first.envelope_snr_db,
-            )
-        }
+        // Past the first second, the stripes lit by then
+        if frame >= 60 do lowest = min(lowest, lock_in.bands[0].visibility)
     }
     testing.expectf(t, lowest >= 0.5, "the 1× track's stripes went down to %.2f", lowest)
 }
@@ -176,7 +160,7 @@ test_slat_level_without_the_fundamental :: proc(t: ^testing.T) {
                 clock += 1
             }
             audio_capture_write(lock_in, chunk[:])
-            run_phase_detection(lock_in, is_tonal = true)
+            run_phase_detection(lock_in)
         }
 
         // What the 1× track's slots and its lock-in hear of the 2×, in dB under it
@@ -194,55 +178,4 @@ test_slat_level_without_the_fundamental :: proc(t: ^testing.T) {
         )
         testing.expectf(t, first.slat_level == 0, "%+.0f cents: the 1× track lit at %.2f", detune_cents, first.slat_level)
     }
-}
-
-// The slots' halves: a track's own partial in the slots is full stripes, under a 2nd partial as loud and a 3×
-// five times as loud too. Noise on both halves of every slot grays them by how much it weighs against the
-// partial.
-@(test)
-test_slat_halves_level :: proc(t: ^testing.T) {
-    // The track's partial and its 2× and 3× at these levels, noise on both halves of every slot
-    fill :: proc(slats: ^StrobeSlats, levels: [3]f32, noise: f32) {
-        for bin in 0 ..< SLAT_BINS {
-            angle := math.TAU * f32(bin) / SLAT_BINS
-            value: f32 = 0
-            for level, index in levels do value += level * math.cos(f32(index + 1) * angle)
-
-            slats.positive[0][bin] = max(value, 0) + noise
-            slats.negative[0][bin] = max(-value, 0) + noise
-            slats.weight[0][bin] = 1
-        }
-    }
-
-    slats: StrobeSlats
-    fill(&slats, {1, 0, 0}, 0)
-    testing.expect(t, abs(slat_halves_level(&slats, 0) - 1) < 0.01)
-    fill(&slats, {1, 1, 0}, 0)
-    testing.expect(t, abs(slat_halves_level(&slats, 0) - 1) < 0.01)
-    fill(&slats, {0.2, 0, 1}, 0)
-    testing.expect(t, abs(slat_halves_level(&slats, 0) - 1) < 0.01)
-
-    // Noise 0.9 of the partial's level in every slot, 0.1 left, times the gain
-    fill(&slats, {1, 0, 0}, 0.9)
-    testing.expect(t, abs(slat_halves_level(&slats, 0) - min(0.1 * STROBE_SLATS_GAIN, 1)) < 0.01)
-
-    // Nothing came in, gray
-    empty: StrobeSlats
-    testing.expect_value(t, slat_halves_level(&empty, 0), 0)
-}
-
-// The 2× track's slots span a period of the note, two of its own. A fundamental twice as loud as the 2×
-// partial stands still in them, on one side of zero in each, the 2× track's stripes are full.
-@(test)
-test_slat_halves_level_octave :: proc(t: ^testing.T) {
-    slats: StrobeSlats
-    slats.periods[0] = 2
-    for bin in 0 ..< 2 * SLAT_BINS {
-        angle := math.TAU * f32(bin) / (2 * SLAT_BINS) // of the note
-        value := math.cos(angle) + 0.5 * math.cos(2 * angle)
-        slats.positive[0][bin] = max(value, 0)
-        slats.negative[0][bin] = max(-value, 0)
-        slats.weight[0][bin] = 1
-    }
-    testing.expect(t, abs(slat_halves_level(&slats, 0) - 1) < 0.01)
 }

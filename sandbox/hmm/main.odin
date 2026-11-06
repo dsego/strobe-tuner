@@ -138,7 +138,7 @@ main :: proc() {
         core.audio_capture_write(&detector, frame)
         core.audio_capture_write(strobe, frame)
         pitch := core.run_pitch_detection(&detector, note_target.pitch)
-        core.run_phase_detection(strobe, pitch.is_tonal)
+        core.run_phase_detection(strobe)
         if core.update_note_target(&note_target, pitch, core.strobe_shows_note(strobe)) do retune(strobe, note_target.target_note.frequency)
         if !pitch.fresh do continue
 

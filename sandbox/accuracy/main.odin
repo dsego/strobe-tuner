@@ -252,7 +252,7 @@ run_case :: proc(test_case: Case) -> (result: Result) {
         core.audio_capture_write(&detector, frame)
         core.audio_capture_write(strobe, frame)
         pitch := core.run_pitch_detection(&detector, note_target.pitch)
-        core.run_phase_detection(strobe, pitch.is_tonal)
+        core.run_phase_detection(strobe)
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
         if core.update_note_target(&note_target, pitch, core.strobe_shows_note(strobe)) {
             retune(strobe, note_target.target_note.frequency, test_case.pitch_standard)
@@ -268,13 +268,7 @@ run_case :: proc(test_case: Case) -> (result: Result) {
         // Lit like core.strobe_shows_note counts it, on a partial the tone has. A sine's empty tracks can light
         // up from its leakage, their drift is the fundamental's and says nothing about the stripes.
         for band in strobe.bands {
-            when core.STROBE_SNR_FADE {
-                fade := core.STROBE_FADE_SNR_DB
-                lit := band.snr_db >= 0.5 * (fade[0] + fade[1])
-            } else {
-                lit := band.visibility >= 0.5
-            }
-            if !band.in_range || !lit do continue
+            if !band.in_range || !core.band_half_lit(band) do continue
             if !has_partial(test_case.waveform, band.interval) do continue
 
             expected_hz := core.freq_at_cents(band.freq_hz, test_case.offset_cents) - band.freq_hz

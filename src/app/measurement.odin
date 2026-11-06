@@ -128,7 +128,7 @@ set_measurement_sample_rate :: proc(measurement: ^Measurement, sample_rate: f32)
 measure :: proc(app: ^App) -> (reading: Reading) {
     measurement, config := &app.measurement, app.config
     reading.pitch = core.run_pitch_detection(&measurement.pitch_detector, measurement.note_target.pitch)
-    core.run_phase_detection(measurement.strobe_lock_in, reading.pitch.is_tonal)
+    core.run_phase_detection(measurement.strobe_lock_in)
 
     ready := follow_note(measurement, config, reading.pitch)
 
@@ -224,12 +224,7 @@ traced_cents :: proc(measurement: ^Measurement, config: ^Config, reading: Readin
     if measurement.traced_track < 0 do return
 
     band := measurement.strobe_lock_in.bands[measurement.traced_track]
-    when core.STROBE_SNR_FADE {
-        fade := core.STROBE_FADE_SNR_DB
-        light = math.smoothstep(fade[0], fade[1], band.envelope_snr_db)
-    } else {
-        light = band.visibility
-    }
+    light = band.visibility
     if light == 0 || !band.in_range do measurement.traced_track = -1
 
     if measurement.traced_track >= 0 && !out_of_range && abs(band.err_cents) <= core.READOUT_RANGE_CENTS {

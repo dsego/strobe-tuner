@@ -91,9 +91,7 @@ test_phase_detection_lock_in :: proc(t: ^testing.T) {
                 clock += 1
             }
             audio_capture_write(pc, chunk[:])
-
-            // A clear pitch like the pitch detection's, the noise floors don't learn the tone
-            run_phase_detection(pc, is_tonal = true)
+            run_phase_detection(pc)
         }
         return {pc.bands[0].err_cents, pc.bands[1].err_cents}, pc.bands[0].phase_diff
     }
@@ -139,7 +137,7 @@ test_phase_over_a_hitch :: proc(t: ^testing.T) {
             clock^ += 1
         }
         audio_capture_write(pc, samples)
-        run_phase_detection(pc, is_tonal = true)
+        run_phase_detection(pc)
     }
 
     for _ in 0 ..< 2 * int(DEFAULT_SAMPLE_RATE) / FRAME do play(pc, chunk[:FRAME], freq, &clock)
@@ -152,71 +150,6 @@ test_phase_over_a_hitch :: proc(t: ^testing.T) {
     }
 }
 
-
-// A voice down a semitone and back up, the strobe retuned to each note a moment after it changes like the
-// note target does. Each track hears the note as well when it comes back as before it left.
-@(test)
-test_note_away_and_back :: proc(t: ^testing.T) {
-    FRAME :: 800
-    RETUNE_AFTER :: 9 // frames, about what the note recognition takes to confirm a note
-    a3, g_sharp3: f32 = 220, 207.65
-
-    intervals := []f32{1, 2, 4}
-    pc := init_strobe_lock_in(a3, intervals, .HARMONIC)
-    defer destroy_strobe_lock_in(pc)
-    set_strobe_lock_in_freq(pc, a3, 440, 0.025, 2, .HARMONIC)
-
-    // The partials of a hum over a little noise, the background for the noise floors to learn first. The
-    // voice slides from one note to the next over glide frames, not a clear pitch on the way.
-    Voice :: struct {
-        chunk: [FRAME]f32,
-        phase: f64,
-        freq:  f32,
-        noise: u32,
-    }
-    play :: proc(pc: ^StrobeLockIn, voice: ^Voice, to: f32, frames: int, glide := 0, retune := -1) {
-        from := voice.freq
-        for frame in 0 ..< frames {
-            voice.freq = to if frame >= glide else from + (to - from) * f32(frame) / f32(glide)
-            for &sample in voice.chunk {
-                voice.noise = voice.noise * 1664525 + 1013904223
-                sample = 0.1 * (f32(voice.noise) / f32(max(u32)) - 0.5)
-                voice.phase += math.TAU * f64(voice.freq) / DEFAULT_SAMPLE_RATE
-                phase := voice.phase
-                if voice.freq > 0 do sample += f32(0.1 * math.sin(phase) + 0.03 * math.sin(2 * phase) + 0.01 * math.sin(4 * phase))
-            }
-            if frame == retune do set_strobe_lock_in_freq(pc, to, 440, 0.025, 2, .HARMONIC)
-
-            audio_capture_write(pc, voice.chunk[:])
-            run_phase_detection(pc, is_tonal = voice.freq > 0 && frame >= glide)
-        }
-    }
-
-    SECOND :: DEFAULT_SAMPLE_RATE / FRAME
-    GLIDE :: SECOND / 2
-    voice := Voice{noise = 1}
-    play(pc, &voice, 0, 3 * SECOND)
-    play(pc, &voice, a3, 2 * SECOND)
-    before: [3]f32
-    for band, index in pc.bands do before[index] = band.snr_db
-
-    play(pc, &voice, g_sharp3, 2 * SECOND, GLIDE, GLIDE + RETUNE_AFTER)
-    away: [3]f32
-    for band, index in pc.bands do away[index] = band.snr_db
-
-    play(pc, &voice, a3, 2 * SECOND, GLIDE, GLIDE + RETUNE_AFTER)
-    for band, index in pc.bands {
-        testing.expectf(
-            t,
-            band.snr_db > before[index] - 3,
-            "%v× %.1f dB back on the note, %.1f before, %.1f a semitone down",
-            band.interval,
-            band.snr_db,
-            before[index],
-            away[index],
-        )
-    }
-}
 
 // How fast the wheel turns for a steady detuning, against what the lock-in phase should give:
 // TAU * STROBE_REFERENCE_HZ * (2^(cents / 1200) - 1) * speed, in radians of the wheel per second.
@@ -246,7 +179,7 @@ test_strobe_turn_rate :: proc(t: ^testing.T) {
                 clock += 1
             }
             audio_capture_write(pc, chunk[:])
-            run_phase_detection(pc, false)
+            run_phase_detection(pc)
         }
         return start - pc.bands[0].scaled_phase
     }

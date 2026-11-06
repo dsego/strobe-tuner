@@ -462,8 +462,8 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo, meter
     gfx.draw_rect(meter + {0, LEVEL_METER_HEIGHT}, {LEVEL_BAR_WIDTH + floor_level, 3}, gfx.PURPLE)
 
     base_band := app.measurement.strobe_lock_in.bands[0]
-    stat(fmt.ctprintf("Band SNR %.1f", base_band.snr_db), layout.stats)
-    stat(fmt.ctprintf("Band NF %.1f", core.dbfs(base_band.noise_floor.level)), layout.stats + {0, 15})
+    stat(fmt.ctprintf("Band level %.2f", base_band.slat_level), layout.stats)
+    stat(fmt.ctprintf("Band lit %.2f", base_band.visibility), layout.stats + {0, 15})
     stat(fmt.ctprintf("Band drift %.1f", base_band.drift_cents), layout.stats + {0, 30})
     stat(fmt.ctprintf("RMS %.1f", pitch.rms_dbfs), layout.stats + {130, 0})
     stat(fmt.ctprintf("NF %.1f", floor_level), layout.stats + {130, 15})

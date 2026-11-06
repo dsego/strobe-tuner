@@ -109,7 +109,7 @@ Track :: struct {
     lit:        bool,
     freq_hz:    f32,
     drift_hz:   f32,
-    snr_db:     f32,
+    level_dbfs: f32, // the lock-in's, see NULL_DROP_DB
     after_null: bool, // see NULL_DROP_DB
 }
 
@@ -449,13 +449,13 @@ measure :: proc(detections: []Detection, sustain: [2]f32, expected_note: int, se
             when SHOW_WRONG_WAY {
                 intervals := INTERVALS
                 fmt.eprintfln(
-                    "  %.2fs %v× drifts %+.1f¢ at %.1fdB, the original's %+.1f¢ at %.1fdB, %+.1f¢ expected",
+                    "  %.2fs %v× drifts %+.1f¢ at %.1fdBFS, the original's %+.1f¢ at %.1fdBFS, %+.1f¢ expected",
                     detection.time_s,
                     intervals[index],
                     core.cents_deviation(track.freq_hz + track.drift_hz, track.freq_hz),
-                    track.snr_db,
+                    track.level_dbfs,
                     partial_cents,
-                    partial.snr_db,
+                    partial.level_dbfs,
                     expected_cents,
                 )
             }
@@ -639,7 +639,7 @@ play :: proc(recording: []f32, sample_rate: f32, pitch_standard: f32) -> (detect
         core.audio_capture_write(&detector, frame)
         core.audio_capture_write(strobe, frame)
         pitch := core.run_pitch_detection(&detector, note_target.pitch)
-        core.run_phase_detection(strobe, pitch.is_tonal)
+        core.run_phase_detection(strobe)
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
         if core.update_note_target(&note_target, pitch, core.strobe_shows_note(strobe)) {
             retune(strobe, note_target.target_note.frequency, pitch_standard)
@@ -663,14 +663,9 @@ play :: proc(recording: []f32, sample_rate: f32, pitch_standard: f32) -> (detect
         }
         // Lit like sandbox/accuracy counts it, an instrument's partials are whole multiples
         for band, index in strobe.bands[:len(detection.tracks)] {
-            when core.STROBE_SNR_FADE {
-                fade := core.STROBE_FADE_SNR_DB
-                lit := band.in_range && band.snr_db >= 0.5 * (fade[0] + fade[1])
-            } else {
-                lit := band.in_range && band.visibility >= 0.5
-            }
-            lit &&= band.interval == math.round(band.interval)
-            detection.tracks[index] = {lit = lit, freq_hz = band.freq_hz, drift_hz = band.drift_hz, snr_db = band.snr_db}
+            lit := band.in_range && core.band_half_lit(band) && band.interval == math.round(band.interval)
+            level_dbfs := 20 * math.log10(max(band.amp, core.MIN_NOISE_FLOOR))
+            detection.tracks[index] = {lit = lit, freq_hz = band.freq_hz, drift_hz = band.drift_hz, level_dbfs = level_dbfs}
         }
         append(&detections, detection)
     }
@@ -687,7 +682,7 @@ mark_nulls :: proc(detections: []Detection) {
             track := &detection.tracks[track_index]
             for earlier := index - 1; earlier >= 0; earlier -= 1 {
                 if detection.time_s - detections[earlier].time_s > NULL_FALL_S do break
-                if detections[earlier].tracks[track_index].snr_db - track.snr_db >= NULL_DROP_DB {
+                if detections[earlier].tracks[track_index].level_dbfs - track.level_dbfs >= NULL_DROP_DB {
                     null_s = detection.time_s
                     break
                 }

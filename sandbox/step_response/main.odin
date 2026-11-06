@@ -126,7 +126,7 @@ run_tuner :: proc(samples: []f32) -> (run: Run) {
         core.audio_capture_write(&detector, frame)
         core.audio_capture_write(strobe, frame)
         pitch := core.run_pitch_detection(&detector, note_target.pitch)
-        core.run_phase_detection(strobe, pitch.is_tonal)
+        core.run_phase_detection(strobe)
         readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
         if core.update_note_target(&note_target, pitch, core.strobe_shows_note(strobe)) {
             retune(strobe, note_target.target_note.frequency)

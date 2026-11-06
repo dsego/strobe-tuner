@@ -24,10 +24,6 @@ import "../gfx"
 
 APP_NAME :: "Strobie"
 
-// The window's, the other fades say so side by side, the settings stay APP_NAME's
-WINDOW_TITLE ::
-    APP_NAME + " (SNR fade)" when core.STROBE_SNR_FADE else (APP_NAME + " (halves)" when core.STROBE_SLATS_HALVES else APP_NAME)
-
 // Show the signal stats and NSDF plots, e.g. `odin run app -debug -define:DEBUG_STATS=true`
 DEBUG_STATS :: #config(DEBUG_STATS, false)
 
@@ -116,7 +112,7 @@ new_app :: proc(config: ^Config) -> App {
 // window, nothing else is made then.
 start_app :: proc(app: ^App) -> bool {
     size, min_size, position := window_placement(app.config)
-    if !gfx.init(size.x, size.y, WINDOW_TITLE, min_size, position) do return false
+    if !gfx.init(size.x, size.y, APP_NAME, min_size, position) do return false
 
     setup_menu_bar(app)
     gfx.load_shapes()
@@ -464,11 +460,7 @@ follow_window_size :: proc(config: ^Config, window: [2]f32) {
 limit_frame_rate :: proc(app: ^App) {
     signal := app.measurement.note_target.active
     for band in app.measurement.strobe_lock_in.bands {
-        when core.STROBE_SNR_FADE {
-            if band.snr_db > core.STROBE_FADE_SNR_DB[0] do signal = true
-        } else {
-            if band.visibility > 0 do signal = true
-        }
+        if band.visibility > 0 do signal = true
     }
     touched := gfx.mouse_down() || gfx.mouse_pressed() || gfx.mouse_wheel() != 0
     sliding := note_ruler.swipe.gesture == .COASTING || note_ruler.roll != 0
