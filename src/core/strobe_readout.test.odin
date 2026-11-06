@@ -17,6 +17,7 @@
 #+build !js
 package core
 
+import "core:log"
 import "core:math"
 import "core:testing"
 
@@ -24,6 +25,14 @@ import "core:testing"
 test_readout_track :: proc(t: ^testing.T) {
     level :: proc(db: f32) -> f32 {
         return math.pow(10, db / 20)
+    }
+
+    // The track's stripes this lit, 1 full, by the SNR or by the slots, see STROBE_SNR_FADE
+    light :: proc(band: ^PhaseBand, lit: f32) {
+        fade := STROBE_FADE_SNR_DB
+        band.snr_db = fade[0] + lit * (fade[1] - fade[0])
+        band.envelope_snr_db = band.snr_db
+        band.slat_level, band.visibility = lit, lit
     }
 
     self := init_strobe_lock_in(123.47, {1, 2, 4}, .HARMONIC)
@@ -36,7 +45,7 @@ test_readout_track :: proc(t: ^testing.T) {
     for &band, index in self.bands {
         band.in_range = true
         band.rate_time_s = 1
-        band.snr_db, band.envelope_snr_db = 30, 30
+        light(&band, 1)
         band.envelope = level(levels_db[index])
     }
     track, ready := strobe_readout_track(self, -1)
@@ -50,13 +59,13 @@ test_readout_track :: proc(t: ^testing.T) {
     self.bands[2].onset = false
 
     // The fundamental dies down while the 2nd harmonic still rings, the readout goes on with that one
-    self.bands[0].snr_db, self.bands[0].envelope_snr_db = 10, 12
+    light(&self.bands[0], 0.25)
     track, ready = strobe_readout_track(self, track)
     testing.expect_value(t, track, 1)
     testing.expect(t, ready)
 
     // It doesn't take the readout back as it comes up again, only a pluck picks again
-    self.bands[0].snr_db, self.bands[0].envelope_snr_db = 30, 30
+    light(&self.bands[0], 1)
     track, _ = strobe_readout_track(self, track)
     testing.expect_value(t, track, 1)
     self.bands[1].onset = true
@@ -65,7 +74,7 @@ test_readout_track :: proc(t: ^testing.T) {
     self.bands[1].onset = false
 
     // A fundamental under its noise gives way to the loudest partial over it
-    self.bands[0].snr_db = 10
+    light(&self.bands[0], 0.25)
     track, _ = strobe_readout_track(self, -1)
     testing.expect_value(t, track, 1)
 
@@ -76,7 +85,7 @@ test_readout_track :: proc(t: ^testing.T) {
     track, ready = strobe_readout_track(self, -1)
     testing.expect_value(t, track, 1)
     testing.expect(t, ready)
-    self.bands[0].snr_db = 17
+    light(&self.bands[0], 1)
     self.bands[0].rate_time_s = READOUT_SETTLE_S + 0.001
     track, ready = strobe_readout_track(self, track)
     testing.expect_value(t, track, 0)
@@ -88,13 +97,13 @@ test_readout_track :: proc(t: ^testing.T) {
     for &band, index in self.bands {
         band.in_range = true
         band.rate_time_s = 1
-        band.snr_db, band.envelope_snr_db = 30, 30
+        light(&band, 1)
         band.envelope = level(-30 if index == 0 else -10)
     }
     track, _ = strobe_readout_track(self, -1)
     testing.expect_value(t, track, 0)
 
-    self.bands[0].snr_db = 10
+    light(&self.bands[0], 0.25)
     track, _ = strobe_readout_track(self, -1)
     testing.expect_value(t, track, -1)
 
@@ -104,13 +113,88 @@ test_readout_track :: proc(t: ^testing.T) {
     for &band, index in self.bands {
         band.in_range = true
         band.rate_time_s = 1
-        band.snr_db, band.envelope_snr_db = 30, 30
+        light(&band, 1)
         band.envelope = level(-20 if index == 0 else -40)
     }
     track, _ = strobe_readout_track(self, -1, 2)
     testing.expect_value(t, track, 1)
 
-    self.bands[1].snr_db = 10
+    light(&self.bands[1], 0.25)
     track, _ = strobe_readout_track(self, -1, 2)
     testing.expect_value(t, track, 0)
+}
+
+// sandbox/accuracy's C8 in tune going 55 cents sharp, in noise 20 dB under it, and its loop: 2 s of the noise, 3 s
+// of C8, then 2.5 s sharp. The strobe starts on 110 Hz and is retuned once the pitch detection lights the note,
+// and it keeps the note while the pitch detection loses it. Every change is logged.
+@(test)
+test_note_held_high_in_noise :: proc(t: ^testing.T) {
+    when STROBE_SLATS_HALVES do return
+
+    FRAME :: 800 // a 60th of a second
+    LEAD_IN :: 2 * 48_000
+    BEFORE :: 3 * 48_000
+    TONE :: 5 * 24_000 // 2.5 s
+    TONE_RMS :: 0.1
+
+    detector := init_pitch_detector(440)
+    defer destroy_pitch_detector(&detector)
+    note_target := init_note_target(110, 440)
+    lock_in := init_strobe_lock_in(110, {1, 2, 4}, .HARMONIC)
+    defer destroy_strobe_lock_in(lock_in)
+    set_strobe_lock_in_freq(lock_in, note_target.target_note.frequency, 440, 0.025, 2, .HARMONIC)
+
+    c8 := cents_to_note(39 * 100, 440)
+    sharp_hz := f64(freq_at_cents(c8.frequency, 55))
+    noise_rms := TONE_RMS * math.pow(f32(10), -20.0 / 20)
+    random := u32(0x9e3779b9)
+    chunk: [FRAME]f32
+    clock := 0
+    cycles: f64 = 0
+    was_active, was_shown, was_weak := false, false, false
+    wrong := 0
+    for clock < LEAD_IN + BEFORE + TONE {
+        for &sample in chunk {
+            random ~= random << 13
+            random ~= random >> 17
+            random ~= random << 5
+            uniform := f32(random) / f32(max(u32)) * 2 - 1
+            sample = noise_rms * math.SQRT_THREE * uniform
+            if clock >= LEAD_IN {
+                sample += f32(math.SQRT_TWO * TONE_RMS * math.sin(math.TAU * cycles))
+                cycles += (f64(c8.frequency) if clock < LEAD_IN + BEFORE else sharp_hz) / 48_000
+            }
+            clock += 1
+        }
+        audio_capture_write(&detector, chunk[:])
+        audio_capture_write(lock_in, chunk[:])
+        pitch := run_pitch_detection(&detector, note_target.pitch)
+        run_phase_detection(lock_in, pitch.is_tonal)
+        shown := strobe_shows_note(lock_in)
+        retuned := update_note_target(&note_target, pitch, shown)
+        if retuned do set_strobe_lock_in_freq(lock_in, note_target.target_note.frequency, 440, 0.025, 2, .HARMONIC)
+
+        first := lock_in.bands[0]
+        if retuned || note_target.active != was_active || shown != was_shown || pitch.is_weak_pitch != was_weak {
+            log.infof(
+                "%.3f s: %s note %v, pitch %.0f Hz%s, strobe on %.0f Hz shows %v, 1× level %.2f stripes %.2f",
+                f32(clock) / 48_000,
+                "retuned," if retuned else "",
+                note_target.active,
+                pitch.detected_freq,
+                " weak" if pitch.is_weak_pitch else "",
+                lock_in.base_freq_hz,
+                shown,
+                first.slat_level,
+                first.visibility,
+            )
+        }
+        was_active, was_shown, was_weak = note_target.active, shown, pitch.is_weak_pitch
+
+        // The last second, as sandbox/accuracy measures
+        if clock > LEAD_IN + BEFORE + TONE - 48_000 && (!note_target.active || note_target.target_note.cents != c8.cents) {
+            wrong += 1
+        }
+    }
+    testing.expectf(t, wrong == 0, "no note or the wrong one in %v frames of the last second", wrong)
 }

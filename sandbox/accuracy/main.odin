@@ -267,9 +267,14 @@ run_case :: proc(test_case: Case) -> (result: Result) {
 
         // Lit like core.strobe_shows_note counts it, on a partial the tone has. A sine's empty tracks can light
         // up from its leakage, their drift is the fundamental's and says nothing about the stripes.
-        fade := core.STROBE_FADE_SNR_DB
         for band in strobe.bands {
-            if !band.in_range || band.snr_db < 0.5 * (fade[0] + fade[1]) do continue
+            when core.STROBE_SNR_FADE {
+                fade := core.STROBE_FADE_SNR_DB
+                lit := band.snr_db >= 0.5 * (fade[0] + fade[1])
+            } else {
+                lit := band.visibility >= 0.5
+            }
+            if !band.in_range || !lit do continue
             if !has_partial(test_case.waveform, band.interval) do continue
 
             expected_hz := core.freq_at_cents(band.freq_hz, test_case.offset_cents) - band.freq_hz
@@ -373,12 +378,22 @@ generate :: proc(waveform: Waveform, freq_hz, noise_snr_db: f32, before_hz: f32 
         for amplitude in amplitudes do power += 0.5 * amplitude * amplitude
         gain := TONE_RMS / math.sqrt(power)
 
+        // Up to the highest partial there is, the ones above it are over the Nyquist frequency or none
+        partials := 0
+        for amplitude, index in amplitudes {
+            if amplitude != 0 do partials = index + 1
+        }
+
+        // Each partial's sine from the two under it, sin((k + 1)x) = 2 cos(x) sin(kx) - sin((k - 1)x): a sine and
+        // a cosine a sample instead of a sine per partial, the same tone to an f32's precision
         cycles_step := f64(freq_hz) / SAMPLERATE
         for &sample, index in samples {
             phase := math.TAU * (start_cycles + cycles_step * f64(index))
-            for amplitude, harmonic in amplitudes {
-                if amplitude == 0 do continue
-                sample += gain * amplitude * f32(math.sin(phase * f64(harmonic + 1)))
+            double_cosine := 2 * math.cos(phase)
+            below, current: f64 = 0, math.sin(phase)
+            for harmonic in 0 ..< partials {
+                sample += gain * amplitudes[harmonic] * f32(current)
+                below, current = current, double_cosine * current - below
             }
         }
 

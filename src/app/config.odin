@@ -44,12 +44,6 @@ StrobeShape :: enum {
     CURVED,
 }
 
-// What turns the tracks
-StrobeSource :: enum {
-    LOCK_IN, // each track's DFT on the samples, against a reference at its partial, see src/core/phase.odin
-    LAMP, // the lamp's screen, a DFT bin of it for each track's partial, see core.strobe_lamp_bands
-}
-
 // The partials a track can follow, 1½ is the fifth above the fundamental
 TRACK_PARTIALS :: [?]f32{1, 1.5, 2, 3, 4, 5, 6, 7, 8}
 TRACK_OFFSET_MAX_CENTS :: 50
@@ -164,7 +158,6 @@ Config :: struct {
 
     // A track per partial, or every track on the fundamental at more and more speed
     strobe_mode:                  core.StrobeMode,
-    strobe_source:                StrobeSource,
 
     // The partial of each track, harmonic mode, the tracks are the ones of 1 and more, 0 is no track
     strobe_intervals:             [core.MAX_BANDS]f32,
@@ -259,7 +252,6 @@ config_defaults :: Config {
 
     // --- Strobe ---
     strobe_mode                  = .HARMONIC,
-    strobe_source                = .LOCK_IN,
     strobe_intervals             = {1, 2, 4, 0, 0},
     strobe_offsets_cents         = {0, 0, 0, 0, 0},
     strobe_speeds                = {1, 1, 1, 1, 1},

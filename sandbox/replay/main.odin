@@ -152,17 +152,18 @@ main :: proc() {
             readout = fmt.tprintf("%+.1f¢ %v× %v", band.err_cents, band.interval, core.note_name(note_target.target_note))
         }
         fmt.printf("%-13v ", readout)
-        // The stripes fade out between 16 and 8 dB of the envelope's SNR, see core.STROBE_FADE_SNR_DB. And by
-        // their speed, the desktop's stripes a second by the drift, they fade from a quarter of a stripe a frame,
-        // see the app's STROBE_ALIAS_FADE_STRIPES.
-        // The jitter the RMS of the frames' changes.
+        // How lit the stripes are, by the slots, see core.update_band_levels, and the envelope's SNR, the stripes
+        // fade out between 16 and 8 dB of it with STROBE_SNR_FADE, see core.STROBE_FADE_SNR_DB. And by their speed,
+        // the desktop's stripes a second by the drift, they fade from a quarter of a stripe a frame, see the app's
+        // STROBE_ALIAS_FADE_STRIPES. The jitter the RMS of the frames' changes.
         for band, index in strobe.bands {
             drift_hz := core.freq_at_cents(band.freq_hz, band.drift_cents) - band.freq_hz
             stripes_per_s := DESKTOP_PERIODS * drift_hz * f32(core.strobe_rescale(band.freq_hz)) * band.speed
             jitter := math.sqrt(jitter_squares[index] / f32(max(jitter_frames, 1)))
             fmt.printf(
-                "  %v× %-7v %-6v %-6v %-6v %-5v",
+                "  %v× %-8v %-7v %-6v %-6v %-6v %-5v",
                 band.interval,
+                fmt.tprintf("lit %.2f", band.visibility),
                 fmt.tprintf("%.1fdB", band.envelope_snr_db),
                 fmt.tprintf("%+.1f¢", band.err_cents),
                 fmt.tprintf("~%.0f¢", band.drift_cents),

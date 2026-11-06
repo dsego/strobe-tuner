@@ -30,8 +30,7 @@ Measurement :: struct {
     pitch_detector: core.PitchDetector, // follows the pitch standard, see apply_config
     note_target:    core.NoteTarget,
     strobe_lock_in: ^core.StrobeLockIn,
-    scope:          core.Scope, // of the scope and the lamp display types, and the tracks the lamp turns
-    strobe_lamp:    core.StrobeLamp, // the tracks the lamp turns, strobe_source LAMP
+    scope:          core.Scope, // of the scope and the lamp display types
 
     readout_track:  int, // the strobe track the readout follows, see core.strobe_readout_track
     held_readout:   HeldReadout, // the last one shown while the note was lit, see measure
@@ -225,8 +224,12 @@ traced_cents :: proc(measurement: ^Measurement, config: ^Config, reading: Readin
     if measurement.traced_track < 0 do return
 
     band := measurement.strobe_lock_in.bands[measurement.traced_track]
-    fade := core.STROBE_FADE_SNR_DB
-    light = math.smoothstep(fade[0], fade[1], band.envelope_snr_db)
+    when core.STROBE_SNR_FADE {
+        fade := core.STROBE_FADE_SNR_DB
+        light = math.smoothstep(fade[0], fade[1], band.envelope_snr_db)
+    } else {
+        light = band.visibility
+    }
     if light == 0 || !band.in_range do measurement.traced_track = -1
 
     if measurement.traced_track >= 0 && !out_of_range && abs(band.err_cents) <= core.READOUT_RANGE_CENTS {
@@ -235,20 +238,17 @@ traced_cents :: proc(measurement: ^Measurement, config: ^Config, reading: Readin
     return
 }
 
-// The new audio onto the scope's screen, while its views or the tracks the lamp turns show it. strobe_shows
-// is false while a sheet covers the whole strobe area.
+// The new audio onto the scope's screen, while its views show it. strobe_shows is false while a sheet covers
+// the whole strobe area.
 feed_scope :: proc(app: ^App, strobe_shows: bool) {
     measurement, config := &app.measurement, app.config
     scope := &measurement.scope
 
     type := config.strobe_display_type
-    shown := type == .SCOPE || type == .LAMP || (type == .STROBE && config.strobe_source == .LAMP)
+    shown := type == .SCOPE || type == .LAMP
 
     if !shown || !strobe_shows {
         core.skip_scope(scope)
-
-        // The lamp's tracks start over on a dark screen too, the phases they turned by are stale
-        measurement.strobe_lamp.freq_hz = 0
         return
     }
 
@@ -257,13 +257,12 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
     strobe_hz := f64(measurement.strobe_lock_in.base_freq_hz)
     if scope.freq_hz != strobe_hz do core.set_scope_freq(scope, strobe_hz)
 
-    // The lamp is the screen from above, it needs the sweep over time, and so do the tracks it turns
+    // The lamp is the screen from above, it needs the sweep over time
     sweep := config.scope_sweep if config.strobe_display_type == .SCOPE else .TIME
     if scope.sweep != sweep do core.set_scope_sweep(scope, sweep)
 
     // In periods of the strobe's frequency, the smear and the waver per cent look the same on every note. The
-    // scope view is the sweeps averaged over its own span, the lamp's screen fades over the lamp's, and so does
-    // the screen the lamp's tracks turn by.
+    // scope view is the sweeps averaged over its own span, the lamp's screen fades over the lamp's.
     periods := config.scope_averaging_periods if config.strobe_display_type == .SCOPE else config.screen_persistence_periods
     scope.persistence_s = f64(periods) / strobe_hz
 
@@ -274,9 +273,8 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
         core.clear_scope(scope)
     }
 
-    // The scope view's and the lamp's, each its own setting. Not the screen the lamp's tracks turn by, it would
-    // weaken their upper partials: the 6th keeps 41%, the 8th 17%. Turned on or off, the average starts over:
-    // the sweeps in it went through the low-pass or didn't, and are placed by its delay or not, the next ones
+    // The scope view's and the lamp's, each its own setting. Turned on or off, the average starts over: the
+    // sweeps in it went through the low-pass or didn't, and are placed by its delay or not, the next ones
     // stepped from them.
     lowpass := (type == .SCOPE && config.scope_lowpass) || (type == .LAMP && config.lamp_lowpass)
     if scope.lowpass != lowpass {

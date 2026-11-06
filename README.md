@@ -23,7 +23,7 @@ Strobie is coming to the App Store for Mac and iPhone. [Try it in your browser](
 - Readout: hertz and cents to a tenth, of the fundamental's track, the 2×'s, or a blend, the whole wave like most tuners. A guitar or piano string is stiff, so its partials run a little sharp and the three read a few cents apart, see [Readout](#readout).
 - Readout speed: how long the cents average, 400 ms evens out a vibrato, 150 ms follows a string being tuned sooner.
 - Five displays, a menu under the strobe picks one, see [Displays](#displays):
-  - Strobe: curved tracks, a wheel or flat tracks, turned by a lock-in on each partial or by the lamp.
+  - Strobe: curved tracks, a wheel or flat tracks, turned by a lock-in on each partial.
   - Lamp: the mechanical strobe, stripes lit by the wave.
   - Scope: the waveform synced to the strobe's frequency, tap it for petals on a circle.
   - Trace: the cents over time.
@@ -148,15 +148,13 @@ To install on a phone, tap Build number in Settings → About phone 7 times, tur
 
 ### How it works
 
-<img src="docs/signal-path.svg" alt="Audio signal path: the audio thread writes the input into three ring buffers. On the main thread the pitch detector picks the target note, which sets the reference of the lock-in and the lamp. The lock-in's phase or the lamp's turns the strobe tracks, the lamp's screen also draws the scope and the lamp views.">
+<img src="docs/signal-path.svg" alt="Audio signal path: the audio thread writes the input into three ring buffers. On the main thread the pitch detector picks the target note, which sets the reference of the lock-in and the lamp. The lock-in's phase turns the strobe tracks, the lamp's screen draws the scope and the lamp views.">
 
 #### Displays
 
 The first four show how the note's phase slips against a reference at the target pitch, the fifth what the pitch detection hears:
 
-- **Strobe**: the tracks of a strobe tuner, one per partial in harmonic mode, still when in tune, turning left when flat and right when sharp. Flat, a wheel or curved. They're turned by:
-  - **Lock-in** (the default): each track measures its own partial with a single-bin DFT, see [Stroboscopic effect](#stroboscopic-effect).
-  - **Lamp**: each track turns by its partial on the lamp's screen, a DFT bin of it, see [Folding](#ways-to-build-a-strobe). A pluck or a weak partial can make the stripes jump.
+- **Strobe**: the tracks of a strobe tuner, one per partial in harmonic mode, still when in tune, turning left when flat and right when sharp. Flat, a wheel or curved. Each track measures its own partial with a single-bin DFT, a lock-in, see [Stroboscopic effect](#stroboscopic-effect).
 - **Lamp**: the disc of a mechanical strobe lit by a lamp that flashes with the wave. Every sample is folded onto two periods of the reference, the stripes as bright as the wave is high there. A detuned note drifts, and a fast drift smears to gray like on a real one. The height follows how loud the note is, its peak over the Persistence or at least the last 18 periods on a dB scale: −6 dBFS fills the screen and every dB quieter is a step lower, so a hum is about half as bright as a note sung out and a fading note dims as it fades. A Low-pass of its own, the Scope's filter, takes the room's hiss out of the stripes.
 - **Scope**: the same folded screen drawn as a wave, an oscilloscope synced to the reference. Tapped, the sweep goes round a circle, two periods a turn, so a sine draws two lobes and the partials bump and dip them, spinning clockwise when sharp. A low-pass keeps the first few partials, delayed alike so the shape stays. The sweeps are averaged over the Averaging span with the reference as the trigger, so the noise cancels out and a detuned note smears like the stripes. The beam is a Solid line, or Phosphor, dim where it moves fast and bright where it lingers. Its height follows how loud the note is like the Lamp's, with or without averaging.
 - **Trace**: the cents of the readout over the last few seconds, to see a vibrato or a drift. A dot at now draws the line, a little way in from the right edge.
@@ -210,7 +208,7 @@ Not built: the tracks' own cents averaged by their level, a blend that keeps the
 The ways to turn the samples into a strobe display, what goes wrong with each, and which ones are in the app.
 
 1. **Cutting frames** (tried and dropped): each frame takes the newest samples and lines one reference period up with the pattern. No smear, a fast drift jumps from frame to frame instead of washing out to gray; a high note's few samples per period make the pattern move in blocks or jitter; and each band needs an IIR bandpass, whose phase shift differs from band to band.
-2. **Folding** (the Lamp and the Scope): every sample is placed on the screen at its phase of the reference and the screen fades like phosphor. Nothing is rounded or resampled, and the smear comes by itself: a slow drift stays sharp, a fast one washes out. A DFT bin of the screen per partial gives its phase as a number, that's how the lamp turns the strobe tracks, though a pluck or a weak partial on the screen can make the stripes jump.
+2. **Folding** (the Lamp and the Scope): every sample is placed on the screen at its phase of the reference and the screen fades like phosphor. Nothing is rounded or resampled, and the smear comes by itself: a slow drift stays sharp, a fast one washes out. A DFT bin of the screen per partial gives its phase as a number. It turned the strobe tracks for a while, but a pluck or a weak partial on the screen made the stripes jump.
    - Through a square-wave slot: [strobeTuner](https://sourceforge.net/projects/strobetuner/) (Scott Duplichan, GPLv3) multiplies the last 6 periods by a ±1 square wave at the band's pitch for each column, the same fold through a slot half a period wide, like a real disc's half black, half clear stripes.
    - Through a flash lamp: [Stroboscopic Tuner](https://github.com/AdamFoster/StrobeTuner) (Adam Foster, GPL-3.0) fires the lamp only on samples above 70% of the frame's peak, like a neon lamp, with rings at ¼× to 8× the note. Nothing persists between frames, so a fast drift flickers instead of smearing.
 3. **Phase lock** (the default): the lock-in measures each partial's phase against the reference on the samples themselves, see [Stroboscopic effect](#stroboscopic-effect). The phase is continuous and shifts alike in every band, so the stripes move smoothly at any pitch.

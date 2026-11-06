@@ -33,7 +33,7 @@ SEGMENT_WIDTH :: 60
 SETTINGS_ROWS :: 7
 
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
-DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 6, .SCOPE = 4, .TRACE = 2, .LAMP = 3, .SPECTRUM = 4}
+DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 5,.SCOPE = 4, .TRACE = 2, .LAMP = 3, .SPECTRUM = 4}
 
 // For the longer labels of the display's options
 WIDE_SEGMENT_WIDTH :: 80
@@ -364,9 +364,6 @@ display_menu_options :: proc() -> (options: [len(StrobeDisplayType)]GuiOption) {
 gui_strobe_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -> (changes: ConfigChanges) {
     row := 0
     gui_settings_segmented(sheet_layout, &row, "Shape", {"Flat", "Wheel", "Curved"}, &config.strobe_shape, WIDE_SEGMENT_WIDTH)
-
-    // What turns the tracks: their own DFT, or the lamp's screen, the strobe the other way
-    gui_settings_segmented(sheet_layout, &row, "Turned by", {"Lock-in", "Lamp"}, &config.strobe_source, WIDE_SEGMENT_WIDTH)
 
     // Harmonic shows a track per partial, vernier the same frequency at different sensitivities
     if gui_settings_segmented(sheet_layout, &row, "Mode", {"Harmonic", "Vernier"}, &config.strobe_mode, WIDE_SEGMENT_WIDTH) {

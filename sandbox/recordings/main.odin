@@ -662,9 +662,13 @@ play :: proc(recording: []f32, sample_rate: f32, pitch_standard: f32) -> (detect
             detection.read_on = band.interval
         }
         // Lit like sandbox/accuracy counts it, an instrument's partials are whole multiples
-        fade := core.STROBE_FADE_SNR_DB
         for band, index in strobe.bands[:len(detection.tracks)] {
-            lit := band.in_range && band.snr_db >= 0.5 * (fade[0] + fade[1])
+            when core.STROBE_SNR_FADE {
+                fade := core.STROBE_FADE_SNR_DB
+                lit := band.in_range && band.snr_db >= 0.5 * (fade[0] + fade[1])
+            } else {
+                lit := band.in_range && band.visibility >= 0.5
+            }
             lit &&= band.interval == math.round(band.interval)
             detection.tracks[index] = {lit = lit, freq_hz = band.freq_hz, drift_hz = band.drift_hz, snr_db = band.snr_db}
         }

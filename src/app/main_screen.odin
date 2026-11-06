@@ -117,16 +117,13 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     draw_strobe_shadow(strobe)
 }
 
-// Turned by the lock-in or by the lamp's screen. Tapping a track opens its sheet, in vernier mode every track
-// shows the same pitch and there's nothing to set on one. Off the tracks a tap could have switched the shape,
-// but the flat tracks fill the strobe and there it couldn't switch back.
+// Turned by the lock-in. Tapping a track opens its sheet, in vernier mode every track shows the same pitch and
+// there's nothing to set on one. Off the tracks a tap could have switched the shape, but the flat tracks fill
+// the strobe and there it couldn't switch back.
 draw_strobe_with_tracks :: proc(app: ^App, layout: Layout) {
-    config, measurement, strobe := app.config, &app.measurement, layout.strobe
-    lock_in := measurement.strobe_lock_in
+    config, strobe := app.config, layout.strobe
+    lock_in := app.measurement.strobe_lock_in
     bands := lock_in.bands[:]
-    if config.strobe_source == .LAMP {
-        bands = core.strobe_lamp_bands(&measurement.strobe_lamp, &measurement.scope, bands, measurement.pitch_detector.snr_db)
-    }
 
     displays := &app.displays
     draw_strobe_display(&displays.strobe, &displays.glow_targets, layout, bands, lock_in, config)

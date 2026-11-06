@@ -45,8 +45,7 @@ StrobeDisplay :: struct {
     band_drawn_phases: [core.MAX_BANDS]f32,
     // when the tracks were last drawn, another display may have shown in between, see strobe_tracks
     tracks_tick:     time.Tick,
-    // what turned them and how, a change starts them over, see strobe_tracks
-    tracks_lamp:     bool,
+    // how they were turned, a change starts them over, see strobe_tracks
     tracks_mode:     core.StrobeMode,
 
     // The track whose sheet is open, outlined while the others dim. selection fades it in and out with
@@ -261,8 +260,7 @@ glow_background :: proc(background: gfx.Color, glow: GlowParams) -> gfx.Color {
 }
 
 // See strobe_geometry for the tracks' layout. In the layout's strobe pane at its scale, turned sets the
-// strobe into it a quarter turn, see strobe_upright. bands are the lock-in's, or the lamp's, see
-// core.strobe_lamp_bands.
+// strobe into it a quarter turn, see strobe_upright.
 draw_strobe_display :: proc(
     self: ^StrobeDisplay,
     targets: ^GlowTargets,
@@ -566,9 +564,8 @@ strobe_tracks :: proc(
 ) -> (
     tracks: StrobeTracks,
 ) {
-    lamp := config.strobe_source == .LAMP
     mode := lock_in.mode
-    stale := tracks_went_stale(self, lamp, mode)
+    stale := tracks_went_stale(self, mode)
     tracks.count = len(bands)
 
     // The stripes start dark with the phase, a note that faded while another display showed would flash its last
@@ -591,19 +588,20 @@ strobe_tracks :: proc(
         uniforms.time_stretch = band.time_stretch
         uniforms.norm_freq = band.norm_freq
 
-        uniforms.phase, uniforms.phase_step = track_phase(self, band, band_index, lock_in, lamp, stale, geometry.density, period_count)
+        uniforms.phase, uniforms.phase_step = track_phase(self, band, band_index, lock_in, stale, geometry.density, period_count)
 
-        gain := track_gain(bands, band_index, mode, lamp)
-
-        // Not the lamp's tracks, a partial too fast to follow smears on the screen and their own SNR fades them
-        stripes_per_s: f32 = 0
-        if !lamp do stripes_per_s = track_stripes_per_s(bands, band_index, mode, period_count, geometry.density)
+        gain := track_gain(bands, band_index, mode)
 
         // Off the note the edges go soft, the stripes a sine before they fade. Squared, as the gain alone
         // still leaves an edge a few percent of a stripe wide where they're half faded.
         uniforms.amp = STROBE_AMP * gain * gain
-        frame_time := min(gfx.frame_time(), STROBE_MAX_FRAME_TIME_S)
-        uniforms.visibility = update_band_visibility(self, &band, band_index, gain, stripes_per_s, frame_time)
+        when core.STROBE_SNR_FADE {
+            frame_time := min(gfx.frame_time(), STROBE_MAX_FRAME_TIME_S)
+            stripes_per_s := track_stripes_per_s(bands, band_index, mode, period_count, geometry.density)
+            uniforms.visibility = update_band_visibility(self, &band, band_index, gain, stripes_per_s, frame_time)
+        } else {
+            uniforms.visibility = band.visibility
+        }
 
         // Without stripes the track looks the same whatever its phase and edges, and doesn't change from frame to
         // frame: the gain follows the noise
@@ -618,15 +616,15 @@ strobe_tracks :: proc(
 
 // Whether the phases drawn before are too old to carry on from, the strobe wasn't drawn for a while or is
 // turned another way now
-tracks_went_stale :: proc(self: ^StrobeDisplay, lamp: bool, mode: core.StrobeMode) -> bool {
+tracks_went_stale :: proc(self: ^StrobeDisplay, mode: core.StrobeMode) -> bool {
     stale := time.duration_seconds(time.tick_since(self.tracks_tick)) > core.STROBE_STALE_S
     self.tracks_tick = time.tick_now()
 
-    // The lamp's phase isn't the lock-in's, and a vernier track's stripes are packed tighter than a harmonic
-    // one's: the phase drawn before doesn't carry over
-    if lamp != self.tracks_lamp || mode != self.tracks_mode do stale = true
+    // A vernier track's stripes are packed tighter than a harmonic one's, the phase drawn before doesn't carry
+    // over
+    if mode != self.tracks_mode do stale = true
 
-    self.tracks_lamp, self.tracks_mode = lamp, mode
+    self.tracks_mode = mode
     return stale
 }
 
@@ -655,7 +653,6 @@ track_phase :: proc(
     band: core.PhaseBand,
     band_index: int,
     lock_in: ^core.StrobeLockIn,
-    lamp: bool,
     stale: bool,
     density: f32,
     period_count: f32,
@@ -664,10 +661,8 @@ track_phase :: proc(
     phase_step: f32,
 ) {
     // The shader multiplies the phase by the period count, a denser pattern turns slower to drift as many
-    // stripes a second as the desktop's. Drawn as of now, see strobe_phase_ahead. Not the lamp's tracks, they
-    // turn by the screen and the readout's rate isn't theirs, they'd jump back each chunk.
-    ahead := core.strobe_phase_ahead(lock_in, band) if !lamp else 0
-    phase = (band.scaled_phase + ahead) / density
+    // stripes a second as the desktop's. Drawn as of now, see strobe_phase_ahead.
+    phase = (band.scaled_phase + core.strobe_phase_ahead(lock_in, band)) / density
 
     // The phase wrapped by whole turns, see core.STROBE_PHASE_WRAP, the drawn one goes with it and the step
     // stays what the stripes moved
@@ -689,12 +684,8 @@ track_phase :: proc(
     return
 }
 
-// How much of a track's stripes is left off the note. Vernier tracks show the first one's measurement. Not the
-// lamp's tracks, they show the screen as it is: it smears a partial off the note, and their own SNR fades them
-// with it, see core.strobe_lamp_bands.
-track_gain :: proc(bands: []core.PhaseBand, band_index: int, mode: core.StrobeMode, lamp: bool) -> f32 {
-    if lamp do return 1
-
+// How much of a track's stripes is left off the note. Vernier tracks show the first one's measurement.
+track_gain :: proc(bands: []core.PhaseBand, band_index: int, mode: core.StrobeMode) -> f32 {
     band := bands[band_index]
     if mode != .VERNIER do return narrow_band_gain(band.drift_cents)
 

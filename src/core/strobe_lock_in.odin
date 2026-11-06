@@ -95,6 +95,8 @@ PhaseBand :: struct {
     drift_cents:  f32, // and how far off that is, unsigned
     scaled_phase: f32, // the strobe's phase, phase_diff times the speed added up, see turn_strobe
     speed:        f32, // under 1 the strobe turns slower, over 1 faster
+    slat_level:   f32, // how sure the partial is in the newest samples, 0 to 1, see strobe_slat_level
+    visibility:   f32, // how lit the stripes are, the level eased, see update_band_levels
     snr_db:       f32,
     envelope_snr_db: f32, // the SNR with the level at its envelope, what the stripes fade by, see update_band_noise_floor
     noise_floor:  NoiseFloor,
@@ -146,6 +148,8 @@ StrobeLockIn :: struct {
 
     // Number of valid samples in sample_buffer, the newest sample sits at sample_buffer[buffer_len - 1]
     buffer_len:       int,
+
+    slats:            StrobeSlats, // how bright the tracks' stripes are, see fill_strobe_slats
 }
 
 
@@ -361,6 +365,7 @@ restart_band :: proc(band: ^PhaseBand) {
 
     // Nothing heard yet, like a track out of range, the previous note's level isn't this one's
     band.amp = 0
+    band.slat_level, band.visibility = 0, 0
     band.snr_db = 0
     band.envelope_snr_db = 0
     band.phase_diff = 0
@@ -417,6 +422,9 @@ run_phase_detection :: proc(self: ^StrobeLockIn, is_tonal := false) {
         }
     }
     determine_band_phases(self, measured[:measured_count])
+    fill_strobe_slats(&self.slats, self)
+    update_band_levels(self)
+
     measure_noise_between_partials(self)
     for band in measured[:measured_count] do update_band_noise_floor(self, band, is_tonal)
 
@@ -560,14 +568,14 @@ advance_band :: proc(self: ^StrobeLockIn, band: ^PhaseBand, phase_advance: f64, 
         band.drift_cents = abs(band_cents_off(band, band.drift_hz))
     }
 
-    // The readout fits the rate while the stripes fully show, over the noise around the track, see
-    // update_band_noise_floor. A fading note keeps the last of it, the dimming stripes drift with the noise.
+    // The readout fits the rate while the stripes fully show, see band_fully_lit. A fading note keeps the last
+    // of it, the dimming stripes drift with the noise.
     // Each measurement is weighted by its samples, a stalled frame counts for as long as it took, and by the
     // partial's power against its envelope. Where two components beat, the phase swings fast through the dips;
     // weighted by power the rate settles on their mean pitch by energy instead of following the swings.
     // Against the envelope, not the absolute power: a decaying note's newest moments are its weakest, and they
     // still count as much. A single one has no slope yet, the rate is its advance.
-    if had_phase && band.snr_db >= READOUT_MIN_SNR_DB {
+    if had_phase && band_fully_lit(band^) {
         if band.rate_time_s == 0 do band.fit = {}
 
         band.rate_time_s += f32(self.available) / self.sample_rate
@@ -640,7 +648,13 @@ strobe_phase_ahead :: proc(self: ^StrobeLockIn, band: PhaseBand) -> f32 {
 // Detect a new pluck (sudden amplitude jump), the readout's average starts over. The envelope jumps along,
 // while the attack rises through the window each jump starts it over again.
 update_onset :: proc(self: ^StrobeLockIn, band: ^PhaseBand) {
-    is_loud := band.snr_db > NOISE_FLOOR_SNR_DB_THRESHOLD
+    // Out of the noise. By the slots, the stripes lit at all: they lag the attack by a few periods of the note,
+    // the window's amplitude by longer, it still jumps when they light up.
+    when STROBE_SNR_FADE {
+        is_loud := band.snr_db > NOISE_FLOOR_SNR_DB_THRESHOLD
+    } else {
+        is_loud := band.slat_level > 0
+    }
     band.onset = is_loud && band.amp > ONSET_RATIO * band.envelope
     if band.onset {
         band.rate_time_s = 0

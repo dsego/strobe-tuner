@@ -2,6 +2,39 @@
 
 Features and code changes that aren't planned yet. Nothing here is decided.
 
+## Stripe fade from the samples
+
+On the `slat-strobe` branch since 2026-11-06: the lock-in's stripes as they are, their phase, spin rate and
+motion blur, faded by how sure the track's partial is in the samples themselves instead of the SNR, see
+`src/core/strobe_slats.odin`. `-define:STROBE_SNR_FADE=true` brings back the SNR fade to compare.
+
+- The idea: the brightness from the same evidence as the position, so a shaky position is always a faint one.
+- Each track measures its partial once a period of the note (its own periods, three for a fifth), the note's
+  other partials cancel over it. The measurements fade over 4 periods of the note. How much they scatter
+  around their average, over how many there are, is how uncertain the average's phase is: full under 0.375
+  rad, gray at 0.5 (`STROBE_SLATS_NOISE_RAD`, gain 4), eased over 0.1 s. It averages down and only hears the
+  noise near the track's frequency, like the SNR.
+- First tried as slots: the samples sorted into 64 slots a period by their place in it, the positive and the
+  negative half summed apart, the noise what landed on both sides (`-define:STROBE_SLATS_HALVES=true`). It
+  counts the noise at every frequency sample by sample and doesn't average down: on reference tones through
+  the laptop's speaker it kept a 5-string's low B (30.8 Hz) lit where the SNR fade let go, but let a fading
+  A2's 4× partial go 1.7 s before the SNR did (the tone −50 to −55 dBFS against the SNR's −63 to −68).
+- Dropped on the way: a strobe drawn from the slots alone, a square at the slots' own phase (no shimmer at its
+  physical speed, a slat a beat, but it vibrated on bass at the lock-in's, its 4 periods against the
+  lock-in's ~24, ×16 at E1), its square disc and the wave's pull toward gray (split and morphed the slats),
+  and the same slats on the Lamp.
+
+Next:
+
+- Check the scatter fade against the SNR fade frame by frame on all three tracks, the onsets and the ends of
+  fades against the recording's own audio.
+- The note hold, the readout's handover between tracks, the trace's light and the signal check still read the
+  SNR. On the new fade the note goes dark with the last stripe.
+- The hard cases: a noisy room, hiss, mains hum, a soft note, a long fade lit to the end, a string tuned
+  quickly through two notes (a note change starts the measurements over, a gray dip).
+- If it holds, the SNR fade's machinery the stripes no longer need: the envelope SNR, the fade smoothing,
+  maybe the noise between partials, as far as the readout doesn't use them.
+
 ## Steady rotation far from a locked note
 
 Behind a flag, in locked mode only. Tuning up a new string with the note locked to low E, the string

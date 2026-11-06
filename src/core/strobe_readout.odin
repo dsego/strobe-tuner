@@ -20,6 +20,26 @@ import "core:math"
 
 // The readout follows a track this loud, where its stripes are fully there
 READOUT_MIN_SNR_DB :: STROBE_FADE_SNR_DB[1]
+
+// Whether the track's stripes are fully there in the newest samples, the readout fits it and can follow it. Not
+// eased like the stripes, from a pluck the readout follows as soon as the partial is sure.
+band_fully_lit :: proc(band: PhaseBand) -> bool {
+    when STROBE_SNR_FADE {
+        return band.snr_db >= READOUT_MIN_SNR_DB
+    } else {
+        return band.slat_level >= 1
+    }
+}
+
+// Whether the track's stripes are at least half faded in, eased as they're drawn
+band_half_lit :: proc(band: PhaseBand) -> bool {
+    when STROBE_SNR_FADE {
+        fade := STROBE_FADE_SNR_DB
+        return band.envelope_snr_db >= 0.5 * (fade[0] + fade[1])
+    } else {
+        return band.visibility >= 0.5
+    }
+}
 // The track's own reading this far off its partial, as far as a note holds past halfway to the next one
 // (NOTE_HOLD_CENTS) and the tracks were measured to read, see sandbox/accuracy and sandbox/recordings. Further
 // out the readout has none.
@@ -52,10 +72,15 @@ strobe_readout_track :: proc(self: ^StrobeLockIn, current: int, partial: f32 = 1
     pick_again ||= chosen >= 0 && just_settled(self, self.bands[chosen])
 
     // Held, unless a pluck brings another track to pick or the held one's stripes fade while another's are lit. By
-    // the envelope like the stripes, a beating partial's dip doesn't hand the readout on.
+    // the envelope like the stripes, a beating partial's dip doesn't hand the readout on. By the slots, half
+    // faded as drawn, eased: one sure partial's level flickers through a few frames.
     held := current >= 0 && current < len(self.bands) && measures_band(self, current) && settled(self.bands[current])
     if held && !pick_again {
-        faded := self.bands[current].envelope_snr_db < READOUT_MIN_SNR_DB
+        when STROBE_SNR_FADE {
+            faded := self.bands[current].envelope_snr_db < READOUT_MIN_SNR_DB
+        } else {
+            faded := !band_half_lit(self.bands[current])
+        }
         if !faded || loudest < 0 do return current, true
 
         return loudest, settled(self.bands[loudest])
@@ -73,7 +98,7 @@ readout_candidates :: proc(self: ^StrobeLockIn, partial: f32) -> (loudest, chose
     loudest, chosen = -1, -1
     for band, index in self.bands {
         if !measures_band(self, index) || !is_octave_track(band) do continue
-        if !hears_note(band, self.band_cents) || band.snr_db < READOUT_MIN_SNR_DB do continue
+        if !hears_note(band, self.band_cents) || !band_fully_lit(band) do continue
 
         if loudest < 0 || band.envelope > self.bands[loudest].envelope do loudest = index
         if band.interval == partial do chosen = index
@@ -94,11 +119,10 @@ hears_note :: proc(band: PhaseBand, band_cents: int) -> bool {
 }
 
 // Whether any track's stripes are at least half faded in, the note is still ringing. The noise stays under it,
-// the room's and the note's own between its partials. By the envelopes, as the stripes fade.
+// the room's and the note's own between its partials. As the stripes fade, see band_half_lit.
 strobe_shows_note :: proc(self: ^StrobeLockIn) -> bool {
-    fade := STROBE_FADE_SNR_DB
     for band in self.bands {
-        if hears_note(band, self.band_cents) && band.envelope_snr_db >= 0.5 * (fade[0] + fade[1]) do return true
+        if hears_note(band, self.band_cents) && band_half_lit(band) do return true
     }
     return false
 }

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 565" width="1100" height="565" role="img" aria-labelledby="title desc">
   <title id="title">Strobie audio signal path</title>
-  <desc id="desc">On the audio thread the input comes from miniaudio as mono at the device's own rate, never resampled, a rate of 88.2 kHz or more halved through halfband filters, and is written into three lock-free ring buffers, one per reader. On the main thread, every display frame: the pitch lane filters its samples, runs the NSDF, picks the peak and holds the target note for 50 ms, which sets the reference frequency of the lock-in and the lamp. The lock-in lane runs a single-bin DFT per track and rotates it by the reference on the sample clock, its phase advance times the track speed turns the strobe tracks, and a least squares fit of the phase gives the cents for the readout and the trace. The lamp lane folds every sample onto two periods of the reference on a fading screen, which the scope view draws as it is and the lamp view from above; a DFT bin of the screen per track can turn the strobe tracks instead of the lock-in.</desc>
+  <desc id="desc">On the audio thread the input comes from miniaudio as mono at the device's own rate, never resampled, a rate of 88.2 kHz or more halved through halfband filters, and is written into three lock-free ring buffers, one per reader. On the main thread, every display frame: the pitch lane filters its samples, runs the NSDF, picks the peak and holds the target note for 50 ms, which sets the reference frequency of the lock-in and the lamp. The lock-in lane runs a single-bin DFT per track and rotates it by the reference on the sample clock, its phase advance times the track speed turns the strobe tracks, and a least squares fit of the phase gives the cents for the readout and the trace. The lamp lane folds every sample onto two periods of the reference on a fading screen, which the scope view draws as it is and the lamp view from above.</desc>
   <style>
     text { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #111; }
     .bg { fill: #fff; }
@@ -61,12 +61,8 @@
   <rect class="box" x="240" y="390" width="140" height="56"/>
   <rect class="box" x="410" y="390" width="140" height="56"/>
   <rect class="box" x="580" y="390" width="140" height="56"/>
-  <rect class="box" x="750" y="390" width="140" height="56"/>
   <rect class="box" x="410" y="470" width="140" height="56"/>
   <rect class="box" x="580" y="470" width="140" height="56"/>
-
-  <!-- Turned by the lock-in or the lamp -->
-  <path class="box" d="M820,214 L834,228 L820,242 L806,228 Z"/>
 
   <!-- Audio thread -->
   <path class="wire" d="M105,136 V190" marker-end="url(#arrow)"/>
@@ -93,22 +89,16 @@
   <!-- Lock-in -->
   <path class="wire" d="M380,228 H410" marker-end="url(#arrow)"/>
   <path class="wire" d="M550,228 H580" marker-end="url(#arrow)"/>
-  <path class="wire" d="M720,228 H806" marker-end="url(#arrow)"/>
-  <path class="wire" d="M834,228 H920" marker-end="url(#arrow)"/>
+  <path class="wire" d="M720,228 H920" marker-end="url(#arrow)"/>
   <path class="wire" d="M650,256 V280" marker-end="url(#arrow)"/>
   <path class="wire" d="M720,308 H920" marker-end="url(#arrow)"/>
   <path class="wire dashed" d="M310,256 V280"/>
-  <text class="guard" x="763" y="222" text-anchor="middle">[lock-in]</text>
-  <text class="guard" x="820" y="207" text-anchor="middle">turned by</text>
 
   <!-- Lamp -->
   <path class="wire" d="M380,418 H410" marker-end="url(#arrow)"/>
   <path class="wire" d="M550,418 H580" marker-end="url(#arrow)"/>
-  <path class="wire" d="M720,418 H750" marker-end="url(#arrow)"/>
-  <path class="wire" d="M820,390 V242" marker-end="url(#arrow)"/>
   <path class="wire" d="M480,446 V470" marker-end="url(#arrow)"/>
   <path class="wire" d="M650,446 V470" marker-end="url(#arrow)"/>
-  <text class="guard" x="826" y="370">[lamp]</text>
 
   <g text-anchor="middle">
     <!-- Audio thread -->
@@ -180,10 +170,6 @@
     <text class="title" x="650" y="412">From above</text>
     <text class="sub" x="650" y="429">the beam's average</text>
     <text class="sub" x="650" y="442">height per column</text>
-
-    <text class="title" x="820" y="412">DFT bin per track</text>
-    <text class="sub" x="820" y="429">phase advance</text>
-    <text class="sub" x="820" y="442">× track speed</text>
 
     <text class="stereotype" x="480" y="486">«display»</text>
     <text class="title" x="480" y="503">Scope</text>
