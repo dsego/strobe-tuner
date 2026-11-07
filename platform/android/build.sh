@@ -53,11 +53,14 @@ mkdir -p "$DEPS" "$OUT" "$LIBS"
 # --- native libraries --------------------------------------------------------------------------
 
 # The miniaudio.a in the Odin folder is built for the Mac, the same miniaudio.c as Odin's bindings goes here.
-# It opens AAudio at run time.
-if [ ! -f "$DEPS/libminiaudio.a" ]; then
-    echo "Building miniaudio"
+# It opens AAudio at run time. Built again when Odin brings another miniaudio: its bindings check the library's
+# version at startup and stop the app on a mismatch. The version built is noted beside the library.
+MINIAUDIO_VERSION=$(awk '/^#define MA_VERSION_(MAJOR|MINOR|REVISION) / { printf "%s%s", sep, $3; sep = "." }' "$ODIN_ROOT/vendor/miniaudio/src/miniaudio.h")
+if [ ! -f "$DEPS/libminiaudio.a" ] || [ "$(cat "$DEPS/libminiaudio.version" 2> /dev/null)" != "$MINIAUDIO_VERSION" ]; then
+    echo "Building miniaudio $MINIAUDIO_VERSION"
     $CC $CFLAGS -c "$ODIN_ROOT/vendor/miniaudio/src/miniaudio.c" -o "$DEPS/miniaudio.o"
     $AR rcs "$DEPS/libminiaudio.a" "$DEPS/miniaudio.o"
+    echo "$MINIAUDIO_VERSION" > "$DEPS/libminiaudio.version"
 fi
 
 # Odin's stb bindings look for the libraries in the Odin folder, where Linux has them. Built there with the

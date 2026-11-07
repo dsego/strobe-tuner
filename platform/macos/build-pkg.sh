@@ -42,21 +42,11 @@ fi
 
 mkdir -p "$DEPS" "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-# The native libraries are built once into external/macos for the oldest macOS the app runs on, the ones
-# `just setup` and Odin ship are built for the Mac they were built on. SDL is linked in statically,
-# Homebrew's isn't on the Macs the app runs on, just sdl macos builds it.
+# miniaudio and stb are the ones Odin ships, built for macOS 10.12 and up and always the version its bindings
+# expect. SDL is linked in statically, Homebrew's isn't on the Macs the app runs on, just sdl macos builds it
+# into external/macos for the oldest macOS the app runs on.
 ODIN_ROOT=$(odin root)
 CC="xcrun clang -target arm64-apple-macos$MIN_MACOS"
-CFLAGS="-O2 -fPIC"
-
-if [ ! -f "$DEPS/libminiaudio.a" ]; then
-    echo "Building miniaudio"
-    mkdir -p "$DEPS/miniaudio"
-    for src in "$ODIN_ROOT"/vendor/miniaudio/src/*.c; do
-        $CC $CFLAGS -c "$src" -o "$DEPS/miniaudio/$(basename "$src" .c).o"
-    done
-    ar rcs "$DEPS/libminiaudio.a" "$DEPS"/miniaudio/*.o
-fi
 
 if [ ! -f "$DEPS/sdl3/lib/libSDL3.a" ]; then
     echo "No SDL in $DEPS/sdl3, build it with just sdl macos"
@@ -82,7 +72,7 @@ echo "Linking"
 $CC \
     "$OUT/app.o" \
     ${STORE_OBJECT:+"$STORE_OBJECT" "-L$SWIFT_LIBS" -framework StoreKit} \
-    "$DEPS/libminiaudio.a" \
+    "$ODIN_ROOT/vendor/miniaudio/lib/darwin/miniaudio.a" \
     "$ODIN_ROOT/vendor/stb/lib/darwin/stb_image.a" \
     "$ODIN_ROOT/vendor/stb/lib/darwin/stb_truetype.a" \
     "$ODIN_ROOT/vendor/stb/lib/darwin/stb_rect_pack.a" \

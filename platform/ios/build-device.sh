@@ -33,14 +33,18 @@ mkdir -p "$DEPS" "$OUT"
 
 # --- native libraries --------------------------------------------------------------------------
 
-if [ ! -f "$DEPS/libminiaudio.a" ]; then
-    echo "Building miniaudio"
+# Built again when Odin brings another miniaudio: its bindings check the library's version at startup and stop
+# the app on a mismatch. The version built is noted beside the library.
+MINIAUDIO_VERSION=$(awk '/^#define MA_VERSION_(MAJOR|MINOR|REVISION) / { printf "%s%s", sep, $3; sep = "." }' "$ODIN_ROOT/vendor/miniaudio/src/miniaudio.h")
+if [ ! -f "$DEPS/libminiaudio.a" ] || [ "$(cat "$DEPS/libminiaudio.version" 2> /dev/null)" != "$MINIAUDIO_VERSION" ]; then
+    echo "Building miniaudio $MINIAUDIO_VERSION"
     mkdir -p "$DEPS/miniaudio"
     # miniaudio has to be compiled as Objective-C on iOS for the AVAudioSession setup
     for src in "$ODIN_ROOT"/vendor/miniaudio/src/*.c; do
         $CC $CFLAGS -x objective-c -DMA_NO_RUNTIME_LINKING -c "$src" -o "$DEPS/miniaudio/$(basename "$src" .c).o"
     done
     ar rcs "$DEPS/libminiaudio.a" "$DEPS"/miniaudio/*.o
+    echo "$MINIAUDIO_VERSION" > "$DEPS/libminiaudio.version"
 fi
 
 if [ ! -f "$DEPS/libstb.a" ]; then
