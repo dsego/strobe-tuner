@@ -29,6 +29,12 @@ import "core:math"
 // steady as one span's measurements were over 4, the windows overlap, see SLAT_WINDOW_OVERLAP.
 STROBE_SLATS_MEMORY_PERIODS :: #config(STROBE_SLATS_MEMORY_PERIODS, 7.0)
 
+// Whether the partial is still there is told from the measurements of about this many periods of the note. The
+// remembered ones agree long after a note stops, the silence after it weighs nothing against them by size, and
+// the stripes stayed lit until they faded under STROBE_SLATS_SILENCE_DBFS: a hum half a second, a bass's low E
+// a second. A string fading out stays lit as long as before, its last periods are as loud as it still is.
+STROBE_SLATS_RECENT_PERIODS :: #config(STROBE_SLATS_RECENT_PERIODS, 1.0)
+
 // Each measurement is a Blackman window over this many spans. One span alone let a 2nd partial 7 cents off into
 // the 1× track 40 dB under it, louder than a low string's fundamental can be, and it turned so slowly from span
 // to span that it looked steady. Over three, the window's main lobe reaches a note's frequency each way and every
@@ -90,6 +96,10 @@ SlatMeasurements :: struct {
     weight:       f32, // how many, faded
     size:         f32, // each one's size
     size_squared: f32, // how many measurements the sums are worth by size, size² ÷ this
+
+    // The sizes again, fading over STROBE_SLATS_RECENT_PERIODS, and how many
+    recent_size:   f32,
+    recent_weight: f32,
 }
 
 // The Blackman window at place, 0 to 1 across it
@@ -122,6 +132,10 @@ add_slat_measurement :: proc(sums: ^SlatMeasurements, cosine, sine: f32, note_pe
     sums.weight = sums.weight * keep + 1
     sums.size = sums.size * keep + size
     sums.size_squared = sums.size_squared * keep * keep + size * size
+
+    recent_keep := math.exp(-note_periods / STROBE_SLATS_RECENT_PERIODS)
+    sums.recent_size = sums.recent_size * recent_keep + size
+    sums.recent_weight = sums.recent_weight * recent_keep + 1
 }
 
 // As many of the track's own periods as fit a whole number of the note's, its partial or three for a fifth.
@@ -238,7 +252,7 @@ update_band_levels :: proc(self: ^StrobeLockIn) {
 // many measurements it holds, in radians near enough. By direction, each measurement as much as its size: an
 // attack's first windows only partly hold the note and grow into it, they agree and aren't scatter. Gray at
 // STROBE_SLATS_NOISE_RAD, as much of the way as STROBE_SLATS_GAIN allows. All gray before two measurements' worth
-// came in and in silence.
+// came in, in silence and once the last periods went silent, see STROBE_SLATS_RECENT_PERIODS.
 strobe_slat_level :: proc(self: ^StrobeSlats, band_index: int) -> f32 {
     sums := self.measurements[band_index]
     if sums.weight <= 0 || sums.size_squared <= 0 do return 0
@@ -250,6 +264,9 @@ strobe_slat_level :: proc(self: ^StrobeSlats, band_index: int) -> f32 {
     length := math.sqrt(sums.cosine * sums.cosine + sums.sine * sums.sine)
     height := length / sums.weight
     if height <= 0 || 20 * math.log10(height) < STROBE_SLATS_SILENCE_DBFS do return 0
+
+    recent := sums.recent_size / sums.recent_weight
+    if recent <= 0 || 20 * math.log10(recent) < STROBE_SLATS_SILENCE_DBFS do return 0
 
     // How far their directions agree, 1 all one way, and their scatter around it. Noise moves a measurement's size
     // as much as its direction, the direction alone scatters half as much as the measurement did: doubled, a

@@ -126,6 +126,44 @@ test_slat_level_lights_a_pluck :: proc(t: ^testing.T) {
     testing.expectf(t, half_drawn_s >= 0, "the 1× track never lit")
 }
 
+// A hum stopping into silence lets go within a few periods, it held a bass's low E over a second while the
+// remembered measurements faded. A note fading out is held as long as before, still at -70 dBFS.
+@(test)
+test_slat_level_lets_go_of_a_stop :: proc(t: ^testing.T) {
+    FRAME :: 400 // a 120th of a second
+    STOP_S :: 1.5
+    PARTIALS :: []f64{0.06, 0.025, 0, 0.008} // -24, -32 and -42 dBFS
+    FADE_S :: 0.25 // to a third, the fundamental at -70 dBFS 1.31 s in
+    FADED_S :: 1.3
+
+    for note_hz in ([]f64{41.20, 92.50}) {
+        stopped := test_lock_in(f32(note_hz), {1, 2, 4})
+        defer destroy_strobe_lock_in(stopped)
+
+        samples := test_samples(2.5)
+        add_partials(samples[:int(STOP_S * f64(DEFAULT_SAMPLE_RATE))], note_hz, PARTIALS)
+        held_at_stop := false
+        let_go_s: f64 = -1
+        played := 0
+        for end_s in play_frames(stopped, samples, &played, FRAME) {
+            if end_s <= STOP_S do held_at_stop = strobe_shows_note(stopped)
+            if end_s > STOP_S && let_go_s < 0 && !strobe_shows_note(stopped) do let_go_s = end_s - STOP_S
+        }
+        log.infof("%.1f Hz stopped, let go after %.0f ms", note_hz, 1000 * let_go_s)
+        testing.expectf(t, held_at_stop, "%.1f Hz: not held before it stopped", note_hz)
+        testing.expectf(t, let_go_s >= 0 && let_go_s < 0.25, "%.1f Hz: let go %.2f s after it stopped", note_hz, let_go_s)
+
+        fading := test_lock_in(f32(note_hz), {1, 2, 4})
+        defer destroy_strobe_lock_in(fading)
+
+        faded := test_samples(FADED_S)
+        add_partials(faded, note_hz, PARTIALS, decay_s = FADE_S)
+        played = 0
+        for _ in play_frames(fading, faded, &played, FRAME) {}
+        testing.expectf(t, strobe_shows_note(fading), "%.1f Hz: let go of a note fading out at -70 dBFS", note_hz)
+    }
+}
+
 // Windows SLAT_WINDOW_SPANS spans long, one closing every span, share the noise where they overlap: white noise
 // through two of them a span apart is as correlated as their weights overlap, and two spans apart. One and twice
 // those is how many measurements share as much noise as one.
