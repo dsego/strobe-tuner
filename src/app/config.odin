@@ -277,7 +277,7 @@ config_defaults :: Config {
     scope_averaging_periods      = 7,
     scope_beam                   = .SOLID,
     trace_seconds                = 2,
-    trace_range_cents            = 25,
+    trace_range_cents            = 50,
     spectrum_windows             = 2,
     spectrum_scale               = .SNR,
     spectrum_labels              = .BOTH,
