@@ -55,6 +55,7 @@ TraceSample :: struct {
     time:  f64, // seconds on the trace's clock
     cents: f32, // NaN marks where the pitch was lost, the line has a gap there
     light: f32, // 0 to 1, as lit as the strobe track's stripes
+    note:  int, // the note the cents are off, in cents from A4, its run of the line is in its color By note
 }
 
 TraceDisplay :: struct {
@@ -86,15 +87,15 @@ push_sample :: proc(self: ^TraceDisplay, sample: TraceSample) {
 }
 
 // Called every frame, fresh tells a new reading from the previous one repeated
-record_trace :: proc(self: ^TraceDisplay, cents, light: f32, fresh: bool, frame_time: f32) {
+record_trace :: proc(self: ^TraceDisplay, cents, light: f32, note: int, fresh: bool, frame_time: f32) {
     self.clock += f64(frame_time)
 
     lost := self.count > 0 && math.is_nan(trace_sample(self, self.count - 1).cents)
     if math.is_nan(cents) {
         // One marker where the pitch goes, not one every frame
-        if self.count > 0 && !lost do push_sample(self, {self.clock, cents, 0})
+        if self.count > 0 && !lost do push_sample(self, {self.clock, cents, 0, note})
     } else if fresh || lost || self.count == 0 {
-        push_sample(self, {self.clock, cents, light})
+        push_sample(self, {self.clock, cents, light, note})
     }
 }
 
@@ -105,10 +106,11 @@ trace_plot :: proc(view: gfx.Rect) -> gfx.Rect {
 
 // Oldest on the left, the newest at now on the plot's right edge, sharp is up. The config's trace seconds
 // across, its range in cents from the middle to the top and bottom.
-// The line in the colorway's lit color, the in tune band in its second color
+// The line in the colorway's lit color, the in tune band in its second color. By note each note's run of the
+// line keeps that note's color, see trace_line_color.
 draw_trace_display :: proc(self: ^TraceDisplay, rect: gfx.Rect, config: ^Config) {
     // The trace, and the dot at now over its end
-    draw_plot :: proc(self: ^TraceDisplay, plot: gfx.Rect, span, cents_range: f32, line_color: gfx.Color) {
+    draw_plot :: proc(self: ^TraceDisplay, plot: gfx.Rect, span, cents_range: f32, config: ^Config) {
         middle := plot.y + plot.height / 2
 
         // Without a glow, its edges fade over a pixel
@@ -117,7 +119,7 @@ draw_trace_display :: proc(self: ^TraceDisplay, rect: gfx.Rect, config: ^Config)
 
         // The plot's scales, seconds and cents to points
         axes := TraceAxes{plot, middle, {plot.width / span, plot.height / 2 / cents_range}}
-        draw_trace_line(self, axes, 2 * LINE_RADIUS + pixel, pixel, line_color)
+        draw_trace_line(self, axes, 2 * LINE_RADIUS + pixel, pixel, config)
 
         // As lit as the newest reading, gone with the pitch. A pill as tall as it's wide, round like the
         // buttons' ends.
@@ -125,13 +127,13 @@ draw_trace_display :: proc(self: ^TraceDisplay, rect: gfx.Rect, config: ^Config)
         if !usable_trace_sample(self, newest) do return
 
         now := [2]f32{plot.x + plot.width, trace_point(self, newest, axes).y}
-        light := trace_sample(self, newest).light
+        color := fade_color(trace_line_color(self, newest, config), trace_sample(self, newest).light)
         radius := TRACE_DOT_RADIUS
-        gfx.draw_pill({now.x - radius, now.y - radius, 2 * radius, 2 * radius}, fade_color(line_color, light))
+        gfx.draw_pill({now.x - radius, now.y - radius, 2 * radius, 2 * radius}, color)
     }
 
     colors := strobe_colors(config)
-    line_color, band_color, background := gfx.hex(colors.x), gfx.hex(colors.y), gfx.hex(strobe_bg_color)
+    band_color, background := gfx.hex(colors.y), gfx.hex(strobe_bg_color)
 
     // As the config file has them, none or longer than the readings kept is as far as they go
     span := clamp(config.trace_seconds, TRACE_MIN_S, TRACE_MAX_S)
@@ -153,7 +155,7 @@ draw_trace_display :: proc(self: ^TraceDisplay, rect: gfx.Rect, config: ^Config)
     draw_trace_notches(plot, cents_range)
 
     gfx.begin_scissor(rect)
-    draw_plot(self, plot, span, cents_range, line_color)
+    draw_plot(self, plot, span, cents_range, config)
     gfx.end_scissor()
 }
 
@@ -183,8 +185,9 @@ draw_trace_notches :: proc(plot: gfx.Rect, cents_range: f32) {
 
 // A curve through the readings, dimmed along the line as the readings' light, with a gap where the pitch
 // was lost
-draw_trace_line :: proc(self: ^TraceDisplay, axes: TraceAxes, thickness, feather: f32, color: gfx.Color) {
-    // Each run of readings between the gaps, its own curve. One that starts left of the plot is cut there.
+draw_trace_line :: proc(self: ^TraceDisplay, axes: TraceAxes, thickness, feather: f32, config: ^Config) {
+    // Each run of readings between the gaps and the note changes, its own curve. One that starts left of the
+    // plot is cut there.
     start := first_shown_trace_sample(self, axes)
     for start < self.count {
         if !usable_trace_sample(self, start) {
@@ -193,11 +196,20 @@ draw_trace_line :: proc(self: ^TraceDisplay, axes: TraceAxes, thickness, feather
         }
 
         end := start
-        for usable_trace_sample(self, end + 1) do end += 1
+        for continues_trace_run(self, end, end + 1) do end += 1
 
-        draw_trace_run(self, start, end, axes, thickness, feather, color)
+        draw_trace_run(self, start, end, axes, thickness, feather, trace_line_color(self, start, config))
         start = end + 1
     }
+}
+
+// The colorway's lit color. By note the color of the note the reading was off, the line already drawn keeps
+// it when the next note comes, like it keeps a single colorway's.
+trace_line_color :: proc(self: ^TraceDisplay, index: int, config: ^Config) -> gfx.Color {
+    if config.strobe_colorway != .BY_NOTE do return gfx.hex(strobe_colors(config).x)
+
+    shown_note := trace_sample(self, index).note + 100 * shown_transpose(config)
+    return gfx.hex(note_colors(shown_note).x)
 }
 
 // Where the readings go on the plot
@@ -220,6 +232,12 @@ usable_trace_sample :: proc(self: ^TraceDisplay, index: int) -> bool {
     return index >= 0 && index < self.count && !math.is_nan(trace_sample(self, index).cents)
 }
 
+// Whether the line goes on from the reading at index to its neighbour: the neighbour has a pitch and was off
+// the same note. Another note's cents are off another middle, the line doesn't join them up.
+continues_trace_run :: proc(self: ^TraceDisplay, index, neighbour: int) -> bool {
+    return usable_trace_sample(self, neighbour) && trace_sample(self, neighbour).note == trace_sample(self, index).note
+}
+
 // The last reading left of the plot, the older ones are past its left edge
 first_shown_trace_sample :: proc(self: ^TraceDisplay, axes: TraceAxes) -> int {
     shown_from := self.clock - f64(axes.plot.width / axes.scale.x)
@@ -229,8 +247,8 @@ first_shown_trace_sample :: proc(self: ^TraceDisplay, axes: TraceAxes) -> int {
 }
 
 // A Catmull-Rom curve through the readings from start to end, fading from each one's light to the next
-// one's. The usable neighbours either side set the curve's direction, at its ends too. The newest reading
-// holds on to now, the dot's there.
+// one's. The neighbours either side in the same run set the curve's direction, at its ends too. The newest
+// reading holds on to now, the dot's there.
 draw_trace_run :: proc(self: ^TraceDisplay, start, end: int, axes: TraceAxes, thickness, feather: f32, color: gfx.Color) {
     points := make([dynamic][2]f32, context.temp_allocator)
     colors := make([dynamic]gfx.Color, context.temp_allocator)
@@ -240,8 +258,8 @@ draw_trace_run :: proc(self: ^TraceDisplay, start, end: int, axes: TraceAxes, th
     for index in start ..< end {
         from := trace_point(self, index, axes)
         to := trace_point(self, index + 1, axes)
-        before := trace_point(self, index - 1, axes) if usable_trace_sample(self, index - 1) else from
-        after := trace_point(self, index + 2, axes) if usable_trace_sample(self, index + 2) else to
+        before := trace_point(self, index - 1, axes) if continues_trace_run(self, index, index - 1) else from
+        after := trace_point(self, index + 2, axes) if continues_trace_run(self, index + 1, index + 2) else to
         light_from, light_to := trace_sample(self, index).light, trace_sample(self, index + 1).light
 
         for step in 1 ..= TRACE_CURVE_STEPS {
