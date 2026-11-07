@@ -285,6 +285,8 @@ draw_strobe_display :: proc(
         motion_blur     = i32(MOTION_BLUR),
         glow            = i32(glow_enabled),
         flat_track      = i32(shape == .FLAT),
+        // The display's pixels in the strobe's points, drawn straight or through the glow's targets
+        min_edge_width  = MIN_EDGE_PIXELS / gfx.dpi_scale(),
         // The wheel is lit evenly all around, the tracks only show the top of the disc
         lamp_spread     = 1000.0 if shape == .WHEEL else 0.45,
         glow_exposure   = glow.exposure,
@@ -483,6 +485,12 @@ draw_inner_shadow :: proc(area: gfx.Rect, shape: gfx.Rect) {
 // stay this sharp while a note fades, the stripes dim like a lamp's, and soften off the note, see
 // narrow_band_gain. Sharper gets jagged.
 STROBE_AMP :: 50.0
+
+// An edge is never narrower than this many of the display's pixels. A thinner one moves in steps across the
+// pixels, along a slanted edge the steps crawl along it and the turning stripes drag, the curved tracks and the
+// wheel felt rough where the flat ones slid. On a Retina screen the 1× track's edges are about 3 pixels wide, the
+// higher tracks' a pixel or less. -define:MIN_EDGE_PIXELS=0.0 leaves them all as STROBE_AMP has them.
+MIN_EDGE_PIXELS :: f32(#config(MIN_EDGE_PIXELS, 1.0))
 
 // A track off its partial fades as it did when the bands were narrow: a Blackman window a bin of this many
 // cents of the track's own partial, so a harmonic note's tracks fade alike. Half a bin off is 1 dB down, a

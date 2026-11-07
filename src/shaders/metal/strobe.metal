@@ -49,6 +49,7 @@ struct StrobeUniforms {
     float max_radius;
     float highlight; // 0..1, outlines the track whose sheet is open
     float dim; // 0..1, darkens the other tracks meanwhile
+    float min_edge_width; // the narrowest a stripe's edge gets in points, 0 for as amp has it, see strobe_fragment
     int strobe_blur;
     int motion_blur;
     int glow;
@@ -222,11 +223,23 @@ fragment float4 strobe_fragment(FragmentIn in [[stage_in]], constant StrobeUnifo
     // Time is translated from the linear to radial
     float time = angle / TAU;
 
+    // How fast the stripes' sine changes across them here, per point: on an arc by its radius, flat as on the
+    // innermost track's top
+    float angle_per_point = 1.0 / radial_position;
+    if (u.flat_track > 0) angle_per_point = 1.0 / (u.min_radius + u.band_height);
+
+    float sine_per_point = u.period_count * u.time_stretch * u.norm_freq * angle_per_point;
+
+    // An edge spans 2 / amp of the sine, never narrower than min_edge_width. See MIN_EDGE_PIXELS in
+    // strobe_display.odin.
+    float amp = u.amp;
+    if (u.min_edge_width > 0.0) amp = min(amp, 2.0 / (u.min_edge_width * sine_per_point));
+
     float signal_value = generate_blurred_signal(
         u.norm_freq,
         u.phase,
         u.motion_blur > 0 ? u.phase_step : 0.0,
-        u.amp,
+        amp,
         u.visibility,
         time,
         u.time_stretch,

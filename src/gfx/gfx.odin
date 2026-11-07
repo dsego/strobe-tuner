@@ -115,6 +115,7 @@ StrobeUniforms :: struct #align (16) {
     max_radius:       f32,
     highlight:        f32, // 0..1, outlines the track whose sheet is open
     dim:              f32, // 0..1, darkens the other tracks meanwhile
+    min_edge_width:   f32, // in points, see MIN_EDGE_PIXELS in strobe_display.odin
     strobe_blur:      i32,
     motion_blur:      i32,
     glow:             i32,
