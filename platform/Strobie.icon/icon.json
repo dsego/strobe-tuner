@@ -7,13 +7,26 @@
       "layers" : [
         {
           "glass" : false,
-          "image-name" : "strobie-layer-panel.png",
-          "name" : "strobie-layer-panel"
-        },
+          "hidden" : true,
+          "image-name" : "strobie-layer-strobe-red 4.png",
+          "name" : "strobie-layer-strobe-red 4"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
+      }
+    },
+    {
+      "layers" : [
         {
           "glass" : false,
-          "image-name" : "strobie-layer-strobe-red.png",
-          "name" : "strobie-layer-strobe-red"
+          "image-name" : "strobie-layer-strobe-red 5.png",
+          "name" : "strobie-layer-strobe-red 5"
         }
       ],
       "shadow" : {
