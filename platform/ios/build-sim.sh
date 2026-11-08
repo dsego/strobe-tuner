@@ -143,7 +143,8 @@ if [ -z "$DEVICE" ]; then
 fi
 
 xcrun simctl boot "$DEVICE" 2>/dev/null || true
-open -a Simulator
+# The simulator's window: Simulator.app up to Xcode 26, DeviceHub from Xcode 27
+open -b com.apple.iphonesimulator 2>/dev/null || open -b com.apple.dt.Devices
 xcrun simctl install "$DEVICE" "$APP"
 echo "Launching, Ctrl+C to detach"
 xcrun simctl launch --console-pty --terminate-running-process "$DEVICE" "$BUNDLE_ID"
