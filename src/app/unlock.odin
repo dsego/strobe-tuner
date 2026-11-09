@@ -66,7 +66,7 @@ UnlockReminder :: struct {
 
 // Once a frame until it's bought: the free minutes counted from the first lit note, and once they're
 // used up the reminder every UNLOCK_REMINDER_S
-follow_purchase :: proc(app: ^App) {
+remind_to_unlock :: proc(app: ^App) {
     frame_time := gfx.frame_time()
     store_update(frame_time)
 

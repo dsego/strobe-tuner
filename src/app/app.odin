@@ -221,7 +221,7 @@ run_frame :: proc(app: ^App) {
     // Before config_before is taken. The free minutes used grow in the config every frame, and
     // compared the config would never settle, a changed setting wouldn't save until they ran out.
     // They're written with the next save instead, in the background or at the quit.
-    follow_purchase(app)
+    remind_to_unlock(app)
 
     config_before := config^
     menu := handle_keys(app)
