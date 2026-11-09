@@ -142,6 +142,9 @@ stop_app :: proc(app: ^App) {
     // Loaded each frame for the screen's scale, see update_pixel_fonts
     unload_pixel_fonts()
 
+    // Filled as the stats draw, see draw_debug_stats
+    when DEBUG_STATS do destroy_debug_spectrogram(&debug_spectrogram)
+
     gfx.shutdown()
 }
 
@@ -159,8 +162,6 @@ destroy_strobe_area :: proc(strobe_area: ^StrobeArea) {
     destroy_trace_display(&strobe_area.trace)
     destroy_scope_display(&strobe_area.scope)
     unload_glow_targets(&strobe_area.glow_targets)
-
-    when DEBUG_STATS do destroy_debug_spectrogram(&debug_spectrogram)
 }
 
 // The configured input, or the default, its samples to everything that measures or shows them. The list of
