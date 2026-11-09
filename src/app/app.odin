@@ -47,7 +47,7 @@ App :: struct {
     config:         ^Config,
     measurement:    Measurement,
     input:          AudioInput,
-    displays:       Displays,
+    strobe_area:    StrobeArea,
     sheets:         AppSheets,
 
     config_changes: ConfigChanges, // the note target and the strobe need the new config, see apply_config
@@ -65,7 +65,7 @@ ConfigChange :: enum {
 ConfigChanges :: bit_set[ConfigChange]
 
 // What the strobe area draws, the display picked in the settings and the arrows over it
-Displays :: struct {
+StrobeArea :: struct {
     glow_targets: GlowTargets, // shared by the displays that glow
     strobe:       StrobeDisplay,
     scope:        ScopeDisplay, // the scope's and the lamp's views
@@ -117,7 +117,7 @@ start_app :: proc(app: ^App) -> bool {
     setup_menu_bar(app)
     gfx.load_shapes()
     init_measurement(&app.measurement, app.config)
-    init_displays(&app.displays)
+    init_strobe_area(&app.strobe_area)
 
     // Opened or not, the strobe area says why there's no input, see draw_strobe_area
     open_audio_input(app)
@@ -134,7 +134,7 @@ stop_app :: proc(app: ^App) {
     app.config.target_freq_hz = app.measurement.note_target.target_note.frequency
 
     close_audio_input(app)
-    destroy_displays(&app.displays)
+    destroy_strobe_area(&app.strobe_area)
     unload_glow_targets(&app.sheets.unlock.backdrop)
     destroy_measurement(&app.measurement)
     gfx.unload_shapes()
@@ -146,18 +146,18 @@ stop_app :: proc(app: ^App) {
 }
 
 // The glow's targets are made as the first glowing display draws, see ensure_glow_targets
-init_displays :: proc(displays: ^Displays) {
-    displays.strobe = init_strobe_display(strobe_bg_color)
-    displays.scope = init_scope_display(strobe_bg_color)
-    displays.trace = init_trace_display()
-    displays.spectrum = init_spectrum_display()
+init_strobe_area :: proc(strobe_area: ^StrobeArea) {
+    strobe_area.strobe = init_strobe_display(strobe_bg_color)
+    strobe_area.scope = init_scope_display(strobe_bg_color)
+    strobe_area.trace = init_trace_display()
+    strobe_area.spectrum = init_spectrum_display()
 }
 
-destroy_displays :: proc(displays: ^Displays) {
-    destroy_spectrum_display(&displays.spectrum)
-    destroy_trace_display(&displays.trace)
-    destroy_scope_display(&displays.scope)
-    unload_glow_targets(&displays.glow_targets)
+destroy_strobe_area :: proc(strobe_area: ^StrobeArea) {
+    destroy_spectrum_display(&strobe_area.spectrum)
+    destroy_trace_display(&strobe_area.trace)
+    destroy_scope_display(&strobe_area.scope)
+    unload_glow_targets(&strobe_area.glow_targets)
 
     when DEBUG_STATS do destroy_debug_spectrogram(&debug_spectrogram)
 }
@@ -172,7 +172,7 @@ open_audio_input :: proc(app: ^App) {
     audio.register_audio_node(capture, &measurement.pitch_detector)
     audio.register_audio_node(capture, measurement.strobe_lock_in)
     audio.register_audio_node(capture, &measurement.scope)
-    audio.register_audio_node(capture, &app.displays.spectrum)
+    audio.register_audio_node(capture, &app.strobe_area.spectrum)
     match_input_rate(app)
     audio.start(capture)
 
@@ -279,7 +279,7 @@ run_frame :: proc(app: ^App) {
         if strobe_shows do draw_strobe_area(app, layout)
     } else if panel_covered {
         draw_strobe_area(app, layout)
-        draw_tuning_arrows(&app.displays, &app.measurement.note_target, layout, reading, app.config)
+        draw_tuning_arrows(&app.strobe_area,&app.measurement.note_target, layout, reading, app.config)
     } else {
         draw_main_screen(app, layout, reading, menu)
     }

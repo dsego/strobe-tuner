@@ -27,8 +27,8 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu: Menu
     config := app.config
 
     draw_strobe_area(app, layout)
-    draw_tuning_arrows(&app.displays, &app.measurement.note_target, layout, reading, config)
-    draw_tap_toast(&app.displays.toast, config.strobe_display_type, layout.strobe_view)
+    draw_tuning_arrows(&app.strobe_area, &app.measurement.note_target, layout, reading, config)
+    draw_tap_toast(&app.strobe_area.toast,config.strobe_display_type, layout.strobe_view)
     draw_note_controls(app, layout, reading, menu)
 
     // The strobe's reading or the whole wave's, none before a track settled, and nothing to measure on another note
@@ -82,7 +82,7 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu: Menu
 
     // A menu of the displays, last so it opens over the controls under it. Tab goes through them and the number
     // keys straight to one.
-    gui_display_button(layout.display, &config.strobe_display_type, &app.displays.menu_open)
+    gui_display_button(layout.display, &config.strobe_display_type, &app.strobe_area.menu_open)
 
     when DEBUG_STATS do draw_debug_stats(app, layout, reading.pitch, meter)
 }
@@ -93,8 +93,8 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
     strobe, view := layout.strobe, layout.strobe_view
 
     // The selected track stands out as its sheet comes up
-    app.displays.strobe.selected_track = app.sheets.selected_track
-    app.displays.strobe.selection = app.sheets.track.slide
+    app.strobe_area.strobe.selected_track = app.sheets.selected_track
+    app.strobe_area.strobe.selection = app.sheets.track.slide
 
     // The background of the whole area, darker than the panel, the part behind the notch included. The
     // strobe's tracks reach up behind the notch too, the trace and the scope's views start under it.
@@ -125,8 +125,8 @@ draw_strobe_with_tracks :: proc(app: ^App, layout: Layout) {
     lock_in := app.measurement.strobe_lock_in
     bands := lock_in.bands[:]
 
-    displays := &app.displays
-    draw_strobe_display(&displays.strobe, &displays.glow_targets, layout, bands, lock_in, config)
+    strobe_area := &app.strobe_area
+    draw_strobe_display(&strobe_area.strobe, &strobe_area.glow_targets,layout, bands, lock_in, config)
 
     if config.strobe_mode == .HARMONIC && !input_missing(app) && gui_button(strobe) {
         track := strobe_track_at(config.strobe_shape, layout, len(bands), gfx.mouse_position())
@@ -139,27 +139,27 @@ draw_strobe_with_tracks :: proc(app: ^App, layout: Layout) {
 
 // Tapped, the range flips between its narrow and its wide step
 draw_trace_area :: proc(app: ^App, strobe, view: gfx.Rect) {
-    config, displays := app.config, &app.displays
-    draw_trace_display(&displays.trace, view, config)
+    config, strobe_area := app.config, &app.strobe_area
+    draw_trace_display(&strobe_area.trace, view, config)
     if input_missing(app) || !gui_button(strobe) do return
 
     steps, labels := TRACE_RANGE_STEPS_CENTS, RANGE_LABELS
     step := 1 if config.trace_range_cents == steps[0] else 0
     config.trace_range_cents = steps[step]
-    show_tap_toast(&displays.toast, .TRACE, "Range", labels[step])
+    show_tap_toast(&strobe_area.toast, .TRACE,"Range", labels[step])
 }
 
 // Tapped, the scale flips between the noise's and the level's
 draw_spectrum_area :: proc(app: ^App, strobe, view: gfx.Rect) {
-    config, displays := app.config, &app.displays
+    config, strobe_area := app.config, &app.strobe_area
     track_hz := strobe_track_hz(app.measurement.strobe_lock_in)
     active := app.measurement.note_target.active
-    draw_spectrum_display(&displays.spectrum, view, track_hz, active, config)
+    draw_spectrum_display(&strobe_area.spectrum,view, track_hz, active, config)
     if input_missing(app) || !gui_button(strobe) do return
 
     config.spectrum_scale = .DBFS if config.spectrum_scale == .SNR else .SNR
     labels := SCALE_LABELS
-    show_tap_toast(&displays.toast, .SPECTRUM, "Scale", labels[int(config.spectrum_scale)])
+    show_tap_toast(&strobe_area.toast, .SPECTRUM,"Scale", labels[int(config.spectrum_scale)])
 }
 
 // The partials the strobe's tracks follow, until the end of the frame
@@ -173,10 +173,10 @@ strobe_track_hz :: proc(lock_in: ^core.StrobeLockIn) -> []f32 {
 // round its rectifiers in the settings' order: the one lamp, the wave as it is, the two halves split.
 draw_scope_area :: proc(app: ^App, strobe, view: gfx.Rect) {
     config, measurement := app.config, &app.measurement
-    draw_scope_display(&app.displays.scope, &app.displays.glow_targets, &measurement.scope, view, config)
+    draw_scope_display(&app.strobe_area.scope, &app.strobe_area.glow_targets,&measurement.scope, view, config)
     if input_missing(app) || !gui_button(strobe) do return
 
-    toast := &app.displays.toast
+    toast := &app.strobe_area.toast
     if config.strobe_display_type == .SCOPE {
         config.scope_sweep = .TIME if config.scope_sweep == .CIRCLE else .CIRCLE
         labels := SWEEP_LABELS
@@ -271,7 +271,7 @@ input_missing :: proc(app: ^App) -> bool {
 
 // An arrow on the side the pitch is off to, pointing inwards the way to tune, with the sharp or the flat on its
 // outside: flat on the left pointing right to tune up, like higher notes are to the right on the ruler
-draw_tuning_arrows :: proc(displays: ^Displays, note_target: ^core.NoteTarget, layout: Layout, reading: Reading, config: ^Config) {
+draw_tuning_arrows :: proc(strobe_area: ^StrobeArea,note_target: ^core.NoteTarget, layout: Layout, reading: Reading, config: ^Config) {
     // Only the strong readings, a fading note drifts and would flash the arrows. The strobe's close to the
     // note, like the readout.
     cents := core.target_cents_off(note_target, note_target.last_good_pitch.detected_freq)
@@ -283,9 +283,9 @@ draw_tuning_arrows :: proc(displays: ^Displays, note_target: ^core.NoteTarget, l
     // Without a lock or a string, further than the note holds is a neighbouring note that isn't confirmed yet
     if !note_target.active || (!measures_target && distance > core.NOTE_HOLD_CENTS) do return
 
-    displays.flat_arrow = core.schmitt_trigger_neg(displays.flat_arrow, cents, -8, -10)
-    displays.sharp_arrow = core.schmitt_trigger(displays.sharp_arrow, cents, 8, 10)
-    if !displays.flat_arrow && !displays.sharp_arrow do return
+    strobe_area.flat_arrow = core.schmitt_trigger_neg(strobe_area.flat_arrow, cents, -8, -10)
+    strobe_area.sharp_arrow = core.schmitt_trigger(strobe_area.sharp_arrow, cents, 8, 10)
+    if !strobe_area.flat_arrow && !strobe_area.sharp_arrow do return
 
     MARGIN :: 10
     strobe, view := layout.strobe, layout.strobe_view
@@ -308,7 +308,7 @@ draw_tuning_arrows :: proc(displays: ^Displays, note_target: ^core.NoteTarget, l
 
         pair := [2]ArrowGlyph{flat, {arrow, '▲'}}
         middle_y := view.y + view.height - bottom - arrow.size / 2
-        if displays.sharp_arrow {
+        if strobe_area.sharp_arrow {
             pair = {sharp, {arrow, '▼'}}
             middle_y = view.y + top + arrow.size / 2
         }
@@ -323,7 +323,7 @@ draw_tuning_arrows :: proc(displays: ^Displays, note_target: ^core.NoteTarget, l
     }
 
     middle_y := view.y + MARGIN + arrow.size / 2
-    if displays.flat_arrow {
+    if strobe_area.flat_arrow {
         draw_arrow_pair({flat, {arrow, '▶'}}, strobe.x + MARGIN, middle_y)
     } else {
         pair := [2]ArrowGlyph{{arrow, '◀'}, sharp}
