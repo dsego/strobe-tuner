@@ -28,7 +28,7 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu: Menu
 
     draw_strobe_area(app, layout)
     draw_tuning_arrows(&app.strobe_area, &app.measurement.note_target, layout, reading, config)
-    draw_tap_toast(&app.strobe_area.toast,config.strobe_display_type, layout.strobe_view)
+    draw_tap_toast(&app.strobe_area.toast, config.strobe_display_type, layout.strobe_view)
     draw_note_controls(app, layout, reading, menu)
 
     // The strobe's reading or the whole wave's, none before a track settled, and nothing to measure on another note
@@ -126,7 +126,7 @@ draw_strobe_with_tracks :: proc(app: ^App, layout: Layout) {
     bands := lock_in.bands[:]
 
     strobe_area := &app.strobe_area
-    draw_strobe_display(&strobe_area.strobe, &strobe_area.glow_targets,layout, bands, lock_in, config)
+    draw_strobe_display(&strobe_area.strobe, &strobe_area.glow_targets, layout, bands, lock_in, config)
 
     if config.strobe_mode == .HARMONIC && !input_missing(app) && gui_button(strobe) {
         track := strobe_track_at(config.strobe_shape, layout, len(bands), gfx.mouse_position())
@@ -154,7 +154,7 @@ draw_spectrum_area :: proc(app: ^App, strobe, view: gfx.Rect) {
     config, strobe_area := app.config, &app.strobe_area
     track_hz := strobe_track_hz(app.measurement.strobe_lock_in)
     active := app.measurement.note_target.active
-    draw_spectrum_display(&strobe_area.spectrum,view, track_hz, active, config)
+    draw_spectrum_display(&strobe_area.spectrum, view, track_hz, active, config)
     if input_missing(app) || !gui_button(strobe) do return
 
     config.spectrum_scale = .DBFS if config.spectrum_scale == .SNR else .SNR
@@ -173,7 +173,7 @@ strobe_track_hz :: proc(lock_in: ^core.StrobeLockIn) -> []f32 {
 // round its rectifiers in the settings' order: the one lamp, the wave as it is, the two halves split.
 draw_scope_area :: proc(app: ^App, strobe, view: gfx.Rect) {
     config, measurement := app.config, &app.measurement
-    draw_scope_display(&app.strobe_area.scope, &app.strobe_area.glow_targets,&measurement.scope, view, config)
+    draw_scope_display(&app.strobe_area.scope, &app.strobe_area.glow_targets, &measurement.scope, view, config)
     if input_missing(app) || !gui_button(strobe) do return
 
     toast := &app.strobe_area.toast
@@ -271,7 +271,7 @@ input_missing :: proc(app: ^App) -> bool {
 
 // An arrow on the side the pitch is off to, pointing inwards the way to tune, with the sharp or the flat on its
 // outside: flat on the left pointing right to tune up, like higher notes are to the right on the ruler
-draw_tuning_arrows :: proc(strobe_area: ^StrobeArea,note_target: ^core.NoteTarget, layout: Layout, reading: Reading, config: ^Config) {
+draw_tuning_arrows :: proc(strobe_area: ^StrobeArea, note_target: ^core.NoteTarget, layout: Layout, reading: Reading, config: ^Config) {
     // Only the strong readings, a fading note drifts and would flash the arrows. The strobe's close to the
     // note, like the readout.
     cents := core.target_cents_off(note_target, note_target.last_good_pitch.detected_freq)

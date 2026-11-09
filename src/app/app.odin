@@ -285,7 +285,7 @@ run_frame :: proc(app: ^App) {
         if strobe_shows do draw_strobe_area(app, layout)
     } else if panel_covered {
         draw_strobe_area(app, layout)
-        draw_tuning_arrows(&app.strobe_area,&app.measurement.note_target, layout, reading, app.config)
+        draw_tuning_arrows(&app.strobe_area, &app.measurement.note_target, layout, reading, app.config)
     } else {
         draw_main_screen(app, layout, reading, menu)
     }

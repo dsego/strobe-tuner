@@ -147,10 +147,10 @@ measure :: proc(app: ^App) -> (reading: Reading) {
 
     cents, light := traced_cents(measurement, config, reading, out_of_range)
     note := measurement.note_target.target_note.cents
-    record_trace(&app.strobe_area.trace,cents, light, note, reading.pitch.fresh, gfx.frame_time())
+    record_trace(&app.strobe_area.trace, cents, light, note, reading.pitch.fresh, gfx.frame_time())
 
     // The spectrum of what came in, only while it's the display
-    if config.strobe_display_type == .SPECTRUM do update_spectrum_display(&app.strobe_area.spectrum,config.spectrum_windows)
+    if config.strobe_display_type == .SPECTRUM do update_spectrum_display(&app.strobe_area.spectrum, config.spectrum_windows)
 
     return
 }
