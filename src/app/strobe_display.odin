@@ -665,7 +665,10 @@ draw_strobe_tracks :: proc(self: ^StrobeDisplay, tracks: ^StrobeTracks, pane: gf
 
         // The quad is laid out in the upright frame, it lands in the pane turned with it
         quad := strobe_pane_rect(pane, turned, {rect.x, rect.y + offset, rect.z, rect.w})
-        if turned do gfx.draw_shader_quad_turned(quad)
-        else do gfx.draw_shader_quad(quad)
+        if turned {
+            gfx.draw_shader_quad_turned(quad)
+        } else {
+            gfx.draw_shader_quad(quad)
+        }
     }
 }

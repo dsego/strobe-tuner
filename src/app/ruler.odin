@@ -180,8 +180,11 @@ ruler_follow_finger :: proc(
         if !land do swipe^ = {}
     case swipe.gesture == .COASTING && gfx.mouse_pressed():
         // Caught on the ruler it stops there and can be swiped on, a press anywhere else settles it
-        if gui_background_pressed(rect) do swipe^ = ruler_press(.CAUGHT, mouse)
-        else do land = true
+        if gui_background_pressed(rect) {
+            swipe^ = ruler_press(.CAUGHT, mouse)
+        } else {
+            land = true
+        }
     case swipe.gesture == .COASTING:
         land = ruler_coast(swipe, &ruler.position)
     case swipe.gesture == .NONE:

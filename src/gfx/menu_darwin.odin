@@ -204,8 +204,11 @@ add_menu_item :: proc(to: ^AK.Menu, item: MenuItem, index: NS.Integer = -1) {
         if item.command > 0 do attach_item(made, item.command)
     }
 
-    if index < 0 do AK.Menu_addItem(to, made)
-    else do AK.Menu_insertItem(to, made, index)
+    if index < 0 {
+        AK.Menu_addItem(to, made)
+    } else {
+        AK.Menu_insertItem(to, made, index)
+    }
 
     made->release()
 }

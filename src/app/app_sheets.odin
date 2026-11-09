@@ -40,15 +40,22 @@ all_sheets :: proc(sheets: ^AppSheets) -> [5]^Sheet {
 
 // Settings… from the menu bar or Ctrl+, closes the settings when they're up, the sheet covers the strobe
 toggle_settings_sheet :: proc(sheets: ^AppSheets) {
-    if sheets.settings.open do close_settings_sheet(sheets)
-    else do open_settings_sheet(sheets)
+    if sheets.settings.open {
+        close_settings_sheet(sheets)
+    } else {
+        open_settings_sheet(sheets)
+    }
 }
 
 // Over whichever sheet is up. Not over the unlock's reminder, it stays until it's closed.
 open_settings_sheet :: proc(sheets: ^AppSheets) {
     if sheets.unlock.sheet.open do return
 
-    for sheet in all_sheets(sheets) do if sheet != &sheets.settings do dismiss_sheet(sheets, sheet)
+    for sheet in all_sheets(sheets) {
+        if sheet == &sheets.settings do continue
+
+        dismiss_sheet(sheets, sheet)
+    }
     reset_note_offsets_editing()
 
     sheets.settings.open = true
@@ -140,8 +147,11 @@ draw_track_sheet :: proc(app: ^App, layout: Layout) {
     // Tapping another track outside the sheet switches to it, anywhere else closes the sheet
     if gui_button(sheet_layout.outside) {
         track := strobe_track_at(config.strobe_shape, layout, len(bands), gfx.mouse_position())
-        if track >= 0 do sheets.selected_track = track
-        else do close = true
+        if track >= 0 {
+            sheets.selected_track = track
+        } else {
+            close = true
+        }
     }
 
     if close || gfx.key_pressed(.ESCAPE) || swiped do close_sheet(sheet)

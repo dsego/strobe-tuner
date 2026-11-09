@@ -90,8 +90,11 @@ build_input_list :: proc(input: ^AudioInput, wanted_name: string) {
     if audio.device_count(capture) > 0 {
         delete(input.default_label)
         default_name := audio.device_name(capture, audio.SYSTEM_DEFAULT)
-        if default_name == "" do input.default_label = fmt.aprint("Default")
-        else do input.default_label = fmt.aprintf("Default (%s)", default_name)
+        if default_name == "" {
+            input.default_label = fmt.aprint("Default")
+        } else {
+            input.default_label = fmt.aprintf("Default (%s)", default_name)
+        }
 
         append(&input.devices, GuiOption{audio.SYSTEM_DEFAULT, input.default_label})
         wanted := audio.find_device(capture, wanted_name)

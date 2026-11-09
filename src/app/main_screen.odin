@@ -263,8 +263,11 @@ gui_no_input_message :: proc(app: ^App, strobe, view: gfx.Rect, title, hint: cst
 
     if !gui_button(strobe) do return
 
-    if audio.microphone_denied() do audio.allow_microphone()
-    else do app.input.restart, app.input.refresh = true, true
+    if audio.microphone_denied() {
+        audio.allow_microphone()
+    } else {
+        app.input.restart, app.input.refresh = true, true
+    }
 }
 
 // The strobe area says why there's no input instead, see draw_strobe_area

@@ -440,7 +440,11 @@ gui_offset_buttons :: proc(rows: OffsetRows, grid: OffsetGrid, header: gfx.Rect,
 
     clear_right := grid.right if stringed else add_x - 12 - small_button_width("REMOVE") - 8
     clearable := !stringed && count > 0
-    for cents in rows.cents[:count] do if cents != 0 do clearable = true
+    for cents in rows.cents[:count] {
+        if cents != 0 {
+            clearable = true
+        }
+    }
 
     if gui_small_button(clear_right, header, "SURE?" if editing.clearing else "CLEAR", clearable, warn = editing.clearing) {
         if editing.clearing {

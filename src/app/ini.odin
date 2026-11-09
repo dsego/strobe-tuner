@@ -113,8 +113,11 @@ read_value :: proc(ptr: rawptr, type: ^runtime.Type_Info, written: string) {
         }
     case reflect.Type_Info_Float:
         if value, ok := parse_finite_f32(text); ok {
-            if type.size == 8 do (^f64)(ptr)^ = f64(value)
-            else do (^f32)(ptr)^ = value
+            if type.size == 8 {
+                (^f64)(ptr)^ = f64(value)
+            } else {
+                (^f32)(ptr)^ = value
+            }
         }
     case reflect.Type_Info_Integer:
         if value, ok := strconv.parse_int(text); ok do write_int_field(ptr, type.size, value)
@@ -131,8 +134,11 @@ read_value :: proc(ptr: rawptr, type: ^runtime.Type_Info, written: string) {
 
         for index in 0 ..< info.count {
             element := rawptr(uintptr(ptr) + uintptr(index * info.elem_size))
-            if index < len(items) do read_value(element, info.elem, items[index])
-            else do runtime.mem_zero(element, info.elem_size)
+            if index < len(items) {
+                read_value(element, info.elem, items[index])
+            } else {
+                runtime.mem_zero(element, info.elem_size)
+            }
         }
     case reflect.Type_Info_Enumerated_Array:
         items := split_list(text)

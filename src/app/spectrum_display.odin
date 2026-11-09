@@ -515,7 +515,11 @@ draw_spectrum_peak_level :: proc(
     if len(peaks) == 0 do return
 
     loudest := peaks[0]
-    for peak in peaks do if peak.level > loudest.level do loudest = peak
+    for peak in peaks {
+        if peak.level > loudest.level {
+            loudest = peak
+        }
+    }
 
     held^ = held_within(held^, loudest.shown, SPECTRUM_HOLD_DB)
     y := spectrum_y(held^, range, plot)
@@ -594,8 +598,18 @@ draw_peak_labels :: proc(
     fade_dropped_peak_labels(self, named_before, carried, fade_step)
 
     pitch_standard, labels := config.pitch_standard, config.spectrum_labels
-    for named in self.named do if !named.shown do draw_named_peak(named, pitch_standard, labels, background)
-    for named in self.named do if named.shown do draw_named_peak(named, pitch_standard, labels, background)
+
+    // The labels fading out under the ones picked this frame
+    for named in self.named {
+        if named.shown do continue
+
+        draw_named_peak(named, pitch_standard, labels, background)
+    }
+    for named in self.named {
+        if !named.shown do continue
+
+        draw_named_peak(named, pitch_standard, labels, background)
+    }
 }
 
 // Into self.named, up to SPECTRUM_MAX_LABELS of the candidates in their order, within

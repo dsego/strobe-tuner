@@ -92,7 +92,11 @@ open_unlock_sheet :: proc(sheets: ^AppSheets, countdown: bool) {
     reminder := &sheets.unlock
     if reminder.sheet.open do return
 
-    for sheet in all_sheets(sheets) do if sheet != &reminder.sheet do dismiss_sheet(sheets, sheet)
+    for sheet in all_sheets(sheets) {
+        if sheet == &reminder.sheet do continue
+
+        dismiss_sheet(sheets, sheet)
+    }
     reset_note_offsets_editing()
 
     // The App Store asked again when it couldn't be reached, e.g. offline at the start

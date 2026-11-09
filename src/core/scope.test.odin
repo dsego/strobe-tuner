@@ -551,7 +551,11 @@ test_scope_newest_sweep_drawn_whole_from_its_start :: proc(t: ^testing.T) {
                 if sweep == .TIME {
                     // The sweep runs right to left on the screen, across here from 0 to 1
                     restarts := 0
-                    for i in 1 ..< len(points) do if points[i].x < points[i - 1].x do restarts += 1
+                    for point_index in 1 ..< len(points) {
+                        if points[point_index].x < points[point_index - 1].x {
+                            restarts += 1
+                        }
+                    }
                     testing.expectf(t, restarts == 0, "%v Hz frame %v: started over %v times", freq, index, restarts)
                     testing.expectf(t, first.x < 0.01 && last.x > 0.99, "%v Hz frame %v: from %v to %v across", freq, index, first.x, last.x)
                 } else {
@@ -873,7 +877,11 @@ test_scope_peak_release :: proc(t: ^testing.T) {
     samples: [SCOPE_TEST_FRAME]f32
     for frame in 0 ..< 84 {
         scope_test_sine(samples[:], FREQ, scope.sample_clock)
-        if frame >= 60 do for &sample in samples do sample *= 0.1
+        if frame >= 60 {
+            for &sample in samples {
+                sample *= 0.1
+            }
+        }
 
         sweep_samples(&scope, samples[:])
     }
