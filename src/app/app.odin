@@ -114,7 +114,7 @@ start_app :: proc(app: ^App) -> bool {
     size, min_size, position := window_placement(app.config)
     if !gfx.init(size.x, size.y, APP_NAME, min_size, position) do return false
 
-    setup_menu_bar(app)
+    setup_os_menu_bar(app)
     gfx.load_shapes()
     init_measurement(&app.measurement, app.config)
     init_strobe_area(&app.strobe_area)
@@ -218,19 +218,19 @@ run_frame :: proc(app: ^App) {
 
     // Before the measurements and the sheets, what a key changed shows this frame. The menu bar's command can
     // only be read once a frame, it's passed on to the note's lock, see draw_note_controls.
-    menu := handle_keys(app)
+    menu_command := handle_keys(app)
 
     reading := measure_frame(app)
     layout := lay_out_frame(app)
 
-    // After the keys and the measurements, the menu's check marks show this frame's
-    update_menu_checks(app)
+    // After the keys and the measurements, the menu bar shows this frame's state
+    update_os_menu_bar(app)
 
     // Ends after the frame's rate is set, the rest of the frame is waited out at it, see limit_frame_rate
     gfx.begin_frame(gfx.hex(panel_bg_color))
     defer gfx.end_frame()
 
-    draw_frame(app, layout, reading, menu)
+    draw_frame(app, layout, reading, menu_command)
     save_frame_changes(app, config_before)
     limit_frame_rate(app)
 }
@@ -293,7 +293,7 @@ lay_out_frame :: proc(app: ^App) -> (layout: Layout) {
 
 // The sheets slid, then the layers from the bottom: the main screen or what a sheet leaves of it, the
 // sheets, and the unlock's reminder over all of them blurred
-draw_frame :: proc(app: ^App, layout: Layout, reading: Reading, menu: MenuCommand) {
+draw_frame :: proc(app: ^App, layout: Layout, reading: Reading, menu_command: MenuCommand) {
     gui_begin_frame()
     cover := slide_sheets(app, layout)
 
@@ -313,7 +313,7 @@ draw_frame :: proc(app: ^App, layout: Layout, reading: Reading, menu: MenuComman
         draw_strobe_area(app, layout)
         draw_tuning_arrows(&app.strobe_area, &app.measurement.note_target, layout, reading, app.config)
     } else {
-        draw_main_screen(app, layout, reading, menu)
+        draw_main_screen(app, layout, reading, menu_command)
     }
     draw_sheets(app, layout, reading)
 
@@ -402,15 +402,15 @@ wait_in_background :: proc(app: ^App) {
 }
 
 // The menu bar's item chosen this frame is returned for the main screen's, see draw_note_controls
-handle_keys :: proc(app: ^App) -> (menu: MenuCommand) {
+handle_keys :: proc(app: ^App) -> (menu_command: MenuCommand) {
     config := app.config
 
     // A menu item's key reaches the keys here too, the plain ones skip while Command is down
-    menu = MenuCommand(gfx.menu_command())
-    command := gfx.key_down(.LEFT_SUPER) || gfx.key_down(.RIGHT_SUPER)
-    plain := !command
+    menu_command = MenuCommand(gfx.menu_command())
+    command_down := gfx.key_down(.LEFT_SUPER) || gfx.key_down(.RIGHT_SUPER)
+    plain := !command_down
 
-    #partial switch menu {
+    #partial switch menu_command {
     case .SETTINGS:
         toggle_settings_sheet(&app.sheets)
     case .RETRO_GLOW:
@@ -420,15 +420,15 @@ handle_keys :: proc(app: ^App) -> (menu: MenuCommand) {
     case .UNLOCK:
         open_unlock_sheet(&app.sheets, countdown = false)
     }
-    for menu_command, type in DISPLAY_COMMANDS {
-        if menu == menu_command do config.strobe_display_type = type
+    for command, type in DISPLAY_COMMANDS {
+        if menu_command == command do config.strobe_display_type = type
     }
-    for menu_command, colorway in COLORWAY_COMMANDS {
-        if menu == menu_command do config.strobe_colorway = colorway
+    for command, colorway in COLORWAY_COMMANDS {
+        if menu_command == command do config.strobe_colorway = colorway
     }
 
     // Opened in the next frame like a pick on the input's sheet, see follow_input
-    input := int(menu) - int(MenuCommand.INPUTS)
+    input := int(menu_command) - int(MenuCommand.INPUTS)
     if input >= 0 && input < len(app.input.devices) do app.input.device_index = input
 
     if plain && gfx.key_pressed(.G) do config.strobe_glow = !config.strobe_glow

@@ -21,7 +21,7 @@ import "core:fmt"
 import "../audio"
 import "../gfx"
 
-// The macOS menu bar's commands, see setup_menu_bar. Each key has Command in it, see handle_keys.
+// The macOS menu bar's commands, see setup_os_menu_bar. Each key has Command in it, see handle_keys.
 MenuCommand :: enum {
     NONE,
     SETTINGS,
@@ -65,7 +65,7 @@ COLORWAY_COMMANDS :: [StrobeColorway]MenuCommand {
 // SDL's app menu gets Settings… and with UNLOCK Unlock Strobie…, the View menu the displays, the colors, the
 // glow and the lock, the Input menu the inputs, the Window menu the strobe's size back. Resetting stays on the
 // settings sheet, where RESET asks first.
-setup_menu_bar :: proc(app: ^App) {
+setup_os_menu_bar :: proc(app: ^App) {
     // The unlock's sheet with the restore, like UNLOCK in the settings' header, greyed out once it's unlocked
     app_items: []gfx.MenuItem
     when UNLOCK != "" do app_items = {{title = "Unlock Strobie…", command = int(MenuCommand.UNLOCK)}}
@@ -106,8 +106,9 @@ setup_menu_bar :: proc(app: ^App) {
     gfx.add_window_menu_items({{title = "Strobe Size", key = "0", command = int(MenuCommand.DEFAULT_SIZE)}})
 }
 
-// The check marks in the View menu follow the app however it was changed
-update_menu_checks :: proc(app: ^App) {
+// The check marks in the View and Input menus follow the app however it was changed, Unlock Strobie… is greyed
+// out once it's bought
+update_os_menu_bar :: proc(app: ^App) {
     for command, type in DISPLAY_COMMANDS {
         gfx.set_menu_checked(int(command), app.config.strobe_display_type == type)
     }

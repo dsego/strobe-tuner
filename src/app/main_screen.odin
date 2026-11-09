@@ -23,13 +23,13 @@ import "../audio"
 import "../core"
 import "../gfx"
 
-draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu: MenuCommand) {
+draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu_command: MenuCommand) {
     config := app.config
 
     draw_strobe_area(app, layout)
     draw_tuning_arrows(&app.strobe_area, &app.measurement.note_target, layout, reading, config)
     draw_tap_toast(&app.strobe_area.toast, config.strobe_display_type, layout.strobe_view)
-    draw_note_controls(app, layout, reading, menu)
+    draw_note_controls(app, layout, reading, menu_command)
 
     // The strobe's reading or the whole wave's, none before a track settled, and nothing to measure on another note
     // than a locked one. The gauge points the way without one.
@@ -370,7 +370,7 @@ shown_transpose :: proc(config: ^Config) -> int {
     return -capo_fret(setup) if setup.instrument != .CHROMATIC else transpose_key(setup)
 }
 
-draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading, menu: MenuCommand) {
+draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading, menu_command: MenuCommand) {
     config, note_target := app.config, &app.measurement.note_target
     string_mode := note_target.string_count > 0 // a custom preset's every note before its first row
 
@@ -418,7 +418,7 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading, menu: Me
 
     lock_toggled := gui_lock_toggle(layout.lock, note_target.locked) || note_tapped
     if !gui.disabled {
-        if gfx.key_pressed(.SPACE) || menu == .LOCK_NOTE do lock_toggled = true
+        if gfx.key_pressed(.SPACE) || menu_command == .LOCK_NOTE do lock_toggled = true
         if gfx.key_pressed(.LEFT) do step = -1
         if gfx.key_pressed(.RIGHT) do step = 1
 

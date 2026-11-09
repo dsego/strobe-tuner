@@ -33,7 +33,7 @@ AudioInput :: struct {
     listed:        int, // device_index as build_input_list picked it, another one is a pick
     refresh:       bool, // the list is made again, see follow_input
     default_label: string, // the list's first input, see build_input_list
-    menu:          int, // the Input menu, see setup_menu_bar
+    menu:          int, // the Input menu, see setup_os_menu_bar
     restart:       bool, // opens the input again, after the background or an interruption
     missing_s:     f32, // since the picked input was last looked for, see MISSING_INPUT_POLL_S
     stats:         InputStats, // on its sheet, held INPUT_STATS_HOLD_S
@@ -113,7 +113,7 @@ build_input_list :: proc(input: ^AudioInput, wanted_name: string) {
 
     gfx.set_menu_items(input.menu, items[:])
 
-    // Checked already, the menu may be opening now and show before the next frame's update_menu_checks
+    // Checked already, the menu may be opening now and show before the next frame's update_os_menu_bar
     if len(input.devices) > 0 && input.device_index < MAX_INPUT_COMMANDS {
         gfx.set_menu_checked(int(MenuCommand.INPUTS) + input.device_index, true)
     }
