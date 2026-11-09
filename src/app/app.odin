@@ -211,42 +211,68 @@ run_main_loop :: proc(app: ^App) {
     }
 }
 
-// A turn of the main loop after its events: the measurements, the layout and the drawing
+// A turn of the main loop after its events, in steps that each hand the next what it needs: the input, the
+// keys, the measurements, the layout, the drawing and the save
 run_frame :: proc(app: ^App) {
-    config, audio_capture := app.config, app.input.capture
+    config_before := follow_input_and_unlock(app)
 
+    // Before the measurements and the sheets, what a key changed shows this frame. The menu bar's command can
+    // only be read once a frame, it's passed on to the note's lock, see draw_note_controls.
+    menu := handle_keys(app)
+
+    reading := measure_frame(app)
+    layout := lay_out_frame(app)
+
+    // After the keys and the measurements, the menu's check marks show this frame's
+    update_menu_checks(app)
+
+    // Ends after the frame's rate is set, the rest of the frame is waited out at it, see limit_frame_rate
+    gfx.begin_frame(gfx.hex(panel_bg_color))
+    defer gfx.end_frame()
+
+    draw_frame(app, layout, reading, menu)
+    save_frame_changes(app, config_before)
+    limit_frame_rate(app)
+}
+
+// What came in since the last frame: the input, the purchase and the free minutes. Returns the config as it is
+// after them, what the rest of the frame changes in it is saved, see save_frame_changes.
+follow_input_and_unlock :: proc(app: ^App) -> (config_before: Config) {
     // An interruption that ended, e.g. a call, opens the input again in follow_input
-    if audio.interruption_ended(audio_capture) do app.input.restart = true
+    if audio.interruption_ended(app.input.capture) do app.input.restart = true
 
-    // Before the measurements, they take this frame's samples. Before config_before too, the input's old
-    // name is freed in the config here.
+    // Before the copy, the input's old name is freed in the config here
     follow_input(app)
 
     // Before the reminder, a purchase that went through this frame stops it
     when UNLOCK == "fake" do update_fake_app_store(gfx.frame_time())
 
-    // Before config_before is taken. The free minutes used grow in the config every frame, and
-    // compared the config would never settle, a changed setting wouldn't save until they ran out.
-    // They're written with the next save instead, in the background or at the quit.
+    // Before the copy. The free minutes used grow in the config every frame, and compared the config would
+    // never settle, a changed setting wouldn't save until they ran out. They're written with the next save
+    // instead, in the background or at the quit.
     remind_to_unlock(app)
 
-    // What changes the config from here on is saved: the keys, the window's size, the panel and the sheets
-    config_before := config^
+    return app.config^
+}
 
-    // Before the menu's check marks and the sheets, both show what a key changed this frame. The menu bar's
-    // command can only be read once a frame, it's passed on to the note's lock, see draw_note_controls.
-    menu := handle_keys(app)
-
-    // What the sheets changed last frame, before it's measured with it
+// The config brought up to what the sheets changed last frame, then measured with it
+measure_frame :: proc(app: ^App) -> (reading: Reading) {
     if app.config_changes != {} do apply_config(app, app.config_changes)
 
-    reading := measure(app)
+    reading = measure(app)
 
     // After the measurements, By note's colors flip with this frame's note
     follow_note_colors(app)
+    return
+}
+
+// The UI scale, the window's size kept in the config, then the layout and the fonts at that scale. Before the
+// frame begins, the fonts load then, see update_pixel_fonts.
+lay_out_frame :: proc(app: ^App) -> (layout: Layout) {
+    config := app.config
 
     when !DEBUG_STATS {
-        // Before the layout and the fonts. A tablet draws in larger points than its own, see ui_scale
+        // A tablet draws in larger points than its own, see ui_scale
         points := gfx.window_points()
         gfx.set_ui_scale(ui_scale(points / gfx.content_scale(), gfx.ui_scale()))
         when !gfx.MOBILE && !gfx.WEB do follow_window_size(config, points)
@@ -260,43 +286,30 @@ run_frame :: proc(app: ^App) {
         safe.width = STROBE_WIDTH
     }
 
-    layout := compute_layout(window, safe, selected_preset(config) != nil)
+    layout = compute_layout(window, safe, selected_preset(config) != nil)
     update_pixel_fonts()
-    update_menu_checks(app)
+    return
+}
 
-    gfx.begin_frame(gfx.hex(panel_bg_color))
-    defer gfx.end_frame()
+// The sheets slid, then the layers from the bottom: the main screen or what a sheet leaves of it, the
+// sheets, and the unlock's reminder over all of them blurred
+draw_frame :: proc(app: ^App, layout: Layout, reading: Reading, menu: MenuCommand) {
     gui_begin_frame()
+    cover := slide_sheets(app, layout)
 
-    // Before anything draws. The sheets slide up over the main screen, which keeps running under them and
-    // ignores taps until they're all the way down again. They're drawn at the end of the frame.
-    // A sheet all the way up covers the panel, the instrument sheet the strobe too when the panel is under
-    // it. A phone's strobe area still shows above that, behind the notch. Not while a sheet is dragged, it
-    // may move down later in the frame. The unlock's reminder covers nothing, the screen shows blurred under it.
-    gui.disabled = false
-    panel_covered := false
-    reminder := &app.sheets.unlock.sheet
-    for sheet in all_sheets(&app.sheets) {
-        slide_sheet(sheet)
-        if sheet.open || sheet.slide > SHEET_DOWN do gui.disabled = true
-        if sheet.slide == SHEET_UP && !sheet.drag.active && sheet != reminder do panel_covered = true
-    }
-
-    instrument_sheet := app.sheets.instrument
-    covered := !layout.beside && instrument_sheet.slide == SHEET_UP && !instrument_sheet.drag.active
-    strobe_shows := !covered || safe.y > 0
-
-    feed_scope(app, strobe_shows)
+    // The scope's views get the new audio only while they can be seen
+    feed_scope(app, cover.strobe_shows)
 
     // While the unlock's reminder is up or sliding, what's drawn from here to end_unlock_backdrop is blurred
     // under it
-    reminder_shows := reminder.slide > SHEET_DOWN
-    if reminder_shows do begin_unlock_backdrop(&app.sheets.unlock)
+    reminder := &app.sheets.unlock
+    reminder_shows := reminder.sheet.slide > SHEET_DOWN
+    if reminder_shows do begin_unlock_backdrop(reminder)
 
     // The arrows are on the strobe, they show above the sheet
-    if covered {
-        if strobe_shows do draw_strobe_area(app, layout)
-    } else if panel_covered {
+    if cover.strobe {
+        if cover.strobe_shows do draw_strobe_area(app, layout)
+    } else if cover.panel {
         draw_strobe_area(app, layout)
         draw_tuning_arrows(&app.strobe_area, &app.measurement.note_target, layout, reading, app.config)
     } else {
@@ -305,20 +318,48 @@ run_frame :: proc(app: ^App) {
     draw_sheets(app, layout, reading)
 
     if reminder_shows {
-        end_unlock_backdrop(&app.sheets.unlock)
+        end_unlock_backdrop(reminder)
     } else {
         // Its render targets go while it's down
-        unload_glow_targets(&app.sheets.unlock.backdrop)
+        unload_glow_targets(&reminder.backdrop)
     }
 
     // Last, sharp over the blur
     draw_unlock_sheet(app)
+}
 
-    // After everything that changes the config this frame
-    if config^ != config_before do app.unsaved, app.unsaved_s = true, 0
+// What the sheets cover of the main screen this frame, see slide_sheets
+SheetCover :: struct {
+    panel:        bool, // a sheet other than the reminder is all the way up
+    strobe:       bool, // the instrument sheet is all the way up, with the panel under the strobe
+    strobe_shows: bool, // not covered, or above the sheet behind a phone's notch
+}
+
+// Before anything draws. The sheets slide up over the main screen, which keeps running under them and ignores
+// taps until they're all the way down again. They're drawn at the end of the frame. A sheet all the way up
+// covers the panel, the instrument sheet the strobe too when the panel is under it. A phone's strobe area still
+// shows above that, behind the notch. Not while a sheet is dragged, it may move down later in the frame. The
+// unlock's reminder covers nothing, the screen shows blurred under it.
+slide_sheets :: proc(app: ^App, layout: Layout) -> (cover: SheetCover) {
+    gui.disabled = false
+    reminder := &app.sheets.unlock.sheet
+    for sheet in all_sheets(&app.sheets) {
+        slide_sheet(sheet)
+        if sheet.open || sheet.slide > SHEET_DOWN do gui.disabled = true
+        if sheet.slide == SHEET_UP && !sheet.drag.active && sheet != reminder do cover.panel = true
+    }
+
+    instrument_sheet := app.sheets.instrument
+    cover.strobe = !layout.beside && instrument_sheet.slide == SHEET_UP && !instrument_sheet.drag.active
+    cover.strobe_shows = !cover.strobe || gfx.safe_area().y > 0
+    return
+}
+
+// After everything that changes the config this frame, it's written once it settled, see save_when_settled
+save_frame_changes :: proc(app: ^App, config_before: Config) {
+    if app.config^ != config_before do app.unsaved, app.unsaved_s = true, 0
 
     save_when_settled(app)
-    limit_frame_rate(app)
 }
 
 // The pitch detection, the note target and the strobe brought up to the config, at the start and after a
