@@ -129,32 +129,63 @@ draw_unlock_sheet :: proc(app: ^App) {
 // when that one is tapped.
 gui_unlock :: proc(close_after_s, slide: f32, restore: bool) -> (close: bool) {
     state := purchase_state()
-    counting := close_after_s > 0
     text, gaps := UNLOCK_TEXT, UNLOCK_GAPS
+    font := pixel_fonts.label_large
 
-    window, safe := gfx.window_size(), gfx.safe_area()
-    width := min(safe.width - 2 * UNLOCK_SIDE_MARGIN, UNLOCK_WIDTH)
-    left := safe.x + (safe.width - width) / 2
+    left, width, y := unlock_column(slide, restore)
     middle := left + width / 2
-
-    height := TITLE_LARGE_SIZE + gaps[0] + f32(len(text)) * UNLOCK_LINE_HEIGHT + gaps[1]
-    height += 2 * UNLOCK_BUTTON_HEIGHT + gaps[2]
-    if restore do height += gaps[3] + UNLOCK_RESTORE_HEIGHT
-    centered := safe.y + (safe.height - height) / 2
-    y := window.y + (centered - window.y) * slide
 
     draw_centered_text(pixel_fonts.title_large, "Unlock Strobie", middle, y)
     y += TITLE_LARGE_SIZE + gaps[0]
 
     for line in text {
-        draw_centered_text(pixel_fonts.label_large, line, middle, y)
+        draw_centered_text(font, line, middle, y)
         y += UNLOCK_LINE_HEIGHT
     }
     y += gaps[1]
 
     // The purchase, its price is on the App Store's own sheet in the buyer's currency
-    buyable := state == .READY || state == .NOTHING_TO_RESTORE
-    label: cstring
+    buy_button := gfx.Rect{left, y, width, UNLOCK_BUTTON_HEIGHT}
+    if gui_unlock_button(buy_button, font, buy_label(state), can_buy(state), highlight = true) do buy_unlock()
+
+    y += UNLOCK_BUTTON_HEIGHT + gaps[2]
+
+    // Under it the button that closes it, dead until the countdown runs out
+    close_button := gfx.Rect{left, y, width, UNLOCK_BUTTON_HEIGHT}
+    close = gui_unlock_button(close_button, font, close_label(close_after_s), close_after_s <= 0)
+    y += UNLOCK_BUTTON_HEIGHT + gaps[3]
+
+    if !restore do return
+
+    // Restore, Apple asks for a way to it, as wide as its words. Not on the reminder that interrupts, StoreKit
+    // finds an earlier purchase at every start, and buying again what's bought costs nothing.
+    label := restore_label(state)
+    restore_width := measure_label(pixel_fonts.label, label, 1).x + 2 * UNLOCK_SIDE_MARGIN
+    restore_button := gfx.Rect{middle - restore_width / 2, y, restore_width, UNLOCK_RESTORE_HEIGHT}
+    if gui_unlock_button(restore_button, pixel_fonts.label, label, can_restore(state)) do restore_purchase()
+
+    return
+}
+
+// The column's left edge, its width and its top as it slides up from under the window, in the middle of the
+// safe area once it's up
+unlock_column :: proc(slide: f32, restore: bool) -> (left, width, top: f32) {
+    text, gaps := UNLOCK_TEXT, UNLOCK_GAPS
+    window, safe := gfx.window_size(), gfx.safe_area()
+    width = min(safe.width - 2 * UNLOCK_SIDE_MARGIN, UNLOCK_WIDTH)
+    left = safe.x + (safe.width - width) / 2
+
+    height := TITLE_LARGE_SIZE + gaps[0] + f32(len(text)) * UNLOCK_LINE_HEIGHT + gaps[1]
+    height += 2 * UNLOCK_BUTTON_HEIGHT + gaps[2]
+    if restore do height += gaps[3] + UNLOCK_RESTORE_HEIGHT
+
+    centered := safe.y + (safe.height - height) / 2
+    top = window.y + (centered - window.y) * slide
+    return
+}
+
+// What the purchase's button says for where the purchase stands
+buy_label :: proc(state: PurchaseState) -> (label: cstring) {
     switch state {
     case .READY, .NOTHING_TO_RESTORE:
         label = "Buy once"
@@ -167,29 +198,30 @@ gui_unlock :: proc(close_after_s, slide: f32, restore: bool) -> (close: bool) {
     case .UNLOCKED:
         label = "Unlocked, thank you!"
     }
-
-    unlock := gfx.Rect{left, y, width, UNLOCK_BUTTON_HEIGHT}
-    if gui_unlock_button(unlock, pixel_fonts.label_large, label, buyable, highlight = true) do buy_unlock()
-    y += UNLOCK_BUTTON_HEIGHT + gaps[2]
-
-    // Under it, the seconds left on the button that closes it, dead until they run out
-    seconds := int(math.ceil(close_after_s))
-    close_label: cstring = "Close"
-    if counting do close_label = "Close in 1 second" if seconds == 1 else fmt.ctprintf("Close in %v seconds", seconds)
-
-    close_button := gfx.Rect{left, y, width, UNLOCK_BUTTON_HEIGHT}
-    close = gui_unlock_button(close_button, pixel_fonts.label_large, close_label, !counting)
-    y += UNLOCK_BUTTON_HEIGHT + gaps[3]
-    if !restore do return
-
-    // Restore, Apple asks for a way to it, as wide as its words. Not on the reminder that interrupts, StoreKit
-    // finds an earlier purchase at every start, and buying again what's bought costs nothing.
-    restore_label: cstring = "No earlier purchase found" if state == .NOTHING_TO_RESTORE else "Restore purchase"
-    restore_width := measure_label(pixel_fonts.label, restore_label, 1).x + 2 * UNLOCK_SIDE_MARGIN
-    restore_button := gfx.Rect{middle - restore_width / 2, y, restore_width, UNLOCK_RESTORE_HEIGHT}
-    restorable := state != .BUSY && state != .UNLOCKED && state != .LOADING
-    if gui_unlock_button(restore_button, pixel_fonts.label, restore_label, restorable) do restore_purchase()
     return
+}
+
+// Once the App Store has the product, and after a restore that found nothing
+can_buy :: proc(state: PurchaseState) -> bool {
+    return state == .READY || state == .NOTHING_TO_RESTORE
+}
+
+// "Close", or the seconds left until it can be closed
+close_label :: proc(close_after_s: f32) -> cstring {
+    seconds := int(math.ceil(close_after_s))
+    if seconds <= 0 do return "Close"
+    if seconds == 1 do return "Close in 1 second"
+
+    return fmt.ctprintf("Close in %v seconds", seconds)
+}
+
+restore_label :: proc(state: PurchaseState) -> cstring {
+    return "No earlier purchase found" if state == .NOTHING_TO_RESTORE else "Restore purchase"
+}
+
+// Not while the App Store is asked or busy, nor once it's bought
+can_restore :: proc(state: PurchaseState) -> bool {
+    return state != .LOADING && state != .BUSY && state != .UNLOCKED
 }
 
 // A pill with its label in the middle, a shade lighter while it's held. The purchase's in yellow with dark
