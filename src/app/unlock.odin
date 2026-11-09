@@ -64,8 +64,9 @@ UnlockReminder :: struct {
     backdrop:      GlowTargets, // the screen under it and its blur, made while it's up, see UNLOCK_BLUR_DOWNSCALE
 }
 
-// Once a frame: the free time, then the reminder when it's due
-follow_unlock :: proc(app: ^App) {
+// Once a frame until it's bought: the free minutes counted from the first lit note, and once they're
+// used up the reminder every UNLOCK_REMINDER_S
+follow_purchase :: proc(app: ^App) {
     frame_time := gfx.frame_time()
     store_update(frame_time)
 

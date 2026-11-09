@@ -237,7 +237,7 @@ Config :: struct {
 
     // --- Unlock ---
 
-    // How much of the free time before the reminder is used, kept through a reset, see UNLOCK_FREE_S
+    // How many of the free minutes before the reminder are used, kept through a reset, see UNLOCK_FREE_S
     unlock_free_s:                f32,
 }
 
