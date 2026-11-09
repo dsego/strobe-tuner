@@ -89,10 +89,9 @@ SlatWindow :: struct {
     spans:  f64, // how much of the window the samples covered, whole at SLAT_WINDOW_SPANS
 }
 
-// The measurements summed, each fading by the note's periods since, see add_slat_measurement
+// The measurements summed, each fading by the note's periods since, see slat_fade
 SlatMeasurements :: struct {
-    cosine:       f32,
-    sine:         f32,
+    sum:          complex64, // the partials' peaks and phases, as a cosine and a sine
     weight:       f32, // how many, faded
     size:         f32, // each one's size
     size_squared: f32, // how many measurements the sums are worth by size, size² ÷ this
@@ -118,24 +117,34 @@ phasor :: #force_inline proc(angle: f64) -> complex128 {
     return complex(math.cos(angle), math.sin(angle))
 }
 
-// A window closed, its partial as a sine's peak and phase, into the sums. The older ones fade by the note's
-// periods since the one before, a span, and turn by as far as the partial turned in it, turned radians the way
-// the measurements go: off the track's frequency it goes round steadily, that's the drift and not noise. Turned
-// back with a long memory a note 10 cents sharp grayed its 4× track.
-add_slat_measurement :: proc(sums: ^SlatMeasurements, cosine, sine: f32, note_periods: f32, turned: f32 = 0) {
-    keep := math.exp(-note_periods / STROBE_SLATS_MEMORY_PERIODS)
-    turn_cosine, turn_sine := math.cos(turned), math.sin(turned)
-    sums.cosine, sums.sine =
-        (sums.cosine * turn_cosine - sums.sine * turn_sine) * keep + cosine,
-        (sums.sine * turn_cosine + sums.cosine * turn_sine) * keep + sine
-    size := math.sqrt(cosine * cosine + sine * sine)
-    sums.weight = sums.weight * keep + 1
-    sums.size = sums.size * keep + size
-    sums.size_squared = sums.size_squared * keep * keep + size * size
+// How the sums change from one span to the next, the same for every span of a track over a frame, see slat_fade
+SlatFade :: struct {
+    turn:        complex64, // the turn times the fade, the sum's twiddle
+    keep:        f32,
+    recent_keep: f32, // over STROBE_SLATS_RECENT_PERIODS
+}
 
-    recent_keep := math.exp(-note_periods / STROBE_SLATS_RECENT_PERIODS)
-    sums.recent_size = sums.recent_size * recent_keep + size
-    sums.recent_weight = sums.recent_weight * recent_keep + 1
+// The older measurements fade by the note's periods in a span and turn by as far as the partial turned in it,
+// turned radians the way the measurements go: off the track's frequency it goes round steadily, that's the
+// drift and not noise. Turned back with a long memory a note 10 cents sharp grayed its 4× track.
+slat_fade :: proc(note_periods: f32, turned: f32 = 0) -> SlatFade {
+    keep := math.exp(-note_periods / STROBE_SLATS_MEMORY_PERIODS)
+    return {
+        turn = complex(math.cos(turned) * keep, math.sin(turned) * keep),
+        keep = keep,
+        recent_keep = math.exp(-note_periods / STROBE_SLATS_RECENT_PERIODS),
+    }
+}
+
+// A window closed, its partial as a sine's peak and phase, into the sums, the older ones faded and turned
+add_slat_measurement :: proc(sums: ^SlatMeasurements, measurement: complex64, fade: SlatFade) {
+    size := abs(measurement)
+    sums.sum = sums.sum * fade.turn + measurement
+    sums.weight = sums.weight * fade.keep + 1
+    sums.size = sums.size * fade.keep + size
+    sums.size_squared = sums.size_squared * fade.keep * fade.keep + size * size
+    sums.recent_size = sums.recent_size * fade.recent_keep + size
+    sums.recent_weight = sums.recent_weight * fade.recent_keep + 1
 }
 
 // As many of the track's own periods as fit a whole number of the note's, its partial or three for a fifth.
@@ -164,70 +173,115 @@ fill_strobe_slats :: proc(self: ^StrobeSlats, lock_in: ^StrobeLockIn) {
     self.clock = lock_in.sample_clock
 
     for band, index in lock_in.bands {
-        periods := slat_fold_periods(band, lock_in.mode)
-        if self.freq_hz[index] != band.freq_hz || self.periods[index] != periods {
-            self.open[index], self.measurements[index] = {}, {}
-            self.freq_hz[index] = band.freq_hz
-            self.periods[index] = periods
-        }
+        retune_slat_track(self, index, band, lock_in.mode)
         if !measures_band(lock_in, index) || !band.in_range do continue
 
-        // The span, in its own turns, of the first new sample and a sample's step. The note's periods in a span,
-        // and how far the partial turns in one by the lock-in's phase advance over the new samples, as the stripes
-        // move: a sine measured against a cosine and a sine of the track's own goes round the other way. Not the
-        // drift, it follows over tenths of a second, a note stepping 55 cents grayed the stripes for a moment.
-        step := f64(band.freq_hz) / f64(lock_in.sample_rate) / f64(periods)
-        start := math.mod(f64(first) * step, 1)
-        span_note_periods := f32(periods) * lock_in.base_freq_hz / band.freq_hz
-        advance_per_sample := f64(band.phase_diff) / strobe_rescale(band.freq_hz) / f64(max(lock_in.available, 1))
-        span_turned := -f32(advance_per_sample / step)
-        open := &self.open[index]
+        spans := slat_spans(band, self.periods[index], lock_in, first)
+        fill_slat_windows(&self.open[index], &self.measurements[index], samples, spans)
+    }
+}
 
-        // The track's angle and the windows' turned sample by sample, see phasor, and set exactly again where a
-        // span starts. The track's goes whole turns in a span, the windows' a third of one, each window a third
-        // further along than the one opened after it.
-        track_step := phasor(math.TAU * f64(periods) * step)
-        window_step := phasor(math.TAU * step / SLAT_WINDOW_SPANS)
-        window_offsets: [SLAT_WINDOW_SPANS]complex128
-        for &window_offset, later in window_offsets {
-            window_offset = phasor(math.TAU * f64(SLAT_WINDOW_SPANS - 1 - later) / SLAT_WINDOW_SPANS)
+// A track measured at another reference, or over another number of its own periods, starts over
+retune_slat_track :: proc(self: ^StrobeSlats, index: int, band: PhaseBand, mode: StrobeMode) {
+    periods := slat_fold_periods(band, mode)
+    if self.freq_hz[index] == band.freq_hz && self.periods[index] == periods do return
+
+    self.open[index], self.measurements[index] = {}, {}
+    self.freq_hz[index] = band.freq_hz
+    self.periods[index] = periods
+}
+
+// One track's spans over a frame's new samples: where the samples fall in them, how the track's angle and the
+// windows' turn sample by sample, and how the measurements fade and turn from one span to the next
+SlatSpans :: struct {
+    periods: int, // the track's own periods in a span, see slat_fold_periods
+    step:    f64, // a sample's, in spans
+    start:   f64, // where in its span the first new sample falls
+    fade:    SlatFade,
+
+    // The track's angle goes whole turns in a span, the windows' a third of one, each window a third further
+    // along than the one opened after it
+    track_step:     complex128,
+    window_step:    complex128,
+    window_offsets: [SLAT_WINDOW_SPANS]complex128,
+}
+
+// The note's periods in a span, and how far the partial turns in one by the lock-in's phase advance over the
+// new samples, as the stripes move: a sine measured against a cosine and a sine of the track's own goes round
+// the other way. Not the drift, it follows over tenths of a second, a note stepping 55 cents grayed the stripes
+// for a moment.
+slat_spans :: proc(band: PhaseBand, periods: int, lock_in: ^StrobeLockIn, first: i64) -> (spans: SlatSpans) {
+    spans.periods = periods
+    spans.step = f64(band.freq_hz) / f64(lock_in.sample_rate) / f64(periods)
+    spans.start = math.mod(f64(first) * spans.step, 1)
+
+    note_periods := f32(periods) * lock_in.base_freq_hz / band.freq_hz
+    advance_per_sample := f64(band.phase_diff) / strobe_rescale(band.freq_hz) / f64(max(lock_in.available, 1))
+    spans.fade = slat_fade(note_periods, -f32(advance_per_sample / spans.step))
+
+    spans.track_step = phasor(math.TAU * f64(periods) * spans.step)
+    spans.window_step = phasor(math.TAU * spans.step / SLAT_WINDOW_SPANS)
+    for &window_offset, later in spans.window_offsets {
+        window_offset = phasor(math.TAU * f64(SLAT_WINDOW_SPANS - 1 - later) / SLAT_WINDOW_SPANS)
+    }
+    return
+}
+
+// One track's new samples into its open windows. A span ends where the next starts over, the first window
+// closes and the next one opens.
+fill_slat_windows :: proc(open: ^SlatWindows, sums: ^SlatMeasurements, samples: []f32, spans: SlatSpans) {
+    turns := slat_turns_at(spans.start, spans)
+
+    for sample, offset in samples {
+        turn := spans.start + f64(offset) * spans.step
+        place := turn - math.floor(turn)
+        if place < open.turn {
+            close_slat_window(open, sums, spans.fade)
+            turns = slat_turns_at(place, spans)
         }
-        track_turn := phasor(math.TAU * f64(periods) * start)
-        window_turn := phasor(math.TAU * start / SLAT_WINDOW_SPANS)
+        open.turn = place
 
-        for sample, offset in samples {
-            turn := start + f64(offset) * step
-            place := turn - math.floor(turn)
+        add_to_slat_windows(open, sample, turns, spans)
+        turns.track *= spans.track_step
+        turns.window *= spans.window_step
+    }
+}
 
-            // A span ends where the next starts over. The first window closes, measured if it was whole, not one
-            // cut by a reset, and the next one opens.
-            if place < open.turn {
-                closing := open.windows[0]
-                if closing.spans > SLAT_WINDOW_SPANS - 0.1 {
-                    cosine := f32(2 * closing.cosine / closing.weight)
-                    sine := f32(2 * closing.sine / closing.weight)
-                    add_slat_measurement(&self.measurements[index], cosine, sine, span_note_periods, span_turned)
-                }
-                copy(open.windows[:], open.windows[1:])
-                open.windows[SLAT_WINDOW_SPANS - 1] = {}
+// The track's angle and the windows' at a place in the span, set exactly where a span starts and turned sample
+// by sample in between, see phasor
+SlatTurns :: struct {
+    track:  complex128,
+    window: complex128,
+}
 
-                track_turn = phasor(math.TAU * f64(periods) * place)
-                window_turn = phasor(math.TAU * place / SLAT_WINDOW_SPANS)
-            }
-            open.turn = place
+slat_turns_at :: proc(place: f64, spans: SlatSpans) -> SlatTurns {
+    return {
+        track = phasor(math.TAU * f64(spans.periods) * place),
+        window = phasor(math.TAU * place / SLAT_WINDOW_SPANS),
+    }
+}
 
-            // Into each open window at its own place, the first one's last span
-            cosine, sine := f64(sample) * real(track_turn), f64(sample) * imag(track_turn)
-            for &window, later in open.windows {
-                window_weight := slat_window_at(real(window_turn * window_offsets[later]))
-                window.cosine += window_weight * cosine
-                window.sine += window_weight * sine
-                window.weight += window_weight
-                window.spans += step
-            }
-            track_turn *= track_step
-            window_turn *= window_step
-        }
+// The first window closes, measured if it was whole, not one cut by a reset, and the next one opens
+close_slat_window :: proc(open: ^SlatWindows, sums: ^SlatMeasurements, fade: SlatFade) {
+    closing := open.windows[0]
+    if closing.spans > SLAT_WINDOW_SPANS - 0.1 {
+        measurement := complex(f32(2 * closing.cosine / closing.weight), f32(2 * closing.sine / closing.weight))
+        add_slat_measurement(sums, measurement, fade)
+    }
+    copy(open.windows[:], open.windows[1:])
+    open.windows[SLAT_WINDOW_SPANS - 1] = {}
+}
+
+// A sample into each open window at its own place, the first one's last span. Every sample of every track,
+// inlined.
+add_to_slat_windows :: #force_inline proc(open: ^SlatWindows, sample: f32, turns: SlatTurns, spans: SlatSpans) {
+    cosine, sine := f64(sample) * real(turns.track), f64(sample) * imag(turns.track)
+    for &window, later in open.windows {
+        window_weight := slat_window_at(real(turns.window * spans.window_offsets[later]))
+        window.cosine += window_weight * cosine
+        window.sine += window_weight * sine
+        window.weight += window_weight
+        window.spans += spans.step
     }
 }
 
@@ -261,7 +315,7 @@ strobe_slat_level :: proc(self: ^StrobeSlats, band_index: int) -> f32 {
     count := sums.size * sums.size / sums.size_squared
     if count < 2 * SLAT_WINDOW_OVERLAP do return 0
 
-    length := math.sqrt(sums.cosine * sums.cosine + sums.sine * sums.sine)
+    length := abs(sums.sum)
     height := length / sums.weight
     if height <= 0 || 20 * math.log10(height) < STROBE_SLATS_SILENCE_DBFS do return 0
 

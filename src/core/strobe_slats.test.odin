@@ -27,9 +27,10 @@ test_strobe_slat_level :: proc(t: ^testing.T) {
     // 40 measurements a period of the note apart, the partial at 1 and its phase swinging up and down by scatter
     level_of :: proc(scatter: f32) -> f32 {
         slats: StrobeSlats
+        fade := slat_fade(note_periods = 1)
         for measurement in 0 ..< 40 {
             swing := scatter if measurement % 2 == 0 else -scatter
-            add_slat_measurement(&slats.measurements[0], 1, swing, 1)
+            add_slat_measurement(&slats.measurements[0], complex(1, swing), fade)
         }
         return strobe_slat_level(&slats, 0)
     }
@@ -41,12 +42,15 @@ test_strobe_slat_level :: proc(t: ^testing.T) {
     testing.expect_value(t, level_of(1), 0)
 
     one: StrobeSlats
-    add_slat_measurement(&one.measurements[0], 1, 0, 1)
+    add_slat_measurement(&one.measurements[0], 1, slat_fade(note_periods = 1))
     testing.expect_value(t, strobe_slat_level(&one, 0), 0)
 
     // An attack: one direction growing from a tenth of the partial to all of it isn't scatter
     attack: StrobeSlats
-    for measurement in 0 ..< 8 do add_slat_measurement(&attack.measurements[0], min(0.1 + 0.3 * f32(measurement), 1), 0, 1)
+    for measurement in 0 ..< 8 {
+        size := min(0.1 + 0.3 * f32(measurement), 1)
+        add_slat_measurement(&attack.measurements[0], complex(size, 0), slat_fade(note_periods = 1))
+    }
     testing.expect(t, strobe_slat_level(&attack, 0) > 0.99)
 }
 
@@ -208,7 +212,7 @@ test_slat_level_without_the_fundamental :: proc(t: ^testing.T) {
 
         // What the 1× track's slots and its lock-in hear of the 2×, in dB under it
         sums := lock_in.slats.measurements[0]
-        slots_db := 20 * math.log10(math.sqrt(sums.cosine * sums.cosine + sums.sine * sums.sine) / sums.weight / LEVEL)
+        slots_db := 20 * math.log10(abs(sums.sum) / sums.weight / LEVEL)
         lock_in_db := 20 * math.log10(lock_in.bands[0].amp / lock_in.bands[1].amp)
         first := lock_in.bands[0]
         log.infof(
