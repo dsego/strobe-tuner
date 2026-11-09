@@ -1,5 +1,5 @@
 # The one-time unlock for the iPhone, iPad and Mac build scripts, which source this after setting ROOT and OUT,
-# see UNLOCK in src/app/store.odin. UNLOCK=storekit sells it through the App Store with
+# see UNLOCK in src/app/app_store.odin. UNLOCK=storekit sells it through the App Store with
 # platform/apple/Store.swift, UNLOCK=fake pretends to, unset leaves the whole app free.
 #
 # With storekit, compile_store <sdk> <target> compiles Store.swift into $OUT and leaves the object in

@@ -14,13 +14,13 @@
 // with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // The one-time unlock through StoreKit 2, which is Swift only, for the app's Odin code through plain C
-// functions, see src/app/store.odin. The iPhone, iPad and Mac builds compile it with UNLOCK=storekit. The app
+// functions, see src/app/app_store.odin. The iPhone, iPad and Mac builds compile it with UNLOCK=storekit. The app
 // calls in from its main thread and reads the state every frame, StoreKit's work runs in tasks on the main
 // actor and leaves its result in the state.
 
 import StoreKit
 
-// As StoreState in src/app/store.odin
+// As PurchaseState in src/app/app_store.odin
 private enum State: Int32 {
     case loading = 0
     case ready = 1

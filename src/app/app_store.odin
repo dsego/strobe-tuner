@@ -27,8 +27,8 @@ UNLOCK :: #config(UNLOCK, "")
 // The non-consumable in App Store Connect, the same on iPhone, iPad and Mac
 UNLOCK_PRODUCT :: "app.strobie.unlock"
 
-// What the store is doing, as State in Store.swift
-StoreState :: enum i32 {
+// Where the purchase stands, as State in Store.swift
+PurchaseState :: enum i32 {
     LOADING, // asking the App Store for the product and an earlier purchase
     READY, // the product is in, it can be bought
     BUSY, // a purchase or a restore is running
@@ -47,87 +47,83 @@ when UNLOCK == "storekit" {
     foreign store_swift {
         strobie_store_start :: proc(product: cstring) ---
         strobie_store_retry :: proc() ---
-        strobie_store_state :: proc() -> StoreState ---
+        strobie_store_state :: proc() -> PurchaseState ---
         strobie_store_buy :: proc() ---
         strobie_store_restore :: proc() ---
     }
 
-    store_start :: proc() {
+    ask_app_store :: proc() {
         strobie_store_start(UNLOCK_PRODUCT)
     }
 
     // The product asked for again when the App Store couldn't be reached, nothing otherwise
-    store_retry :: proc() {
+    ask_app_store_again :: proc() {
         strobie_store_retry()
     }
 
-    // StoreKit runs on its own, nothing to move on
-    store_update :: proc(frame_time: f32) {}
-
-    store_state :: proc() -> StoreState {
+    purchase_state :: proc() -> PurchaseState {
         return strobie_store_state()
     }
 
-    store_buy :: proc() {
+    buy_unlock :: proc() {
         strobie_store_buy()
     }
 
-    store_restore :: proc() {
+    restore_purchase :: proc() {
         strobie_store_restore()
     }
 } else when UNLOCK == "fake" {
     // The App Store's sheet takes a moment
-    FAKE_STORE_WAIT_S :: 1.5
+    FAKE_APP_STORE_WAIT_S :: 1.5
 
-    FakeStore :: struct {
-        state:     StoreState,
+    FakeAppStore :: struct {
+        state:     PurchaseState,
         busy_s:    f32, // left until the purchase or restore is through
         restoring: bool,
     }
 
-    fake_store: FakeStore
+    fake_app_store: FakeAppStore
 
-    store_start :: proc() {
-        fake_store.state = .READY
+    ask_app_store :: proc() {
+        fake_app_store.state = .READY
     }
 
     // It's always reached
-    store_retry :: proc() {}
+    ask_app_store_again :: proc() {}
 
-    // Once a frame
-    store_update :: proc(frame_time: f32) {
-        if fake_store.state != .BUSY do return
+    // Once a frame, the purchase or the restore goes through after its wait. StoreKit runs on its own and
+    // needs nothing like it.
+    update_fake_app_store :: proc(frame_time: f32) {
+        if fake_app_store.state != .BUSY do return
 
-        fake_store.busy_s -= frame_time
-        if fake_store.busy_s > 0 do return
+        fake_app_store.busy_s -= frame_time
+        if fake_app_store.busy_s > 0 do return
 
-        fake_store.state = .NOTHING_TO_RESTORE if fake_store.restoring else .UNLOCKED
+        fake_app_store.state = .NOTHING_TO_RESTORE if fake_app_store.restoring else .UNLOCKED
     }
 
-    store_state :: proc() -> StoreState {
-        return fake_store.state
+    purchase_state :: proc() -> PurchaseState {
+        return fake_app_store.state
     }
 
-    store_buy :: proc() {
-        fake_store = {.BUSY, FAKE_STORE_WAIT_S, false}
+    buy_unlock :: proc() {
+        fake_app_store = {.BUSY, FAKE_APP_STORE_WAIT_S, false}
     }
 
-    store_restore :: proc() {
-        fake_store = {.BUSY, FAKE_STORE_WAIT_S, true}
+    restore_purchase :: proc() {
+        fake_app_store = {.BUSY, FAKE_APP_STORE_WAIT_S, true}
     }
 } else {
     // Off, there's nothing to unlock and the reminder never comes
-    store_start :: proc() {}
+    ask_app_store :: proc() {}
 
-    store_retry :: proc() {}
+    ask_app_store_again :: proc() {}
 
-    store_update :: proc(frame_time: f32) {}
-
-    store_state :: proc() -> StoreState {
+    purchase_state :: proc() -> PurchaseState {
         return .UNLOCKED
     }
 
-    store_buy :: proc() {}
+    buy_unlock :: proc() {}
 
-    store_restore :: proc() {}
+    restore_purchase :: proc() {}
 }

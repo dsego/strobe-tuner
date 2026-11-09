@@ -116,7 +116,7 @@ update_menu_checks :: proc(app: ^App) {
     }
     gfx.set_menu_checked(int(MenuCommand.RETRO_GLOW), app.config.strobe_glow)
     gfx.set_menu_checked(int(MenuCommand.LOCK_NOTE), app.measurement.note_target.locked)
-    gfx.set_menu_enabled(int(MenuCommand.UNLOCK), store_state() != .UNLOCKED)
+    gfx.set_menu_enabled(int(MenuCommand.UNLOCK), purchase_state() != .UNLOCKED)
 
     for index in 0 ..< min(len(app.input.devices), MAX_INPUT_COMMANDS) {
         gfx.set_menu_checked(int(MenuCommand.INPUTS) + index, index == app.input.device_index)

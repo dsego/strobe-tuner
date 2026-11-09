@@ -21,7 +21,7 @@ import "core:math"
 
 import "../gfx"
 
-// Free with a reminder, built with UNLOCK only, see store.odin. The whole app works. Once per install it
+// Free with a reminder, built with UNLOCK only, see app_store.odin. The whole app works. Once per install it
 // gives UNLOCK_FREE_S from the first lit note, then a reminder over the whole window asks to unlock every
 // UNLOCK_REMINDER_S on screen, closed after a countdown of UNLOCK_CLOSE_AFTER_S. It comes over any other sheet,
 // they leave the strobe to tune with. Unlocked, it doesn't come back.
@@ -70,7 +70,7 @@ remind_to_unlock :: proc(app: ^App) {
     frame_time := gfx.frame_time()
     reminder := &app.sheets.unlock
     if reminder.sheet.open do reminder.close_after_s = max(reminder.close_after_s - frame_time, 0)
-    if store_state() == .UNLOCKED do return
+    if purchase_state() == .UNLOCKED do return
 
     // From the first lit note on, saved, a new start doesn't give it again. The reminder comes as it ends.
     config := app.config
@@ -96,7 +96,7 @@ open_unlock_sheet :: proc(sheets: ^AppSheets, countdown: bool) {
     reset_note_offsets_editing()
 
     // The App Store asked again when it couldn't be reached, e.g. offline at the start
-    store_retry()
+    ask_app_store_again()
 
     reminder.sheet.open = true
     reminder.close_after_s = UNLOCK_CLOSE_AFTER_S if countdown else 0
@@ -113,7 +113,7 @@ draw_unlock_sheet :: proc(app: ^App) {
     if sheet.slide == SHEET_DOWN do return
 
     // Bought, it can go at once
-    if store_state() == .UNLOCKED do reminder.close_after_s = 0
+    if purchase_state() == .UNLOCKED do reminder.close_after_s = 0
 
     // Not the tap that opened it, not while it slides away
     gui.disabled = !(sheet.was_open && sheet.open)
@@ -128,7 +128,7 @@ draw_unlock_sheet :: proc(app: ^App) {
 // that buys it, under it the one that closes it after the countdown, and with restore the restore. Returns close
 // when that one is tapped.
 gui_unlock :: proc(close_after_s, slide: f32, restore: bool) -> (close: bool) {
-    state := store_state()
+    state := purchase_state()
     counting := close_after_s > 0
     text, gaps := UNLOCK_TEXT, UNLOCK_GAPS
 
@@ -169,7 +169,7 @@ gui_unlock :: proc(close_after_s, slide: f32, restore: bool) -> (close: bool) {
     }
 
     unlock := gfx.Rect{left, y, width, UNLOCK_BUTTON_HEIGHT}
-    if gui_unlock_button(unlock, pixel_fonts.label_large, label, buyable, highlight = true) do store_buy()
+    if gui_unlock_button(unlock, pixel_fonts.label_large, label, buyable, highlight = true) do buy_unlock()
     y += UNLOCK_BUTTON_HEIGHT + gaps[2]
 
     // Under it, the seconds left on the button that closes it, dead until they run out
@@ -188,7 +188,7 @@ gui_unlock :: proc(close_after_s, slide: f32, restore: bool) -> (close: bool) {
     restore_width := measure_label(pixel_fonts.label, restore_label, 1).x + 2 * UNLOCK_SIDE_MARGIN
     restore_button := gfx.Rect{middle - restore_width / 2, y, restore_width, UNLOCK_RESTORE_HEIGHT}
     restorable := state != .BUSY && state != .UNLOCKED && state != .LOADING
-    if gui_unlock_button(restore_button, pixel_fonts.label, restore_label, restorable) do store_restore()
+    if gui_unlock_button(restore_button, pixel_fonts.label, restore_label, restorable) do restore_purchase()
     return
 }
 
@@ -261,14 +261,14 @@ end_unlock_backdrop :: proc(reminder: ^UnlockReminder) {
 
 // The version after the settings' title, and Free until it's unlocked
 settings_details :: proc() -> cstring {
-    if store_state() == .UNLOCKED do return VERSION
+    if purchase_state() == .UNLOCKED do return VERSION
     return fmt.ctprintf("%v · Free", VERSION)
 }
 
 // UNLOCK in the settings' header after Free until it's unlocked, built with UNLOCK only. It opens the reminder,
 // with the restore. Returns true when it's tapped.
 gui_settings_unlock :: proc(sheet_layout: SheetLayout) -> bool {
-    if store_state() == .UNLOCKED do return false
+    if purchase_state() == .UNLOCKED do return false
 
     // After the title and its details as draw_sheet_header lays them out, on the title's middle, a row's height
     // to tap

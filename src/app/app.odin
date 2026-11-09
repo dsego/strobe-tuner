@@ -125,7 +125,7 @@ start_app :: proc(app: ^App) -> bool {
     apply_config(app, {.RETUNE})
 
     // Asks the App Store for the product and an earlier purchase, nothing without UNLOCK
-    store_start()
+    ask_app_store()
     return true
 }
 
@@ -219,7 +219,7 @@ run_frame :: proc(app: ^App) {
     follow_input(app)
 
     // Before the reminder, a purchase that went through this frame stops it
-    store_update(gfx.frame_time())
+    when UNLOCK == "fake" do update_fake_app_store(gfx.frame_time())
 
     // Before config_before is taken. The free minutes used grow in the config every frame, and
     // compared the config would never settle, a changed setting wouldn't save until they ran out.
