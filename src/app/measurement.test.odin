@@ -33,7 +33,9 @@ test_vernier_keeps_its_own_tracks :: proc(t: ^testing.T) {
     config.strobe_mode = .VERNIER
     set_strobe_tracks(&measurement, &config)
     testing.expect_value(t, len(measurement.strobe_lock_in.bands), VERNIER_TRACKS)
-    for band in measurement.strobe_lock_in.bands do testing.expect_value(t, band.interval, 1)
+    for band in measurement.strobe_lock_in.bands {
+        testing.expect_value(t, band.interval, 1)
+    }
 
     config.strobe_mode = .HARMONIC
     set_strobe_tracks(&measurement, &config)

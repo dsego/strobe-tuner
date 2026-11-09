@@ -184,7 +184,9 @@ draw_strobe_partial_label :: proc(position: [2]f32, type: PartialLabelType, band
     text, font := partial_label(type, band)
     text_size := measure_label(font, text)
     bounds: gfx.Rect = {position.x - text_size.x, position.y, text_size.x, text_size.y}
-    if centered do bounds.x, bounds.y = position.x - text_size.x / 2, position.y - text_size.y / 2
+    if centered {
+        bounds.x, bounds.y = position.x - text_size.x / 2, position.y - text_size.y / 2
+    }
 
     draw_label(font, text, {bounds.x, bounds.y}, accent_color)
 
@@ -195,7 +197,9 @@ draw_strobe_partial_label :: proc(position: [2]f32, type: PartialLabelType, band
         offset_size := measure_label(offset_font, offset)
         center_y := bounds.y + text_size.y / 2
         offset_position := [2]f32{bounds.x - 6 - offset_size.x, center_y - offset_size.y / 2}
-        if centered do offset_position = {position.x - offset_size.x / 2, bounds.y + text_size.y + 2}
+        if centered {
+            offset_position = {position.x - offset_size.x / 2, bounds.y + text_size.y + 2}
+        }
 
         draw_label(offset_font, offset, offset_position, accent_color)
     }
@@ -247,7 +251,9 @@ draw_cents_gauge :: proc(top: [2]f32, cents: f32, lit: bool, semitones: bool, co
     if lit {
         lowest := gauge_snap(cents - GAUGE_HYSTERESIS_CENTS, per_side)
         highest := gauge_snap(cents + GAUGE_HYSTERESIS_CENTS, per_side)
-        if gauge_target < lowest || gauge_target > highest do gauge_target = gauge_snap(cents, per_side)
+        if gauge_target < lowest || gauge_target > highest {
+            gauge_target = gauge_snap(cents, per_side)
+        }
     }
 
     gauge_target = clamp(gauge_target, -f32(per_side), f32(per_side))
@@ -406,11 +412,15 @@ draw_dropdown_button :: proc(rect: gfx.Rect, label: string, left_pad: f32) {
 dropdown_menu_rect :: proc(button_rect: gfx.Rect, count: int, dividers: []int, down: bool) -> gfx.Rect {
     height := f32(count * DROPDOWN_OPTION_HEIGHT) + 2 * DROPDOWN_MENU_PAD
     for index in 0 ..< count {
-        if dropdown_divider_above(dividers, index) do height += DROPDOWN_DIVIDER_SPACE
+        if dropdown_divider_above(dividers, index) {
+            height += DROPDOWN_DIVIDER_SPACE
+        }
     }
 
     y := button_rect.y - height - DROPDOWN_MENU_GAP
-    if down do y = button_rect.y + button_rect.height + DROPDOWN_MENU_GAP
+    if down {
+        y = button_rect.y + button_rect.height + DROPDOWN_MENU_GAP
+    }
     return {button_rect.x, y, button_rect.width, height}
 }
 
@@ -430,7 +440,9 @@ dropdown_press :: proc(open: bool, button_rect, menu_rect: gfx.Rect, down: bool)
 
         reach := menu_rect
         reach.height += DROPDOWN_MENU_GAP
-        if down do reach.y -= DROPDOWN_MENU_GAP
+        if down {
+            reach.y -= DROPDOWN_MENU_GAP
+        }
         if gfx.point_in_rect(mouse, reach) do return true
 
         gui.menu_open = false
@@ -469,7 +481,9 @@ draw_dropdown_menu :: proc(rect: gfx.Rect, options: []GuiOption, dividers: []int
     for option, index in options {
         first, last := index == 0, index == len(options) - 1
         divider := dropdown_divider_above(dividers, index)
-        if divider do spaced += DROPDOWN_DIVIDER_SPACE
+        if divider {
+            spaced += DROPDOWN_DIVIDER_SPACE
+        }
 
         option_y := rect.y + DROPDOWN_MENU_PAD + f32(index * DROPDOWN_OPTION_HEIGHT) + spaced
 
@@ -479,12 +493,18 @@ draw_dropdown_menu :: proc(rect: gfx.Rect, options: []GuiOption, dividers: []int
             option_rect.y -= DROPDOWN_MENU_PAD
             option_rect.height += DROPDOWN_MENU_PAD
         }
-        if last do option_rect.height += DROPDOWN_MENU_PAD
+        if last {
+            option_rect.height += DROPDOWN_MENU_PAD
+        }
 
         hover := gfx.point_in_rect(mouse, option_rect)
-        if hover && gfx.mouse_pressed() do picked, was_picked = index, true
+        if hover && gfx.mouse_pressed() {
+            picked, was_picked = index, true
+        }
 
-        if hover do draw_option_highlight(option_rect, first, last)
+        if hover {
+            draw_option_highlight(option_rect, first, last)
+        }
 
         label := fit_label(pixel_fonts.label, option.label, rect.width - 2 * DROPDOWN_TEXT_INSET)
         text_color := text_color_hover if hover else text_color_light
@@ -532,7 +552,9 @@ draw_measurements :: proc(pos: [2]f32, hz, cents: f32, shown: bool, active: bool
     // Four digits like a meter's: a tenth up to 999.9, whole hertz from 1000 on. A tenth of a hertz up there is
     // under 0.2 cents.
     hz_str: cstring = "-"
-    if shown do hz_str = fmt.ctprintf("%.1f", hz) if hz < 999.95 else fmt.ctprintf("%.0f", hz)
+    if shown {
+        hz_str = fmt.ctprintf("%.1f", hz) if hz < 999.95 else fmt.ctprintf("%.0f", hz)
+    }
 
     // A semitone or more off the cents don't fit the column, the gauge shows how many semitones it is
     cents_shown := shown && abs(cents) < 99.95
@@ -555,7 +577,9 @@ draw_measurements :: proc(pos: [2]f32, hz, cents: f32, shown: bool, active: bool
     // The dash without a value at the gutter like the Hz one, the readout stays balanced around the middle
     if cents_shown {
         width := draw_text_right(value.font, cents_str, cents_right + {0, VALUE_Y}, value.size, 0, color)
-        if signed do draw_text_right(value.font, sign, cents_right + {-width - 2, VALUE_Y}, value.size, 0, color)
+        if signed {
+            draw_text_right(value.font, sign, cents_right + {-width - 2, VALUE_Y}, value.size, 0, color)
+        }
     } else {
         gfx.draw_text(value.font, cents_str, snap_to_pixels(cents_left + {0, VALUE_Y}), value.size, 0, color)
     }

@@ -88,8 +88,12 @@ draw_sheets :: proc(app: ^App, layout: Layout, reading: Reading) {
     // Android's back button is Escape. It closes a sheet, with none up it leaves the app as anywhere else.
     when gfx.ANDROID {
         sheets_down := true
-        for sheet in all_sheets(&app.sheets) do sheets_down &&= sheet.slide == SHEET_DOWN
-        if gfx.key_pressed(.ESCAPE) && sheets_down do gfx.system_back()
+        for sheet in all_sheets(&app.sheets) {
+            sheets_down &&= sheet.slide == SHEET_DOWN
+        }
+        if gfx.key_pressed(.ESCAPE) && sheets_down {
+            gfx.system_back()
+        }
     }
 
     draw_settings_sheet(app, layout)
@@ -154,7 +158,9 @@ draw_track_sheet :: proc(app: ^App, layout: Layout) {
         }
     }
 
-    if close || gfx.key_pressed(.ESCAPE) || swiped do close_sheet(sheet)
+    if close || gfx.key_pressed(.ESCAPE) || swiped {
+        close_sheet(sheet)
+    }
 }
 
 draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
@@ -211,7 +217,9 @@ draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
         // until something was measured, e.g. without an input, a reading that isn't one would be 0 dBFS.
         none := math.nan_f32()
         input.stats = {none, none, none}
-        if pitch.measured do input.stats = {pitch.rms_dbfs, core.dbfs(pitch.noise_floor), max(pitch.snr_db, 0)}
+        if pitch.measured {
+            input.stats = {pitch.rms_dbfs, core.dbfs(pitch.noise_floor), max(pitch.snr_db, 0)}
+        }
         input.stats_age = 0
     }
 

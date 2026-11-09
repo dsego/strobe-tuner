@@ -103,7 +103,9 @@ set_strobe_tracks :: proc(measurement: ^Measurement, config: ^Config) {
     if config.strobe_mode == .VERNIER {
         // Every one on the fundamental at the base speed, vernier mode turns each faster, see VERNIER_SPEED_MULTIPLIER
         intervals, offsets_cents, speeds: [VERNIER_TRACKS]f32
-        for index in 0 ..< VERNIER_TRACKS do intervals[index], speeds[index] = 1, 1
+        for index in 0 ..< VERNIER_TRACKS {
+            intervals[index], speeds[index] = 1, 1
+        }
 
         core.set_strobe_lock_in_tracks(lock_in, intervals[:], offsets_cents[:], speeds[:])
         return
@@ -150,7 +152,9 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     record_trace(&app.strobe_area.trace, cents, light, note, reading.pitch.fresh, gfx.frame_time())
 
     // The spectrum of what came in, only while it's the display
-    if config.strobe_display_type == .SPECTRUM do update_spectrum_display(&app.strobe_area.spectrum, config.spectrum_windows)
+    if config.strobe_display_type == .SPECTRUM {
+        update_spectrum_display(&app.strobe_area.spectrum, config.spectrum_windows)
+    }
 
     return
 }
@@ -209,8 +213,12 @@ readout_reading :: proc(
 hold_readout :: proc(measurement: ^Measurement, reading: ^Reading, out_of_range: bool) {
     held, steady := &measurement.held_readout, &reading.steady
     if measurement.note_target.active {
-        if reading.readout_shown do held^ = {true, steady.detected_freq, steady.err_cents}
-        if out_of_range do held^ = {}
+        if reading.readout_shown {
+            held^ = {true, steady.detected_freq, steady.err_cents}
+        }
+        if out_of_range {
+            held^ = {}
+        }
     } else {
         reading.readout_shown = held.shown
         steady.detected_freq, steady.err_cents = held.freq, held.cents
@@ -235,7 +243,9 @@ traced_cents :: proc(measurement: ^Measurement, config: ^Config, reading: Readin
 
     band := measurement.strobe_lock_in.bands[measurement.traced_track]
     light = band.visibility
-    if light == 0 || !band.in_range do measurement.traced_track = -1
+    if light == 0 || !band.in_range {
+        measurement.traced_track = -1
+    }
 
     if measurement.traced_track >= 0 && !out_of_range && abs(band.err_cents) <= core.READOUT_RANGE_CENTS {
         cents = band.err_cents
@@ -260,11 +270,15 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
     // At the strobe's frequency, not the target note's: that one jumps an octave with the detection while
     // the strobe stays, and every change starts with a dark screen
     strobe_hz := f64(measurement.strobe_lock_in.base_freq_hz)
-    if scope.freq_hz != strobe_hz do core.set_scope_freq(scope, strobe_hz)
+    if scope.freq_hz != strobe_hz {
+        core.set_scope_freq(scope, strobe_hz)
+    }
 
     // The lamp is the screen from above, it needs the sweep over time
     sweep := config.scope_sweep if config.strobe_display_type == .SCOPE else .TIME
-    if scope.sweep != sweep do core.set_scope_sweep(scope, sweep)
+    if scope.sweep != sweep {
+        core.set_scope_sweep(scope, sweep)
+    }
 
     // In periods of the strobe's frequency, the smear and the waver per cent look the same on every note. The
     // scope view is the sweeps averaged over its own span, the lamp's screen fades over the lamp's.

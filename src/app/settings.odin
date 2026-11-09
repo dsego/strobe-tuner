@@ -156,7 +156,9 @@ gui_settings :: proc(
     gui_settings_segmented(sheet_layout, &row, "Retro glow", {"Off", "On"}, &config.strobe_glow)
 
     concert_a_changed, concert_a_value := gui_concert_a_row(sheet_layout, &row, config)
-    if concert_a_changed do changes += {.RETUNE}
+    if concert_a_changed {
+        changes += {.RETUNE}
+    }
 
     // What the readout, the gauge and the trace read: the fundamental's track, the 2nd partial's, or a blend, the
     // whole wave like most tuners. A guitar or piano string's partials run a little sharp, each reads its own cents.
@@ -172,11 +174,15 @@ gui_settings :: proc(
         changes += {.READOUT}
     }
 
-    if gui_reset_row(sheet_layout, &row, config, confirm_reset) do changes += {.RETUNE}
+    if gui_reset_row(sheet_layout, &row, config, confirm_reset) {
+        changes += {.RETUNE}
+    }
 
     // Last, their menus open down over the rows under them
     gui_display_dropdown(open, display_rect, config)
-    if gui_concert_a_menu(open, concert_a_value, config) do changes += {.RETUNE}
+    if gui_concert_a_menu(open, concert_a_value, config) {
+        changes += {.RETUNE}
+    }
     return
 }
 
@@ -194,7 +200,9 @@ gui_display_options_page :: proc(
     display_names := DISPLAY_NAMES
     back: bool
     close, back = draw_back_header(sheet_layout, display_names[config.strobe_display_type])
-    if back do display_options^ = false
+    if back {
+        display_options^ = false
+    }
 
     switch config.strobe_display_type {
     case .STROBE:
@@ -250,7 +258,9 @@ gui_concert_a_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config)
 gui_concert_a_menu :: proc(open: ^Dropdown, value: gfx.Rect, config: ^Config) -> bool {
     presets := CONCERT_A_PRESETS_HZ
     options: [len(presets)]GuiOption
-    for preset, index in presets do options[index] = {i32(index), fmt.tprintf("%.0f Hz", preset)}
+    for preset, index in presets {
+        options[index] = {i32(index), fmt.tprintf("%.0f Hz", preset)}
+    }
 
     is_open, picked := gui_dropdown_menu(value, options[:], open^ == .CONCERT_A, down = true)
     if is_open {
@@ -278,7 +288,9 @@ gui_display_row :: proc(sheet_layout: SheetLayout, row: ^int, display_options: ^
 
     // From the control to the sheet's edge, the row's height
     sheet_right := sheet_layout.sheet.x + sheet_layout.sheet.width
-    if gui_button(touch_area({right, rect.y, sheet_right - right, rect.height})) do display_options^ = true
+    if gui_button(touch_area({right, rect.y, sheet_right - right, rect.height})) {
+        display_options^ = true
+    }
 
     return rect
 }
@@ -313,7 +325,9 @@ gui_colorway_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config) 
 // The By note swatch, the notes' lit colors in slices round a disc, C at the top
 draw_note_wheel :: proc(swatch: gfx.Rect) {
     colors: [12]gfx.Color
-    for pair, note in NOTE_COLORS do colors[note] = gfx.hex(pair.x)
+    for pair, note in NOTE_COLORS {
+        colors[note] = gfx.hex(pair.x)
+    }
     gfx.draw_sector_disc({swatch.x + swatch.width / 2, swatch.y + swatch.height / 2}, swatch.width / 2, colors[:], 0.75)
 }
 
@@ -356,7 +370,9 @@ gui_display_dropdown :: proc(open: ^Dropdown, rect: gfx.Rect, config: ^Config) {
 // The displays as the dropdown's options, in the order of StrobeDisplayType
 display_menu_options :: proc() -> (options: [len(StrobeDisplayType)]GuiOption) {
     display_names := DISPLAY_NAMES
-    for name, type in display_names do options[int(type)] = {i32(type), string(name)}
+    for name, type in display_names {
+        options[int(type)] = {i32(type), string(name)}
+    }
     return
 }
 
@@ -443,7 +459,9 @@ gui_steps :: proc(
 ) -> bool {
     step := -1
     for step_value, index in steps {
-        if value^ == step_value do step = index
+        if value^ == step_value {
+            step = index
+        }
     }
     if !gui_settings_segmented(sheet_layout, row, label, labels, &step, segment_width) do return false
 
@@ -473,8 +491,12 @@ gui_track_settings :: proc(
 
     reset_partial := track_reset_partial(config, slot)
     row := 0
-    if gui_partial_row(sheet_layout, &row, config, slot, reset_partial) do changes += {.RETUNE}
-    if gui_target_offset_row(sheet_layout, &row, config, slot) do changes += {.RETUNE}
+    if gui_partial_row(sheet_layout, &row, config, slot, reset_partial) {
+        changes += {.RETUNE}
+    }
+    if gui_target_offset_row(sheet_layout, &row, config, slot) {
+        changes += {.RETUNE}
+    }
 
     // On top of the strobe's spin rate, a high partial spins faster than the rest. In percent, × is for partials.
     speed_labels := []cstring{"25%", "50%", "100%", "200%"}
@@ -482,8 +504,12 @@ gui_track_settings :: proc(
         changes += {.SPEED}
     }
 
-    if gui_reset_track_row(sheet_layout, &row, config, slot, reset_partial) do changes += {.RETUNE}
-    if gui_add_remove_track(sheet_layout, config, slot) do changes += {.RETUNE}
+    if gui_reset_track_row(sheet_layout, &row, config, slot, reset_partial) {
+        changes += {.RETUNE}
+    }
+    if gui_add_remove_track(sheet_layout, config, slot) {
+        changes += {.RETUNE}
+    }
 
     return
 }
@@ -506,7 +532,9 @@ track_reset_partial :: proc(config: ^Config, slot: int) -> f32 {
 // A step at a time along TRACK_PARTIALS, a scroll can take a few. Reset goes back to reset_partial.
 gui_partial_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config, slot: int, reset_partial: f32) -> bool {
     widest: f32
-    for listed in TRACK_PARTIALS do widest = max(widest, measure_label(pixel_fonts.label, partial_text(listed), 1).x)
+    for listed in TRACK_PARTIALS {
+        widest = max(widest, measure_label(pixel_fonts.label, partial_text(listed), 1).x)
+    }
 
     widest += measure_label(pixel_fonts.label_times, "×").x
     rect := settings_row(sheet_layout, row^, "Partial", stepper_width(widest))
@@ -517,7 +545,9 @@ gui_partial_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Config, s
     if reset {
         partial = reset_partial
     } else {
-        for _ in 0 ..< abs(int(steps)) do partial = next_partial_above(partial) if steps > 0 else next_partial_below(partial)
+        for _ in 0 ..< abs(int(steps)) {
+            partial = next_partial_above(partial) if steps > 0 else next_partial_below(partial)
+        }
     }
     if partial == config.strobe_intervals[slot] do return false
 
@@ -539,7 +569,9 @@ gui_target_offset_row :: proc(sheet_layout: SheetLayout, row: ^int, config: ^Con
 
     offset := config.strobe_offsets_cents[slot]
     steps, reset := gui_stepper_buttons(rect, offset_cents_text(offset))
-    if reset do offset = 0
+    if reset {
+        offset = 0
+    }
 
     offset = clamp(offset + steps * TRACK_OFFSET_STEP_CENTS, -TRACK_OFFSET_MAX_CENTS, TRACK_OFFSET_MAX_CENTS)
     if offset == config.strobe_offsets_cents[slot] do return false
@@ -641,7 +673,9 @@ gui_audio_input :: proc(sheet_layout: SheetLayout, input: ^AudioInput, open: ^Dr
     device_rate, sample_rate, stats := capture.device_rate, capture.sample_rate, input.stats
 
     device_name := "No input"
-    if audio.device_count(capture) > 0 do device_name = audio.device_name(capture, capture.active_device)
+    if audio.device_count(capture) > 0 {
+        device_name = audio.device_name(capture, capture.active_device)
+    }
 
     close = draw_sheet_header(sheet_layout, "Input", fmt.ctprintf("%s", device_name))
     row := 0
@@ -806,7 +840,9 @@ gui_small_button :: proc(right: f32, control: gfx.Rect, label: cstring, enabled 
 
     fill := pill_gray if enabled && gui_button_held(touch) else pill_dark
     label_color := text_color_white if enabled else text_color_disabled
-    if warn do fill, label_color = pill_yellow, text_color_dark
+    if warn {
+        fill, label_color = pill_yellow, text_color_dark
+    }
 
     gfx.draw_pill(rect, fill)
     draw_label(font, label, {rect.x + SMALL_BUTTON_PADDING, middle - LABEL_SMALL_SIZE / 2}, label_color, 1)
@@ -958,7 +994,9 @@ gui_stepper_buttons :: proc(
     // Scrolling over the stepper steps too, trackpads scroll in fractions so add them up to whole steps.
     // Only the stepper under the mouse keeps the fraction, with a few on a sheet.
     if gfx.point_in_rect(gfx.mouse_position(), touch_area(rect)) && gui_takes_input() {
-        if stepper.scroll_rect != rect do stepper.scroll = 0
+        if stepper.scroll_rect != rect {
+            stepper.scroll = 0
+        }
 
         stepper.scroll_rect = rect
         stepper.scroll += gfx.mouse_wheel()

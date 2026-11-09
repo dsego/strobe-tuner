@@ -69,13 +69,17 @@ UnlockReminder :: struct {
 remind_to_unlock :: proc(app: ^App) {
     frame_time := gfx.frame_time()
     reminder := &app.sheets.unlock
-    if reminder.sheet.open do reminder.close_after_s = max(reminder.close_after_s - frame_time, 0)
+    if reminder.sheet.open {
+        reminder.close_after_s = max(reminder.close_after_s - frame_time, 0)
+    }
     if purchase_state() == .UNLOCKED do return
 
     // From the first lit note on, saved, a new start doesn't give it again. The reminder comes as it ends.
     config := app.config
     if config.unlock_free_s < UNLOCK_FREE_S {
-        if config.unlock_free_s > 0 || app.measurement.note_target.active do config.unlock_free_s += frame_time
+        if config.unlock_free_s > 0 || app.measurement.note_target.active {
+            config.unlock_free_s += frame_time
+        }
         reminder.until_next_s = 0
         return
     }
@@ -83,7 +87,9 @@ remind_to_unlock :: proc(app: ^App) {
     if reminder.sheet.open do return
 
     reminder.until_next_s -= frame_time
-    if reminder.until_next_s <= 0 do open_unlock_sheet(&app.sheets, countdown = true)
+    if reminder.until_next_s <= 0 {
+        open_unlock_sheet(&app.sheets, countdown = true)
+    }
 }
 
 // Over the main screen, the other sheets go. Opened from the settings it closes at once and has the restore.
@@ -117,7 +123,9 @@ draw_unlock_sheet :: proc(app: ^App) {
     if sheet.slide == SHEET_DOWN do return
 
     // Bought, it can go at once
-    if purchase_state() == .UNLOCKED do reminder.close_after_s = 0
+    if purchase_state() == .UNLOCKED {
+        reminder.close_after_s = 0
+    }
 
     // Not the tap that opened it, not while it slides away
     gui.disabled = !(sheet.was_open && sheet.open)
@@ -125,7 +133,9 @@ draw_unlock_sheet :: proc(app: ^App) {
     close := gui_unlock(reminder.close_after_s, sheet.slide, reminder.asked)
     if reminder.close_after_s > 0 do return
 
-    if close || gfx.key_pressed(.ESCAPE) do dismiss_sheet(sheets, sheet)
+    if close || gfx.key_pressed(.ESCAPE) {
+        dismiss_sheet(sheets, sheet)
+    }
 }
 
 // A column in the middle of the window that comes up from under it with slide: the title, the words, the button
@@ -150,7 +160,9 @@ gui_unlock :: proc(close_after_s, slide: f32, restore: bool) -> (close: bool) {
 
     // The purchase, its price is on the App Store's own sheet in the buyer's currency
     buy_button := gfx.Rect{left, y, width, UNLOCK_BUTTON_HEIGHT}
-    if gui_unlock_button(buy_button, font, buy_label(state), can_buy(state), highlight = true) do buy_unlock()
+    if gui_unlock_button(buy_button, font, buy_label(state), can_buy(state), highlight = true) {
+        buy_unlock()
+    }
 
     y += UNLOCK_BUTTON_HEIGHT + gaps[2]
 
@@ -166,7 +178,9 @@ gui_unlock :: proc(close_after_s, slide: f32, restore: bool) -> (close: bool) {
     label := restore_label(state)
     restore_width := measure_label(pixel_fonts.label, label, 1).x + 2 * UNLOCK_SIDE_MARGIN
     restore_button := gfx.Rect{middle - restore_width / 2, y, restore_width, UNLOCK_RESTORE_HEIGHT}
-    if gui_unlock_button(restore_button, pixel_fonts.label, label, can_restore(state)) do restore_purchase()
+    if gui_unlock_button(restore_button, pixel_fonts.label, label, can_restore(state)) {
+        restore_purchase()
+    }
 
     return
 }
@@ -181,7 +195,9 @@ unlock_column :: proc(slide: f32, restore: bool) -> (left, width, top: f32) {
 
     height := TITLE_LARGE_SIZE + gaps[0] + f32(len(text)) * UNLOCK_LINE_HEIGHT + gaps[1]
     height += 2 * UNLOCK_BUTTON_HEIGHT + gaps[2]
-    if restore do height += gaps[3] + UNLOCK_RESTORE_HEIGHT
+    if restore {
+        height += gaps[3] + UNLOCK_RESTORE_HEIGHT
+    }
 
     centered := safe.y + (safe.height - height) / 2
     top = window.y + (centered - window.y) * slide
@@ -232,8 +248,12 @@ can_restore :: proc(state: PurchaseState) -> bool {
 // words while it can be bought. Dead when not enabled, the words stay white.
 gui_unlock_button :: proc(rect: gfx.Rect, font: PixelFont, label: cstring, enabled: bool, highlight := false) -> bool {
     fill, words := pill_dark, text_color_white
-    if highlight && enabled do fill, words = pill_yellow, text_color_dark
-    if enabled && gui_button_held(rect) do fill = pill_gray
+    if highlight && enabled {
+        fill, words = pill_yellow, text_color_dark
+    }
+    if enabled && gui_button_held(rect) {
+        fill = pill_gray
+    }
 
     gfx.draw_pill(rect, fill)
     width := measure_label(font, label, 1).x
@@ -283,7 +303,9 @@ end_unlock_backdrop :: proc(reminder: ^UnlockReminder) {
     // The sharp screen under the blur while it slides, once it's up the blur covers all of it
     slide := reminder.sheet.slide
     window := gfx.Rect{0, 0, backdrop.size.x, backdrop.size.y}
-    if slide < SHEET_UP do gfx.draw_render_target(backdrop.scene_rt, window)
+    if slide < SHEET_UP {
+        gfx.draw_render_target(backdrop.scene_rt, window)
+    }
     gfx.set_blend_mode(.ALPHA)
 
     gfx.draw_render_target(backdrop.bloom_rt[0], window, fade_color(gfx.WHITE, slide))

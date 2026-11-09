@@ -131,28 +131,38 @@ gui_note_ruler :: proc(
     // The note in the middle is the target, already while the row follows the finger or coasts. Settled, the
     // ruler eases onto it from where it is.
     step = int(settle) - target if swiping || land else 0
-    if land do ruler.swipe = {}
+    if land {
+        ruler.swipe = {}
+    }
 
     slide := 1 - math.exp(-RULER_SLIDE_SPEED * gfx.frame_time())
     if !swiping || land {
         // Slide to the next note, and settle exactly on it, a jump further snaps
         shown := f32(target + step)
-        if abs(shown - ruler.position) > 1 && step == 0 do ruler.position = shown
+        if abs(shown - ruler.position) > 1 && step == 0 {
+            ruler.position = shown
+        }
 
         ruler.position += (shown - ruler.position) * slide
-        if abs(shown - ruler.position) < RULER_ON_NOTE do ruler.position = shown
+        if abs(shown - ruler.position) < RULER_ON_NOTE {
+            ruler.position = shown
+        }
     }
 
     // Let go, the octave rolls back onto the note the same way
     if ruler.swipe.gesture != .TURNING {
         ruler.roll -= ruler.roll * slide
-        if abs(ruler.roll) < RULER_ON_NOTE do ruler.roll = 0
+        if abs(ruler.roll) < RULER_ON_NOTE {
+            ruler.roll = 0
+        }
     }
 
     // The target note is white while there's a pitch
     draw_ruler(layout, notes, ruler.position, ruler.roll, text_color_white if active else text_color_muted)
 
-    if tapped do step, toggle_lock = ruler_tap(layout, notes, ruler.position, target)
+    if tapped {
+        step, toggle_lock = ruler_tap(layout, notes, ruler.position, target)
+    }
 
     return
 }
@@ -177,7 +187,9 @@ ruler_follow_finger :: proc(
     case gui.disabled:
         // A sheet opened over it, a swipe on the way lands
         land = swipe.gesture in RULER_MOVING
-        if !land do swipe^ = {}
+        if !land {
+            swipe^ = {}
+        }
     case swipe.gesture == .COASTING && gfx.mouse_pressed():
         // Caught on the ruler it stops there and can be swiped on, a press anywhere else settles it
         if gui_background_pressed(rect) {
@@ -188,7 +200,9 @@ ruler_follow_finger :: proc(
     case swipe.gesture == .COASTING:
         land = ruler_coast(swipe, &ruler.position)
     case swipe.gesture == .NONE:
-        if gui_background_pressed(rect) do swipe^ = ruler_press(.PRESSED, mouse)
+        if gui_background_pressed(rect) {
+            swipe^ = ruler_press(.PRESSED, mouse)
+        }
     case gfx.mouse_down():
         ruler_drag(ruler, mouse, spacing, highest, target, octaves)
     case swipe.gesture == .SWIPING:
@@ -203,7 +217,9 @@ ruler_follow_finger :: proc(
     // Not past the ends
     if ruler.position <= 0 || ruler.position >= highest {
         ruler.position = clamp(ruler.position, 0, highest)
-        if swipe.gesture == .COASTING do land = true
+        if swipe.gesture == .COASTING {
+            land = true
+        }
     }
     settle = math.round(ruler.position)
     return
@@ -250,8 +266,12 @@ ruler_drag :: proc(ruler: ^NoteRuler, mouse: [2]f32, spacing, highest: f32, targ
         swipe.grab = ruler.position
     }
 
-    if swipe.gesture == .SWIPING do ruler.position = swipe.grab + (swipe.press.x - mouse.x) / spacing
-    if swipe.gesture == .TURNING do ruler_turn(ruler, (swipe.press.y - mouse.y) / RULER_OCTAVE_SPACING, highest)
+    if swipe.gesture == .SWIPING {
+        ruler.position = swipe.grab + (swipe.press.x - mouse.x) / spacing
+    }
+    if swipe.gesture == .TURNING {
+        ruler_turn(ruler, (swipe.press.y - mouse.y) / RULER_OCTAVE_SPACING, highest)
+    }
 }
 
 // The octave turned by turned octaves from the note it started on, up is higher, the row on the same letter
@@ -289,8 +309,12 @@ ruler_let_go :: proc(swipe: ^RulerSwipe, position, spacing, highest: f32) -> (la
     speed := clamp(-swipe.velocity / spacing, -RULER_COAST_MAX, RULER_COAST_MAX)
     stop := position + speed / RULER_COAST_FRICTION
     swipe.stop_at = clamp(math.round(stop), 0, highest)
-    if speed > 0 do swipe.stop_at = max(swipe.stop_at, math.ceil(position))
-    if speed < 0 do swipe.stop_at = min(swipe.stop_at, math.floor(position))
+    if speed > 0 {
+        swipe.stop_at = max(swipe.stop_at, math.ceil(position))
+    }
+    if speed < 0 {
+        swipe.stop_at = min(swipe.stop_at, math.floor(position))
+    }
 
     distance := swipe.stop_at - position
     if abs(speed) < RULER_COAST_MIN || abs(distance) < RULER_ON_NOTE do return true
@@ -365,7 +389,9 @@ ruler_tap :: proc(layout: RulerLayout, notes: []core.Note, position: f32, target
             half := layout.spacing / 2 + layout.center_gap
             toggle_lock = gfx.point_in_rect(mouse, {x - half, rect.y, 2 * half, rect.height})
         } else if index != target && distance <= f32(layout.per_side) {
-            if gfx.point_in_rect(mouse, {x - layout.spacing / 2, rect.y, layout.spacing, rect.height}) do step = index - target
+            if gfx.point_in_rect(mouse, {x - layout.spacing / 2, rect.y, layout.spacing, rect.height}) {
+                step = index - target
+            }
         }
     }
     return
@@ -384,7 +410,9 @@ draw_ruler_note :: proc(note: core.Note, pos: [2]f32, large, octave: f32, color:
 
     name_font := lerp_font(pixel_fonts.neighbour, pixel_fonts.note, large)
     sign_font := lerp_font(pixel_fonts.neighbour_sharp, pixel_fonts.note_sharp, large)
-    if note.accidental == .FLAT do sign_font = lerp_font(pixel_fonts.neighbour_flat, pixel_fonts.note_flat, large)
+    if note.accidental == .FLAT {
+        sign_font = lerp_font(pixel_fonts.neighbour_flat, pixel_fonts.note_flat, large)
+    }
 
     size := name_font.size
 
@@ -400,7 +428,9 @@ draw_ruler_note :: proc(note: core.Note, pos: [2]f32, large, octave: f32, color:
     // are evenly spaced.
     OPTICAL_WEIGHT :: 0.5
     suffix := octave * measure_label(pixel_fonts.octave, octave_label).x
-    if note.accidental != .NATURAL do suffix = max(suffix, gfx.measure_text(sign_font.font, sign, sign_font.size, 0).x)
+    if note.accidental != .NATURAL {
+        suffix = max(suffix, gfx.measure_text(sign_font.font, sign, sign_font.size, 0).x)
+    }
 
     center := pos - {large * OPTICAL_WEIGHT * suffix / 2, 0}
 

@@ -105,7 +105,9 @@ glow_params :: proc(config: ^Config) -> GlowParams {
     glow := glows[config.strobe_colorway]
     if config.strobe_colorway == .BY_NOTE {
         glow.color, glow.dark_color = by_note_colors.x, by_note_colors.x
-        if BY_NOTE_GLOW_FROM_DARK do glow.dark_color = by_note_colors.y
+        if BY_NOTE_GLOW_FROM_DARK {
+            glow.dark_color = by_note_colors.y
+        }
     }
     return glow
 }

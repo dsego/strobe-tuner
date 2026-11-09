@@ -50,7 +50,9 @@ load_config :: proc() -> Config {
     config.target_freq_hz = clamp(config.target_freq_hz, lowest, highest)
 
     // A custom instrument's notes are a preset's, there's no built-in one
-    if config.instrument == .CUSTOM do config.instrument = .CHROMATIC
+    if config.instrument == .CUSTOM {
+        config.instrument = .CHROMATIC
+    }
 
     // A readout time of 0 would fit the newest chunk alone and a negative one blow the fit up
     fit_steps := READOUT_FIT_STEPS_S
@@ -58,13 +60,21 @@ load_config :: proc() -> Config {
 
     // An offset past the settings' own moves the strobe's target to another note, it stands still there
     for &preset in config.note_offset_cents {
-        for &cents in preset do cents = clamp(cents, -NOTE_OFFSET_MAX_CENTS, NOTE_OFFSET_MAX_CENTS)
+        for &cents in preset {
+            cents = clamp(cents, -NOTE_OFFSET_MAX_CENTS, NOTE_OFFSET_MAX_CENTS)
+        }
     }
-    for &cents in config.strobe_offsets_cents do cents = clamp(cents, -TRACK_OFFSET_MAX_CENTS, TRACK_OFFSET_MAX_CENTS)
+    for &cents in config.strobe_offsets_cents {
+        cents = clamp(cents, -TRACK_OFFSET_MAX_CENTS, TRACK_OFFSET_MAX_CENTS)
+    }
 
     // 0 is off, a sliver of a period would fade the screen to nothing between two samples, or average nothing
-    if config.screen_persistence_periods != 0 do config.screen_persistence_periods = clamp(config.screen_persistence_periods, 1, 1000)
-    if config.scope_averaging_periods != 0 do config.scope_averaging_periods = clamp(config.scope_averaging_periods, 1, 1000)
+    if config.screen_persistence_periods != 0 {
+        config.screen_persistence_periods = clamp(config.screen_persistence_periods, 1, 1000)
+    }
+    if config.scope_averaging_periods != 0 {
+        config.scope_averaging_periods = clamp(config.scope_averaging_periods, 1, 1000)
+    }
 
     // A spectrum window of 0 would have nothing to transform
     window_steps := SPECTRUM_WINDOW_STEPS
@@ -73,12 +83,18 @@ load_config :: proc() -> Config {
     // The strobe needs a track
     defaults := config_defaults
     has_track := false
-    for interval in config.strobe_intervals do has_track ||= interval >= 1
-    if !has_track do config.strobe_intervals = defaults.strobe_intervals
+    for interval in config.strobe_intervals {
+        has_track ||= interval >= 1
+    }
+    if !has_track {
+        config.strobe_intervals = defaults.strobe_intervals
+    }
 
     // Hand edited smaller than the window goes, it opens at the strobe's size
     min_size := WINDOW_MIN_SIZE
-    if config.window_size.x < int(min_size.x) || config.window_size.y < int(min_size.y) do config.window_size = {}
+    if config.window_size.x < int(min_size.x) || config.window_size.y < int(min_size.y) {
+        config.window_size = {}
+    }
 
     return config
 }
@@ -180,7 +196,9 @@ read_value :: proc(ptr: rawptr, type: ^runtime.Type_Info, written: string) {
 split_list :: proc(text: string) -> [dynamic]string {
     items: [dynamic]string
     inner := strings.trim_space(text)
-    if strings.has_prefix(inner, "[") && strings.has_suffix(inner, "]") do inner = inner[1:len(inner) - 1]
+    if strings.has_prefix(inner, "[") && strings.has_suffix(inner, "]") {
+        inner = inner[1:len(inner) - 1]
+    }
     if len(strings.trim_space(inner)) == 0 do return items
 
     depth, start := 0, 0

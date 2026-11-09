@@ -314,7 +314,9 @@ reset_config :: proc(config: ^Config) {
 set_input_device :: proc(config: ^Config, name: string) {
     if name == config.input_device do return
 
-    if len(config.input_device) > 0 do delete(config.input_device)
+    if len(config.input_device) > 0 {
+        delete(config.input_device)
+    }
 
     config.input_device = strings.clone(name) if len(name) > 0 else ""
 }

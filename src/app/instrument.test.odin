@@ -30,7 +30,9 @@ test_custom_strings :: proc(t: ^testing.T) {
 
     // D3, A3 and B♭3 counted from A0, the B♭ a little sharp, then B♭3 again
     rows := [?]int{29, 36, 37, 37}
-    for note, row in rows do config.note_offset_notes[1][row] = note
+    for note, row in rows {
+        config.note_offset_notes[1][row] = note
+    }
     config.note_offset_counts[1] = len(rows)
     config.note_offset_cents[1][2] = 3
     config.note_offset_cents[1][3] = -2

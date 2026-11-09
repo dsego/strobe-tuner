@@ -246,8 +246,12 @@ gui_instrument_button :: proc(pos: [2]f32, config: ^Config) -> bool {
 
     setup := current_setup(config)
     icon := ICON_GUITAR
-    if setup.instrument == .CHROMATIC do icon = ICON_PIANO_KEYS
-    if setup.instrument == .CUSTOM do icon = ICON_PINWHEEL
+    if setup.instrument == .CHROMATIC {
+        icon = ICON_PIANO_KEYS
+    }
+    if setup.instrument == .CUSTOM {
+        icon = ICON_PINWHEEL
+    }
 
     draw_icon(icon, {pos.x, pos.y - ICON_LARGE_SIZE / 2}, icon_color, .LARGE)
 
@@ -303,26 +307,38 @@ gui_instrument :: proc(
 
     // The strings next to the title
     details: cstring
-    if stringed do details = fmt.ctprintf("%s", strings.join(tuning.strings, " ", context.temp_allocator))
+    if stringed {
+        details = fmt.ctprintf("%s", strings.join(tuning.strings, " ", context.temp_allocator))
+    }
 
     close = draw_sheet_header(sheet_layout, "Instrument", details)
 
     if stringed {
-        if gui_capo_row(sheet_layout, options_row, setup, capo_value) do changed = true
+        if gui_capo_row(sheet_layout, options_row, setup, capo_value) {
+            changed = true
+        }
     } else if setup.instrument == .CHROMATIC {
-        if gui_transpose_row(sheet_layout, options_row, setup, transpose_value) do changed = true
+        if gui_transpose_row(sheet_layout, options_row, setup, transpose_value) {
+            changed = true
+        }
     }
 
-    if is_preset && gui_note_offsets(sheet_layout, offsets_row, config, preset, target) do changed = true
+    if is_preset && gui_note_offsets(sheet_layout, offsets_row, config, preset, target) {
+        changed = true
+    }
 
     // The dropdowns from the bottom up, their menus open down over the rows under them
     if tunable && gui_tuning_dropdown(open, sheet_layout, tuning_row, setup.instrument, tuning_index, tuning_value) {
         changed = true
     }
 
-    if is_preset && gui_preset_instrument_dropdown(open, sheet_layout, config, preset) do changed = true
+    if is_preset && gui_preset_instrument_dropdown(open, sheet_layout, config, preset) {
+        changed = true
+    }
 
-    if gui_instrument_dropdown(open, instrument_rect, config, setup.preset) do changed = true
+    if gui_instrument_dropdown(open, instrument_rect, config, setup.preset) {
+        changed = true
+    }
 
     return
 }
@@ -334,7 +350,9 @@ gui_capo_row :: proc(sheet_layout: SheetLayout, row: int, setup: Setup, capo_val
     }
 
     widest: f32
-    for fret in 0 ..= CAPO_MAX_FRET do widest = max(widest, measure_label(pixel_fonts.label, capo_text(fret), 1).x)
+    for fret in 0 ..= CAPO_MAX_FRET {
+        widest = max(widest, measure_label(pixel_fonts.label, capo_text(fret), 1).x)
+    }
 
     rect := settings_row(sheet_layout, row, "Capo", stepper_width(widest))
     capo := capo_fret(setup)
@@ -350,12 +368,16 @@ gui_capo_row :: proc(sheet_layout: SheetLayout, row: int, setup: Setup, capo_val
 gui_transpose_row :: proc(sheet_layout: SheetLayout, row: int, setup: Setup, transpose_value: ^int) -> bool {
     keys := TRANSPOSE_KEYS
     widest: f32
-    for key in keys do widest = max(widest, measure_label(pixel_fonts.label, fmt.ctprintf("%s", key), 1).x)
+    for key in keys {
+        widest = max(widest, measure_label(pixel_fonts.label, fmt.ctprintf("%s", key), 1).x)
+    }
 
     rect := settings_row(sheet_layout, row, "Transpose", stepper_width(widest))
     transpose := transpose_key(setup)
     steps, reset := gui_stepper_buttons(rect, fmt.ctprintf("%s", keys[transpose]))
-    if reset do transpose = 0
+    if reset {
+        transpose = 0
+    }
 
     transpose = (transpose - int(steps)) %% len(keys)
     if transpose == transpose_value^ do return false
@@ -375,7 +397,9 @@ gui_tuning_dropdown :: proc(
 ) -> bool {
     tunings := TUNINGS[instrument]
     options := make([]GuiOption, len(tunings), context.temp_allocator)
-    for listed, index in tunings do options[index] = {i32(index), listed.name}
+    for listed, index in tunings {
+        options[index] = {i32(index), listed.name}
+    }
 
     rect := settings_row(sheet_layout, row, "Tuning", dropdown_width(options))
     selected := tuning_index
@@ -468,7 +492,9 @@ instrument_and_preset_options :: proc(config: ^Config) -> []GuiOption {
 instrument_options :: proc(count, extra: int) -> []GuiOption {
     names := INSTRUMENT_NAMES
     options := make([]GuiOption, count + extra, context.temp_allocator)
-    for index in 0 ..< count do options[index] = {i32(index), names[Instrument(index)]}
+    for index in 0 ..< count {
+        options[index] = {i32(index), names[Instrument(index)]}
+    }
 
     return options
 }

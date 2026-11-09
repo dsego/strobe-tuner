@@ -194,7 +194,9 @@ update_spectrum_display :: proc(self: ^SpectrumDisplay, windows: f32) {
     read, elapsed := core.audio_capture_read_filtered(self, transform.samples, &self.highpass, &self.lowpass)
 
     // The stale skip coming back from another display, the picture and the filters start over on what's next
-    if read == 0 && elapsed > 0 do reset_spectrum_display(self)
+    if read == 0 && elapsed > 0 {
+        reset_spectrum_display(self)
+    }
     if read == 0 do return
 
     core.run_windowed_spectrum(transform)
@@ -214,7 +216,9 @@ update_spectrum_display :: proc(self: ^SpectrumDisplay, windows: f32) {
 
     // The first bin packs DC and Nyquist, see core.square_spectrum
     for &power, bin in self.power[:used] {
-        if bin > 0 do power += alpha * (real(transform.spectrum[bin]) - power)
+        if bin > 0 {
+            power += alpha * (real(transform.spectrum[bin]) - power)
+        }
         self.levels[bin] = max(10 * math.log10(max(power, 1e-20)) - full_scale_db, SPECTRUM_FLOOR_DB)
     }
 
@@ -226,7 +230,9 @@ update_spectrum_display :: proc(self: ^SpectrumDisplay, windows: f32) {
     noise_at :: proc(levels, around: []f32, bin, stride: int) -> f32 {
         span := stride * (len(around) - 1)
         start := clamp(bin - span / 2, 0, len(levels) - 1 - span)
-        for &value, index in around do value = levels[start + index * stride]
+        for &value, index in around {
+            value = levels[start + index * stride]
+        }
         slice.sort(around)
         return around[len(around) / 2]
     }
@@ -283,7 +289,9 @@ draw_spectrum_display :: proc(self: ^SpectrumDisplay, rect: gfx.Rect, track_hz: 
 
     // What's drawn, and the plot's bottom and top in it
     shown, range := self.over, SPECTRUM_SNR_DB
-    if config.spectrum_scale == .DBFS do shown, range = self.levels, SPECTRUM_DBFS_DB
+    if config.spectrum_scale == .DBFS {
+        shown, range = self.levels, SPECTRUM_DBFS_DB
+    }
 
     octaves := spectrum_octaves(config.pitch_standard, axes)
     levels := spectrum_grid_levels(range)
@@ -303,7 +311,9 @@ draw_spectrum_display :: proc(self: ^SpectrumDisplay, rect: gfx.Rect, track_hz: 
     draw_spectrum_level_labels(levels, range, plot, background)
 
     peaks := find_spectrum_peaks(self, shown, low_hz, high_hz, bin_hz)
-    if config.spectrum_peak_level do draw_spectrum_peak_level(&self.peak_line, peaks, plot, range, config.spectrum_scale, background)
+    if config.spectrum_peak_level {
+        draw_spectrum_peak_level(&self.peak_line, peaks, plot, range, config.spectrum_scale, background)
+    }
     if config.spectrum_labels != .OFF {
         draw_peak_labels(self, peaks, axes, config, background)
     } else {
@@ -328,7 +338,9 @@ spectrum_octaves :: proc(pitch_standard: f32, axes: SpectrumAxes) -> []SpectrumO
     octaves := make([dynamic]SpectrumOctave, context.temp_allocator)
     for octave in 1 ..= 8 {
         c_hz := core.freq_at_cents(pitch_standard, f32((octave - 4) * 1200 - 900))
-        if c_hz >= axes.low_hz && c_hz <= axes.high_hz do append(&octaves, SpectrumOctave{spectrum_x(c_hz, axes), octave})
+        if c_hz >= axes.low_hz && c_hz <= axes.high_hz {
+            append(&octaves, SpectrumOctave{spectrum_x(c_hz, axes), octave})
+        }
     }
     return octaves[:]
 }
@@ -341,7 +353,9 @@ SPECTRUM_GRID_LABEL_DB :: 20
 spectrum_grid_levels :: proc(range: [2]f32) -> []f32 {
     levels := make([dynamic]f32, context.temp_allocator)
     for db := math.floor(range[0] / SPECTRUM_GRID_DB) * SPECTRUM_GRID_DB + SPECTRUM_GRID_DB; db < range[1]; db += SPECTRUM_GRID_DB {
-        if db > range[0] do append(&levels, db)
+        if db > range[0] {
+            append(&levels, db)
+        }
     }
     return levels[:]
 }
@@ -350,7 +364,9 @@ spectrum_grid_levels :: proc(range: [2]f32) -> []f32 {
 spectrum_track_marks :: proc(track_hz: []f32, axes: SpectrumAxes) -> []f32 {
     track_x := make([dynamic]f32, context.temp_allocator)
     for freq in track_hz {
-        if freq >= axes.low_hz && freq <= axes.high_hz do append(&track_x, spectrum_x(freq, axes))
+        if freq >= axes.low_hz && freq <= axes.high_hz {
+            append(&track_x, spectrum_x(freq, axes))
+        }
     }
     return track_x[:]
 }
@@ -403,7 +419,9 @@ spectrum_column_db :: proc(shown: []f32, from, to, floor: f32) -> f32 {
     }
 
     db := floor
-    for bin in int(math.ceil(from)) ..= min(int(to), last) do db = max(db, shown[bin])
+    for bin in int(math.ceil(from)) ..= min(int(to), last) {
+        db = max(db, shown[bin])
+    }
     return db
 }
 
@@ -421,8 +439,12 @@ draw_spectrum_plot :: proc(
     grid := band_color
     grid.a = 70
     hairline := 1 / gfx.dpi_scale()
-    for octave in octaves do gfx.draw_rect({octave.x, plot.y}, {hairline, plot.height}, grid)
-    for db in levels do gfx.draw_rect({plot.x, spectrum_y(db, range, plot)}, {plot.width, hairline}, grid)
+    for octave in octaves {
+        gfx.draw_rect({octave.x, plot.y}, {hairline, plot.height}, grid)
+    }
+    for db in levels {
+        gfx.draw_rect({plot.x, spectrum_y(db, range, plot)}, {plot.width, hairline}, grid)
+    }
 
     fill := lerp_color(background, line_color, 0.2)
     fill.a = 255
@@ -550,7 +572,9 @@ find_spectrum_peaks :: proc(self: ^SpectrumDisplay, shown: []f32, low_hz, high_h
 
         highest := true
         for other in bin - SIDE_BINS ..= bin + SIDE_BINS {
-            if over[other] > db || (over[other] == db && other < bin) do highest = false
+            if over[other] > db || (over[other] == db && other < bin) {
+                highest = false
+            }
         }
         if !highest do continue
 
@@ -662,11 +686,15 @@ peak_label_candidates :: proc(peaks: []SpectrumPeak, named_before: []NamedPeak) 
             candidate.alpha = before.alpha
             candidate.before = index
             was_shown = before.shown
-            if before.shown do candidate.rank += SPECTRUM_LABEL_HOLD_DB
+            if before.shown {
+                candidate.rank += SPECTRUM_LABEL_HOLD_DB
+            }
             break
         }
 
-        if was_shown || peak.db >= SPECTRUM_PROMINENCE_DB do append(&candidates, candidate)
+        if was_shown || peak.db >= SPECTRUM_PROMINENCE_DB {
+            append(&candidates, candidate)
+        }
     }
     slice.sort_by(candidates[:], proc(first, second: PeakLabelCandidate) -> bool { return first.rank > second.rank })
     return candidates[:]
@@ -698,16 +726,26 @@ fade_dropped_peak_labels :: proc(self: ^SpectrumDisplay, named_before: []NamedPe
         faded := before
         faded.alpha -= fade_step
         faded.shown = false
-        if faded.alpha > 0 do append(&self.named, faded)
+        if faded.alpha > 0 {
+            append(&self.named, faded)
+        }
     }
 }
 
 peak_label_text :: proc(hz, pitch_standard: f32, labels: SpectrumLabels) -> (text: PeakLabelText) {
     GAP :: 4
-    if labels != .HZ do text.name = fmt.ctprintf("%s", core.note_name(core.freq_to_note(hz, pitch_standard)))
-    if labels != .NOTE do text.hz = fmt.ctprintf("%.0fHz", hz)
-    if text.name != nil do text.name_size = measure_label(pixel_fonts.band_label, text.name)
-    if text.hz != nil do text.hz_size = measure_label(pixel_fonts.band_label_small, text.hz)
+    if labels != .HZ {
+        text.name = fmt.ctprintf("%s", core.note_name(core.freq_to_note(hz, pitch_standard)))
+    }
+    if labels != .NOTE {
+        text.hz = fmt.ctprintf("%.0fHz", hz)
+    }
+    if text.name != nil {
+        text.name_size = measure_label(pixel_fonts.band_label, text.name)
+    }
+    if text.hz != nil {
+        text.hz_size = measure_label(pixel_fonts.band_label_small, text.hz)
+    }
 
     text.size = {max(text.name_size.x, text.hz_size.x), text.name_size.y + text.hz_size.y + (GAP if labels == .BOTH else 0)}
     return

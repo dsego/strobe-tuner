@@ -54,7 +54,9 @@ active_note_offsets :: proc(config: ^Config) -> (offsets: [core.NOTE_COUNT]f32) 
     if len(tuning.strings) > 0 {
         for semitone, row in tuning_strings(config) {
             index := semitone - core.LOWEST_NOTE
-            if row < MAX_NOTE_OFFSETS && index >= 0 && index < core.NOTE_COUNT do offsets[index] = cents[row]
+            if row < MAX_NOTE_OFFSETS && index >= 0 && index < core.NOTE_COUNT {
+                offsets[index] = cents[row]
+            }
         }
         return
     }
@@ -62,7 +64,9 @@ active_note_offsets :: proc(config: ^Config) -> (offsets: [core.NOTE_COUNT]f32) 
     // Chromatic or custom, a note in more than one row is tuned by the first
     for row := clamp(config.note_offset_counts[preset], 0, MAX_NOTE_OFFSETS) - 1; row >= 0; row -= 1 {
         index := config.note_offset_notes[preset][row]
-        if index >= 0 && index < core.NOTE_COUNT do offsets[index] = cents[row]
+        if index >= 0 && index < core.NOTE_COUNT {
+            offsets[index] = cents[row]
+        }
     }
     return
 }
@@ -223,10 +227,16 @@ gui_offset_spin :: proc(rect: gfx.Rect, reach: [2]f32, label: cstring, down_icon
     draw_centered_icon(up_icon, {rect.x + rect.width - button_width, rect.y, button_width, rect.height}, icon_color, style)
 
     down_right, up_left := rect.x + button_width, rect.x + rect.width - button_width
-    if large do down_right, up_left = rect.x + rect.width / 2, rect.x + rect.width / 2
+    if large {
+        down_right, up_left = rect.x + rect.width / 2, rect.x + rect.width / 2
+    }
 
-    if gui_button_repeat({reach[0], rect.y, down_right - reach[0], rect.height}) do step = -1
-    if gui_button_repeat({up_left, rect.y, reach[1] - up_left, rect.height}) do step = 1
+    if gui_button_repeat({reach[0], rect.y, down_right - reach[0], rect.height}) {
+        step = -1
+    }
+    if gui_button_repeat({up_left, rect.y, reach[1] - up_left, rect.height}) {
+        step = 1
+    }
 
     return
 }
@@ -271,7 +281,9 @@ offset_popup_rect :: proc(grid: OffsetGrid, popup: NoteOffsetPopup, row: int) ->
     sheet := grid.sheet
     x := clamp(offset_popup_anchor(grid, popup) - width / 2, sheet.x + OFFSET_POPUP_PAD, sheet.x + sheet.width - OFFSET_POPUP_PAD - width)
     y := offset_row_y(grid, row) - GAP - OFFSET_POPUP_HEIGHT
-    if y < grid.top do y = offset_row_y(grid, row) + grid.row_height + GAP
+    if y < grid.top {
+        y = offset_row_y(grid, row) + grid.row_height + GAP
+    }
 
     return {x, y, width, OFFSET_POPUP_HEIGHT}
 }
@@ -289,12 +301,16 @@ gui_offset_row :: proc(rows: OffsetRows, grid: OffsetGrid, row: int, editing: ^N
     cents := &rows.cents[row]
 
     background := note_offset_selected_color if selected else gfx.hex(sheet_bg_color)
-    if selected do gfx.draw_rect({sheet.x, y}, {sheet.width, grid.row_height}, background)
+    if selected {
+        gfx.draw_rect({sheet.x, y}, {sheet.width, grid.row_height}, background)
+    }
 
     // Halfway into the gaps beside the bar like the steppers, before the row takes the press
     bar_left, bar_right := bar.x - OFFSET_BAR_GAP / 2, grid.cents_x - OFFSET_BAR_GAP / 2
     bar_reach := gfx.Rect{bar_left, y, bar_right - bar_left, grid.row_height}
-    if gui_offset_slide(&editing.slide, row, bar_reach, bar.width, cents) do changed = true
+    if gui_offset_slide(&editing.slide, row, bar_reach, bar.width, cents) {
+        changed = true
+    }
 
     if !selected || touch {
         draw_centered_label(offset_row_name(rows, row), name_rect, text_color_white)
@@ -307,8 +323,12 @@ gui_offset_row :: proc(rows: OffsetRows, grid: OffsetGrid, row: int, editing: ^N
             editing.popup = .NONE
             if touch {
                 x := gfx.mouse_position().x
-                if !stringed && x < bar_left do editing.popup = .NOTE
-                if x >= bar_right do editing.popup = .CENTS
+                if !stringed && x < bar_left {
+                    editing.popup = .NOTE
+                }
+                if x >= bar_right {
+                    editing.popup = .CENTS
+                }
             }
         }
         return
@@ -323,11 +343,15 @@ gui_offset_row :: proc(rows: OffsetRows, grid: OffsetGrid, row: int, editing: ^N
         octave_rect := gfx.Rect{note_rect.x + OFFSET_NOTE_COLUMN + OFFSET_GAP, y, OFFSET_OCTAVE_COLUMN, grid.row_height}
         note_reach := [2]f32{sheet.x, octave_rect.x - OFFSET_GAP / 2}
         octave_reach := [2]f32{octave_rect.x - OFFSET_GAP / 2, bar_left}
-        if gui_offset_note_spins(rows, row, note_rect, octave_rect, note_reach, octave_reach) do changed = true
+        if gui_offset_note_spins(rows, row, note_rect, octave_rect, note_reach, octave_reach) {
+            changed = true
+        }
     }
 
     draw_offset_bar(bar, cents^, background)
-    if gui_offset_cents_spin(cents, cents_rect, {bar_right, sheet.x + sheet.width}) do changed = true
+    if gui_offset_cents_spin(cents, cents_rect, {bar_right, sheet.x + sheet.width}) {
+        changed = true
+    }
 
     return
 }
@@ -423,8 +447,12 @@ gui_offset_cents_spin :: proc(cents: ^f32, rect: gfx.Rect, reach: [2]f32, large 
 offset_new_row_note :: proc(rows: OffsetRows, target: int) -> int {
     count := offset_row_count(rows)
     start := OFFSET_MIDDLE_C
-    if count > 0 do start = rows.notes[count - 1]
-    if target >= 0 do start = target
+    if count > 0 {
+        start = rows.notes[count - 1]
+    }
+    if target >= 0 {
+        start = target
+    }
 
     for try in 0 ..< core.NOTE_COUNT {
         candidate := start + try if start + try < core.NOTE_COUNT else start - (start + try - core.NOTE_COUNT + 1)
@@ -570,18 +598,26 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
 
     editing := &note_offsets_editing
     touch := gfx.touch_input()
-    if editing.selected >= count do editing.selected = -1
-    if editing.selected < 0 || !touch do editing.popup = .NONE
+    if editing.selected >= count {
+        editing.selected = -1
+    }
+    if editing.selected < 0 || !touch {
+        editing.popup = .NONE
+    }
 
     // Let go, or the row it was on is gone
-    if !gfx.mouse_down() do editing.slide = nil
+    if !gfx.mouse_down() {
+        editing.slide = nil
+    }
 
     // A tap on the popup is its own, the controls under it don't see it. A tap anywhere else puts it away and
     // goes on to what's there, on the other value it opens that one's popup.
     was_disabled := gui.disabled
     if editing.popup != .NONE {
         if gfx.point_in_rect(gfx.mouse_position(), offset_popup_rect(grid, editing.popup, editing.selected)) {
-            if gfx.mouse_pressed() do gui.press_taken = true
+            if gfx.mouse_pressed() {
+                gui.press_taken = true
+            }
 
             gui.disabled = true
         } else if gui_background_pressed(grid.sheet) {
@@ -590,10 +626,14 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
     }
 
     for row in 0 ..< count {
-        if gui_offset_row(rows, grid, row, editing, touch) do changed = true
+        if gui_offset_row(rows, grid, row, editing, touch) {
+            changed = true
+        }
     }
     rows_rect := gfx.Rect{grid.sheet.x, rows_top, grid.sheet.width, f32(count) * grid.row_height}
-    if gui_offset_buttons(rows, grid, header, editing, target) do changed = true
+    if gui_offset_buttons(rows, grid, header, editing, target) {
+        changed = true
+    }
 
     // A tap on the sheet away from the rows and the buttons above them unselects the row
     title_row := gfx.Rect{grid.sheet.x, top, grid.sheet.width, sheet_layout.row_height}
@@ -605,7 +645,9 @@ gui_note_offsets :: proc(sheet_layout: SheetLayout, first_row: int, config: ^Con
     gui.disabled = was_disabled
 
     // The popup, over everything
-    if editing.popup != .NONE && gui_offset_popup(rows, grid, editing^) do changed = true
+    if editing.popup != .NONE && gui_offset_popup(rows, grid, editing^) {
+        changed = true
+    }
 
     return
 }

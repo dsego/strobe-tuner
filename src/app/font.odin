@@ -207,7 +207,9 @@ unload_pixel_fonts :: proc() {
     if pixel_font_scale == 0 do return
 
     fonts := transmute([FONT_COUNT]PixelFont)pixel_fonts
-    for pixel_font in fonts do gfx.unload_font(pixel_font.font)
+    for pixel_font in fonts {
+        gfx.unload_font(pixel_font.font)
+    }
 
     pixel_fonts = {}
     pixel_font_scale = 0

@@ -90,7 +90,9 @@ record_debug_column :: proc(
 
     mark := DebugMark{freq = pitch.detected_freq, lit = lit}
     if stack.score_db >= core.HARMONICS_LOW_DB {
-        for peak, index in stack.harmonics do mark.harmonics[index] = peak.freq
+        for peak, index in stack.harmonics {
+            mark.harmonics[index] = peak.freq
+        }
     }
     self.marks[self.next] = mark
 
@@ -111,7 +113,9 @@ print_debug_label :: proc(self: ^DebugSpectrogram, lit: bool, shown: core.Note) 
     }
 
     oldest := self.recorded - DEBUG_SPECTROGRAM_COLUMNS - DEBUG_LABEL_GAP_COLUMNS
-    for len(self.labels) > 0 && self.labels[0].column < oldest do ordered_remove(&self.labels, 0)
+    for len(self.labels) > 0 && self.labels[0].column < oldest {
+        ordered_remove(&self.labels, 0)
+    }
 }
 
 // The columns oldest to newest across rect, low notes at the bottom and a C every octave. Over them the detected
@@ -210,7 +214,9 @@ stack_level_between :: proc(stack: ^core.HarmonicStack, from_hz, to_hz: f32) -> 
     first, last := max(int(math.ceil(from)), 1), int(to)
     if last >= first {
         level = transform.levels[first]
-        for bin in first + 1 ..= last do level = max(level, transform.levels[bin])
+        for bin in first + 1 ..= last {
+            level = max(level, transform.levels[bin])
+        }
         return level, transform.background[first]
     }
 

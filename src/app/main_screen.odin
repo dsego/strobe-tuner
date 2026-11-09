@@ -42,12 +42,18 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu_comma
     )
 
     // Opens on the settings, not the display's options it was closed on
-    if gui_settings_button(layout.settings) do open_settings_sheet(&app.sheets)
+    if gui_settings_button(layout.settings) {
+        open_settings_sheet(&app.sheets)
+    }
 
-    if gui_instrument_button(layout.instrument, config) do app.sheets.instrument.open = true
+    if gui_instrument_button(layout.instrument, config) {
+        app.sheets.instrument.open = true
+    }
 
     sample_rate := app.input.capture.sample_rate
-    if gui_level_meter(layout.level_meter, reading.pitch, sample_rate) do open_input_sheet(app)
+    if gui_level_meter(layout.level_meter, reading.pitch, sample_rate) {
+        open_input_sheet(app)
+    }
 
     // A menu of the displays, last so it opens over the controls under it. Tab goes through them and the number
     // keys straight to one.
@@ -174,7 +180,9 @@ draw_spectrum_area :: proc(app: ^App, strobe, view: gfx.Rect) {
 // The partials the strobe's tracks follow, until the end of the frame
 strobe_track_hz :: proc(lock_in: ^core.StrobeLockIn) -> []f32 {
     track_hz := make([]f32, len(lock_in.bands), context.temp_allocator)
-    for band, index in lock_in.bands do track_hz[index] = band.freq_hz
+    for band, index in lock_in.bands {
+        track_hz[index] = band.freq_hz
+    }
     return track_hz
 }
 
@@ -287,7 +295,9 @@ draw_tuning_arrows :: proc(strobe_area: ^StrobeArea, note_target: ^core.NoteTarg
     // Only the strong readings, a fading note drifts and would flash the arrows. The strobe's close to the
     // note, like the readout.
     cents := core.target_cents_off(note_target, note_target.last_good_pitch.detected_freq)
-    if reading.readout_shown do cents = reading.steady.err_cents
+    if reading.readout_shown {
+        cents = reading.steady.err_cents
+    }
 
     distance := abs(cents)
     measures_target := core.measures_target(note_target)
@@ -430,24 +440,42 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading, menu_com
 
     lock_toggled := gui_lock_toggle(layout.lock, note_target.locked) || note_tapped
     if !gui.disabled {
-        if gfx.key_pressed(.SPACE) || menu_command == .LOCK_NOTE do lock_toggled = true
-        if gfx.key_pressed(.LEFT) do step = -1
-        if gfx.key_pressed(.RIGHT) do step = 1
+        if gfx.key_pressed(.SPACE) || menu_command == .LOCK_NOTE {
+            lock_toggled = true
+        }
+        if gfx.key_pressed(.LEFT) {
+            step = -1
+        }
+        if gfx.key_pressed(.RIGHT) {
+            step = 1
+        }
 
         // An octave up and down on every note, the strings have no octaves
-        if !string_mode && gfx.key_pressed(.UP) do step = ruler_step_octave(len(ruler_notes), target, 1)
-        if !string_mode && gfx.key_pressed(.DOWN) do step = ruler_step_octave(len(ruler_notes), target, -1)
+        if !string_mode && gfx.key_pressed(.UP) {
+            step = ruler_step_octave(len(ruler_notes), target, 1)
+        }
+        if !string_mode && gfx.key_pressed(.DOWN) {
+            step = ruler_step_octave(len(ruler_notes), target, -1)
+        }
     }
 
     // A swipe locks the note in the middle as it goes, the one it started on right away, rather than the
     // target following the detected note under the finger
-    if swiping do lock_toggled = !note_target.locked
-    if lock_toggled || step != 0 do app.quiet_time = 0
+    if swiping {
+        lock_toggled = !note_target.locked
+    }
+    if lock_toggled || step != 0 {
+        app.quiet_time = 0
+    }
 
     retune_target := lock_toggled && core.toggle_note_lock(note_target)
 
-    if core.step_target_note(note_target, step) do retune_target = true
-    if retune_target do retune(&app.measurement, config)
+    if core.step_target_note(note_target, step) {
+        retune_target = true
+    }
+    if retune_target {
+        retune(&app.measurement, config)
+    }
 
     // A note that's tuned off pitch says so between the letter and the lock, the strobe and the readout are on
     // the offset note, see gui_note_offsets.
@@ -489,8 +517,12 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo) {
     } else {
         stat(fmt.ctprintf("Clarity %.3f", pitch.clarity), {500, 10}, large = true)
     }
-    if pitch.is_strong_pitch do stat("strong", {600, 10}, gfx.ORANGE, large = true)
-    if pitch.is_weak_pitch do stat("weak", {600, 10}, gfx.PURPLE, large = true)
+    if pitch.is_strong_pitch {
+        stat("strong", {600, 10}, gfx.ORANGE, large = true)
+    }
+    if pitch.is_weak_pitch {
+        stat("weak", {600, 10}, gfx.PURPLE, large = true)
+    }
 
     font := pixel_fonts.label_small.font
     detector := &app.measurement.pitch_detector

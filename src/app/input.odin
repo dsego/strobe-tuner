@@ -73,10 +73,14 @@ follow_input :: proc(app: ^App) {
         build_input_list(input, app.config.input_device)
 
         // One may be there now
-        if audio.input_failed(capture) do input.restart = true
+        if audio.input_failed(capture) {
+            input.restart = true
+        }
     }
 
-    if input.restart || picked_device(input) != capture.active_device do switch_input(app)
+    if input.restart || picked_device(input) != capture.active_device {
+        switch_input(app)
+    }
 }
 
 // The list on the input's sheet and in the Input menu: the system default with the device it is now, then
@@ -100,7 +104,9 @@ build_input_list :: proc(input: ^AudioInput, wanted_name: string) {
         wanted := audio.find_device(capture, wanted_name)
         for index in 0 ..< audio.device_count(capture) {
             append(&input.devices, GuiOption{index, audio.device_name(capture, index)})
-            if index == wanted do input.device_index = len(input.devices) - 1
+            if index == wanted {
+                input.device_index = len(input.devices) - 1
+            }
         }
         input.listed = input.device_index
     }
@@ -109,10 +115,14 @@ build_input_list :: proc(input: ^AudioInput, wanted_name: string) {
     items: [dynamic]gfx.MenuItem
     items.allocator = context.temp_allocator
     for option, index in input.devices[:min(len(input.devices), MAX_INPUT_COMMANDS)] {
-        if index == 1 do append(&items, gfx.MenuItem{})
+        if index == 1 {
+            append(&items, gfx.MenuItem{})
+        }
         append(&items, gfx.MenuItem{title = fmt.ctprintf("%s", option.label), command = int(MenuCommand.INPUTS) + index})
     }
-    if len(items) == 0 do append(&items, gfx.MenuItem{title = "No Input Found"})
+    if len(items) == 0 {
+        append(&items, gfx.MenuItem{title = "No Input Found"})
+    }
 
     gfx.set_menu_items(input.menu, items[:])
 

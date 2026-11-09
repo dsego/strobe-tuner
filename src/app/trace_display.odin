@@ -93,7 +93,9 @@ record_trace :: proc(self: ^TraceDisplay, cents, light: f32, note: int, fresh: b
     lost := self.count > 0 && math.is_nan(trace_sample(self, self.count - 1).cents)
     if math.is_nan(cents) {
         // One marker where the pitch goes, not one every frame
-        if self.count > 0 && !lost do push_sample(self, {self.clock, cents, 0, note})
+        if self.count > 0 && !lost {
+            push_sample(self, {self.clock, cents, 0, note})
+        }
     } else if fresh || lost || self.count == 0 {
         push_sample(self, {self.clock, cents, light, note})
     }
@@ -178,7 +180,9 @@ draw_trace_notches :: proc(plot: gfx.Rect, cents_range: f32) {
     // 10 on the narrow range, 20 on the wide one, none on a range too narrow for it
     halfway := math.floor(cents_range / 2 / 10) * 10
     for side in ([2]f32{-1, 1}) {
-        if halfway > 0 do draw_notch(plot, side * halfway, cents_range)
+        if halfway > 0 {
+            draw_notch(plot, side * halfway, cents_range)
+        }
         draw_notch(plot, side * cents_range, cents_range)
     }
 }
@@ -196,7 +200,9 @@ draw_trace_line :: proc(self: ^TraceDisplay, axes: TraceAxes, thickness, feather
         }
 
         end := start
-        for continues_trace_run(self, end, end + 1) do end += 1
+        for continues_trace_run(self, end, end + 1) {
+            end += 1
+        }
 
         draw_trace_run(self, start, end, axes, thickness, feather, trace_line_color(self, start, config))
         start = end + 1
@@ -242,7 +248,9 @@ continues_trace_run :: proc(self: ^TraceDisplay, index, neighbour: int) -> bool 
 first_shown_trace_sample :: proc(self: ^TraceDisplay, axes: TraceAxes) -> int {
     shown_from := self.clock - f64(axes.plot.width / axes.scale.x)
     first := 0
-    for first + 1 < self.count && trace_sample(self, first + 1).time < shown_from do first += 1
+    for first + 1 < self.count && trace_sample(self, first + 1).time < shown_from {
+        first += 1
+    }
     return first
 }
 

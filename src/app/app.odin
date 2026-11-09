@@ -239,7 +239,9 @@ run_frame :: proc(app: ^App) {
 // after them, what the rest of the frame changes in it is saved, see save_frame_changes.
 follow_input_and_unlock :: proc(app: ^App) -> (config_before: Config) {
     // An interruption that ended, e.g. a call, opens the input again in follow_input
-    if audio.interruption_ended(app.input.capture) do app.input.restart = true
+    if audio.interruption_ended(app.input.capture) {
+        app.input.restart = true
+    }
 
     // Before the copy, the input's old name is freed in the config here
     follow_input(app)
@@ -257,7 +259,9 @@ follow_input_and_unlock :: proc(app: ^App) -> (config_before: Config) {
 
 // The config brought up to what the sheets changed last frame, then measured with it
 measure_frame :: proc(app: ^App) -> (reading: Reading) {
-    if app.config_changes != {} do apply_config(app, app.config_changes)
+    if app.config_changes != {} {
+        apply_config(app, app.config_changes)
+    }
 
     reading = measure(app)
 
@@ -304,11 +308,15 @@ draw_frame :: proc(app: ^App, layout: Layout, reading: Reading, menu_command: Me
     // under it
     reminder := &app.sheets.unlock
     reminder_shows := reminder.sheet.slide > SHEET_DOWN
-    if reminder_shows do begin_unlock_backdrop(reminder)
+    if reminder_shows {
+        begin_unlock_backdrop(reminder)
+    }
 
     // The arrows are on the strobe, they show above the sheet
     if cover.strobe {
-        if cover.strobe_shows do draw_strobe_area(app, layout)
+        if cover.strobe_shows {
+            draw_strobe_area(app, layout)
+        }
     } else if cover.panel {
         draw_strobe_area(app, layout)
         draw_tuning_arrows(&app.strobe_area, &app.measurement.note_target, layout, reading, app.config)
@@ -345,8 +353,12 @@ slide_sheets :: proc(app: ^App, layout: Layout) -> (cover: SheetCover) {
     reminder := &app.sheets.unlock.sheet
     for sheet in all_sheets(&app.sheets) {
         slide_sheet(sheet)
-        if sheet.open || sheet.slide > SHEET_DOWN do gui.disabled = true
-        if sheet.slide == SHEET_UP && !sheet.drag.active && sheet != reminder do cover.panel = true
+        if sheet.open || sheet.slide > SHEET_DOWN {
+            gui.disabled = true
+        }
+        if sheet.slide == SHEET_UP && !sheet.drag.active && sheet != reminder {
+            cover.panel = true
+        }
     }
 
     instrument_sheet := app.sheets.instrument
@@ -357,7 +369,9 @@ slide_sheets :: proc(app: ^App, layout: Layout) -> (cover: SheetCover) {
 
 // After everything that changes the config this frame, it's written once it settled, see save_when_settled
 save_frame_changes :: proc(app: ^App, config_before: Config) {
-    if app.config^ != config_before do app.unsaved, app.unsaved_s = true, 0
+    if app.config^ != config_before {
+        app.unsaved, app.unsaved_s = true, 0
+    }
 
     save_when_settled(app)
 }
@@ -381,7 +395,9 @@ apply_config :: proc(app: ^App, changes: ConfigChanges) {
         return
     }
 
-    if .SPEED in changes do set_strobe_speed(measurement, config)
+    if .SPEED in changes {
+        set_strobe_speed(measurement, config)
+    }
 
     // Another readout picks its track again, the reading held was the other one's
     if .READOUT in changes {
@@ -421,17 +437,25 @@ handle_keys :: proc(app: ^App) -> (menu_command: MenuCommand) {
         open_unlock_sheet(&app.sheets, countdown = false)
     }
     for command, type in DISPLAY_COMMANDS {
-        if menu_command == command do config.strobe_display_type = type
+        if menu_command == command {
+            config.strobe_display_type = type
+        }
     }
     for command, colorway in COLORWAY_COMMANDS {
-        if menu_command == command do config.strobe_colorway = colorway
+        if menu_command == command {
+            config.strobe_colorway = colorway
+        }
     }
 
     // Opened in the next frame like a pick on the input's sheet, see follow_input
     input := int(menu_command) - int(MenuCommand.INPUTS)
-    if input >= 0 && input < len(app.input.devices) do app.input.device_index = input
+    if input >= 0 && input < len(app.input.devices) {
+        app.input.device_index = input
+    }
 
-    if plain && gfx.key_pressed(.G) do config.strobe_glow = !config.strobe_glow
+    if plain && gfx.key_pressed(.G) {
+        config.strobe_glow = !config.strobe_glow
+    }
 
     // H flips the pitch detection between its two ways to try them side by side, not a setting yet, see
     // core.PitchMethod. Debug builds only, nothing on the screen shows which one reads.
@@ -443,7 +467,9 @@ handle_keys :: proc(app: ^App) -> (menu_command: MenuCommand) {
         }
     }
 
-    if plain && gfx.key_pressed(.TAB) do config.strobe_display_type = next_display(config.strobe_display_type)
+    if plain && gfx.key_pressed(.TAB) {
+        config.strobe_display_type = next_display(config.strobe_display_type)
+    }
 
     // Or straight to one, in the settings' order
     DISPLAY_KEYS :: [StrobeDisplayType]gfx.Key {
@@ -454,16 +480,22 @@ handle_keys :: proc(app: ^App) -> (menu_command: MenuCommand) {
         .SPECTRUM = .NUM_5,
     }
     for key, type in DISPLAY_KEYS {
-        if plain && gfx.key_pressed(key) do config.strobe_display_type = type
+        if plain && gfx.key_pressed(key) {
+            config.strobe_display_type = type
+        }
     }
 
     // Without a menu bar Ctrl+, opens the settings and Ctrl+0 puts the window back to the strobe's size, see
     // follow_window_size
     when !gfx.MOBILE && ODIN_OS != .Darwin {
         control := gfx.key_down(.LEFT_CONTROL) || gfx.key_down(.RIGHT_CONTROL)
-        if control && gfx.key_pressed(.COMMA) do toggle_settings_sheet(&app.sheets)
+        if control && gfx.key_pressed(.COMMA) {
+            toggle_settings_sheet(&app.sheets)
+        }
 
-        if control && gfx.key_pressed(.NUM_0) do config.window_size = {}
+        if control && gfx.key_pressed(.NUM_0) {
+            config.window_size = {}
+        }
     }
     return
 }
@@ -478,7 +510,9 @@ next_display :: proc(type: StrobeDisplayType) -> StrobeDisplayType {
 // window dragged bigger where the system's loop doesn't hold the frames, e.g. Linux, isn't written every frame.
 save_when_settled :: proc(app: ^App) {
     sheets_open := false
-    for sheet in all_sheets(&app.sheets) do sheets_open ||= sheet.open
+    for sheet in all_sheets(&app.sheets) {
+        sheets_open ||= sheet.open
+    }
     if !app.unsaved || sheets_open do return
 
     app.unsaved_s += gfx.frame_time()
@@ -528,12 +562,16 @@ follow_window_size :: proc(config: ^Config, window: [2]f32) {
 limit_frame_rate :: proc(app: ^App) {
     signal := app.measurement.note_target.active
     for band in app.measurement.strobe_lock_in.bands {
-        if band.visibility > 0 do signal = true
+        if band.visibility > 0 {
+            signal = true
+        }
     }
     touched := gfx.mouse_down() || gfx.mouse_pressed() || gfx.mouse_wheel() != 0
     sliding := note_ruler.swipe.gesture == .COASTING || note_ruler.roll != 0
     for sheet in all_sheets(&app.sheets) {
-        if sheet.slide != slide_target(sheet^) do sliding = true
+        if sheet.slide != slide_target(sheet^) {
+            sliding = true
+        }
     }
 
     if signal || touched || sliding {

@@ -181,7 +181,9 @@ draw_scope_time_labels :: proc(rect: gfx.Rect, scope: ^core.Scope, background: g
     decimals := 0 if step_ms >= 10 else (1 if step_ms >= 1 else 2)
     for division := 0; division <= SCOPE_DIVISIONS; division += 2 {
         text: cstring = "0 ms"
-        if division > 0 do text = fmt.ctprintf("%.*f ms", decimals, span_ms * f32(division) / SCOPE_DIVISIONS)
+        if division > 0 {
+            text = fmt.ctprintf("%.*f ms", decimals, span_ms * f32(division) / SCOPE_DIVISIONS)
+        }
 
         size := measure_label(font, text)
         line := rect.x + rect.width * (1 - f32(division) / SCOPE_DIVISIONS)
@@ -224,18 +226,30 @@ draw_scope_trace :: proc(
     // Solid, as bright all along. Round the circle the ends fade where they overlap. Dimmer is clearer, not
     // darker: the ring and the graticule under it show through.
     if beam == .SOLID {
-        for &color, index in self.trace_colors do color = fade_color(beam_color, self.trace_light[index])
-        if scope.sweep == .CIRCLE do fade_circle_ends(self.trace_colors[:])
+        for &color, index in self.trace_colors {
+            color = fade_color(beam_color, self.trace_light[index])
+        }
+        if scope.sweep == .CIRCLE {
+            fade_circle_ends(self.trace_colors[:])
+        }
         draw_pieces(self, rect, SCOPE_TRACE_THICKNESS, SCOPE_TRACE_FEATHER)
         return
     }
 
-    for &color, index in self.trace_colors do color = fade_color(beam_color, self.trace_light[index] * SCOPE_GLOW)
-    if scope.sweep == .CIRCLE do fade_circle_ends(self.trace_colors[:])
+    for &color, index in self.trace_colors {
+        color = fade_color(beam_color, self.trace_light[index] * SCOPE_GLOW)
+    }
+    if scope.sweep == .CIRCLE {
+        fade_circle_ends(self.trace_colors[:])
+    }
     draw_pieces(self, rect, SCOPE_GLOW_THICKNESS, 0.5 * SCOPE_GLOW_THICKNESS)
 
-    for &color, index in self.trace_colors do color = fade_color(beam_color, self.trace_light[index])
-    if scope.sweep == .CIRCLE do fade_circle_ends(self.trace_colors[:])
+    for &color, index in self.trace_colors {
+        color = fade_color(beam_color, self.trace_light[index])
+    }
+    if scope.sweep == .CIRCLE {
+        fade_circle_ends(self.trace_colors[:])
+    }
     draw_pieces(self, rect, SCOPE_TRACE_THICKNESS, SCOPE_TRACE_FEATHER)
 }
 
@@ -259,7 +273,9 @@ fade_circle_ends :: proc(colors: []gfx.Color) {
 // all along. Phosphor, each point as bright as the beam stays there, see draw_scope_trace.
 place_trace :: proc(rect: gfx.Rect, scope: ^core.Scope, beam: ScopeBeam, points: [][2]f32, light: []f32) {
     for &point in points {
-        if scope.sweep == .TIME do point.x = 1 - point.x
+        if scope.sweep == .TIME {
+            point.x = 1 - point.x
+        }
 
         point = {rect.x + point.x * rect.width, rect.y + point.y * rect.height}
     }
@@ -280,7 +296,9 @@ place_trace :: proc(rect: gfx.Rect, scope: ^core.Scope, beam: ScopeBeam, points:
     // Each point as far as the beam goes to the next one, or from the one before where it starts over
     for &brightness, index in light {
         next := index + 1
-        if next == len(points) || trace_wraps(rect, points, index, next) do next = max(index - 1, 0)
+        if next == len(points) || trace_wraps(rect, points, index, next) {
+            next = max(index - 1, 0)
+        }
 
         delta := points[next] - points[index]
         distance := math.sqrt(delta.x * delta.x + delta.y * delta.y)

@@ -82,7 +82,9 @@ compute_sheet_layout :: proc(
     sheet_layout.bottom = sheet_layout.sheet.y + height - (window.y - (safe.y + safe.height)) - PANEL_PADDING
 
     sheet_layout.outside = {0, 0, window.x, sheet_layout.sheet.y}
-    if layout.beside do sheet_layout.outside = {0, 0, sheet_x, window.y}
+    if layout.beside {
+        sheet_layout.outside = {0, 0, sheet_x, window.y}
+    }
 
     top := sheet_layout.sheet.y + SHEET_TOP_PADDING
     sheet_layout.title = {left, top}
@@ -129,10 +131,14 @@ SHEET_DISMISS_VELOCITY :: 600
 // the way off it closes, it isn't there to see the finger let go. While it's dragged it stays where the
 // finger left it, the frame the finger lets go draws it there and not eased back up a bit.
 slide_sheet :: proc(sheet: ^Sheet) {
-    if sheet.drag.active && sheet.slide == SHEET_DOWN do close_sheet(sheet)
+    if sheet.drag.active && sheet.slide == SHEET_DOWN {
+        close_sheet(sheet)
+    }
 
     sheet.was_open = sheet.open
-    if !sheet.drag.active do slide_toward(&sheet.slide, slide_target(sheet^))
+    if !sheet.drag.active {
+        slide_toward(&sheet.slide, slide_target(sheet^))
+    }
 }
 
 // Where open puts the sheet, all the way up or down
@@ -143,7 +149,9 @@ slide_target :: proc(sheet: Sheet) -> f32 {
 // Eases slide towards target at a sheet's pace and snaps the last bit
 slide_toward :: proc(slide: ^f32, target: f32) {
     slide^ += (target - slide^) * min(1, SHEET_SLIDE_SPEED * gfx.frame_time())
-    if abs(target - slide^) < SHEET_SNAP_SLIDE do slide^ = target
+    if abs(target - slide^) < SHEET_SNAP_SLIDE {
+        slide^ = target
+    }
 }
 
 close_sheet :: proc(sheet: ^Sheet) {
@@ -198,7 +206,9 @@ begin_sheet :: proc(
 
     // The strobe looks set into the window above the sheet like above the panel, and the edge shades the
     // panel on the way up. A sheet beside the strobe doesn't reach it.
-    if !layout.beside do draw_strobe_bottom_shadow(layout.strobe, sheet_layout.sheet.y)
+    if !layout.beside {
+        draw_strobe_bottom_shadow(layout.strobe, sheet_layout.sheet.y)
+    }
 
     return
 }

@@ -384,7 +384,9 @@ draw_track_label :: proc(
         width := measure_label(font, "-00.0").x
         text := fmt.ctprintf("%+.1f", band.err_cents)
         position := [2]f32{upright.x + TRACK_CENTS_INSET + width, label_y}
-        if turned do position = {label_x + 0.5 * width, pane.y + pane.height - TRACK_CENTS_INSET - label_height}
+        if turned {
+            position = {label_x + 0.5 * width, pane.y + pane.height - TRACK_CENTS_INSET - label_height}
+        }
 
         draw_text_right(font.font, text, position, font.size, 0, lerp_color(text_color_muted, accent_color, visibility))
     }
@@ -406,8 +408,12 @@ turned_label_reach :: proc(config: ^Config) -> (top, bottom: f32) {
     if config.strobe_mode != .HARMONIC do return
 
     label_height := pixel_fonts.band_label.size
-    if config.partial_labels != .NONE && config.strobe_shape != .WHEEL do top = TRACK_PARTIAL_INSET + label_height
-    if config.show_band_cents do bottom = TRACK_CENTS_INSET + label_height
+    if config.partial_labels != .NONE && config.strobe_shape != .WHEEL {
+        top = TRACK_PARTIAL_INSET + label_height
+    }
+    if config.show_band_cents {
+        bottom = TRACK_CENTS_INSET + label_height
+    }
     return
 }
 
@@ -543,7 +549,9 @@ strobe_tracks :: proc(
         // turns faster, its stripes are packed twice as tight as the one inside it.
         curvature_radius := geometry.curvature_radius + geometry.band_height * f32(band_index)
         period_count := geometry.period_count
-        if mode == .VERNIER do period_count *= f32(u32(1) << u32(band_index))
+        if mode == .VERNIER {
+            period_count *= f32(u32(1) << u32(band_index))
+        }
 
         order := len(bands) - 1 - band_index
         uniforms.bounding_rect = track_bounds(geometry, strobe_rect, order, curvature_radius)
@@ -563,7 +571,9 @@ strobe_tracks :: proc(
 
         // Without stripes the track looks the same whatever its phase and edges, and doesn't change from frame to
         // frame: the gain follows the noise
-        if uniforms.visibility == 0 do uniforms.phase, uniforms.phase_step, uniforms.amp = 0, 0, 0
+        if uniforms.visibility == 0 {
+            uniforms.phase, uniforms.phase_step, uniforms.amp = 0, 0, 0
+        }
 
         selected := band_index == self.selected_track
         uniforms.highlight = self.selection if selected else 0
@@ -580,7 +590,9 @@ tracks_went_stale :: proc(self: ^StrobeDisplay, mode: core.StrobeMode) -> bool {
 
     // A vernier track's stripes are packed tighter than a harmonic one's, the phase drawn before doesn't carry
     // over
-    if mode != self.tracks_mode do stale = true
+    if mode != self.tracks_mode {
+        stale = true
+    }
 
     self.tracks_mode = mode
     return stale
@@ -599,7 +611,9 @@ track_bounds :: proc(geometry: StrobeGeometry, strobe_rect: gfx.Rect, order: int
         arc_height = curvature_radius - math.sqrt(inner_radius * inner_radius - half_width * half_width)
     }
     height := min(strobe_rect.y + strobe_rect.height - band_y, arc_height + 4)
-    if geometry.shape == .FLAT do height = band_height
+    if geometry.shape == .FLAT {
+        height = band_height
+    }
 
     return {strobe_rect.x, band_y, strobe_rect.width, height}
 }
@@ -630,7 +644,9 @@ track_phase :: proc(
 
     // Coming back to the strobe or turned another way, the stripes start where they are, the motion blur
     // doesn't sweep them from a phase seconds old or from another one
-    if stale do drawn_phase^ = phase
+    if stale {
+        drawn_phase^ = phase
+    }
 
     // How far the strobe moved since the previous frame as drawn
     phase_step = phase - drawn_phase^
