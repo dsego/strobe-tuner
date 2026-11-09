@@ -108,7 +108,7 @@ TOUCH_HEIGHT :: 44
 // The shown display's name and a caret after it, plain like the other controls on the main screen. A tap opens
 // the displays' menu under it, the settings' dropdown menu over the panel, and the one picked shows. Drawn after
 // the controls under it. pos is the left edge, vertically centred.
-gui_display_button :: proc(pos: [2]f32, type: ^StrobeDisplayType, open: ^bool) {
+gui_pick_display :: proc(pos: [2]f32, type: ^StrobeDisplayType, open: ^bool) {
     CARET_GAP :: 4
     MENU_WIDTH :: 140
     TOUCH_PAD :: 12 // past the label and the caret on each side

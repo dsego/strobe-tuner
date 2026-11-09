@@ -62,7 +62,7 @@ COLORWAY_NAMES :: [StrobeColorway]cstring {
     .BY_NOTE     = "By note",
 }
 
-// The same on the main screen's display button, in caps like the other controls' labels
+// The same on the main screen's display picker, in caps like the other controls' labels
 DISPLAY_LABELS :: [StrobeDisplayType]cstring {
     .STROBE   = "STROBE",
     .SCOPE    = "SCOPE",

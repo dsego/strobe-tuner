@@ -66,18 +66,18 @@ ConfigChanges :: bit_set[ConfigChange]
 
 // What the strobe area draws, the display picked in the settings and the arrows over it
 StrobeArea :: struct {
-    glow_targets: GlowTargets, // shared by the displays that glow
-    strobe:       StrobeDisplay,
-    scope:        ScopeDisplay, // the scope's and the lamp's views
-    trace:        TraceDisplay,
-    spectrum:     SpectrumDisplay,
+    glow_targets:      GlowTargets, // shared by the displays that glow
+    strobe:            StrobeDisplay,
+    scope:             ScopeDisplay, // the scope's and the lamp's views
+    trace:             TraceDisplay,
+    spectrum:          SpectrumDisplay,
 
     // The arrows on the strobe, see draw_tuning_arrows
-    flat_arrow:   bool,
-    sharp_arrow:  bool,
+    flat_arrow:        bool,
+    sharp_arrow:       bool,
 
-    menu_open:    bool, // the displays' menu over the strobe, see gui_display_button
-    toast:        TapToast, // the option a tap on the view changed, see show_tap_toast
+    display_menu_open: bool, // the displays' menu over the strobe, see gui_pick_display
+    toast:             TapToast, // the option a tap on the view changed, see show_tap_toast
 }
 
 

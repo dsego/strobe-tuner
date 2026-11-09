@@ -51,7 +51,11 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu_comma
 
     // A menu of the displays, last so it opens over the controls under it. Tab goes through them and the number
     // keys straight to one.
-    gui_display_button(layout.display, &config.strobe_display_type, &app.strobe_area.menu_open)
+    gui_pick_display(
+        layout.display_picker,
+        &config.strobe_display_type,
+        &app.strobe_area.display_menu_open,
+    )
 
     when DEBUG_STATS do draw_debug_stats(app, layout, reading.pitch)
 }

@@ -38,7 +38,7 @@ Layout :: struct {
     measurements:   [2]f32, // the top middle of the readout, see draw_measurements
     stats:          [2]f32,
     lock:           [2]f32, // the middle of the button
-    display:        [2]f32, // the display button's left edge and middle, see gui_display_button
+    display_picker: [2]f32, // its left edge and middle, see gui_pick_display
     level_meter:    [2]f32, // left of the icon, top of the bar
     settings:       [2]f32,
     note_offset:    [2]f32, // the middle of the note's offset, between the letter and the lock
@@ -59,7 +59,7 @@ STROBE_MAX_SCALE :: 2.4
 STROBE_CUTOUT :: 0.0
 
 PANEL_PADDING :: 16
-PANEL_MIN_WIDTH :: 424 // the column beside the strobe at its narrowest, the readout's labels clear the display button and the level meter
+PANEL_MIN_WIDTH :: 424 // the column beside the strobe at its narrowest, the readout's labels clear the display picker and the level meter
 
 // The controls and a sheet's rows at their widest, PANEL_PADDING inside, centred in a wider panel. A tablet
 // held upright has the panel the whole window across, a label at one edge with its control at the other
@@ -160,7 +160,7 @@ compute_layout :: proc(window: [2]f32, safe: gfx.Rect, offsets: bool) -> (layout
     return
 }
 
-// The display button and the level meter in a row along the top of the panel, the note with the readout
+// The display picker and the level meter in a row along the top of the panel, the note with the readout
 // above it and the lock under it, and the instrument and the settings in the bottom corners
 panel_layout :: proc(layout: ^Layout, offsets: bool) {
     panel := layout.panel
@@ -168,11 +168,10 @@ panel_layout :: proc(layout: ^Layout, offsets: bool) {
     right := left + width
     bottom := panel.y + panel.height - PANEL_PADDING
 
-    // The display button picks what the strobe area shows, it sits at the top of the panel on the left, the
-    // level meter opposite it on the right. The bar lines up with the button's icon. Both stay under the
-    // strobe like the bottom row in its corners.
-    layout.display = {left, panel.y + 20}
-    layout.level_meter = {right - LEVEL_METER_WIDTH, layout.display.y - LEVEL_METER_HEIGHT / 2}
+    // The display picker sits at the top of the panel on the left, the level meter opposite it on the right.
+    // The bar lines up with the picker's caret. Both stay under the strobe like the bottom row in its corners.
+    layout.display_picker = {left, panel.y + 20}
+    layout.level_meter = {right - LEVEL_METER_WIDTH, layout.display_picker.y - LEVEL_METER_HEIGHT / 2}
 
     // A row along the bottom like the one under the strobe
     corners := bottom - SETTINGS_ICON_SIZE / 2
@@ -195,7 +194,7 @@ panel_layout :: proc(layout: ^Layout, offsets: bool) {
     note_top: f32 = -CAP_HALF * RULER_SCALE * RULER_NOTE_SIZE
     note_bottom := -note_top + RULER_SCALE * OCTAVE_BELOW
     contents := readout_height + note_bottom - note_top + GAUGE_HEIGHT + caption + LOCK_BUTTON_HEIGHT
-    rows_top := layout.display.y + ROW_CLEARANCE
+    rows_top := layout.display_picker.y + ROW_CLEARANCE
     rows_bottom := corners - ROW_CLEARANCE
     slack := rows_bottom - rows_top - contents
     gap := clamp(slack / (3 + 2 * WIDE_GAP), MIN_GAP, MAX_GAP)
