@@ -145,7 +145,8 @@ stop_app :: proc(app: ^App) {
     gfx.shutdown()
 }
 
-// The glow's targets are made as the first glowing display draws, see ensure_glow_targets
+// The displays, but not the glow's targets: those take the size of the first glowing display as it
+// draws, see ensure_glow_targets
 init_strobe_area :: proc(strobe_area: ^StrobeArea) {
     strobe_area.strobe = init_strobe_display(strobe_bg_color)
     strobe_area.scope = init_scope_display(strobe_bg_color)
