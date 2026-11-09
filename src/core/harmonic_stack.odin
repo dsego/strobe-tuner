@@ -217,10 +217,11 @@ run_harmonic_stack :: proc(
     if bass_wins do note, freq, score_db = &self.bass, bass_freq, bass_db
     if short_steps_under do note, freq, score_db = &self.bass, under, under_db
 
-    // The followed pitch's octave held against a harmonic or an undertone of it, the note there from the best's
-    // own pitch: the followed one may be the note before a step
-    if harmonic, above := harmonic_of_followed(freq, followed_hz); harmonic > 1 {
-        held_hz := freq / f32(harmonic) if above else freq * f32(harmonic)
+    // A harmonic or an undertone of the followed pitch, the stack is tried at the followed pitch too and kept
+    // there when it scores nearly as well: the followed octave holds. From the best's own pitch, the followed
+    // one may be the note before a step.
+    held_hz, related := followed_pitch_from(freq, followed_hz)
+    if related {
         held := stack_transform_at(self, held_hz)
         held_top := bass_top if held == &self.bass else top_hz
         held_db, held_freq := score_stack(held.peaks[:], held_hz, held_top)
@@ -284,22 +285,35 @@ harmonic_tolerance :: proc(harmonic: int) -> f32 {
     return HARMONICS_TOLERANCE_CENTS + HARMONICS_STRETCH_CENTS * f32(harmonic)
 }
 
-// Which of the followed pitch's 2nd to HARMONICS_COUNT-th harmonics freq is, or of its undertones when it's
-// under it, 0 for none or no followed pitch. Within the harmonic's tolerance and NOTE_HOLD_CENTS more, the note
-// stepped as far as that and stayed the same note: a low square stepped 55 cents and its new 5th harmonic was
-// 49 cents off the followed one's.
-harmonic_of_followed :: proc(freq, followed_hz: f32) -> (harmonic: int, above: bool) {
-    if freq <= 0 || followed_hz <= 0 do return 0, false
+// The followed pitch as freq has it when freq is one of its harmonics or undertones: freq divided by the
+// harmonic, or times the undertone. related is false when it's neither, or nothing is followed.
+followed_pitch_from :: proc(freq, followed_hz: f32) -> (pitch_hz: f32, related: bool) {
+    multiple := harmonic_multiple(freq, followed_hz)
+    if multiple == 0 do return 0, false
 
-    above = freq > followed_hz
-    ratio := max(freq, followed_hz) / min(freq, followed_hz)
+    if freq > followed_hz do return freq / f32(multiple), true
+
+    return freq * f32(multiple), true
+}
+
+is_harmonic_or_undertone :: proc(freq, of_hz: f32) -> bool {
+    return harmonic_multiple(freq, of_hz) != 0
+}
+
+// How many times the higher of freq and of_hz is the lower, 2 to HARMONICS_COUNT, 0 for neither or no pitch.
+// Within the harmonic's tolerance and NOTE_HOLD_CENTS more, the note stepped as far as that and stayed the same
+// note: a low square stepped 55 cents and its new 5th harmonic was 49 cents off the followed one's.
+harmonic_multiple :: proc(freq, of_hz: f32) -> int {
+    if freq <= 0 || of_hz <= 0 do return 0
+
+    ratio := max(freq, of_hz) / min(freq, of_hz)
     nearest := int(math.round(ratio))
-    if nearest < 2 || nearest > HARMONICS_COUNT do return 0, false
+    if nearest < 2 || nearest > HARMONICS_COUNT do return 0
 
     off_cents := abs(1200 * math.log2(ratio / f32(nearest)))
-    if off_cents > harmonic_tolerance(nearest) + NOTE_HOLD_CENTS do return 0, false
+    if off_cents > harmonic_tolerance(nearest) + NOTE_HOLD_CENTS do return 0
 
-    return nearest, above
+    return nearest
 }
 
 // Every peak as each of a candidate's first harmonics, from from_hz to under below_hz, the stack that scores

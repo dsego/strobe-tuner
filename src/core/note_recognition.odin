@@ -72,7 +72,7 @@ recognize_note :: proc(self: ^NoteRecognition, pitch: PitchInfo, confirmed_hz: f
     if pitch.fresh do time_detection(self, pitch)
 
     confirm_s := self.confirm_s
-    if harmonic, _ := harmonic_of_followed(pitch.detected_freq, confirmed_hz); harmonic > 1 {
+    if is_harmonic_or_undertone(pitch.detected_freq, confirmed_hz) {
         confirm_s = max(confirm_s, NOTE_HARMONIC_SWITCH_S)
     }
 
