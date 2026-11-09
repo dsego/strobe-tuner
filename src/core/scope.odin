@@ -370,7 +370,8 @@ scope_width :: proc(self: ^Scope) -> int {
 // draws the newest sweep over a cleared one
 update_scope :: proc(self: ^Scope) {
     self.skipping = false
-    if lost := audio_capture_skip_stale(self); lost > 0 {
+    lost := audio_capture_skip_stale(self)
+    if lost > 0 {
         // A stall, the beam starts over on the audio after it
         self.sample_clock += lost
         restart_beam(self)

@@ -392,7 +392,10 @@ draw_render_targets :: proc() {
 
         gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, pass.target, 0)
         gl.Viewport(0, 0, i32(pass.target_size.x), i32(pass.target_size.y))
-        if clear, ok := pass.clear.?; ok do clear_target(clear, pass.target_size)
+        clear, has_clear := pass.clear.?
+        if has_clear {
+            clear_target(clear, pass.target_size)
+        }
 
         replay_commands(commands, pass.target_size, pass.offset, pass.zoom, flipped = true)
     }

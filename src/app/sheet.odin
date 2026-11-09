@@ -176,7 +176,8 @@ begin_sheet :: proc(
         }
 
         // Smoothed, a finger stops for a frame or two before it lets go
-        if dt := gfx.frame_time(); dt > 0 {
+        dt := gfx.frame_time()
+        if dt > 0 {
             drag.velocity += ((mouse.y - drag.last_y) / dt - drag.velocity) * SHEET_VELOCITY_SMOOTHING
         }
         drag.last_y = mouse.y

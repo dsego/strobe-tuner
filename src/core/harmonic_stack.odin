@@ -325,7 +325,8 @@ best_stack :: proc(self: ^StackTransform, from_hz, below_hz, top_hz: f32) -> (fr
     most_db: f32
     for peak in peaks do most_db = max(most_db, peak.over_db)
 
-    if nearest := nearest_candidate(peaks, self.previous_hz, from_hz, below_hz); nearest > 0 {
+    nearest := nearest_candidate(peaks, self.previous_hz, from_hz, below_hz)
+    if nearest > 0 {
         score_db, freq = score_stack(peaks, nearest, top_hz)
     }
 

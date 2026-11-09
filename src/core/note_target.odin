@@ -73,7 +73,8 @@ update_note_target :: proc(self: ^NoteTarget, pitch: PitchInfo, strobe_hears := 
     // trigger. Rounded to the nearest, a pitch wavering round halfway, a hum or a string tuned up from
     // a semitone flat, flipped from one to the other and the strobe's tracks and the scope started over.
     pitch := pitch
-    if held, has_held := self.detected_note.?; has_held && !pitch.is_weak_pitch && !holds_note(held, pitch.detected_note) {
+    held, has_held := self.detected_note.?
+    if has_held && !pitch.is_weak_pitch && !holds_note(held, pitch.detected_note) {
         held_freq := freq_at_cents(held.frequency, note_offset_cents(self, held))
         if abs(cents_deviation(pitch.detected_freq, held_freq)) <= NOTE_HOLD_CENTS {
             pitch.detected_note = held
@@ -85,7 +86,10 @@ update_note_target :: proc(self: ^NoteTarget, pitch: PitchInfo, strobe_hears := 
     // A harmonic of the confirmed note waits longer, see NOTE_HARMONIC_SWITCH_S. Not of the latest strong
     // detection, the harmonic was one on its first.
     confirmed_hz: f32 = 0
-    if lit, has_lit := self.detected_note.?; has_lit && self.active do confirmed_hz = lit.frequency
+    lit, has_lit := self.detected_note.?
+    if has_lit && self.active {
+        confirmed_hz = lit.frequency
+    }
     strong, confirmed := recognize_note(&self.recognition, pitch, confirmed_hz)
     if strong {
         if confirmed do retune = follow_detected_note(self, pitch.detected_note)
@@ -279,7 +283,8 @@ target_cents_off :: proc(self: ^NoteTarget, freq: f32) -> f32 {
 // The same notes, tuned to another pitch standard
 set_target_pitch_standard :: proc(self: ^NoteTarget, pitch_standard: f32) {
     self.target_note = cents_to_note(f32(self.target_note.cents), pitch_standard)
-    if detected, has_detected := self.detected_note.?; has_detected {
+    detected, has_detected := self.detected_note.?
+    if has_detected {
         self.detected_note = cents_to_note(f32(detected.cents), pitch_standard)
     }
 

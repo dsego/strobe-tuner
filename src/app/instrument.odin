@@ -138,7 +138,8 @@ preset_setup :: proc(config: ^Config, preset: int) -> Setup {
 
 // What's tuned to, the selected preset or the built-in instrument
 current_setup :: proc(config: ^Config) -> Setup {
-    if preset, ok := selected_preset(config).?; ok do return preset_setup(config, preset)
+    preset, has_preset := selected_preset(config).?
+    if has_preset do return preset_setup(config, preset)
 
     instrument := config.instrument
     return {instrument, config.instrument_tunings[instrument], config.instrument_capos[instrument], config.transpose, nil}
@@ -175,7 +176,8 @@ transpose_key :: proc(setup: Setup) -> int {
 // semitones from A4, none for the chromatic ruler. Lives until the end of the frame.
 tuning_strings :: proc(config: ^Config) -> []int {
     setup := current_setup(config)
-    if preset, ok := setup.preset.?; ok && setup.instrument == .CUSTOM do return custom_strings(config, preset)
+    preset, has_preset := setup.preset.?
+    if has_preset && setup.instrument == .CUSTOM do return custom_strings(config, preset)
 
     tuning, _ := setup_tuning(setup)
     if len(tuning.strings) == 0 do return nil
@@ -208,20 +210,29 @@ setup_label :: proc(setup: Setup) -> string {
     abbreviations := INSTRUMENT_ABBREVIATIONS
     keys := TRANSPOSE_KEYS
     prefix := ""
-    if preset, ok := setup.preset.?; ok do prefix = fmt.tprintf("P%d - ", preset + 1)
+    preset, has_preset := setup.preset.?
+    if has_preset {
+        prefix = fmt.tprintf("P%d - ", preset + 1)
+    }
 
     // A Bb instrument, the way it's said
-    if transpose := transpose_key(setup); transpose != 0 {
+    transpose := transpose_key(setup)
+    if transpose != 0 {
         return fmt.tprintf("%s%s IN %s", prefix, abbreviations[setup.instrument], keys[transpose])
     }
 
+    // A tuning other than the instrument's standard one
     name := strings.to_upper(names[setup.instrument], context.temp_allocator)
-    if tuning, index := setup_tuning(setup); index > 0 {
+    tuning, tuning_index := setup_tuning(setup)
+    if tuning_index > 0 {
         name = fmt.tprintf("%s %s", abbreviations[setup.instrument], strings.to_upper(tuning.name, context.temp_allocator))
     }
 
     // The capo's fret alone, a C2 would read like a note
-    if capo := capo_fret(setup); capo > 0 do name = fmt.tprintf("%s · %d", name, capo)
+    capo := capo_fret(setup)
+    if capo > 0 {
+        name = fmt.tprintf("%s · %d", name, capo)
+    }
 
     return strings.concatenate({prefix, name}, context.temp_allocator)
 }
@@ -415,7 +426,10 @@ clear_preset :: proc(config: ^Config, preset: int, instrument: Instrument) {
 // What's tuned to, a built-in instrument or a preset, the one that is is preset. True when it changed.
 gui_instrument_dropdown :: proc(open: ^Dropdown, rect: gfx.Rect, config: ^Config, preset: Maybe(int)) -> bool {
     current := int(config.instrument)
-    if slot, ok := preset.?; ok do current = BUILT_IN_INSTRUMENTS + slot
+    slot, is_preset := preset.?
+    if is_preset {
+        current = BUILT_IN_INSTRUMENTS + slot
+    }
 
     // A line between the built-in instruments and the presets
     dividers := []int{BUILT_IN_INSTRUMENTS}

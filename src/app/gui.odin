@@ -132,7 +132,8 @@ gui_pick_display :: proc(pos: [2]f32, type: ^StrobeDisplayType, open: ^bool) {
     options := display_menu_options()
 
     // The press that opened it is the button's, the touch area reaches over the first option
-    if picked, was_picked := draw_dropdown_menu(menu, options[:], nil); was_picked && was_open {
+    picked, was_picked := draw_dropdown_menu(menu, options[:], nil)
+    if was_picked && was_open {
         type^ = StrobeDisplayType(picked)
         open^ = false
         gui.menu_open = false
@@ -344,7 +345,10 @@ gui_dropdown :: proc(
     draw_dropdown_button(button_rect, options[selected^].label, left_pad)
 
     is_open, picked := gui_dropdown_menu(button_rect, options, open, down, dividers)
-    if index, ok := picked.?; ok do selected^ = index
+    index, was_picked := picked.?
+    if was_picked {
+        selected^ = index
+    }
     return is_open
 }
 

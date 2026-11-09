@@ -50,7 +50,8 @@ active_note_offsets :: proc(config: ^Config) -> (offsets: [core.NOTE_COUNT]f32) 
     if !ok do return
 
     cents := config.note_offset_cents[preset]
-    if tuning, _ := setup_tuning(preset_setup(config, preset)); len(tuning.strings) > 0 {
+    tuning, _ := setup_tuning(preset_setup(config, preset))
+    if len(tuning.strings) > 0 {
         for semitone, row in tuning_strings(config) {
             index := semitone - core.LOWEST_NOTE
             if row < MAX_NOTE_OFFSETS && index >= 0 && index < core.NOTE_COUNT do offsets[index] = cents[row]
@@ -391,14 +392,17 @@ gui_offset_note_spins :: proc(
     changed: bool,
 ) {
     names, shown := OFFSET_NAMES, offset_shown_semitone(rows, row)
-    if step := gui_offset_spin(note_rect, note_reach, names[shown %% 12], ICON_CARET_DOWN, ICON_CARET_UP, large); step != 0 {
-        rows.notes[row] = offset_step_note(rows, row, step)
+    note_name := names[shown %% 12]
+    note_step := gui_offset_spin(note_rect, note_reach, note_name, ICON_CARET_DOWN, ICON_CARET_UP, large)
+    if note_step != 0 {
+        rows.notes[row] = offset_step_note(rows, row, note_step)
         changed = true
     }
 
     octave := fmt.ctprintf("%d", shown / 12)
-    if step := gui_offset_spin(octave_rect, octave_reach, octave, ICON_CARET_DOWN, ICON_CARET_UP, large); step != 0 {
-        rows.notes[row] = offset_step_octave(rows, row, step)
+    octave_step := gui_offset_spin(octave_rect, octave_reach, octave, ICON_CARET_DOWN, ICON_CARET_UP, large)
+    if octave_step != 0 {
+        rows.notes[row] = offset_step_octave(rows, row, octave_step)
         changed = true
     }
     return

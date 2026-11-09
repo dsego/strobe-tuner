@@ -101,18 +101,25 @@ read_value :: proc(ptr: rawptr, type: ^runtime.Type_Info, written: string) {
 
         if text == "nil" {
             runtime.mem_zero(ptr, type.size)
-        } else if value, ok := strconv.parse_int(text); ok {
-            write_int_field(ptr, info.variants[0].size, value)
-            reflect.set_union_variant_type_info(any{ptr, type.id}, info.variants[0])
+        } else {
+            value, is_number := strconv.parse_int(text)
+            if is_number {
+                write_int_field(ptr, info.variants[0].size, value)
+                reflect.set_union_variant_type_info(any{ptr, type.id}, info.variants[0])
+            }
         }
     case reflect.Type_Info_Enum:
-        if value, ok := reflect.enum_from_name_any(type.id, strings.trim(text, "\".")); ok {
+        // By its name, or by its number when it's one of the enum's
+        value, named := reflect.enum_from_name_any(type.id, strings.trim(text, "\"."))
+        number, is_number := strconv.parse_int(text)
+        if named {
             write_int_field(ptr, type.size, int(value))
-        } else if number, is_number := strconv.parse_int(text); is_number {
-            if slice.contains(info.values, reflect.Type_Info_Enum_Value(number)) do write_int_field(ptr, type.size, number)
+        } else if is_number && slice.contains(info.values, reflect.Type_Info_Enum_Value(number)) {
+            write_int_field(ptr, type.size, number)
         }
     case reflect.Type_Info_Float:
-        if value, ok := parse_finite_f32(text); ok {
+        value, is_number := parse_finite_f32(text)
+        if is_number {
             if type.size == 8 {
                 (^f64)(ptr)^ = f64(value)
             } else {
@@ -120,9 +127,15 @@ read_value :: proc(ptr: rawptr, type: ^runtime.Type_Info, written: string) {
             }
         }
     case reflect.Type_Info_Integer:
-        if value, ok := strconv.parse_int(text); ok do write_int_field(ptr, type.size, value)
+        value, is_number := strconv.parse_int(text)
+        if is_number {
+            write_int_field(ptr, type.size, value)
+        }
     case reflect.Type_Info_Boolean:
-        if value, ok := strconv.parse_bool(text); ok do (^bool)(ptr)^ = value
+        value, is_bool := strconv.parse_bool(text)
+        if is_bool {
+            (^bool)(ptr)^ = value
+        }
     case reflect.Type_Info_String:
         // A copy of its own, the map goes at the end
         (^string)(ptr)^ = strings.clone(text)
@@ -242,7 +255,8 @@ write_ini_pairs :: proc(stream: io.Stream, ini_map: ini.Map) -> bool {
     slice.sort(keys)
 
     for key in keys {
-        if _, write_err := ini.write_pair(stream, key, section[key]); write_err != .None do return false
+        _, write_err := ini.write_pair(stream, key, section[key])
+        if write_err != .None do return false
     }
     return true
 }

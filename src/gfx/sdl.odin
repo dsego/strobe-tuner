@@ -562,7 +562,8 @@ draw_render_targets :: proc(command_buffer: ^sdl.GPUCommandBuffer) {
             load_op  = .LOAD if pass.keep else .DONT_CARE,
             store_op = .STORE,
         }
-        if clear, ok := pass.clear.?; ok {
+        clear, has_clear := pass.clear.?
+        if has_clear {
             normalized := normalize_color(clear)
             color_target.clear_color = {normalized.r, normalized.g, normalized.b, normalized.a}
             color_target.load_op = .CLEAR
@@ -635,7 +636,8 @@ replay_commands :: proc(
         sampled := samplers[command.program] > 0
         if sampled && command.texture == nil do continue
 
-        if next := gpu.pipelines[command.program][command.blend][kind]; next != pipeline {
+        next := gpu.pipelines[command.program][command.blend][kind]
+        if next != pipeline {
             pipeline = next
             sdl.BindGPUGraphicsPipeline(render_pass, pipeline)
             sdl.PushGPUVertexUniformData(command_buffer, 0, &view, size_of(view))

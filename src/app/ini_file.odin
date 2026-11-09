@@ -113,8 +113,9 @@ save_ini :: proc(ini_map: ini.Map) {
         fmt.println("Failed to save the config file", temp_path)
         return
     }
-    if err := os.rename(temp_path, ini_path); err != nil {
-        fmt.println("Failed to replace the config file", ini_path, err)
+    rename_err := os.rename(temp_path, ini_path)
+    if rename_err != nil {
+        fmt.println("Failed to replace the config file", ini_path, rename_err)
     }
 }
 

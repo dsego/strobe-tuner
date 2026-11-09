@@ -96,7 +96,8 @@ audio_capture_read :: proc(
     read: int,
     elapsed: i64,
 ) {
-    if lost := audio_capture_skip_stale(self); lost > 0 {
+    lost := audio_capture_skip_stale(self)
+    if lost > 0 {
         slice.zero(audio_buffer)
         return 0, lost
     }

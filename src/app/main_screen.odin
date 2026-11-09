@@ -117,7 +117,10 @@ draw_strobe_area :: proc(app: ^App, layout: Layout) {
         draw_scope_area(app, strobe, view)
     }
 
-    if title, hint, missing := no_input_reason(app); missing do gui_no_input_message(app, strobe, view, title, hint)
+    title, hint, missing := no_input_reason(app)
+    if missing {
+        gui_no_input_message(app, strobe, view, title, hint)
+    }
 
     // Over the whole strobe area, the part behind the notch included, and over the message, the area's edge shows
     draw_strobe_shadow(strobe)
@@ -448,7 +451,8 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading, menu_com
 
     // A note that's tuned off pitch says so between the letter and the lock, the strobe and the readout are on
     // the offset note, see gui_note_offsets.
-    if offset := core.note_offset_cents(note_target, note_target.target_note); offset != 0 {
+    offset := core.note_offset_cents(note_target, note_target.target_note)
+    if offset != 0 {
         text := offset_cents_text(offset)
         width := measure_label(pixel_fonts.label, text, 1).x
 

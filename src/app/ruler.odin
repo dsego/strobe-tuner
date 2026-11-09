@@ -231,7 +231,8 @@ ruler_drag :: proc(ruler: ^NoteRuler, mouse: [2]f32, spacing, highest: f32, targ
     swipe := &ruler.swipe
 
     // Smoothed, a finger stops for a frame or two before it lets go
-    if dt := gfx.frame_time(); dt > 0 {
+    dt := gfx.frame_time()
+    if dt > 0 {
         swipe.velocity += ((mouse.x - swipe.last_x) / dt - swipe.velocity) * (1 - math.exp(-dt / RULER_VELOCITY_S))
     }
     swipe.last_x = mouse.x
@@ -270,7 +271,8 @@ ruler_turn :: proc(ruler: ^NoteRuler, turned, highest: f32) {
 // the next. Past the ends there's no such note, it gives a little and springs back.
 ruler_step_octave :: proc(count, target, turn: int) -> (step: int) {
     ruler := &note_ruler
-    if stepped := target + 12 * turn; stepped < 0 || stepped >= count {
+    stepped := target + 12 * turn
+    if stepped < 0 || stepped >= count {
         ruler.roll = f32(turn) * RULER_OCTAVE_GIVE
         return 0
     }

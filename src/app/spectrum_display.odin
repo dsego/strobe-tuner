@@ -637,7 +637,10 @@ pick_named_peaks :: proc(
         bounds := peak_label_bounds(self, axes.plot, spectrum_x(peak.freq, axes), size)
         if beside_named_peak(self.named[:], bounds) do continue
 
-        if before, ok := candidate.before.?; ok do carried[before] = true
+        before, was_named := candidate.before.?
+        if was_named {
+            carried[before] = true
+        }
         alpha := min(candidate.alpha + fade_step, 1)
         append(&self.named, NamedPeak{peak.freq, candidate.hz, alpha, true, bounds})
         shown_count += 1

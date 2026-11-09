@@ -170,12 +170,16 @@ draw_instrument_sheet :: proc(app: ^App, layout: Layout) {
     note_target := &app.measurement.note_target
     note := note_target.target_note
     if current_setup(app.config).instrument == .CUSTOM {
-        if detected, has_detected := note_target.detected_note.?; has_detected do note = detected
+        detected, has_detected := note_target.detected_note.?
+        if has_detected {
+            note = detected
+        }
     }
 
     target := -1
-    if index, in_range := core.note_index(note); in_range {
-        target = index
+    note_index, in_range := core.note_index(note)
+    if in_range {
+        target = note_index
     }
     close, changed := gui_instrument(sheet_layout, app.config, &sheets.open_dropdown, target)
     if changed {
