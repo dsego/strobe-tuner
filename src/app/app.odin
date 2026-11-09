@@ -277,8 +277,9 @@ run_frame :: proc(app: ^App) {
 
     feed_scope(app, strobe_shows)
 
-    // The unlock's reminder blurs everything under it, see begin_unlock_backdrop
-    backdrop := begin_unlock_backdrop(&app.sheets.unlock)
+    // The unlock's reminder blurs everything under it while it's up or sliding
+    reminder_shows := reminder.slide > SHEET_DOWN
+    if reminder_shows do begin_unlock_backdrop(&app.sheets.unlock)
 
     // The arrows are on the strobe, they show above the sheet
     if covered {
@@ -291,7 +292,12 @@ run_frame :: proc(app: ^App) {
     }
     draw_sheets(app, layout, reading)
 
-    if backdrop do end_unlock_backdrop(&app.sheets.unlock)
+    if reminder_shows {
+        end_unlock_backdrop(&app.sheets.unlock)
+    } else {
+        // Its render targets go while it's down
+        unload_glow_targets(&app.sheets.unlock.backdrop)
+    }
     draw_unlock_sheet(app)
 
     if config^ != config_before do app.unsaved, app.unsaved_s = true, 0

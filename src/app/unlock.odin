@@ -211,19 +211,14 @@ draw_centered_text :: proc(font: PixelFont, text: cstring, middle, top: f32) {
     draw_label(font, text, {middle - width / 2, top}, text_color_white, 1)
 }
 
-// While the reminder is up, what's under it is drawn into the backdrop until end_unlock_backdrop, which blurs
-// it. False while it's down, its render targets go then.
-begin_unlock_backdrop :: proc(reminder: ^UnlockReminder) -> (began: bool) {
+// While the reminder is up or sliding, what's under it is drawn into the backdrop until end_unlock_backdrop,
+// which blurs it
+begin_unlock_backdrop :: proc(reminder: ^UnlockReminder) {
     backdrop := &reminder.backdrop
-    if reminder.sheet.slide == SHEET_DOWN {
-        unload_glow_targets(backdrop)
-        return false
-    }
 
     // The scene sharp at the display's scale, the blur in the window's own points like the glow's
     ensure_glow_targets(backdrop, gfx.window_size(), UNLOCK_BLUR_DOWNSCALE)
     gfx.begin_render_target(backdrop.scene_rt, gfx.hex(panel_bg_color), {}, backdrop.scale)
-    return true
 }
 
 // The screen as it was drawn, its blur over it as the sheet comes up, and the sheet's color over that
