@@ -549,14 +549,15 @@ draw_measurements :: proc(pos: [2]f32, hz, cents: f32, shown: bool, active: bool
     VALUE_Y :: READOUT_VALUE_Y
     label_font := pixel_fonts.label.font
 
-    // Four digits like a meter's: a tenth up to 999.9, whole hertz from 1000 on. A tenth of a hertz up there is
-    // under 0.2 cents.
+    // Four digits like a meter's: a tenth up to 999.9, whole hertz from 1000 on. From 999.95 the tenth would
+    // round up to 1000.0, five digits. A tenth of a hertz up there is under 0.2 cents.
     hz_str: cstring = "-"
     if shown {
         hz_str = fmt.ctprintf("%.1f", hz) if hz < 999.95 else fmt.ctprintf("%.0f", hz)
     }
 
-    // A semitone or more off the cents don't fit the column, the gauge shows how many semitones it is
+    // A semitone or more off the cents don't fit the column, the gauge shows how many semitones it is. From
+    // 99.95 they'd round up to 100.0.
     cents_shown := shown && abs(cents) < 99.95
     cents_str := fmt.ctprintf("%.1f", abs(cents)) if cents_shown else "-"
 
