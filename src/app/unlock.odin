@@ -68,8 +68,6 @@ UnlockReminder :: struct {
 // used up the reminder every UNLOCK_REMINDER_S
 remind_to_unlock :: proc(app: ^App) {
     frame_time := gfx.frame_time()
-    store_update(frame_time)
-
     reminder := &app.sheets.unlock
     if reminder.sheet.open do reminder.close_after_s = max(reminder.close_after_s - frame_time, 0)
     if store_state() == .UNLOCKED do return
