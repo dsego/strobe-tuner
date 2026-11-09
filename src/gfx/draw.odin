@@ -164,7 +164,9 @@ delete_frame :: proc() {
 // The draw commands recorded between this pass's start and the next one's
 pass_commands :: proc(pass_index: int) -> []DrawCommand {
     last_command := len(gpu.frame.commands)
-    if pass_index + 1 < len(gpu.frame.passes) do last_command = gpu.frame.passes[pass_index + 1].first_command
+    if pass_index + 1 < len(gpu.frame.passes) {
+        last_command = gpu.frame.passes[pass_index + 1].first_command
+    }
 
     return gpu.frame.commands[gpu.frame.passes[pass_index].first_command:last_command]
 }
@@ -244,8 +246,12 @@ draw_texture :: proc(texture: Texture, source: Rect, dest: Rect, tint := WHITE) 
     size := [2]f32{f32(texture.width), f32(texture.height)}
     uv0 := [2]f32{source.x, source.y} / size
     uv1 := [2]f32{source.x + source.width, source.y + source.height} / size
-    if flip_x do uv0.x, uv1.x = uv1.x, uv0.x
-    if flip_y do uv0.y, uv1.y = uv1.y, uv0.y
+    if flip_x {
+        uv0.x, uv1.x = uv1.x, uv0.x
+    }
+    if flip_y {
+        uv0.y, uv1.y = uv1.y, uv0.y
+    }
 
     push_quad(texture.handle, dest, uv0, uv1, tint)
 }

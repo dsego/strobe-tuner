@@ -237,11 +237,19 @@ polyline_side :: proc(points: [][2]f32, index: int, closed := false) -> [2]f32 {
     before := line_normal(points[max(index - 1, 0)], points[index])
     after := line_normal(points[index], points[min(index + 1, last)])
     if closed && last >= 2 {
-        if index == 0 do before = line_normal(points[last - 1], points[0])
-        if index == last do after = line_normal(points[last], points[1])
+        if index == 0 {
+            before = line_normal(points[last - 1], points[0])
+        }
+        if index == last {
+            after = line_normal(points[last], points[1])
+        }
     } else {
-        if index == 0 do before = after
-        if index == last do after = before
+        if index == 0 {
+            before = after
+        }
+        if index == last {
+            after = before
+        }
     }
 
     bisector := before + after

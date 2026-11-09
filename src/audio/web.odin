@@ -120,11 +120,15 @@ destroy :: proc(self: ^Capture) {
 
 // The one input stays open, one that failed or was closed is asked for again
 switch_device :: proc(self: ^Capture, device_index: i32) {
-    for node in self.nodes do core.flush_audio_capture_ringbuffer(node)
+    for node in self.nodes {
+        core.flush_audio_capture_ringbuffer(node)
+    }
 
     self.active_device = device_index
     state := input_state()
-    if state == .FAILED || state == .CLOSED do open_input()
+    if state == .FAILED || state == .CLOSED {
+        open_input()
+    }
 }
 
 // The samples that came in since the last frame, to every node. From the frame, before it measures.
@@ -140,7 +144,9 @@ take_input :: proc(self: ^Capture) {
         if count == 0 do break
 
         // Not at the new rate yet, they wait for the measurements to follow it
-        if !self.rate_changed do write_to_nodes(self, self.samples[:count])
+        if !self.rate_changed {
+            write_to_nodes(self, self.samples[:count])
+        }
     }
 }
 

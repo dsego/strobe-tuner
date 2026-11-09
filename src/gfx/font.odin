@@ -56,12 +56,16 @@ load_font :: proc(ttf: []u8, size: i32, codepoints: string) -> (font: Font) {
     boxes := measure_glyphs(&info, scale, codepoints)
     atlas_size := pack_glyphs(boxes)
 
-    for box in boxes do font.glyphs[box.codepoint] = glyph_from_box(&info, box, scale)
+    for box in boxes {
+        font.glyphs[box.codepoint] = glyph_from_box(&info, box, scale)
+    }
 
     coverage := rasterize_glyphs(&info, boxes, scale, atlas_size)
     font.texture = create_texture(atlas_size.x, atlas_size.y, white_pixels(coverage))
     font.base_size = f32(size)
-    if len(boxes) > 0 do font.fallback = font.glyphs[boxes[0].codepoint]
+    if len(boxes) > 0 {
+        font.fallback = font.glyphs[boxes[0].codepoint]
+    }
 
     return
 }
@@ -183,7 +187,9 @@ draw_text :: proc(
     x := position.x
     for codepoint in string(text) {
         glyph, ok := font.glyphs[codepoint]
-        if !ok do glyph = font.fallback
+        if !ok {
+            glyph = font.fallback
+        }
 
         if codepoint != ' ' && codepoint != '\t' && glyph.source.width > 0 {
             dest := Rect {
@@ -203,7 +209,9 @@ draw_text :: proc(
 glyph_ink :: proc(font: Font, codepoint: rune, size: f32) -> Rect {
     scale := size / font.base_size
     glyph, ok := font.glyphs[codepoint]
-    if !ok do glyph = font.fallback
+    if !ok {
+        glyph = font.fallback
+    }
 
     return {glyph.offset.x * scale, glyph.offset.y * scale, glyph.source.width * scale, glyph.source.height * scale}
 }
@@ -214,7 +222,9 @@ measure_text :: proc(font: Font, text: cstring, size: f32, spacing: f32) -> [2]f
     count := 0
     for codepoint in string(text) {
         glyph, ok := font.glyphs[codepoint]
-        if !ok do glyph = font.fallback
+        if !ok {
+            glyph = font.fallback
+        }
 
         width += glyph.advance * scale
         count += 1

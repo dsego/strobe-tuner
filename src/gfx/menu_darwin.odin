@@ -78,7 +78,9 @@ add_app_menu_items :: proc(settings: int, items: []MenuItem) {
     AK.MenuItem_setTitle(settings_item, settings_title)
     attach_item(settings_item, settings)
 
-    for item, offset in items do add_menu_item(app_menu, item, index + 1 + NS.Integer(offset))
+    for item, offset in items {
+        add_menu_item(app_menu, item, index + 1 + NS.Integer(offset))
+    }
 }
 
 // A menu of its own, before the Window menu. opening is called with data as it opens, from inside the
@@ -93,7 +95,9 @@ add_menu :: proc(title: cstring, items: []MenuItem, opening: proc(data: rawptr) 
     submenu := AK.Menu_initWithTitle(NS.alloc(AK.Menu), menu_title)
     defer submenu->release()
 
-    for item in items do add_menu_item(submenu, item)
+    for item in items {
+        add_menu_item(submenu, item)
+    }
 
     bar_item := NS.new(AK.MenuItem)
     defer bar_item->release()
@@ -102,7 +106,9 @@ add_menu :: proc(title: cstring, items: []MenuItem, opening: proc(data: rawptr) 
 
     bar := main_menu()
     index := AK.Menu_indexOfItemWithSubmenu(bar, AK.Application_windowsMenu(AK.Application_sharedApplication()))
-    if index < 0 do index = AK.Menu_numberOfItems(bar)
+    if index < 0 {
+        index = AK.Menu_numberOfItems(bar)
+    }
 
     AK.Menu_insertItem(bar, bar_item, index)
 
@@ -123,11 +129,15 @@ set_menu_items :: proc(which: int, items: []MenuItem) {
     submenu := menu.menus[which]
     for position in 0 ..< AK.Menu_numberOfItems(submenu) {
         command := int(AK.MenuItem_tag(AK.Menu_itemAtIndex(submenu, position)))
-        if command > 0 && command < MAX_MENU_COMMANDS do menu.items[command] = nil
+        if command > 0 && command < MAX_MENU_COMMANDS {
+            menu.items[command] = nil
+        }
     }
     AK.Menu_removeAllItems(submenu)
 
-    for item in items do add_menu_item(submenu, item)
+    for item in items {
+        add_menu_item(submenu, item)
+    }
 }
 
 // The items go at the end of the Window menu, after a separator
@@ -136,7 +146,9 @@ add_window_menu_items :: proc(items: []MenuItem) {
     if window_menu == nil do return
 
     add_menu_item(window_menu, {})
-    for item in items do add_menu_item(window_menu, item)
+    for item in items {
+        add_menu_item(window_menu, item)
+    }
 }
 
 // The command of the item chosen since the last call, 0 for none
@@ -157,7 +169,9 @@ set_menu_checked :: proc(command: int, checked: bool) {
 
 // Greyed out or not, AppKit asks before it shows the item, see menu_target
 set_menu_enabled :: proc(command: int, enabled: bool) {
-    if command > 0 && command < MAX_MENU_COMMANDS do menu.disabled[command] = !enabled
+    if command > 0 && command < MAX_MENU_COMMANDS {
+        menu.disabled[command] = !enabled
+    }
 }
 
 // An open menu keeps the main loop stuck in should_close like a drag does, see live_resize_frames. A timer
@@ -201,7 +215,9 @@ add_menu_item :: proc(to: ^AK.Menu, item: MenuItem, index: NS.Integer = -1) {
         made = AK.MenuItem_initWithTitle(NS.alloc(AK.MenuItem), title, nil, key)
 
         // Without an action the menu greys it out
-        if item.command > 0 do attach_item(made, item.command)
+        if item.command > 0 {
+            attach_item(made, item.command)
+        }
     }
 
     if index < 0 {
@@ -261,7 +277,9 @@ menu_delegate :: proc() -> ^NS.Object {
         context = menu.ctx
         for which in 0 ..< menu.count {
             opening := menu.openings[which]
-            if menu.menus[which] == opened && opening.callback != nil do opening.callback(opening.data)
+            if menu.menus[which] == opened && opening.callback != nil {
+                opening.callback(opening.data)
+            }
         }
     }
     has_key_equivalent :: proc "c" (

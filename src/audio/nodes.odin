@@ -46,13 +46,17 @@ set_input_rate :: proc(self: ^Capture, device_rate: f32) {
 // copy of it, the input's buffer is the system's. From the audio thread.
 write_to_nodes :: proc(self: ^Capture, samples: []f32) {
     if self.decimator.halvings == 0 {
-        for node in self.nodes do core.audio_capture_write(node, samples)
+        for node in self.nodes {
+            core.audio_capture_write(node, samples)
+        }
         return
     }
 
     for start := 0; start < len(samples); start += DECIMATE_CHUNK {
         chunk := self.decimate_chunk[:copy(self.decimate_chunk[:], samples[start:])]
         count := core.decimate(&self.decimator, chunk)
-        for node in self.nodes do core.audio_capture_write(node, chunk[:count])
+        for node in self.nodes {
+            core.audio_capture_write(node, chunk[:count])
+        }
     }
 }

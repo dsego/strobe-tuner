@@ -168,7 +168,9 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}, position
         display := sdl.GetPrimaryDisplay()
         if placed {
             title_bar_display, shows := display_showing_title_bar(corner, size.x)
-            if shows do display = title_bar_display
+            if shows {
+                display = title_bar_display
+            }
 
             placed = shows
         }
@@ -182,7 +184,9 @@ init :: proc(width, height: i32, title: cstring, min_size: [2]i32 = {}, position
         return false
     }
     when !MOBILE {
-        if placed do sdl.SetWindowPosition(window.handle, corner.x, corner.y)
+        if placed {
+            sdl.SetWindowPosition(window.handle, corner.x, corner.y)
+        }
     }
     sdl.ShowWindow(window.handle)
 
@@ -318,10 +322,14 @@ destroy_gpu :: proc() {
     sdl.ReleaseGPUSampler(gpu.device, gpu.sampler)
     for &by_blend in gpu.pipelines {
         for &by_pass in by_blend {
-            for pipeline in by_pass do sdl.ReleaseGPUGraphicsPipeline(gpu.device, pipeline)
+            for pipeline in by_pass {
+                sdl.ReleaseGPUGraphicsPipeline(gpu.device, pipeline)
+            }
         }
     }
-    for shader in gpu.fragment_shaders do sdl.ReleaseGPUShader(gpu.device, shader)
+    for shader in gpu.fragment_shaders {
+        sdl.ReleaseGPUShader(gpu.device, shader)
+    }
 
     sdl.ReleaseGPUShader(gpu.device, gpu.vertex_shader)
     if gpu.vertex_buffer != nil {
@@ -348,13 +356,19 @@ should_close :: proc() -> bool {
             if event.key.repeat do break
 
             for scancode, key in scancodes {
-                if scancode == event.key.scancode do input.keys_pressed += {key}
+                if scancode == event.key.scancode {
+                    input.keys_pressed += {key}
+                }
             }
 
             // Android's back button, see system_back
-            if event.key.scancode == .AC_BACK do input.keys_pressed += {.ESCAPE}
+            if event.key.scancode == .AC_BACK {
+                input.keys_pressed += {.ESCAPE}
+            }
         case .MOUSE_BUTTON_DOWN:
-            if event.button.button == sdl.BUTTON_LEFT do input.mouse_clicked = true
+            if event.button.button == sdl.BUTTON_LEFT {
+                input.mouse_clicked = true
+            }
 
             input.touch = event.button.which == sdl.TOUCH_MOUSEID
         case .MOUSE_WHEEL:
@@ -383,7 +397,9 @@ in_background :: proc() -> bool {
 wait_for_foreground :: proc() {
     event: sdl.Event
     for intrinsics.atomic_load(&window.background) && !window.quit {
-        if sdl.WaitEvent(&event) && event.type == .QUIT do window.quit = true
+        if sdl.WaitEvent(&event) && event.type == .QUIT {
+            window.quit = true
+        }
     }
 
     // Not a frame that took as long as the app was away
@@ -399,7 +415,9 @@ window_hidden :: proc() -> bool {
 wait_while_hidden :: proc() {
     event: sdl.Event
     for window_hidden() && !window.quit {
-        if sdl.WaitEvent(&event) && (event.type == .QUIT || event.type == .WINDOW_CLOSE_REQUESTED) do window.quit = true
+        if sdl.WaitEvent(&event) && (event.type == .QUIT || event.type == .WINDOW_CLOSE_REQUESTED) {
+            window.quit = true
+        }
     }
 
     // Not a frame that took as long as the window was hidden
@@ -515,7 +533,9 @@ UNSHOWN_FRAME_MS :: 16
 
 // Without a command buffer it only waits
 submit_gpu_command_buffer :: proc(command_buffer: ^sdl.GPUCommandBuffer, wait: FrameWait = .UNSHOWN) {
-    if command_buffer != nil do _ = sdl.SubmitGPUCommandBuffer(command_buffer)
+    if command_buffer != nil {
+        _ = sdl.SubmitGPUCommandBuffer(command_buffer)
+    }
 
     switch wait {
     case .UNSHOWN:
@@ -527,7 +547,9 @@ submit_gpu_command_buffer :: proc(command_buffer: ^sdl.GPUCommandBuffer, wait: F
 
 acquire_command_buffer :: proc() -> ^sdl.GPUCommandBuffer {
     command_buffer := sdl.AcquireGPUCommandBuffer(gpu.device)
-    if command_buffer == nil do fmt.eprintln("SDL_AcquireGPUCommandBuffer failed:", sdl.GetError())
+    if command_buffer == nil {
+        fmt.eprintln("SDL_AcquireGPUCommandBuffer failed:", sdl.GetError())
+    }
 
     return command_buffer
 }
@@ -605,7 +627,9 @@ begin_render_pass :: proc(
     render_pass := sdl.BeginGPURenderPass(command_buffer, color_target, 1, nil)
     sdl.SetGPUViewport(render_pass, {0, 0, target_size.x, target_size.y, 0, 1})
     binding := sdl.GPUBufferBinding{gpu.vertex_buffer, 0}
-    if gpu.vertex_buffer != nil do sdl.BindGPUVertexBuffers(render_pass, 0, &binding, 1)
+    if gpu.vertex_buffer != nil {
+        sdl.BindGPUVertexBuffers(render_pass, 0, &binding, 1)
+    }
 
     return render_pass
 }
@@ -667,7 +691,9 @@ wait_for_max_fps :: proc() {
 
     elapsed := f64(sdl.GetPerformanceCounter() - clock.last_counter) / f64(sdl.GetPerformanceFrequency())
     remaining := 1 / f64(clock.max_fps) - elapsed - VSYNC_MARGIN_S
-    if remaining > 0 do sdl.DelayPrecise(u64(remaining * 1e9))
+    if remaining > 0 {
+        sdl.DelayPrecise(u64(remaining * 1e9))
+    }
 }
 
 // Pixels per drawing point, the display's density times the UI scale. Text rasterized at it lands texel for
@@ -737,7 +763,9 @@ mouse_down :: proc() -> bool {
 
 // At once, not after the frame: a texture drawn earlier in the frame is still to be drawn in end_frame
 unload_texture :: proc(texture: Texture) {
-    if texture.handle != nil do sdl.ReleaseGPUTexture(gpu.device, texture.handle)
+    if texture.handle != nil {
+        sdl.ReleaseGPUTexture(gpu.device, texture.handle)
+    }
 }
 
 load_render_target :: proc(width, height: i32) -> RenderTarget {
@@ -753,7 +781,9 @@ load_render_target :: proc(width, height: i32) -> RenderTarget {
             num_levels = 1,
         },
     )
-    if handle == nil do fmt.eprintln("Could not create a render target", width, "x", height, ":", sdl.GetError())
+    if handle == nil {
+        fmt.eprintln("Could not create a render target", width, "x", height, ":", sdl.GetError())
+    }
 
     return {{handle, width, height}}
 }
@@ -765,8 +795,12 @@ upload_vertices :: proc(command_buffer: ^sdl.GPUCommandBuffer) -> bool {
     size := len(gpu.frame.vertices) * size_of(Vertex)
 
     if size > gpu.vertex_capacity {
-        if gpu.vertex_buffer != nil do sdl.ReleaseGPUBuffer(gpu.device, gpu.vertex_buffer)
-        if gpu.transfer_buffer != nil do sdl.ReleaseGPUTransferBuffer(gpu.device, gpu.transfer_buffer)
+        if gpu.vertex_buffer != nil {
+            sdl.ReleaseGPUBuffer(gpu.device, gpu.vertex_buffer)
+        }
+        if gpu.transfer_buffer != nil {
+            sdl.ReleaseGPUTransferBuffer(gpu.device, gpu.transfer_buffer)
+        }
 
         gpu.vertex_capacity = max(size, 2 * gpu.vertex_capacity, 64 * 1024)
         gpu.vertex_buffer = sdl.CreateGPUBuffer(
@@ -828,7 +862,9 @@ create_texture :: proc(width, height: i32, pixels: []u8) -> Texture {
     mapped := sdl.MapGPUTransferBuffer(gpu.device, transfer, false) if transfer != nil else nil
     if mapped == nil {
         fmt.eprintln("Could not upload the texture:", sdl.GetError())
-        if transfer != nil do sdl.ReleaseGPUTransferBuffer(gpu.device, transfer)
+        if transfer != nil {
+            sdl.ReleaseGPUTransferBuffer(gpu.device, transfer)
+        }
 
         sdl.ReleaseGPUTexture(gpu.device, handle)
         return {}

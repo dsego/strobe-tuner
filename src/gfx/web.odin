@@ -273,7 +273,9 @@ on_wheel :: proc(event: js.Event) {
     // Pixels like a trackpad's, a mouse's notch is around 100 of them and a line about 3. Up is up.
     WHEEL_PIXELS_PER_STEP :: 100
     delta := f32(event.wheel.delta.y)
-    if event.wheel.delta_mode == .Line do delta *= WHEEL_PIXELS_PER_STEP / 3
+    if event.wheel.delta_mode == .Line {
+        delta *= WHEEL_PIXELS_PER_STEP / 3
+    }
 
     input.wheel -= delta / WHEEL_PIXELS_PER_STEP
 }
@@ -284,7 +286,9 @@ on_key :: proc(event: js.Event) {
         if code != event.key.code do continue
 
         // Tab would move the focus off the canvas, Space and the up and down arrows would scroll
-        if key == .TAB || key == .SPACE || key == .UP || key == .DOWN do js.event_prevent_default()
+        if key == .TAB || key == .SPACE || key == .UP || key == .DOWN {
+            js.event_prevent_default()
+        }
 
         if event.kind == .Key_Up {
             pointer.keys -= {key}
@@ -311,7 +315,9 @@ follow_canvas_size :: proc() {
 
 shutdown :: proc() {
     unload_texture(gpu.white)
-    for program in gpu.programs do gl.DeleteProgram(program)
+    for program in gpu.programs {
+        gl.DeleteProgram(program)
+    }
 
     gl.DeleteBuffer(gpu.vertex_buffer)
     gl.DeleteBuffer(gpu.uniform_buffer)
@@ -464,11 +470,15 @@ replay_commands :: proc(commands: []DrawCommand, target_size: [2]f32, offset: [2
             gl.BindBuffer(gl.UNIFORM_BUFFER, gpu.uniform_buffer)
             gl.BufferData(gl.UNIFORM_BUFFER, uniforms.size, &gpu.frame.uniform_data[uniforms.offset], gl.DYNAMIC_DRAW)
         }
-        if sampled do gl.BindTexture(gl.TEXTURE_2D, command.texture)
+        if sampled {
+            gl.BindTexture(gl.TEXTURE_2D, command.texture)
+        }
 
         // GL's scissor counts rows from the bottom, a flipped target's first row is the drawing's top
         scissor := scissor_pixels(command.scissor, target_size, offset, zoom)
-        if !flipped do scissor.y = i32(target_size.y) - scissor.y - scissor.height
+        if !flipped {
+            scissor.y = i32(target_size.y) - scissor.y - scissor.height
+        }
 
         gl.Scissor(scissor.x, scissor.y, scissor.width, scissor.height)
         gl.DrawArrays(gl.TRIANGLES, int(command.first_vertex), int(command.vertex_count))
@@ -531,7 +541,9 @@ mouse_down :: proc() -> bool {
 
 // At once, not after the frame: WebGL keeps it until the draws already issued are done
 unload_texture :: proc(texture: Texture) {
-    if texture.handle != {} do gl.DeleteTexture(texture.handle)
+    if texture.handle != {} {
+        gl.DeleteTexture(texture.handle)
+    }
 }
 
 load_render_target :: proc(width, height: i32) -> RenderTarget {

@@ -107,7 +107,9 @@ refresh_devices :: proc(self: ^Capture) {
 
     // Copied, the names go with the list
     open_name: [ma.MAX_DEVICE_NAME_LENGTH + 1]u8
-    if self.active_device >= 0 do open_name = self.capture_infos[self.active_device].name
+    if self.active_device >= 0 {
+        open_name = self.capture_infos[self.active_device].name
+    }
 
     infos: [^]ma.device_info
     count: u32
@@ -117,7 +119,9 @@ refresh_devices :: proc(self: ^Capture) {
         microphone_info.isDefault = true
         infos, count = &microphone_info, 1
     } else {
-        if failed(ma.context_get_devices(&self.ctx, nil, nil, &infos, &count)) do count = 0
+        if failed(ma.context_get_devices(&self.ctx, nil, nil, &infos, &count)) {
+            count = 0
+        }
     }
 
     self.capture_infos = infos[:count]
@@ -161,7 +165,9 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
     // A picked device by its ID. The system default without one, miniaudio follows it to another device and
     // says so, see notification_callback. iOS has just the default.
     when !IOS {
-        if self.active_device >= 0 do config.capture.pDeviceID = &self.capture_infos[self.active_device].id
+        if self.active_device >= 0 {
+            config.capture.pDeviceID = &self.capture_infos[self.active_device].id
+        }
     }
 
     // Unprocessed has no automatic gain or noise suppression, not every phone has it. Voice recognition is the
@@ -241,7 +247,9 @@ stop :: proc(self: ^Capture) {
 interruption_ended :: proc(self: ^Capture) -> bool {
     ended := intrinsics.atomic_exchange(&self.interruption_ended, false)
     when ANDROID {
-        if intrinsics.atomic_exchange(&microphone_granted, false) do ended = true
+        if intrinsics.atomic_exchange(&microphone_granted, false) {
+            ended = true
+        }
     }
     return ended
 }
@@ -326,10 +334,14 @@ notification_callback :: proc "c" (notification: ^ma.device_notification) {
     case .interruption_ended:
         intrinsics.atomic_store(&self.interruption_ended, true)
     case .rerouted:
-        if !intrinsics.atomic_load(&self.closing) do intrinsics.atomic_store(&self.devices_changed, true)
+        if !intrinsics.atomic_load(&self.closing) {
+            intrinsics.atomic_store(&self.devices_changed, true)
+        }
     case .stopped:
         when !IOS {
-            if !intrinsics.atomic_load(&self.closing) do intrinsics.atomic_store(&self.devices_changed, true)
+            if !intrinsics.atomic_load(&self.closing) {
+                intrinsics.atomic_store(&self.devices_changed, true)
+            }
         }
     }
 }
@@ -346,9 +358,13 @@ allow_microphone :: proc() {
     } else when MACOS {
         // The Mac has no page per app, the Microphone list in Privacy & Security
         MICROPHONE_SETTINGS :: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-        if !sdl.OpenURL(MICROPHONE_SETTINGS) do fmt.println("Couldn't open the microphone settings:", sdl.GetError())
+        if !sdl.OpenURL(MICROPHONE_SETTINGS) {
+            fmt.println("Couldn't open the microphone settings:", sdl.GetError())
+        }
     } else {
-        if !sdl.OpenURL("app-settings:") do fmt.println("Couldn't open the app's settings:", sdl.GetError())
+        if !sdl.OpenURL("app-settings:") {
+            fmt.println("Couldn't open the app's settings:", sdl.GetError())
+        }
     }
 }
 
@@ -394,7 +410,9 @@ when ANDROID {
     microphone_allowed :: proc() -> bool {
         permission_answered :: proc "c" (userdata: rawptr, permission: cstring, granted: bool) {
             intrinsics.atomic_store(&microphone_permission, MicrophonePermission.GRANTED if granted else .DENIED)
-            if granted do intrinsics.atomic_store(&microphone_granted, true)
+            if granted {
+                intrinsics.atomic_store(&microphone_granted, true)
+            }
         }
 
         switch intrinsics.atomic_load(&microphone_permission) {
