@@ -38,7 +38,9 @@ test_autocorrelation :: proc(t: ^testing.T) {
 
     for lag in 0 ..< len(samples) {
         expected: f32
-        for i in 0 ..< len(samples) - lag do expected += samples[i] * samples[i + lag]
+        for i in 0 ..< len(samples) - lag {
+            expected += samples[i] * samples[i + lag]
+        }
 
         testing.expectf(t, abs(self.autocorr[lag] - expected) < 1e-3, "lag %v: %v, expected %v", lag, self.autocorr[lag], expected)
     }
@@ -116,7 +118,9 @@ test_nsdf_longest_period :: proc(t: ^testing.T) {
     defer destroy_nsdf(&self)
 
     samples: [FFT_SIZE / 2]f32
-    for &sample, index in samples do sample = math.sin(math.TAU * 20 * f32(index) / DEFAULT_SAMPLE_RATE)
+    for &sample, index in samples {
+        sample = math.sin(math.TAU * 20 * f32(index) / DEFAULT_SAMPLE_RATE)
+    }
 
     freq, _ := run_nsdf(&self, samples[:], freq_at_cents(440, LOWEST_NOTE * 100 - 50))
     testing.expectf(t, freq == 0, "a 20 Hz sine read %v Hz", freq)
@@ -148,7 +152,9 @@ test_nsdf_holds_followed_octave :: proc(t: ^testing.T) {
     testing.expectf(t, abs(cents_deviation(held, NOTE_HZ)) < 1, "followed, read %v Hz", held)
 
     sine: [FFT_SIZE / 2]f32
-    for &sample, index in sine do sample = math.sin(math.TAU * NOTE_HZ * f32(index) / DEFAULT_SAMPLE_RATE)
+    for &sample, index in sine {
+        sample = math.sin(math.TAU * NOTE_HZ * f32(index) / DEFAULT_SAMPLE_RATE)
+    }
 
     risen, _ := run_nsdf(&self, sine[:], lowest_hz, NOTE_HZ / 2)
     testing.expectf(t, abs(cents_deviation(risen, NOTE_HZ)) < 1, "followed an octave down, read %v Hz", risen)

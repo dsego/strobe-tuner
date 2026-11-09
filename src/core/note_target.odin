@@ -92,11 +92,15 @@ update_note_target :: proc(self: ^NoteTarget, pitch: PitchInfo, strobe_hears := 
     }
     strong, confirmed := recognize_note(&self.recognition, pitch, confirmed_hz)
     if strong {
-        if confirmed do retune = follow_detected_note(self, pitch.detected_note)
+        if confirmed {
+            retune = follow_detected_note(self, pitch.detected_note)
+        }
 
         // Keep the previous measurement while there is no detected note
         if readout_follows(self, pitch.detected_note) {
-            if pitch.fresh do steady_readout(self, pitch.detected_freq, pitch.elapsed_s)
+            if pitch.fresh {
+                steady_readout(self, pitch.detected_freq, pitch.elapsed_s)
+            }
 
             self.last_good_pitch = pitch
         }
@@ -105,10 +109,14 @@ update_note_target :: proc(self: ^NoteTarget, pitch: PitchInfo, strobe_hears := 
         // target from before, the previous note, for a frame or two. It's followed from the first, its harmonics
         // held against it on the way: a square's 5th and its note took turns and neither held long enough.
         self.following = true
-        if self.active || confirmed || target_stays(self, pitch.detected_note) do self.active = true
+        if self.active || confirmed || target_stays(self, pitch.detected_note) {
+            self.active = true
+        }
     }
 
-    if pitch.is_weak_pitch && !strobe_hears do self.active, self.following = false, false
+    if pitch.is_weak_pitch && !strobe_hears {
+        self.active, self.following = false, false
+    }
 
     // The next detection holds the octave of the latest strong one, see nsdf_choose_peak and
     // HARMONICS_HOLD_RATIO. On a hummed glide it held back more drops than the latest that wasn't weak, a drop
@@ -135,7 +143,9 @@ follow_detected_note :: proc(self: ^NoteTarget, detected: Note) -> (retune: bool
 
     new_target := self.target_note
     if self.string_count > 0 {
-        if !self.locked do self.string_index = nearest_string(self, detected)
+        if !self.locked {
+            self.string_index = nearest_string(self, detected)
+        }
 
         new_target = string_note(self, self.string_index)
     } else if !self.locked {
@@ -238,7 +248,9 @@ set_target_strings :: proc(self: ^NoteTarget, strings: []int) -> (retune: bool) 
     semitone := self.target_note.cents / 100
     self.string_index = 0
     for string_semitone, index in self.strings[:count] {
-        if abs(semitone - string_semitone) < abs(semitone - self.strings[self.string_index]) do self.string_index = index
+        if abs(semitone - string_semitone) < abs(semitone - self.strings[self.string_index]) {
+            self.string_index = index
+        }
     }
     self.target_note = string_note(self, self.string_index)
     return self.target_note.cents != prev.cents
@@ -256,7 +268,9 @@ nearest_string :: proc(self: ^NoteTarget, note: Note) -> int {
     semitone := note.cents / 100
     best := self.string_index
     for string_semitone, index in self.strings[:self.string_count] {
-        if abs(semitone - string_semitone) < abs(semitone - self.strings[best]) do best = index
+        if abs(semitone - string_semitone) < abs(semitone - self.strings[best]) {
+            best = index
+        }
     }
 
     // In semitones, from the target string and from the nearest one
@@ -331,7 +345,9 @@ locked_note :: proc(self: ^NoteTarget) -> bool {
 // The strong detections averaged for the readout, see readout_cents
 readout_pitch :: proc(self: ^NoteTarget) -> (steady_pitch: PitchInfo) {
     steady_pitch = self.last_good_pitch
-    if self.steady_freq != 0 do steady_pitch.detected_freq = self.steady_freq
+    if self.steady_freq != 0 {
+        steady_pitch.detected_freq = self.steady_freq
+    }
 
     steady_pitch.err_cents = readout_cents(self, steady_pitch.detected_freq, steady_pitch.detected_note)
     return

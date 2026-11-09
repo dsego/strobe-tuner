@@ -82,7 +82,9 @@ parse_note :: proc(name: string, pitch_standard: f32 = 440.0) -> (note: Note, ok
     case 'B': semitone = 2
     case: return
     }
-    if is_accidental do semitone += 1 if name[1] == '#' else -1
+    if is_accidental {
+        semitone += 1 if name[1] == '#' else -1
+    }
 
     octave := int(digit - '0')
     return cents_to_note(f32(100 * (semitone + 12 * (octave - 4))), pitch_standard), true

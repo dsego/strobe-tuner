@@ -44,7 +44,9 @@ test_windowed_spectrum :: proc(t: ^testing.T) {
     defer destroy_nsdf(&nsdf)
 
     samples: [WINDOW]f32
-    for &sample, i in samples do sample = f32(0.5 * math.sin(math.TAU * 100 * f64(i) / WINDOW))
+    for &sample, i in samples {
+        sample = f32(0.5 * math.sin(math.TAU * 100 * f64(i) / WINDOW))
+    }
     windowed_spectrum_write(&self, samples[:])
     run_windowed_spectrum(&self)
     nsdf_autocorrelate(&nsdf, samples[:])
@@ -59,7 +61,9 @@ test_windowed_spectrum :: proc(t: ^testing.T) {
 
     // Past the lobe, 4 bins either side
     ripple_db: f32 = -200
-    for bin in PEAK_BIN + 5 ..= PEAK_BIN + 12 do ripple_db = max(ripple_db, from_peak(self.spectrum, bin))
+    for bin in PEAK_BIN + 5 ..= PEAK_BIN + 12 {
+        ripple_db = max(ripple_db, from_peak(self.spectrum, bin))
+    }
 
     testing.expectf(t, ripple_db > -35 && ripple_db < -28, "the first sidelobe is %v dB down", ripple_db)
 
@@ -83,14 +87,18 @@ test_windowed_spectrum_hops :: proc(t: ^testing.T) {
 
     hop: [HOP]f32
     for count in 0 ..< 2 * WINDOW / HOP {
-        for &sample, i in hop do sample = f32(0.5 * math.sin(math.TAU * FREQ * f64(count * HOP + i) / DEFAULT_SAMPLE_RATE))
+        for &sample, i in hop {
+            sample = f32(0.5 * math.sin(math.TAU * FREQ * f64(count * HOP + i) / DEFAULT_SAMPLE_RATE))
+        }
         windowed_spectrum_write(&self, hop[:])
     }
     run_windowed_spectrum(&self)
 
     peak_bin, peak_power := 0, f32(0)
     for value, bin in self.spectrum[1:] {
-        if real(value) > peak_power do peak_bin, peak_power = bin + 1, real(value)
+        if real(value) > peak_power {
+            peak_bin, peak_power = bin + 1, real(value)
+        }
     }
     bin_hz := f32(DEFAULT_SAMPLE_RATE) / f32(self.fft_size)
     testing.expectf(t, abs(f32(peak_bin) * bin_hz - FREQ) < bin_hz, "the peak is at %v Hz", f32(peak_bin) * bin_hz)

@@ -69,7 +69,9 @@ holds_note :: proc(optional: Maybe(Note), note: Note) -> bool {
 // confirmed_hz is the confirmed note's while it's lit, 0 for none, a harmonic of it is confirmed after
 // NOTE_HARMONIC_SWITCH_S instead.
 recognize_note :: proc(self: ^NoteRecognition, pitch: PitchInfo, confirmed_hz: f32 = 0) -> (strong, confirmed: bool) {
-    if pitch.fresh do time_detection(self, pitch)
+    if pitch.fresh {
+        time_detection(self, pitch)
+    }
 
     confirm_s := self.confirm_s
     if is_harmonic_or_undertone(pitch.detected_freq, confirmed_hz) {
@@ -103,5 +105,7 @@ time_detection :: proc(self: ^NoteRecognition, pitch: PitchInfo) {
 
     // A guess at a multiple of the period isn't the note however long it holds, the wave can repeat better over
     // a few periods for a moment
-    if !pitch.shortest_period do self.run_s = 0
+    if !pitch.shortest_period {
+        self.run_s = 0
+    }
 }

@@ -28,7 +28,9 @@ test_comb_rejects_partials :: proc(t: ^testing.T) {
 
     amp :: proc(dft: ^SingleFreqDFT, freq: f32) -> f32 {
         samples := make([]f32, dft.window_size, context.temp_allocator)
-        for &sample, index in samples do sample = math.sin(math.TAU * freq * f32(index) / DEFAULT_SAMPLE_RATE)
+        for &sample, index in samples {
+            sample = math.sin(math.TAU * freq * f32(index) / DEFAULT_SAMPLE_RATE)
+        }
 
         return abs(run_single_dft(dft, samples))
     }

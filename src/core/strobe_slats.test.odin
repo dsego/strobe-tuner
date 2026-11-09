@@ -95,7 +95,9 @@ test_slat_level_high_note_in_noise :: proc(t: ^testing.T) {
     played := 0
     for end_s in play_frames(lock_in, samples, &played, FRAME) {
         // Past the first second, the stripes lit by then
-        if end_s > 1 do lowest = min(lowest, lock_in.bands[0].visibility)
+        if end_s > 1 {
+            lowest = min(lowest, lock_in.bands[0].visibility)
+        }
     }
     testing.expectf(t, lowest >= 0.5, "the 1× track's stripes went down to %.2f", lowest)
 }
@@ -122,9 +124,15 @@ test_slat_level_lights_a_pluck :: proc(t: ^testing.T) {
         if since_s < 0 do continue
 
         first := lock_in.bands[0]
-        if lit_s < 0 && first.slat_level > 0 do lit_s = since_s
-        if full_s < 0 && first.slat_level >= 1 do full_s = since_s
-        if half_drawn_s < 0 && first.visibility >= 0.5 do half_drawn_s = since_s
+        if lit_s < 0 && first.slat_level > 0 {
+            lit_s = since_s
+        }
+        if full_s < 0 && first.slat_level >= 1 {
+            full_s = since_s
+        }
+        if half_drawn_s < 0 && first.visibility >= 0.5 {
+            half_drawn_s = since_s
+        }
     }
     log.infof("A2 plucked, 1×: lit after %.0f ms, full %.0f ms, half drawn %.0f ms", 1000 * lit_s, 1000 * full_s, 1000 * half_drawn_s)
     testing.expectf(t, half_drawn_s >= 0, "the 1× track never lit")
@@ -150,8 +158,12 @@ test_slat_level_lets_go_of_a_stop :: proc(t: ^testing.T) {
         let_go_s: f64 = -1
         played := 0
         for end_s in play_frames(stopped, samples, &played, FRAME) {
-            if end_s <= STOP_S do held_at_stop = strobe_shows_note(stopped)
-            if end_s > STOP_S && let_go_s < 0 && !strobe_shows_note(stopped) do let_go_s = end_s - STOP_S
+            if end_s <= STOP_S {
+                held_at_stop = strobe_shows_note(stopped)
+            }
+            if end_s > STOP_S && let_go_s < 0 && !strobe_shows_note(stopped) {
+                let_go_s = end_s - STOP_S
+            }
         }
         log.infof("%.1f Hz stopped, let go after %.0f ms", note_hz, 1000 * let_go_s)
         testing.expectf(t, held_at_stop, "%.1f Hz: not held before it stopped", note_hz)
@@ -182,12 +194,16 @@ test_slat_window_overlap :: proc(t: ^testing.T) {
         squares += weight * weight
         for later in 1 ..< SLAT_WINDOW_SPANS {
             shifted := index + later * SAMPLES / SLAT_WINDOW_SPANS
-            if shifted < SAMPLES do shared[later] += weight * slat_window((f64(shifted) + 0.5) / SAMPLES)
+            if shifted < SAMPLES {
+                shared[later] += weight * slat_window((f64(shifted) + 0.5) / SAMPLES)
+            }
         }
     }
 
     overlap: f64 = 1
-    for later in 1 ..< SLAT_WINDOW_SPANS do overlap += 2 * shared[later] / squares
+    for later in 1 ..< SLAT_WINDOW_SPANS {
+        overlap += 2 * shared[later] / squares
+    }
     log.infof("the windows overlap by %.3f", overlap)
     testing.expectf(t, abs(overlap - SLAT_WINDOW_OVERLAP) < 0.005, "the windows overlap by %.3f", overlap)
 }

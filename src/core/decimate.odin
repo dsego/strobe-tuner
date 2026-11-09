@@ -90,8 +90,12 @@ windowed_sinc :: proc() -> (pairs: [HALFBAND_PAIRS]f32) {
 // A level that stays the same at 0 Hz: the middle tap's 0.5 and both sides' pairs add up to 1
 unity_gain_at_dc :: proc(pairs: ^[HALFBAND_PAIRS]f32) {
     pairs_sum: f64 = 0
-    for tap in pairs do pairs_sum += f64(tap)
-    for &tap in pairs do tap = f32(f64(tap) * 0.25 / pairs_sum)
+    for tap in pairs {
+        pairs_sum += f64(tap)
+    }
+    for &tap in pairs {
+        tap = f32(f64(tap) * 0.25 / pairs_sum)
+    }
 }
 
 // Decimates the samples in place, returns how many came out. From the audio thread, the filters run on from

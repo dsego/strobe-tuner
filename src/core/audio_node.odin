@@ -63,7 +63,9 @@ destroy_audio_capture_node :: proc(self: ^AudioCaptureNode) {
 // From the audio thread, or a test feeding the samples
 audio_capture_write :: proc(self: ^AudioCaptureNode, input: []f32) {
     written := write_ringbuffer(&self.ringbuffer, input)
-    if written < len(input) do intrinsics.atomic_add(&self.dropped, i64(len(input) - written))
+    if written < len(input) {
+        intrinsics.atomic_add(&self.dropped, i64(len(input) - written))
+    }
 
     intrinsics.atomic_store(&self.written_tick, time.tick_now()._nsec)
 }

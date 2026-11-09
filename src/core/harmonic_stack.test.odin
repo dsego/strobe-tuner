@@ -129,7 +129,9 @@ test_harmonics_low_saws :: proc(t: ^testing.T) {
     for fundamental in ([]f32{30.87, 41.2, 55}) {
         // Up to the detector's low-pass
         amplitudes := make([]f32, int(PITCH_LOWPASS_HZ / fundamental), context.temp_allocator)
-        for &amplitude, index in amplitudes do amplitude = 0.1 / f32(index + 1)
+        for &amplitude, index in amplitudes {
+            amplitude = 0.1 / f32(index + 1)
+        }
         samples := samples_with(fundamental, amplitudes, 0)
 
         detector := init_pitch_detector(sample_rate = DEFAULT_SAMPLE_RATE)
@@ -158,10 +160,14 @@ test_select_nth :: proc(t: ^testing.T) {
 
     for size in ([]int{1, 2, 7, 65, 97}) {
         values := make([]f32, size, context.temp_allocator)
-        for &value in values do value = f32(rand.float64(random) * 100)
+        for &value in values {
+            value = f32(rand.float64(random) * 100)
+        }
 
         // Ties too, a dB level of digital silence repeats
-        if size > 2 do values[1] = values[0]
+        if size > 2 {
+            values[1] = values[0]
+        }
 
         sorted := slice.clone(values, context.temp_allocator)
         slice.sort(sorted)
@@ -230,7 +236,9 @@ test_phase_steadiness :: proc(t: ^testing.T) {
     defer destroy_stack_transform(&noise_transform)
     detect_twice(&noise_transform, noise)
     sum: f32 = 0
-    for noise_bin in 100 ..< 1100 do sum += phase_steadiness(&noise_transform, noise_bin, f32(noise_bin) * noise_transform.bin_hz, HOP)
+    for noise_bin in 100 ..< 1100 {
+        sum += phase_steadiness(&noise_transform, noise_bin, f32(noise_bin) * noise_transform.bin_hz, HOP)
+    }
     average := sum / 1000
     testing.expectf(t, average > 0.6 && average < 0.85, "noise's bins %.2f steady on average", average)
 }

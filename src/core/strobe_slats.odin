@@ -169,7 +169,9 @@ fill_strobe_slats :: proc(self: ^StrobeSlats, lock_in: ^StrobeLockIn) {
     first := lock_in.sample_clock - i64(new_samples) // the absolute index of samples[0]
 
     // A stall, a reset or skipped samples, the spans' phases don't carry on
-    if first != self.clock do self^ = {}
+    if first != self.clock {
+        self^ = {}
+    }
     self.clock = lock_in.sample_clock
 
     for band, index in lock_in.bands {
@@ -296,7 +298,9 @@ update_band_levels :: proc(self: ^StrobeLockIn) {
 
         band.slat_level = strobe_slat_level(&self.slats, index) if band.in_range else 0
         band.visibility += ease * (band.slat_level - band.visibility)
-        if band.slat_level == 0 && band.visibility < 0.001 do band.visibility = 0
+        if band.slat_level == 0 && band.visibility < 0.001 {
+            band.visibility = 0
+        }
     }
 }
 

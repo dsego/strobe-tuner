@@ -65,7 +65,9 @@ add_partials :: proc(
         time_s := f64(index) / f64(DEFAULT_SAMPLE_RATE)
         level := math.exp(-time_s / decay_s) if decay_s > 0 else 1
         angle := phase + math.TAU * freq_hz * time_s
-        for amplitude, partial in amplitudes do sample += f32(level * amplitude * math.sin(f64(partial + 1) * angle))
+        for amplitude, partial in amplitudes {
+            sample += f32(level * amplitude * math.sin(f64(partial + 1) * angle))
+        }
     }
     return phase + math.TAU * freq_hz * f64(len(samples) - first) / f64(DEFAULT_SAMPLE_RATE)
 }
@@ -74,7 +76,9 @@ add_partials :: proc(
 // that harness's noise.
 add_noise :: proc(samples: []f32, rms: f32, seed: u32 = 1) {
     state := seed
-    for &sample in samples do sample += rms * math.SQRT_THREE * test_noise(&state)
+    for &sample in samples {
+        sample += rms * math.SQRT_THREE * test_noise(&state)
+    }
 }
 
 ACCURACY_NOISE_SEED :: 0x9e3779b9 // sandbox/accuracy's
@@ -199,11 +203,15 @@ test_phase_over_a_hitch :: proc(t: ^testing.T) {
         run_phase_detection(pc)
     }
 
-    for _ in 0 ..< 2 * int(DEFAULT_SAMPLE_RATE) / FRAME do play(pc, chunk[:FRAME], freq, &clock)
+    for _ in 0 ..< 2 * int(DEFAULT_SAMPLE_RATE) / FRAME {
+        play(pc, chunk[:FRAME], freq, &clock)
+    }
     play(pc, chunk[:], freq, &clock)
     testing.expect(t, pc.available > HITCH / 2)
 
-    for _ in 0 ..< 3 do play(pc, chunk[:FRAME], freq, &clock)
+    for _ in 0 ..< 3 {
+        play(pc, chunk[:FRAME], freq, &clock)
+    }
     for band, index in pc.bands {
         testing.expectf(t, abs(band.err_cents - 10) < 0.2, "track %v after the hitch, got %v cents", index, band.err_cents)
     }
@@ -231,7 +239,9 @@ test_strobe_turn_rate :: proc(t: ^testing.T) {
         frames_per_s := DEFAULT_SAMPLE_RATE / FRAME
         start: f32
         for frame in 0 ..< 3 * frames_per_s {
-            if frame == 2 * frames_per_s do start = pc.bands[0].scaled_phase
+            if frame == 2 * frames_per_s {
+                start = pc.bands[0].scaled_phase
+            }
 
             for &sample in chunk {
                 sample = f32(0.1 * math.sin(math.TAU * freq * f64(clock) / DEFAULT_SAMPLE_RATE))
@@ -297,7 +307,9 @@ test_onset_on_a_replucked_string :: proc(t: ^testing.T) {
         add_noise(samples, HISS)
         for pluck, index in plucks {
             rings_to_s := plucks[index + 1].at_s if index + 1 < len(plucks) else PLAYED_S
-            if mute_s > pluck.at_s do rings_to_s = min(rings_to_s, mute_s)
+            if mute_s > pluck.at_s {
+                rings_to_s = min(rings_to_s, mute_s)
+            }
 
             ringing := samples[:int(rings_to_s * f64(DEFAULT_SAMPLE_RATE))]
             level := pluck.level
@@ -307,7 +319,9 @@ test_onset_on_a_replucked_string :: proc(t: ^testing.T) {
         onsets: [dynamic]f64
         played := 0
         for end_s in play_frames(lock_in, samples, &played, FRAME) {
-            if lock_in.bands[0].onset do append(&onsets, end_s)
+            if lock_in.bands[0].onset {
+                append(&onsets, end_s)
+            }
         }
         return onsets
     }
@@ -317,7 +331,9 @@ test_onset_on_a_replucked_string :: proc(t: ^testing.T) {
         for pluck in plucks {
             found := false
             for onset in onsets {
-                if onset >= pluck.at_s && onset - pluck.at_s <= FOUND_WITHIN_S do found = true
+                if onset >= pluck.at_s && onset - pluck.at_s <= FOUND_WITHIN_S {
+                    found = true
+                }
             }
             testing.expectf(t, found, "%v: no onset for the pluck at %.2f s, onsets at %v", name, pluck.at_s, onsets)
         }

@@ -66,7 +66,9 @@ test_note_target_holds_between_notes :: proc(t: ^testing.T) {
     // A hum wavering round halfway from A2 to B♭2: A holds to 60 cents past it, then B♭ holds as far back,
     // to 40 cents over A
     hum :: proc(target: ^NoteTarget, cents: f32) -> (retuned: bool) {
-        for _ in 0 ..< 4 do retuned ||= update_note_target(target, test_detection(freq_at_cents(A2_HZ, cents)))
+        for _ in 0 ..< 4 {
+            retuned ||= update_note_target(target, test_detection(freq_at_cents(A2_HZ, cents)))
+        }
         return
     }
 
@@ -162,7 +164,9 @@ test_note_target_note_lock :: proc(t: ^testing.T) {
     testing.expect(t, !out_of_range(&target))
 
     // An octave of the followed note after NOTE_HARMONIC_SWITCH_S, 3 detections
-    for _ in 0 ..< 3 do update_note_target(&target, test_detection(E2_HZ / 2))
+    for _ in 0 ..< 3 {
+        update_note_target(&target, test_detection(E2_HZ / 2))
+    }
     testing.expect_value(t, target.target_note.octave, 2)
     testing.expect(t, out_of_range(&target))
     steady := readout_pitch(&target)
@@ -175,7 +179,9 @@ test_note_target_note_lock :: proc(t: ^testing.T) {
     // Its readout doesn't follow a stray detection of another note, only one that's confirmed. 0.1 s is 3
     // detections 0.05 s apart.
     stray := init_note_target(E2_HZ, 440, 0.1)
-    for _ in 0 ..< 3 do update_note_target(&stray, test_detection(E2_HZ))
+    for _ in 0 ..< 3 {
+        update_note_target(&stray, test_detection(E2_HZ))
+    }
     toggle_note_lock(&stray)
     update_note_target(&stray, test_detection(2 * E2_HZ))
     steady = readout_pitch(&stray)
@@ -253,7 +259,9 @@ test_note_target_strings :: proc(t: ^testing.T) {
     // The low E ringing an octave high is still the low E, read from that octave. Confirmed, after
     // NOTE_HARMONIC_SWITCH_S, 3 detections.
     update_note_target(&target, test_detection(E2_HZ))
-    for _ in 0 ..< 3 do update_note_target(&target, test_detection(2 * E2_HZ))
+    for _ in 0 ..< 3 {
+        update_note_target(&target, test_detection(2 * E2_HZ))
+    }
     testing.expect_value(t, target.string_index, 0)
     steady = readout_pitch(&target)
     testing.expect(t, abs(steady.err_cents) < 0.1)
@@ -262,7 +270,9 @@ test_note_target_strings :: proc(t: ^testing.T) {
     // target, then against its own string
     held := init_note_target(A3_HZ, 440, 0.1)
     set_target_strings(&held, guitar[:])
-    for _ in 0 ..< 3 do update_note_target(&held, test_detection(196.0)) // G3, the target
+    for _ in 0 ..< 3 {
+        update_note_target(&held, test_detection(196.0)) // G3, the target
+    }
 
     update_note_target(&held, test_detection(E2_HZ))
     testing.expect_value(t, held.string_index, 3)
@@ -279,7 +289,9 @@ test_note_target_strings :: proc(t: ^testing.T) {
     set_target_strings(&target, drop_d)
     update_note_target(&target, test_detection(73.42))
     testing.expect_value(t, target.string_index, 0)
-    for _ in 0 ..< 3 do update_note_target(&target, test_detection(146.83))
+    for _ in 0 ..< 3 {
+        update_note_target(&target, test_detection(146.83))
+    }
     testing.expect_value(t, target.string_index, 2)
 }
 

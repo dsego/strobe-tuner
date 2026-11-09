@@ -27,41 +27,55 @@ test_noise_floor :: proc(t: ^testing.T) {
     floor := init_noise_floor()
 
     // Learns the background
-    for _ in 0 ..< 100 do update_noise_floor(&floor, 0.001, DT)
+    for _ in 0 ..< 100 {
+        update_noise_floor(&floor, 0.001, DT)
+    }
 
     testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "background, got %v", floor.level)
 
     // A loud note stands out and barely moves it, only the slow creep
     snr: f32
-    for _ in 0 ..< 20 do snr = update_noise_floor(&floor, 0.1, DT)
+    for _ in 0 ..< 20 {
+        snr = update_noise_floor(&floor, 0.1, DT)
+    }
 
     testing.expectf(t, snr > 35, "note SNR, got %v dB", snr)
     rise_db := 20 * math.log10(floor.level / 0.001)
     testing.expectf(t, abs(rise_db - NOISE_FLOOR_RISE_DB_PER_S * 20 * DT) < 0.01, "rise, got %v dB", rise_db)
 
     // Back down after the note
-    for _ in 0 ..< 200 do update_noise_floor(&floor, 0.001, DT)
+    for _ in 0 ..< 200 {
+        update_noise_floor(&floor, 0.001, DT)
+    }
 
     testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "after the note, got %v", floor.level)
 
     // A clear pitch held for minutes doesn't move it at all
-    for _ in 0 ..< 6000 do snr = update_noise_floor(&floor, 0.1, DT, is_tonal = true)
+    for _ in 0 ..< 6000 {
+        snr = update_noise_floor(&floor, 0.1, DT, is_tonal = true)
+    }
 
     testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "held note, got %v", floor.level)
     testing.expectf(t, snr > 39, "held note SNR, got %v dB", snr)
 
     // Nor one barely over it, a weak partial's band, it would rise to the partial and stay
-    for _ in 0 ..< 6000 do snr = update_noise_floor(&floor, 0.002, DT, is_tonal = true)
+    for _ in 0 ..< 6000 {
+        snr = update_noise_floor(&floor, 0.002, DT, is_tonal = true)
+    }
 
     testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "weak partial, got %v", floor.level)
 
     // A held note unclear for a moment now and then, like a voice, stays a note
-    for step in 0 ..< 6000 do update_noise_floor(&floor, 0.002, DT, is_tonal = step % 8 != 0)
+    for step in 0 ..< 6000 {
+        update_noise_floor(&floor, 0.002, DT, is_tonal = step % 8 != 0)
+    }
 
     testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "unclear moments, got %v", floor.level)
 
     // Once it stops, the floor learns the room again
-    for _ in 0 ..< 200 do update_noise_floor(&floor, 0.003, DT)
+    for _ in 0 ..< 200 {
+        update_noise_floor(&floor, 0.003, DT)
+    }
 
     testing.expectf(t, abs(floor.level - 0.003) < 1e-4, "after the note, got %v", floor.level)
 }
@@ -75,16 +89,22 @@ test_noise_floor_warmup_on_a_note :: proc(t: ^testing.T) {
     floor := init_noise_floor()
     snr: f32
     update_noise_floor(&floor, 0.2, DT)
-    for _ in 0 ..< 40 do snr = update_noise_floor(&floor, 0.1, DT, is_tonal = true)
+    for _ in 0 ..< 40 {
+        snr = update_noise_floor(&floor, 0.1, DT, is_tonal = true)
+    }
 
     testing.expectf(t, snr >= NOISE_FLOOR_UNKNOWN_SNR_DB, "note SNR, got %v dB", snr)
-    for _ in 0 ..< 100 do update_noise_floor(&floor, 0.001, DT)
+    for _ in 0 ..< 100 {
+        update_noise_floor(&floor, 0.001, DT)
+    }
 
     testing.expectf(t, abs(floor.level - 0.001) < 1e-5, "background, got %v", floor.level)
 
     // A tone that never stops still isn't the background
     floor = init_noise_floor()
-    for _ in 0 ..< 300 do snr = update_noise_floor(&floor, 0.01, DT, is_tonal = true)
+    for _ in 0 ..< 300 {
+        snr = update_noise_floor(&floor, 0.01, DT, is_tonal = true)
+    }
 
     testing.expectf(t, floor.level == 0, "steady tone, got %v", floor.level)
     testing.expectf(t, snr >= NOISE_FLOOR_UNKNOWN_SNR_DB, "steady tone SNR, got %v dB", snr)

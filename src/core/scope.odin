@@ -254,10 +254,14 @@ destroy_scope :: proc(self: ^Scope) {
     delete(self.average_sums)
     delete(self.average_weights)
 
-    for &dft in self.partial_dfts do destroy_dft(&dft)
+    for &dft in self.partial_dfts {
+        destroy_dft(&dft)
+    }
 
     delete(self.partial_dfts)
-    for &dft in self.noise_dfts do destroy_dft(&dft)
+    for &dft in self.noise_dfts {
+        destroy_dft(&dft)
+    }
 }
 
 // Starts with a dark screen at the new reference frequency
@@ -396,8 +400,12 @@ update_scope :: proc(self: ^Scope) {
         keep_raw_samples(self, self.chunk[:count])
 
         // Starts over with the beam, and when it's turned on
-        if self.beam_restart || !self.lowpass do self.lowpass_filter.primed = false
-        if self.lowpass do lowpass_samples(&self.lowpass_filter, self.chunk[:count])
+        if self.beam_restart || !self.lowpass {
+            self.lowpass_filter.primed = false
+        }
+        if self.lowpass {
+            lowpass_samples(&self.lowpass_filter, self.chunk[:count])
+        }
 
         if self.persistence_s <= 0 {
             record_samples(self, self.chunk[:count])
@@ -409,7 +417,9 @@ update_scope :: proc(self: ^Scope) {
         available -= count
     }
 
-    if self.persistence_s <= 0 do redraw_newest_sweep(self)
+    if self.persistence_s <= 0 {
+        redraw_newest_sweep(self)
+    }
 }
 
 // Instead of update_scope while nothing shows the screen, drawing the beam costs more than the strobe's
@@ -437,7 +447,9 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
 
     // Of one sample
     decay: f64 = 1
-    if self.persistence_s > 0 do decay = math.exp(-1 / (self.persistence_s * f64(self.sample_rate)))
+    if self.persistence_s > 0 {
+        decay = math.exp(-1 / (self.persistence_s * f64(self.sample_rate)))
+    }
 
     for sample, index in samples {
         follow_level(self, sample)
@@ -447,7 +459,9 @@ sweep_samples :: proc(self: ^Scope, samples: []f32) {
         // the cells before its end
         if self.fade_gain > SCOPE_MAX_FADE_GAIN {
             scale := f32(1 / self.fade_gain)
-            for &cell in self.screen do cell *= scale
+            for &cell in self.screen {
+                cell *= scale
+            }
             self.fade_gain = 1
         }
         move_beam(self, f64(clock + i64(index)) * self.step, sample, self.fade_gain)
@@ -472,7 +486,9 @@ average_samples :: proc(self: ^Scope, samples: []f32) {
     self.beam_restart = false
 
     // By the input's loudness like the lamp's, the average's peak is under the input's, it leaves the noise out
-    for sample in samples do follow_level(self, sample)
+    for sample in samples {
+        follow_level(self, sample)
+    }
     keep_samples(self, samples)
 
     newest := clock + i64(len(samples)) - 1
@@ -498,7 +514,9 @@ sweeps_to_average :: proc(self: ^Scope, clock, newest: i64) -> (first, unfinishe
     unfinished = i64(math.floor(f64(newest) * self.step - overlap))
     from := max(self.averaged_clock, newest - i64(self.history_count) + 1)
     first = i64(math.floor(f64(from) * self.step))
-    if first_clock_in_sweep(self, f64(first)) < from do first += 1
+    if first_clock_in_sweep(self, f64(first)) < from {
+        first += 1
+    }
 
     self.averaged_clock = max(self.averaged_clock, first_clock_in_sweep(self, f64(unfinished)))
     return
@@ -521,7 +539,9 @@ fold_into_average :: proc(self: ^Scope, newest, first, unfinished: i64) {
 
         // A pluck, see SCOPE_PLUCK_DB
         power := sweep_power(self, newest, start, next)
-        if self.average_power > 0 && power > pluck * self.average_power do clear_average(self)
+        if self.average_power > 0 && power > pluck * self.average_power {
+            clear_average(self)
+        }
         self.average_power = power if self.average_power == 0 else decay * self.average_power + (1 - decay) * power
 
         if sweep != self.averaged_sweep {
@@ -533,8 +553,12 @@ fold_into_average :: proc(self: ^Scope, newest, first, unfinished: i64) {
         if self.average_gain > SCOPE_MAX_FADE_GAIN {
             scale := f32(1 / self.average_gain)
             used := average_bins_used(self)
-            for &sum in self.average_sums[:used] do sum *= scale
-            for &weight in self.average_weights[:used] do weight *= scale
+            for &sum in self.average_sums[:used] {
+                sum *= scale
+            }
+            for &weight in self.average_weights[:used] {
+                weight *= scale
+            }
             self.average_gain = 1
         }
 
@@ -612,7 +636,9 @@ record_samples :: proc(self: ^Scope, samples: []f32) {
     _, ok := begin_samples(self, samples)
     if !ok do return
 
-    for sample in samples do follow_level(self, sample)
+    for sample in samples {
+        follow_level(self, sample)
+    }
 
     keep_samples(self, samples)
 }
@@ -981,7 +1007,9 @@ scope_from_above :: proc(self: ^Scope, shape: ScopeShape) -> (heights: []f32, dw
     for row in 0 ..< self.rows {
         value := row_value(self, row)
         depth := max(-value, 0)
-        if shape != .RAW_WAVEFORM do value = max(value, 0)
+        if shape != .RAW_WAVEFORM {
+            value = max(value, 0)
+        }
 
         for cell, column in self.screen[row * self.columns:][:self.columns] {
             if cell == 0 do continue
@@ -1015,14 +1043,18 @@ SCOPE_NOISE_BINS :: 32 // of the halfway bins, from the bottom
 scope_partials :: proc(self: ^Scope, periods: []int, partials: []ScopePartial) -> (noise: f64) {
     // Retuned when the periods asked for change
     if len(self.partial_dfts) != len(periods) {
-        for &dft in self.partial_dfts do destroy_dft(&dft)
+        for &dft in self.partial_dfts {
+            destroy_dft(&dft)
+        }
 
         delete(self.partial_dfts)
         self.partial_dfts = make([]SingleFreqDFT, len(periods))
     }
     for &dft, index in self.partial_dfts {
         norm_freq := f32(periods[index]) / f32(self.columns)
-        if dft.norm_freq != norm_freq do set_dft_freq(&dft, norm_freq, flat_window(self.columns))
+        if dft.norm_freq != norm_freq {
+            set_dft_freq(&dft, norm_freq, flat_window(self.columns))
+        }
     }
 
     // The wave as it is, half rectified it would have harmonics of its own

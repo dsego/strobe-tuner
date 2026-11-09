@@ -90,10 +90,14 @@ run_nsdf :: proc(self: ^NSDF, samples: []f32, lowest_hz: f32, followed_hz: f32 =
     highest := nsdf_key_maxima(self, self.sample_rate / lowest_hz)
 
     followed_lag: f32 = 0
-    if followed_hz > 0 do followed_lag = self.sample_rate / followed_hz
+    if followed_hz > 0 {
+        followed_lag = self.sample_rate / followed_hz
+    }
 
     peak = nsdf_choose_peak(self, highest, followed_lag)
-    if peak.x > 0 do freq = self.sample_rate / peak.x
+    if peak.x > 0 {
+        freq = self.sample_rate / peak.x
+    }
 
     return
 }
@@ -150,8 +154,12 @@ nsdf_key_maxima :: proc(self: ^NSDF, longest_period: f32) -> (highest_peak: Vec2
     lag := 1
     for lag < end {
         // Down the first slope, then past the negative values
-        for lag < end && self.values[lag] > 0.0 do lag += 1
-        for lag < end && self.values[lag] <= 0.0 do lag += 1
+        for lag < end && self.values[lag] > 0.0 {
+            lag += 1
+        }
+        for lag < end && self.values[lag] <= 0.0 {
+            lag += 1
+        }
 
         // The highest local maximum while it's positive
         start := lag
@@ -168,7 +176,9 @@ nsdf_key_maxima :: proc(self: ^NSDF, longest_period: f32) -> (highest_peak: Vec2
             offset, value := parabolic(self.values[highest - 1], self.values[highest], self.values[highest + 1])
             peak := Vec2{f32(highest) + offset, value}
             append(&self.peaks, peak)
-            if value >= highest_peak.y do highest_peak = peak
+            if value >= highest_peak.y {
+                highest_peak = peak
+            }
         }
         lag += 1
     }

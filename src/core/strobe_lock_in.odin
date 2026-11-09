@@ -159,7 +159,9 @@ init_strobe_lock_in :: proc(
     self.readout_fit_s = READOUT_FIT_S
 
     for interval in strobe_intervals {
-        if interval >= 1.0 do append_phase_band(self, interval)
+        if interval >= 1.0 {
+            append_phase_band(self, interval)
+        }
     }
     return self
 }
@@ -168,7 +170,9 @@ init_strobe_lock_in :: proc(
 destroy_strobe_lock_in :: proc(self: ^StrobeLockIn) {
     destroy_audio_capture_node(self)
     delete(self.sample_buffer)
-    for &band in self.bands do destroy_phase_band(&band)
+    for &band in self.bands {
+        destroy_phase_band(&band)
+    }
 
     delete(self.bands)
     free(self)
@@ -221,13 +225,17 @@ set_strobe_lock_in_tracks :: proc(
 ) {
     count := 0
     for interval in strobe_intervals {
-        if interval >= 1.0 do count += 1
+        if interval >= 1.0 {
+            count += 1
+        }
     }
     for len(self.bands) > count {
         band := pop(&self.bands)
         destroy_phase_band(&band)
     }
-    for len(self.bands) < count do append_phase_band(self, 1)
+    for len(self.bands) < count {
+        append_phase_band(self, 1)
+    }
 
     band_index := 0
     for interval, slot in strobe_intervals {
@@ -318,7 +326,9 @@ set_strobe_lock_in_freq :: proc(
         band.in_range = band.norm_freq < MAX_BAND_NORM_FREQ
         band.ref_omega = math.TAU * f64(band.freq_hz) / f64(self.sample_rate)
 
-        if measures_band(self, band_index) do set_dft_freq(&band.dft, band.norm_freq, window)
+        if measures_band(self, band_index) {
+            set_dft_freq(&band.dft, band.norm_freq, window)
+        }
     }
 
     set_strobe_lock_in_speed(self, base_speed)
@@ -362,7 +372,9 @@ restart_band :: proc(band: ^PhaseBand) {
 reset_strobe_lock_in :: proc(self: ^StrobeLockIn) {
     slice.zero(self.sample_buffer)
     self.sample_clock = 0
-    for &band in self.bands do restart_band(&band)
+    for &band in self.bands {
+        restart_band(&band)
+    }
 }
 
 // Handle the jump from 2π to 0 or 0 to 2π (both rotation directions), wraps to -π..π
@@ -381,7 +393,9 @@ run_phase_detection :: proc(self: ^StrobeLockIn) {
     if read == 0 && elapsed > 0 {
         // A stall, the buffer is silent and the tracks start over on the audio after it, the clock too
         self.sample_clock = 0
-        for &band in self.bands do restart_band(&band)
+        for &band in self.bands {
+            restart_band(&band)
+        }
 
         return
     }
@@ -549,7 +563,9 @@ advance_band :: proc(self: ^StrobeLockIn, band: ^PhaseBand, phase_advance: f64, 
     // Against the envelope, not the absolute power: a decaying note's newest moments are its weakest, and they
     // still count as much. A single one has no slope yet, the rate is its advance.
     if had_phase && band_fully_lit(band^) {
-        if band.rate_time_s == 0 do band.fit = {}
+        if band.rate_time_s == 0 {
+            band.fit = {}
+        }
 
         band.rate_time_s += f32(self.available) / self.sample_rate
 

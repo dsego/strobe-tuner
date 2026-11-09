@@ -159,7 +159,9 @@ test_scope_beam_is_continuous :: proc(t: ^testing.T) {
         top, bottom = -1, -1
         for row in 0 ..< scope.rows {
             if scope.screen[row * scope.columns + column] == 0 do continue
-            if top < 0 do top = row
+            if top < 0 {
+                top = row
+            }
 
             bottom = row
         }
@@ -227,7 +229,9 @@ test_scope_height_follows_loudness :: proc(t: ^testing.T) {
         samples: [SCOPE_TEST_FRAME]f32
         for _ in 0 ..< 30 {
             scope_test_sine(samples[:], FREQ, scope.sample_clock)
-            for &sample in samples do sample *= amp
+            for &sample in samples {
+                sample *= amp
+            }
 
             audio_capture_write(&scope, samples[:])
             update_scope(&scope)
@@ -266,8 +270,12 @@ test_scope_lowpass :: proc(t: ^testing.T) {
         for _ in 0 ..< 30 {
             scope_test_sine(samples[:], FREQ, scope.sample_clock)
             scope_test_sine(partial[:], 12 * FREQ, scope.sample_clock)
-            for &sample, index in samples do sample += 0.5 * partial[index]
-            if lowpass do lowpass_samples(&scope.lowpass_filter, samples[:])
+            for &sample, index in samples {
+                sample += 0.5 * partial[index]
+            }
+            if lowpass {
+                lowpass_samples(&scope.lowpass_filter, samples[:])
+            }
 
             clear_scope(&scope)
             sweep_samples(&scope, samples[:])
@@ -304,8 +312,12 @@ test_scope_persistence :: proc(t: ^testing.T) {
     _, lit := scope_test_fundamental(heights)
     testing.expectf(t, abs(lit - 0.5) < 0.02, "lit %v", lit)
 
-    for &sample in samples do sample = 0
-    for _ in 0 ..< 3 do sweep_samples(&scope, samples[:])
+    for &sample in samples {
+        sample = 0
+    }
+    for _ in 0 ..< 3 {
+        sweep_samples(&scope, samples[:])
+    }
 
     heights, _ = scope_from_above(&scope, .HALF_RECTIFIED)
     _, faded := scope_test_fundamental(heights)
@@ -321,7 +333,9 @@ test_scope_newest_sweep :: proc(t: ^testing.T) {
 
     dark_columns :: proc(dwell: []f32) -> (count: int) {
         for time in dwell {
-            if time == 0 do count += 1
+            if time == 0 {
+                count += 1
+            }
         }
         return
     }
@@ -350,7 +364,9 @@ test_scope_newest_sweep :: proc(t: ^testing.T) {
 
     // Every sample leaves one of light on the screen
     light: f32 = 0
-    for cell in scope.screen do light += cell
+    for cell in scope.screen {
+        light += cell
+    }
     sweep := f32(math.ceil(1 / scope.step))
     testing.expectf(t, abs(light - sweep) <= 1, "light %v, a sweep is %v samples", light, sweep)
 }
@@ -429,7 +445,9 @@ test_scope_average :: proc(t: ^testing.T) {
     samples: [SCOPE_TEST_FRAME]f32
     for _ in 0 ..< 60 {
         scope_test_sine(samples[:], FREQ, newest.sample_clock)
-        for &sample in samples do sample = AMP * sample + NOISE * test_noise(&state)
+        for &sample in samples {
+            sample = AMP * sample + NOISE * test_noise(&state)
+        }
         for scope in ([]^Scope{&newest, &averaged}) {
             audio_capture_write(scope, samples[:])
             update_scope(scope)
@@ -584,7 +602,9 @@ test_scope_average_starts_over_on_a_whole_sweep :: proc(t: ^testing.T) {
     samples: [SCOPE_TEST_FRAME]f32
     for frame in 0 ..< 40 {
         // Flips every 7 frames, a frame's samples aren't a whole number of sweeps of either
-        if frame % 7 == 6 do set_scope_freq(&scope, freqs[(frame / 7 + 1) % 2])
+        if frame % 7 == 6 {
+            set_scope_freq(&scope, freqs[(frame / 7 + 1) % 2])
+        }
 
         scope_test_sine(samples[:], NOTE, scope.sample_clock)
         audio_capture_write(&scope, samples[:])
@@ -592,7 +612,9 @@ test_scope_average_starts_over_on_a_whole_sweep :: proc(t: ^testing.T) {
 
         empty := 0
         for weight in scope.average_weights[:scope.average_bins] {
-            if weight == 0 do empty += 1
+            if weight == 0 {
+                empty += 1
+            }
         }
         testing.expectf(
             t,
@@ -702,7 +724,9 @@ test_scope_average_has_no_seam :: proc(t: ^testing.T) {
     samples: [SCOPE_TEST_FRAME]f32
     for _ in 0 ..< 60 {
         scope_test_sine(samples[:], FREQ, scope.sample_clock)
-        for &sample in samples do sample = 0.5 * sample + NOISE * test_noise(&state)
+        for &sample in samples {
+            sample = 0.5 * sample + NOISE * test_noise(&state)
+        }
         audio_capture_write(&scope, samples[:])
         update_scope(&scope)
     }
@@ -746,7 +770,9 @@ test_scope_circle_spins_clockwise_when_sharp :: proc(t: ^testing.T) {
     set_scope_sweep(&scope, .CIRCLE)
 
     // The level starts from nothing, the first frame's first samples are clipped
-    for _ in 0 ..< 2 do sweep_frame(&scope, FREQ)
+    for _ in 0 ..< 2 {
+        sweep_frame(&scope, FREQ)
+    }
     still := petals_angle(&scope)
     for frame in 0 ..< 60 {
         sweep_frame(&scope, FREQ)
@@ -758,7 +784,9 @@ test_scope_circle_spins_clockwise_when_sharp :: proc(t: ^testing.T) {
     // Twice that at twice the angle.
     sweep_frame(&scope, FREQ + OFF_HZ)
     start := petals_angle(&scope)
-    for _ in 0 ..< 15 do sweep_frame(&scope, FREQ + OFF_HZ)
+    for _ in 0 ..< 15 {
+        sweep_frame(&scope, FREQ + OFF_HZ)
+    }
 
     turned := wrap_phase(petals_angle(&scope) - start)
     testing.expectf(t, abs(turned + math.PI / 2) < 0.05, "turned %v, expected %v", turned, -math.PI / 2)
@@ -805,7 +833,9 @@ test_scope_pluck_starts_the_average_over :: proc(t: ^testing.T) {
     gain := scope.average_gain
     for frame in 0 ..< 60 {
         fading(&scope, samples[:], &state)
-        if frame >= 15 do testing.expectf(t, scope.average_gain > gain, "frame %v: started over", frame)
+        if frame >= 15 {
+            testing.expectf(t, scope.average_gain > gain, "frame %v: started over", frame)
+        }
         gain = scope.average_gain
     }
 
@@ -905,9 +935,13 @@ test_scope_peak_holds_over_the_screen :: proc(t: ^testing.T) {
         scope_test_sine(samples[:], FREQ, scope.sample_clock)
         for &sample, index in samples {
             period := (scope.sample_clock + i64(index)) * i64(FREQ) / DEFAULT_SAMPLE_RATE
-            if period / BEAT_PERIODS % 2 == 1 do sample *= 0.8
+            if period / BEAT_PERIODS % 2 == 1 {
+                sample *= 0.8
+            }
         }
         sweep_samples(&scope, samples[:])
-        if frame > 0 do testing.expectf(t, scope.level > 0.99, "frame %v: level %v", frame, scope.level)
+        if frame > 0 {
+            testing.expectf(t, scope.level > 0.99, "frame %v: level %v", frame, scope.level)
+        }
     }
 }

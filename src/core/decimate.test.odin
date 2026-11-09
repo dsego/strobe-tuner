@@ -27,7 +27,9 @@ test_decimate :: proc(t: ^testing.T) {
     level :: proc(input_rate, freq_hz: f64) -> f64 {
         decimator, _ := init_decimator(f32(input_rate))
         samples := make([]f32, int(input_rate / 2), context.temp_allocator)
-        for &sample, index in samples do sample = f32(math.sin(math.TAU * freq_hz * f64(index) / input_rate))
+        for &sample, index in samples {
+            sample = f32(math.sin(math.TAU * freq_hz * f64(index) / input_rate))
+        }
 
         // In chunks like the audio thread's, an odd size so the drop moves across them
         out := 0
@@ -38,7 +40,9 @@ test_decimate :: proc(t: ^testing.T) {
             out += count
         }
         peak: f64
-        for sample in samples[out / 2:out] do peak = max(peak, abs(f64(sample)))
+        for sample in samples[out / 2:out] {
+            peak = max(peak, abs(f64(sample)))
+        }
         return peak
     }
 

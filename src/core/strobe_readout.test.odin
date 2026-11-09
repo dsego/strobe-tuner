@@ -158,7 +158,9 @@ test_note_held_high_in_noise :: proc(t: ^testing.T) {
 
         // The last second, as sandbox/accuracy measures
         last_second := start + FRAME > len(samples) - int(DEFAULT_SAMPLE_RATE)
-        if last_second && (!note_target.active || note_target.target_note.cents != c8.cents) do wrong += 1
+        if last_second && (!note_target.active || note_target.target_note.cents != c8.cents) {
+            wrong += 1
+        }
     }
     testing.expectf(t, wrong == 0, "no note or the wrong one in %v frames of the last second", wrong)
 }

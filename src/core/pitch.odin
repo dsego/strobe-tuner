@@ -164,7 +164,9 @@ set_pitch_detector_sample_rate :: proc(self: ^PitchDetector, sample_rate: f32) {
 // The window's samples at the rate, PITCH_WINDOW_S rounded up to a power of 2: 4096 at 48 kHz
 pitch_window :: proc(sample_rate: f32) -> int {
     window := 1
-    for f32(window) < PITCH_WINDOW_S * sample_rate do window *= 2
+    for f32(window) < PITCH_WINDOW_S * sample_rate {
+        window *= 2
+    }
     return window
 }
 
@@ -260,7 +262,9 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
 
     when MAINS_HUM {
         for mains_hz in MAINS_HZ {
-            if abs(cents_deviation(info.detected_freq, mains_hz)) <= MAINS_CENTS do mains = true
+            if abs(cents_deviation(info.detected_freq, mains_hz)) <= MAINS_CENTS {
+                mains = true
+            }
         }
     }
 
@@ -292,7 +296,9 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
 
 calculate_rms :: proc(samples: []f32) -> f32 {
     square_sum: f32 = 0
-    for sample in samples do square_sum += sample * sample
+    for sample in samples {
+        square_sum += sample * sample
+    }
 
     return math.sqrt(square_sum / f32(len(samples)))
 }

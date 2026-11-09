@@ -208,14 +208,20 @@ run_harmonic_stack :: proc(
     // a short note under bass_top: over it the bass transform has none of its harmonics, it scores nothing there
     // and any bass peaks under it passed as its own.
     under: f32
-    if short_freq < bass_top do under = step_down_to_note(self.bass.peaks[:], short_freq, short_in_bass, lowest_hz, bass_top)
+    if short_freq < bass_top {
+        under = step_down_to_note(self.bass.peaks[:], short_freq, short_in_bass, lowest_hz, bass_top)
+    }
     under_db, _ := score_stack(self.bass.peaks[:], under, bass_top)
     short_steps_under := under > 0 && under < HARMONICS_BASS_HZ && under_db >= HARMONICS_HIGH_DB
 
     note := &self.short
     freq, score_db = short_freq, short_db
-    if bass_wins do note, freq, score_db = &self.bass, bass_freq, bass_db
-    if short_steps_under do note, freq, score_db = &self.bass, under, under_db
+    if bass_wins {
+        note, freq, score_db = &self.bass, bass_freq, bass_db
+    }
+    if short_steps_under {
+        note, freq, score_db = &self.bass, under, under_db
+    }
 
     // A harmonic or an undertone of the followed pitch, the stack is tried at the followed pitch too and kept
     // there when it scores nearly as well: the followed octave holds. From the best's own pitch, the followed
@@ -323,7 +329,9 @@ harmonic_multiple :: proc(freq, of_hz: f32) -> int {
 best_stack :: proc(self: ^StackTransform, from_hz, below_hz, top_hz: f32) -> (freq, score_db: f32) {
     peaks := self.peaks[:]
     most_db: f32
-    for peak in peaks do most_db = max(most_db, peak.over_db)
+    for peak in peaks {
+        most_db = max(most_db, peak.over_db)
+    }
 
     nearest := nearest_candidate(peaks, self.previous_hz, from_hz, below_hz)
     if nearest > 0 {
@@ -337,7 +345,9 @@ best_stack :: proc(self: ^StackTransform, from_hz, below_hz, top_hz: f32) -> (fr
             if candidate >= below_hz do continue
 
             score, fundamental := score_stack(peaks, candidate, top_hz, beat = score_db, most_db = most_db)
-            if score > score_db do freq, score_db = fundamental, score
+            if score > score_db {
+                freq, score_db = fundamental, score
+            }
         }
     }
 
@@ -357,7 +367,9 @@ nearest_candidate :: proc(peaks: []StackPeak, freq, from_hz, below_hz: f32) -> (
         if candidate < from_hz || candidate >= below_hz do continue
 
         cents := abs(cents_deviation(candidate, freq))
-        if cents < closest do nearest, closest = candidate, cents
+        if cents < closest {
+            nearest, closest = candidate, cents
+        }
     }
     return
 }
@@ -450,8 +462,12 @@ select_nth :: proc(values: []f32, nth: int) -> f32 {
 partition_around :: proc(values: []f32, low, high: int, pivot: f32) -> (lower_end, upper_start: int) {
     left, right := low, high
     for left <= right {
-        for values[left] < pivot do left += 1
-        for values[right] > pivot do right -= 1
+        for values[left] < pivot {
+            left += 1
+        }
+        for values[right] > pivot {
+            right -= 1
+        }
 
         if left <= right {
             values[left], values[right] = values[right], values[left]
@@ -601,7 +617,9 @@ score_stack :: proc(
         weight *= HARMONICS_WEIGHT
     }
 
-    if pulls > 0 do fundamental = weighted_freq / pulls
+    if pulls > 0 {
+        fundamental = weighted_freq / pulls
+    }
     return
 }
 
@@ -616,7 +634,9 @@ matching_peak :: proc(peaks: []StackPeak, target, tolerance_cents: f32) -> (matc
 
         off := cents_deviation(peak.freq, target) / tolerance_cents
         counted := peak.over_db * (1 - off * off)
-        if counted > counted_db do match, counted_db = peak, counted
+        if counted > counted_db {
+            match, counted_db = peak, counted
+        }
     }
     return
 }

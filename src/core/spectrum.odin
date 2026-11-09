@@ -55,7 +55,9 @@ init_windowed_spectrum :: proc(window: int) -> (self: WindowedSpectrum) {
 }
 
 destroy_windowed_spectrum :: proc(self: ^WindowedSpectrum) {
-    if self.fft_size != 0 do fft.destroy_quad_plan(&self.plan)
+    if self.fft_size != 0 {
+        fft.destroy_quad_plan(&self.plan)
+    }
 
     delete(self.taper)
     delete(self.samples)
@@ -66,11 +68,15 @@ destroy_windowed_spectrum :: proc(self: ^WindowedSpectrum) {
 // The samples under the taper through the transform, the power of each bin into spectrum. Into bins too if
 // given, as long as the spectrum, each bin as it is with its phase.
 run_windowed_spectrum :: proc(self: ^WindowedSpectrum, bins: []complex64 = nil) {
-    for sample, index in self.samples do self.padded[index] = sample * self.taper[index]
+    for sample, index in self.samples {
+        self.padded[index] = sample * self.taper[index]
+    }
 
     mem.zero_slice(self.padded[len(self.samples):])
     fft.run_quad(&self.plan, self.padded, self.spectrum)
-    if bins != nil do copy(bins, self.spectrum)
+    if bins != nil {
+        copy(bins, self.spectrum)
+    }
 
     square_spectrum(self.spectrum)
 }

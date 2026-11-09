@@ -90,14 +90,18 @@ update_noise_floor :: proc(
 
     snr_db = 20 * math.log10(level / self.level)
 
-    if warming_up do self.warmup = max(self.warmup - dt, 0)
+    if warming_up {
+        self.warmup = max(self.warmup - dt, 0)
+    }
 
     if self.warmup > 0 || snr_db < NOISE_FLOOR_SNR_DB_THRESHOLD {
         // Smooth in dB, the level of the noise in a single bin dips deep now and then. Only down on a pitch:
         // a weak partial, or a band the note slid away from, would rise to the note's level and stay there,
         // every track it reached dark until the note stops.
         alpha := 1 - math.exp(-dt / NOISE_FLOOR_TIME_S)
-        if !pitch || snr_db < 0 do self.level *= math.pow(10, alpha * snr_db / 20)
+        if !pitch || snr_db < 0 {
+            self.level *= math.pow(10, alpha * snr_db / 20)
+        }
     } else if !pitch {
         self.level *= math.pow(10, NOISE_FLOOR_RISE_DB_PER_S * dt / 20)
     }

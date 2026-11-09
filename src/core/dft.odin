@@ -37,8 +37,12 @@ gamma_window :: proc(index: f32, size: f32) -> f32 {
 gamma_comb_window :: proc(gamma_size: int, comb_samples: f32 = 0, allocator := context.temp_allocator) -> []f64 {
     taps := int(math.ceil(comb_samples)) if comb_samples > 0 else 1
     weights := make([]f64, gamma_size + taps - 1, allocator)
-    for &weight, index in weights[:gamma_size] do weight = f64(gamma_window(f32(index), f32(gamma_size)))
-    if comb_samples > 0 do comb_box(weights, gamma_size, comb_samples)
+    for &weight, index in weights[:gamma_size] {
+        weight = f64(gamma_window(f32(index), f32(gamma_size)))
+    }
+    if comb_samples > 0 {
+        comb_box(weights, gamma_size, comb_samples)
+    }
 
     return weights
 }
@@ -68,7 +72,9 @@ comb_box :: proc(weights: []f64, gamma_size: int, comb_samples: f32) {
 // Every sample the same weight
 flat_window :: proc(size: int, allocator := context.temp_allocator) -> []f64 {
     weights := make([]f64, size, allocator)
-    for &weight in weights do weight = 1
+    for &weight in weights {
+        weight = 1
+    }
 
     return weights
 }
@@ -147,16 +153,22 @@ run_single_dfts :: proc(dfts: []^SingleFreqDFT, samples: []f32) {
 
     window_size := dfts[0].window_size
     assert(len(samples) >= window_size)
-    for dft in dfts do assert(dft.window_size == window_size)
+    for dft in dfts {
+        assert(dft.window_size == window_size)
+    }
 
     lanes: [MAX_BANDS]DftLanes
     vector_end := window_size - window_size % DFT_LANES
     for block := 0; block < vector_end; block += DFT_BLOCK {
         block_end := min(block + DFT_BLOCK, vector_end)
-        for dft, dft_index in dfts do sum_dft_block(&lanes[dft_index], dft, samples, block, block_end)
+        for dft, dft_index in dfts {
+            sum_dft_block(&lanes[dft_index], dft, samples, block, block_end)
+        }
     }
 
-    for dft, dft_index in dfts do dft.dft = sum_dft_lanes(lanes[dft_index], dft, samples, vector_end)
+    for dft, dft_index in dfts {
+        dft.dft = sum_dft_lanes(lanes[dft_index], dft, samples, vector_end)
+    }
 }
 
 // The samples from start to end, a whole number of lanes, into the DFT's lanes. The samples are real, two

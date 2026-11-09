@@ -83,8 +83,12 @@ readout_candidates :: proc(self: ^StrobeLockIn, partial: f32) -> (loudest, chose
         if !measures_band(self, index) || !is_octave_track(band) do continue
         if !hears_note(band, self.band_cents) || !band_fully_lit(band) do continue
 
-        if loudest < 0 || band.envelope > self.bands[loudest].envelope do loudest = index
-        if band.interval == partial do chosen = index
+        if loudest < 0 || band.envelope > self.bands[loudest].envelope {
+            loudest = index
+        }
+        if band.interval == partial {
+            chosen = index
+        }
     }
     return
 }
