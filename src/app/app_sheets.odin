@@ -61,6 +61,14 @@ close_settings_sheet :: proc(sheets: ^AppSheets) {
     sheets.reset_confirm = false
 }
 
+// Tapped on the input's level. Its levels show right away, not after the first hold, and its list has what's
+// connected now.
+open_input_sheet :: proc(app: ^App) {
+    app.sheets.input.open = true
+    app.input.stats_age = INPUT_STATS_HOLD_S
+    app.input.refresh = true
+}
+
 // Closed with the dropdown menu that may be open on it
 dismiss_sheet :: proc(sheets: ^AppSheets, sheet: ^Sheet) {
     close_sheet(sheet)

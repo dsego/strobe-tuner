@@ -46,45 +46,47 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu_comma
 
     if gui_instrument_button(layout.instrument, config) do app.sheets.instrument.open = true
 
-    // The input level, the microphone icon marks it as the input. The level is the rounded track cut off flat
-    // where it ends.
-    icon_y := f32(LEVEL_METER_HEIGHT - ICON_SIZE) / 2
-    draw_icon(ICON_MICROPHONE, layout.level_meter + {0, icon_y}, icon_color)
-
-    // A slow input, a Bluetooth headset's microphone at 16 or 24 kHz, gets a warning before the icon. The high
-    // notes and the partials over its Nyquist are out of reach, their tracks show empty.
-    WARNING_GAP :: 4
-    if sample_rate := app.input.capture.sample_rate; sample_rate > 0 && sample_rate < core.LOW_SAMPLE_RATE {
-        draw_icon(ICON_WARNING, layout.level_meter + {-ICON_SIZE - WARNING_GAP, icon_y}, warning_color)
-    }
-
-    meter := layout.level_meter + {LEVEL_BAR_OFFSET, 0}
-    track := gfx.Rect{meter.x, meter.y, LEVEL_BAR_WIDTH, LEVEL_METER_HEIGHT}
-    gfx.draw_rounded_rect(track, LEVEL_METER_HEIGHT / 2, level_track_color)
-
-    // Empty until something was measured, e.g. without an input, a reading that isn't one would be 0 dBFS
-    if reading.pitch.measured {
-        level := LEVEL_BAR_WIDTH + clamp(reading.pitch.rms_dbfs, -LEVEL_BAR_WIDTH, 0)
-        gfx.begin_scissor({meter.x, meter.y, level, LEVEL_METER_HEIGHT})
-        gfx.draw_rounded_rect(track, LEVEL_METER_HEIGHT / 2, accent_color)
-        gfx.end_scissor()
-    }
-
-    // The warning, the icon and the level open the input's sheet, a finger tall around the thin meter. Its
-    // levels show right away, not after the first hold, and its list has what's connected now.
-    left := layout.level_meter.x - ICON_SIZE - WARNING_GAP
-    touch_width: f32 = LEVEL_METER_WIDTH + ICON_SIZE + WARNING_GAP
-    if gui_button({left, meter.y + LEVEL_METER_HEIGHT / 2 - TOUCH_HEIGHT / 2, touch_width, TOUCH_HEIGHT}) {
-        app.sheets.input.open = true
-        app.input.stats_age = INPUT_STATS_HOLD_S
-        app.input.refresh = true
-    }
+    sample_rate := app.input.capture.sample_rate
+    if gui_level_meter(layout.level_meter, reading.pitch, sample_rate) do open_input_sheet(app)
 
     // A menu of the displays, last so it opens over the controls under it. Tab goes through them and the number
     // keys straight to one.
     gui_display_button(layout.display, &config.strobe_display_type, &app.strobe_area.menu_open)
 
-    when DEBUG_STATS do draw_debug_stats(app, layout, reading.pitch, meter)
+    when DEBUG_STATS do draw_debug_stats(app, layout, reading.pitch)
+}
+
+// The input's level, the microphone icon marks it as the input. Returns true when the level, the icon or the
+// warning before it is tapped.
+gui_level_meter :: proc(position: [2]f32, pitch: core.PitchInfo, sample_rate: f32) -> bool {
+    WARNING_GAP :: 4
+
+    icon_y := f32(LEVEL_METER_HEIGHT - ICON_SIZE) / 2
+    draw_icon(ICON_MICROPHONE, position + {0, icon_y}, icon_color)
+
+    // A slow input, a Bluetooth headset's microphone at 16 or 24 kHz, gets a warning before the icon. The high
+    // notes and the partials over its Nyquist are out of reach, their tracks show empty.
+    if sample_rate > 0 && sample_rate < core.LOW_SAMPLE_RATE {
+        draw_icon(ICON_WARNING, position + {-ICON_SIZE - WARNING_GAP, icon_y}, warning_color)
+    }
+
+    // The level is the rounded track cut off flat where it ends
+    bar := position + {LEVEL_BAR_OFFSET, 0}
+    track := gfx.Rect{bar.x, bar.y, LEVEL_BAR_WIDTH, LEVEL_METER_HEIGHT}
+    gfx.draw_rounded_rect(track, LEVEL_METER_HEIGHT / 2, level_track_color)
+
+    // Empty until something was measured, e.g. without an input, a reading that isn't one would be 0 dBFS
+    if pitch.measured {
+        level := LEVEL_BAR_WIDTH + clamp(pitch.rms_dbfs, -LEVEL_BAR_WIDTH, 0)
+        gfx.begin_scissor({bar.x, bar.y, level, LEVEL_METER_HEIGHT})
+        gfx.draw_rounded_rect(track, LEVEL_METER_HEIGHT / 2, accent_color)
+        gfx.end_scissor()
+    }
+
+    // A finger tall around the thin bar, from the warning's left edge
+    left := position.x - ICON_SIZE - WARNING_GAP
+    width: f32 = LEVEL_METER_WIDTH + ICON_SIZE + WARNING_GAP
+    return gui_button({left, bar.y + LEVEL_METER_HEIGHT / 2 - TOUCH_HEIGHT / 2, width, TOUCH_HEIGHT})
 }
 
 // The strobe, or the trace or the scope's view in its place. Tapping a track opens its sheet, tapping the scope
@@ -449,17 +451,19 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading, menu_com
     }
 }
 
-// The levels next to the input meter, and on the right the pitch detection's latest detection, its NSDF or its
-// harmonic stack, over the stack's spectrogram
-draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo, meter: [2]f32) {
+// The noise floor under the input's level bar, and on the right the pitch detection's latest detection, its
+// NSDF or its harmonic stack, over the stack's spectrogram
+draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo) {
     stat :: proc(text: cstring, position: [2]f32, color := text_color_white, large := false) {
         font := pixel_fonts.label_large if large else pixel_fonts.label_small
         gfx.draw_text(font.font, text, position, 16 if large else 12, 0, color)
     }
 
+    // Under the bar, at its scale, see gui_level_meter
+    bar := layout.level_meter + {LEVEL_BAR_OFFSET, LEVEL_METER_HEIGHT}
     floor_level := core.dbfs(pitch.noise_floor)
-    gfx.draw_rect(meter + {0, LEVEL_METER_HEIGHT}, {LEVEL_BAR_WIDTH, 3}, gfx.hex(strobe_bg_color))
-    gfx.draw_rect(meter + {0, LEVEL_METER_HEIGHT}, {LEVEL_BAR_WIDTH + floor_level, 3}, gfx.PURPLE)
+    gfx.draw_rect(bar, {LEVEL_BAR_WIDTH, 3}, gfx.hex(strobe_bg_color))
+    gfx.draw_rect(bar, {LEVEL_BAR_WIDTH + floor_level, 3}, gfx.PURPLE)
 
     base_band := app.measurement.strobe_lock_in.bands[0]
     stat(fmt.ctprintf("Band level %.2f", base_band.slat_level), layout.stats)
