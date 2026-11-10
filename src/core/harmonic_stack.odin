@@ -344,7 +344,7 @@ best_stack :: proc(self: ^StackTransform, from_hz, below_hz, top_hz: f32) -> (fr
             if candidate < from_hz do break
             if candidate >= below_hz do continue
 
-            score, fundamental := score_stack(peaks, candidate, top_hz, beat = score_db, most_db = most_db)
+            score, fundamental := score_stack(peaks, candidate, top_hz, score_to_beat = score_db, most_db = most_db)
             if score > score_db {
                 freq, score_db = fundamental, score
             }
@@ -588,7 +588,7 @@ score_stack :: proc(
     peaks: []StackPeak,
     candidate, top_hz: f32,
     skip := 0,
-    beat: f32 = 0,
+    score_to_beat: f32 = 0,
     most_db: f32 = 0,
 ) -> (
     score_db, fundamental: f32,
@@ -597,7 +597,7 @@ score_stack :: proc(
     weighted_freq, pulls: f32
     weights_left := (1 - math.pow(f32(HARMONICS_WEIGHT), HARMONICS_COUNT)) / (1 - HARMONICS_WEIGHT)
     for harmonic in 1 ..= HARMONICS_COUNT {
-        if beat > 0 && score_db + weights_left * most_db <= beat do return 0, 0
+        if score_to_beat > 0 && score_db + weights_left * most_db <= score_to_beat do return 0, 0
 
         target := f32(harmonic) * candidate
         if target > top_hz do break
