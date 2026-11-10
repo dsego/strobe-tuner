@@ -30,15 +30,15 @@ struct StrobeUniforms {
     float4 bounding_rect;
     float4 color_a;
     float4 color_b;
-    float4 glow_filter; // lamp filter, normalized and squared on the CPU, see glow_filter in strobe_display.odin
+    float4 glow_filter; // what the glow's lamp shines through, normalized and squared on the CPU, see glow_filter in strobe_display.odin
     float4 glow_dark_filter; // the dark stripes can have a hue of their own
     float4 highlight_color; // outline of the selected track
     float curvature_radius;
     float time_stretch;
     float phase;
     float phase_step; // change of phase since the previous frame
-    float lamp_spread; // angular width of the lamp hotspot in radians
-    float glow_exposure; // how hard the lamp drives the exposure curve, higher washes lit stripes out
+    float glow_spread; // angular width of the glow's hotspot in radians
+    float glow_exposure; // how hard the glow's lamp drives the exposure curve, higher washes lit stripes out
     float glow_saturation; // 1 keeps the full color, lower mixes in gray
     float amp; // stripe sharpness
     float visibility; // 0..1, fades the stripes out when the signal is buried in noise
@@ -58,7 +58,7 @@ struct StrobeUniforms {
 
 constant float TAU = 6.28318530717958647692;
 
-// Share of the lamp light the dark stripes let through
+// Share of the glow's lamp light the dark stripes let through
 constant float DARK_TRANSMISSION = 0.3;
 
 // The selected track: its outline along both edges, inside the track, and how much the others darken
@@ -154,28 +154,29 @@ static float draw_curved_track(float thickness, float outer_radius, float feathe
     return outer_circle - inner_circle;
 }
 
-// Emulate a lamp shining through a strobe disc, like the old mechanical strobe tuners
+// The Retro glow setting, the stripes lit like an old mechanical strobe tuner's: a lamp behind the disc shines
+// through it, brightest in a hotspot at the top. Not the Lamp display.
 static float3 glow_color(constant StrobeUniforms &u, float signal_value, float radial_position, float angle)
 {
     // Stripes drawn in color_a are the lit ones
     float lit = 1.0 - signal_value;
 
-    // Lamp hotspot, sits behind the inner band at the top centre of the arcs.
+    // The lamp's hotspot sits behind the inner band at the top centre of the arcs.
     // The outer bands fall off in brightness, so each band gets its own tone.
     float radial_t = (radial_position - u.min_radius) / max(u.max_radius - u.min_radius, 1.0);
-    float angle_offset = (angle - 0.25 * TAU) / u.lamp_spread;
+    float angle_offset = (angle - 0.25 * TAU) / u.glow_spread;
     float hotspot = exp(-angle_offset * angle_offset - 2.0 * radial_t * radial_t);
 
     // Light model: the lamp shines through a colored filter, the stripes modulate how much gets through.
     // Dark stripes still pass some light, so they read as deep saturated color rather than an opaque surface.
-    float lamp = mix(0.6, 1.0, hotspot) * u.glow_exposure;
+    float exposure = mix(0.6, 1.0, hotspot) * u.glow_exposure;
 
     // Exposure curve per channel, bright light rolls off from saturated color towards pale gold/white,
     // dim light stays deep and saturated. Only the fully lit and fully dark colors go through the curve,
     // in between is a linear blend. Otherwise the mid tones (soft stripe edges, a weak strobe fading out)
     // pick up the curve's most saturated color and show up as red fringes.
-    float3 lit_rgb = 1.0 - exp(-lamp * u.glow_filter.rgb);
-    float3 dark_rgb = 1.0 - exp(-DARK_TRANSMISSION * lamp * u.glow_dark_filter.rgb);
+    float3 lit_rgb = 1.0 - exp(-exposure * u.glow_filter.rgb);
+    float3 dark_rgb = 1.0 - exp(-DARK_TRANSMISSION * exposure * u.glow_dark_filter.rgb);
     float3 rgb = mix(dark_rgb, lit_rgb, lit);
 
     return mix(float3(dot(rgb, float3(0.299, 0.587, 0.114))), rgb, u.glow_saturation);
@@ -247,7 +248,7 @@ fragment float4 strobe_fragment(FragmentIn in [[stage_in]], constant StrobeUnifo
         u.strobe_blur > 0
     );
 
-    // Blend colors, or light the stripes with the lamp
+    // The colors blended, or with Retro glow on lit by the lamp behind the disc, see glow_color
     float3 rgb;
     if (u.glow > 0) {
         rgb = glow_color(u, signal_value, radial_position, angle);

@@ -221,16 +221,16 @@ glow_filter :: proc(color: u32) -> [3]f32 {
 GLOW_DARK_TRANSMISSION :: 0.3
 
 // The filter that lands the lamp on a color in the middle of its light: the shader's exposure curve,
-// 1 - exp(-lamp * filter), run backwards per channel. Toward the hotspot it's a little paler and toward the
+// 1 - exp(-exposure * filter), run backwards per channel. Toward the hotspot it's a little paler and toward the
 // edges darker, the lamp's light and shade over the color. By note's, every note's hue lands on its own
 // instead of the curve washing them all toward pale.
-landing_filter :: proc(color: u32, lamp: f32) -> [3]f32 {
+landing_filter :: proc(color: u32, exposure: f32) -> [3]f32 {
     MIDDLE_LAMP :: 0.8 // between the edges' 0.6 and the hotspot's 1, see the strobe shader
     MAX_CHANNEL :: 0.97 // a full channel would need an endless filter
 
     filter: [3]f32
     for channel, index in gfx.normalize_color(gfx.hex(color)).rgb {
-        filter[index] = -math.ln(1 - min(channel, MAX_CHANNEL)) / (MIDDLE_LAMP * lamp)
+        filter[index] = -math.ln(1 - min(channel, MAX_CHANNEL)) / (MIDDLE_LAMP * exposure)
     }
     return filter
 }
@@ -288,7 +288,7 @@ draw_strobe_display :: proc(
         // The display's pixels in the strobe's points, drawn straight or through the glow's targets
         min_edge_width  = MIN_EDGE_PIXELS / gfx.dpi_scale(),
         // The wheel is lit evenly all around, the tracks only show the top of the disc
-        lamp_spread     = 1000.0 if shape == .WHEEL else 0.45,
+        glow_spread     = 1000.0 if shape == .WHEEL else 0.45,
         glow_exposure   = glow.exposure,
         glow_saturation = glow.saturation,
         color_a         = gfx.normalize_color(gfx.hex(colors.x)),

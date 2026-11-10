@@ -103,7 +103,7 @@ StrobeUniforms :: struct #align (16) {
     time_stretch:     f32,
     phase:            f32,
     phase_step:       f32, // change of phase since the previous frame
-    lamp_spread:      f32, // angular width of the lamp hotspot in radians
+    glow_spread:      f32, // angular width of the glow's hotspot in radians
     glow_exposure:    f32,
     glow_saturation:  f32,
     amp:              f32, // stripe sharpness
