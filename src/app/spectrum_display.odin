@@ -34,10 +34,10 @@ import "../gfx"
 // The power is averaged over a quarter of the window, see SPECTRUM_AVERAGE_WINDOWS, and the curve smoothed
 // on top, see SPECTRUM_SMOOTHING_S. One frame of noise spikes 10 dB here and there, it evens out while a
 // steady tone stays, and a sound that stops falls away within half a second.
-// The detector's band, after its highpass and lowpass, a bass E1's fundamental or the mains look weaker
-// than they are. Its own samples, not the detector's window: a frame that takes longer than the window,
-// e.g. a debug build's at the longest setting, reads one whole window and skips the rest, and a history
-// of those showed a comb at the window's spacing, 12 Hz, with the note between its teeth.
+// The detector's band, after its highpass and lowpass, from under A0 to over C8. Its own samples, not the
+// detector's window: a frame that takes longer than the window, e.g. a debug build's at the longest setting,
+// reads one whole window and skips the rest, and a history of those showed a comb at the window's spacing,
+// 12 Hz, with the note between its teeth.
 
 // Of each of the glow's two strips, picked in the app a little brighter than the dots they replaced:
 // -define:SPECTRUM_GLOW_ALPHA=n to try another

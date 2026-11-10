@@ -90,7 +90,7 @@ test_highest_note :: proc(t: ^testing.T) {
 test_pitch_at_input_rates :: proc(t: ^testing.T) {
     for sample_rate in ([]f32{16_000, 24_000, 44_100, 48_000, 64_000}) {
         for freq in ([]f32{27.5, 110, 4186.01}) {
-            // A0 only has its harmonics over the highpass
+            // A0 with its harmonics like a low string's, a sine alone reads it too
             pitch := detect_test_note(freq, partials = 5 if freq < 100 else 1, sample_rate = sample_rate)
             cents := cents_deviation(pitch.detected_freq, freq)
             if sample_rate >= LOW_SAMPLE_RATE {

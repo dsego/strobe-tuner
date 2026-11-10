@@ -31,6 +31,18 @@ step, under 65. Dropped for a ukulele's fade that then lit its room's rumble, se
 Real bass strings have harmonics and don't restart their phase, and all the bass recordings pass. A strong pitch
 far from the note shown could take over even while it alternates between two neighbours.
 
+## A sine stepping from A1 up to A2 in noise holds A1
+
+Since the pitch detection's high-pass came down from 60 to 20 Hz on 2026-11-10 (`PITCH_HIGHPASS_HZ`), a 4th of
+the generated tones fails: a sine on A1 in white noise 20 dB under it, then on A2 with its phase restarted. Traced
+with `-define:SHOW_CASE` in sandbox/accuracy: after the step the detection reads 55 Hz, 110 Hz now and then, and
+A1 stays shown. The A1 the tuner follows keeps its stack against its octave, see `HARMONICS_HOLD_RATIO`, the A2
+is its 2nd harmonic and the A2's own stack is that one peak. Without the hold it passes, and it passed at 60 Hz.
+The same step passes clean, as a saw, and from A2 down to A1.
+
+A real note has harmonics of its own over the octave below's. At 20 Hz the bass recordings' Eb1 stopped reading an
+octave up, and none of the 1,946 recording runs fails.
+
 ## A ukulele's attack reads a third or a half of the note with the whole wave
 
 The reason the default moved to the harmonic stack. With the whole wave's period (the NSDF,

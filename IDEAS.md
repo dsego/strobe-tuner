@@ -114,7 +114,7 @@ about 2 periods in the window where YIN wants more. YIN, aubio's yinfft and zero
 a sideways step, SWIPE′ and the neural ones (CREPE, PESTO) are better at noise than the strobe needs.
 What falls short is around it, in this order:
 
-1. Mains hum lights a note. The 60 Hz high-pass takes only about 5 dB off 50 Hz, and a higher
+1. Mains hum lights a note. The high-pass, 60 Hz at the time, took only about 5 dB off 50 Hz, and a higher
    cutoff wouldn't help, the harmonics alone repeat every 20 ms, the missing fundamental again.
    A steady hum passes clarity 0.98 and `is_tonal` keeps the noise floor from learning it.
    Replayed, 50 Hz with harmonics up to 350 Hz and a little hiss at -45 dBFS RMS:
@@ -352,7 +352,7 @@ its last pluck, in dB from the loudest.
 - The string is the one the tuner names, a pluck of another string or a chord doesn't count.
 - From the string's own track, at its fundamental, or broadband? The track leaves out hum and the
   other strings ringing, broadband is what an amp hears. The pitch detection's band is filtered,
-  60 Hz to 5 kHz, a bass E1 reads weaker than it is.
+  20 Hz to 5 kHz.
 - A reset, and the spread shown, e.g. "B −4.5 dB".
 
 ## Spectrogram

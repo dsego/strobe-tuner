@@ -29,7 +29,7 @@ import "core:testing"
 test_harmonics_notes :: proc(t: ^testing.T) {
     for sample_rate in ([]f32{16_000, 24_000, 44_100, 48_000, 64_000}) {
         for freq in ([]f32{27.5, 41.2, 110, 329.63, 1760, 4186.01}) {
-            // A0 and E1 only have their harmonics over the highpass, a sine is one harmonic
+            // A0 and E1 with their harmonics like a low string's, a sine alone reads them too
             partials := 5 if freq < 100 else 1
             pitch := detect_test_note(freq, partials, sample_rate, .HARMONICS)
             note := freq_to_note(freq)

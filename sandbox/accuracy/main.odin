@@ -57,8 +57,9 @@ WRONG_WAY_MIN_HZ :: 1
 // White noise this far under the tone, 0 for none
 NOISE_SNRS_DB :: [?]f32{0, 20, 10}
 
-// Report only, their failures don't fail the run: noise louder than a room's, and a pure sine under the pitch
-// detection's highpass in noise, found from its fundamental alone (see core.PITCH_HIGHPASS_HZ)
+// Report only, their failures don't fail the run: noise louder than a room's, and a pure sine in noise under
+// core.HARMONICS_BASS_HZ. A note there wins only with a strong stack, a lone peak in noise isn't one, and B0's
+// and E1's failed at every high-pass from 60 Hz to none. A real low note has harmonics.
 STRESS_SNR_DB :: 10
 
 Waveform :: enum {
@@ -188,7 +189,7 @@ is_stress :: proc(test_case: Case) -> bool {
     if test_case.noise_snr_db == STRESS_SNR_DB do return true
 
     note :=core.cents_to_note(f32(100 * test_case.note_semitones), test_case.pitch_standard)
-    return test_case.waveform == .SINE && test_case.noise_snr_db > 0 && note.frequency < core.PITCH_HIGHPASS_HZ
+    return test_case.waveform == .SINE && test_case.noise_snr_db > 0 && note.frequency < core.HARMONICS_BASS_HZ
 }
 
 passed :: proc(result: Result) -> bool {

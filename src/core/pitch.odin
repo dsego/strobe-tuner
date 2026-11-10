@@ -27,9 +27,11 @@ import "core:slice"
 // E.g. -define:PITCH_WINDOW_S=0.17 for 8192.
 PITCH_WINDOW_S :: #config(PITCH_WINDOW_S, 0.085)
 
-// Under a guitar's low E (82 Hz), it takes out DC and low frequency rumble. A lower note like a bass's E1
-// (41 Hz) loses its fundamental here, it's still found from its harmonics.
-PITCH_HIGHPASS_HZ :: 60
+// Under A0 (27.5 Hz), it takes out DC and the rumble under the notes, A0 loses 1 dB. At 60 Hz a bass's E1 lost
+// 7 dB of its fundamental, and sandbox/recordings' Eb1, its fundamental 46 dB under its strongest harmonic, read an
+// octave up in 1 to 9 detections a run, none at 20. Without it, generated rumble at -30 dBFS lit notes for a
+// moment after the bass and the Strat let go. E.g. -define:PITCH_HIGHPASS_HZ=0 for none.
+PITCH_HIGHPASS_HZ :: #config(PITCH_HIGHPASS_HZ, 20)
 
 // A pitch is tonal from PITCH_CLARITY_LOW, a clear tone from PITCH_CLARITY_HIGH.
 // Clarity is about the share of the window's power repeating at the period: at 0.9 the rest
