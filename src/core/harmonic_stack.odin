@@ -393,7 +393,7 @@ note_under :: proc(peaks: []StackPeak, freq, score_db, lowest_hz, top_hz: f32) -
         candidate := freq / f32(divisor)
         if candidate < lowest_hz do continue
 
-        own, _ := score_stack(peaks, candidate, top_hz, skip = divisor)
+        own, _ := score_stack(peaks, candidate, top_hz, skip_multiples_of = divisor)
         if own < f32(HARMONICS_OWN_PERCENT) / 100 * score_db do continue
 
         _, lower = score_stack(peaks, candidate, top_hz)
@@ -579,22 +579,22 @@ keep_most_prominent :: proc(peaks: ^[dynamic]StackPeak, lowest_hz: f32) {
 // readout reads the same mix of a string's sharp partials either way, an electric guitar's and a bass's low
 // strings within 0.2 cents of the whole wave, an acoustic's 1 to 3 flat, its partials past the stack's count
 // pull the whole wave too. Weighted by the dB over the background they read 2 to 4 cents flat of it and a bass
-// 3 sharp, by the power alone up to 6 flat. Without every skip-th harmonic, the ones a candidate skip times
-// higher shares, for the candidate's own, see note_under.
+// 3 sharp, by the power alone up to 6 flat. Given skip_multiples_of, the harmonics that are multiples of it are
+// left out, the ones a note that many times higher shares, for the candidate's own, see note_under.
 //
 // Given a score to beat and the most prominent peak's dB, it gives up with none once the harmonics still to come
 // couldn't beat it, each as prominent as that peak.
 score_stack :: proc(
     peaks: []StackPeak,
     candidate, top_hz: f32,
-    skip := 0,
+    skip_multiples_of := 0,
     score_to_beat: f32 = 0,
     most_db: f32 = 0,
 ) -> (
     score_db, fundamental: f32,
 ) {
     weight: f32 = 1
-    weighted_freq, pulls: f32
+    weighted_freq, fundamental_pulls: f32
     weights_left := (1 - math.pow(f32(HARMONICS_WEIGHT), HARMONICS_COUNT)) / (1 - HARMONICS_WEIGHT)
     for harmonic in 1 ..= HARMONICS_COUNT {
         if score_to_beat > 0 && score_db + weights_left * most_db <= score_to_beat do return 0, 0
@@ -602,23 +602,23 @@ score_stack :: proc(
         target := f32(harmonic) * candidate
         if target > top_hz do break
 
-        shared := skip > 0 && harmonic % skip == 0
-        if !shared {
+        skipped := skip_multiples_of > 0 && harmonic % skip_multiples_of == 0
+        if !skipped {
             peak, counted_db := matching_peak(peaks, target, harmonic_tolerance(harmonic))
             score_db += weight * counted_db
 
             if peak.freq > 0 {
-                pull := math.pow(10, peak.level / 10) * f32(harmonic * harmonic)
-                weighted_freq += pull * peak.freq / f32(harmonic)
-                pulls += pull
+                fundamental_pull := math.pow(10, peak.level / 10) * f32(harmonic * harmonic)
+                weighted_freq += fundamental_pull * peak.freq / f32(harmonic)
+                fundamental_pulls += fundamental_pull
             }
         }
         weights_left -= weight
         weight *= HARMONICS_WEIGHT
     }
 
-    if pulls > 0 {
-        fundamental = weighted_freq / pulls
+    if fundamental_pulls > 0 {
+        fundamental = weighted_freq / fundamental_pulls
     }
     return
 }
