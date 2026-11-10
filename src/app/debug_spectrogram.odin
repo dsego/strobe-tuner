@@ -228,12 +228,13 @@ stack_level_between :: proc(stack: ^core.HarmonicStack, from_hz, to_hz: f32) -> 
     return
 }
 
-// The stack's latest spectrum across rect on the spectrogram's log scale: each bin's level in dB, the background
-// under it grey, the peaks it kept grey dots, the note's harmonics gold and numbered, and over the plot the
-// note, its Hz and the stack's score
-draw_stack_plot :: proc(rect: gfx.Rect, stack: ^core.HarmonicStack, pitch: core.PitchInfo, sample_rate: f32, font: gfx.Font) {
-    RANGE_DB :: 60 // from the loudest down, the background stays in it
+STACK_PLOT_RANGE_DB :: 60 // from the loudest down, the background stays in it
+STACK_PLOT_GRID_DB :: 20
 
+// The stack's latest spectrum across rect on the spectrogram's log scale, boxed like the NSDF: each bin's level in
+// dB gold, the background under it grey, the peaks it kept grey dots, the note's harmonics white and numbered,
+// and over the plot the note, its Hz and the stack's score
+draw_stack_plot :: proc(rect: gfx.Rect, stack: ^core.HarmonicStack, pitch: core.PitchInfo, sample_rate, pitch_standard: f32, font: gfx.Font) {
     if stack.upper_spectrum.top_bin <= 1 do return
 
     // Each pixel's, see stack_level_between
@@ -252,10 +253,10 @@ draw_stack_plot :: proc(rect: gfx.Rect, stack: ^core.HarmonicStack, pitch: core.
         return rect.x + rect.width * math.ln(freq / low) / math.ln(high / low)
     }
     y_at :: proc(db, loudest: f32, rect: gfx.Rect) -> f32 {
-        return rect.y + rect.height * clamp((loudest - db) / RANGE_DB, 0, 1)
+        return rect.y + rect.height * clamp((loudest - db) / STACK_PLOT_RANGE_DB, 0, 1)
     }
 
-    gfx.draw_rect({rect.x, rect.y + rect.height}, {rect.width, 1}, gfx.LIGHTGRAY)
+    draw_stack_grid(rect, low, high, pitch_standard, font)
 
     // A point a pixel across
     levels := make([][2]f32, len(levels_db), context.temp_allocator)
@@ -265,7 +266,7 @@ draw_stack_plot :: proc(rect: gfx.Rect, stack: ^core.HarmonicStack, pitch: core.
         backgrounds[x] = {rect.x + f32(x), y_at(backgrounds_db[x], loudest, rect)}
     }
     gfx.draw_polyline(backgrounds, 1, gfx.LIGHTGRAY)
-    gfx.draw_polyline(levels, 1, gfx.WHITE)
+    gfx.draw_polyline(levels, 1, gfx.GOLD)
 
     // Each transform's where it's drawn
     for transform in ([2]^core.StackTransform{&stack.lower_spectrum, &stack.upper_spectrum}) {
@@ -280,12 +281,34 @@ draw_stack_plot :: proc(rect: gfx.Rect, stack: ^core.HarmonicStack, pitch: core.
         if peak.freq < low || peak.freq > high do continue
 
         position := [2]f32{x_at(peak.freq, low, high, rect), y_at(peak.level, loudest, rect)}
-        gfx.draw_circle(position, 3, gfx.GOLD)
-        gfx.draw_text(font, fmt.ctprintf("%d", index + 1), position - {3, 18}, 12, 0, gfx.GOLD)
+        gfx.draw_circle(position, 3, gfx.WHITE)
+        gfx.draw_text(font, fmt.ctprintf("%d", index + 1), position - {3, 18}, 12, 0, gfx.WHITE)
     }
 
     if pitch.detected_freq > 0 {
         text := fmt.ctprintf("%s %.1fHz, stack %.0f dB", core.note_name(pitch.detected_note), pitch.detected_freq, pitch.harmonics_db)
         gfx.draw_text(font, text, {rect.x, rect.y - 18}, 12, 0, gfx.GOLD)
+    }
+}
+
+// The stack plot's box like the NSDF's: a line across every STACK_PLOT_GRID_DB down from the loudest, named on
+// the left, and a line down at each C, named under the plot
+draw_stack_grid :: proc(rect: gfx.Rect, low, high, pitch_standard: f32, font: gfx.Font) {
+    for db := 0; db <= STACK_PLOT_RANGE_DB; db += STACK_PLOT_GRID_DB {
+        y := rect.y + rect.height * f32(db) / STACK_PLOT_RANGE_DB
+        gfx.draw_line({rect.x, y}, {rect.x + rect.width, y}, 0.5, gfx.LIGHTGRAY)
+        draw_axis_label(rect, y, fmt.ctprintf("%d", -db), font)
+    }
+
+    // The box's sides, then the Cs between them
+    gfx.draw_line({rect.x, rect.y}, {rect.x, rect.y + rect.height}, 0.5, gfx.LIGHTGRAY)
+    gfx.draw_line({rect.x + rect.width, rect.y}, {rect.x + rect.width, rect.y + rect.height}, 0.5, gfx.LIGHTGRAY)
+    for octave in 1 ..= 8 {
+        c_hz := core.freq_at_cents(pitch_standard, f32((octave - 4) * 1200 - 900))
+        if c_hz < low || c_hz > high do continue
+
+        x := rect.x + rect.width * math.ln(c_hz / low) / math.ln(high / low)
+        gfx.draw_line({x, rect.y}, {x, rect.y + rect.height}, 0.5, gfx.LIGHTGRAY)
+        gfx.draw_text(font, fmt.ctprintf("C%d", octave), {x - 6, rect.y + rect.height + 4}, 12, 0, gfx.LIGHTGRAY)
     }
 }

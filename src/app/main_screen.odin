@@ -532,7 +532,7 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo) {
     font := pixel_fonts.label_small.font
     detector := &app.measurement.pitch_detector
     if detector.method == .HARMONICS {
-        draw_stack_plot(gfx.Rect{520, 50, 660, 170}, &detector.stack, pitch, detector.sample_rate, font)
+        draw_stack_plot(gfx.Rect{520, 50, 660, 170}, &detector.stack, pitch, detector.sample_rate, app.config.pitch_standard, font)
     } else {
         draw_nsdf(gfx.Rect{520, 40, 660, 180}, &detector.nsdf, font)
     }

@@ -74,7 +74,7 @@ draw_nsdf :: proc(rect: gfx.Rect, nsdf: ^core.NSDF, font: gfx.Font) {
 draw_time_plot :: proc(rect: gfx.Rect, len_samples: int, div_samples: int, font: gfx.Font) {
     // Horizontal lines at 1,0,-1
     gfx.draw_line({rect.x, rect.y}, {rect.x + rect.width, rect.y}, 0.5, gfx.LIGHTGRAY)
-    gfx.draw_text(font, "1", {rect.x - 16, rect.y - 8}, 12, 0, gfx.LIGHTGRAY)
+    draw_axis_label(rect, rect.y, "1", font)
 
     gfx.draw_line(
         {rect.x, rect.y + rect.height / 2},
@@ -82,7 +82,7 @@ draw_time_plot :: proc(rect: gfx.Rect, len_samples: int, div_samples: int, font:
         0.5,
         gfx.LIGHTGRAY,
     )
-    gfx.draw_text(font, "0", {rect.x - 16, rect.y + rect.height / 2 - 8}, 12, 0, gfx.LIGHTGRAY)
+    draw_axis_label(rect, rect.y + rect.height / 2, "0", font)
 
     gfx.draw_line(
         {rect.x, rect.y + rect.height},
@@ -90,7 +90,7 @@ draw_time_plot :: proc(rect: gfx.Rect, len_samples: int, div_samples: int, font:
         0.5,
         gfx.LIGHTGRAY,
     )
-    gfx.draw_text(font, "-1", {rect.x - 24, rect.y + rect.height - 8}, 12, 0, gfx.LIGHTGRAY)
+    draw_axis_label(rect, rect.y + rect.height, "-1", font)
 
     // Vertical lines every div_samples
     sample_width := rect.width / f32(len_samples)
@@ -105,5 +105,13 @@ draw_time_plot :: proc(rect: gfx.Rect, len_samples: int, div_samples: int, font:
         0.5,
         gfx.LIGHTGRAY,
     )
+}
+
+// The name of a line across a plot at y, left of the plot and right aligned so the digits line up
+draw_axis_label :: proc(rect: gfx.Rect, y: f32, text: cstring, font: gfx.Font) {
+    GAP :: 6 // from the name to the plot
+
+    width := gfx.measure_text(font, text, 12, 0).x
+    gfx.draw_text(font, text, {rect.x - GAP - width, y - 6}, 12, 0, gfx.LIGHTGRAY)
 }
 
