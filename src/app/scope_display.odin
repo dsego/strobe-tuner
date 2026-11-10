@@ -26,9 +26,10 @@ import "../gfx"
 //   scope   - its screen
 //   lamp   - its screen from above, stripes as bright as the wave is high, the lamp of a mechanical strobe
 //
-// Two periods of the strobe's frequency across. An in tune note stands still, a detuned one drifts. Both
-// are mirrored to move like the strobe tracks, flat to the left and sharp to the right: the scope runs
-// right to left, time the other way from an oscilloscope's, so a sawtooth leans the other way too.
+// The scope's Periods of the strobe's frequency across, the lamp's two. An in tune note stands still, a
+// detuned one drifts. Both are mirrored to move like the strobe tracks, flat to the left and sharp to the
+// right: the scope runs right to left, time the other way from an oscilloscope's, so a sawtooth leans the
+// other way too.
 // Tapped, the wave goes round a circle, lobes that stand still in tune and spin clockwise when sharp.
 
 // The cells of the screen, about one a point at the desktop size
@@ -50,9 +51,9 @@ SCOPE_GLOW_THICKNESS :: 4 * SCOPE_TRACE_THICKNESS // points
 // The beam is a thin line and its bloom is spread thin, it's added this many times over
 SCOPE_BLOOM_PASSES :: #config(SCOPE_BLOOM_PASSES, 3)
 
-// The graticule over time, fixed like an oscilloscope's, its times change with the note: SCOPE_DIVISIONS across
-// the two periods, a quarter period each, and as many up, a quarter of full scale each. The times are under
-// every other line.
+// The graticule over time, fixed like an oscilloscope's, its times change with the note and the periods:
+// SCOPE_DIVISIONS across the sweep, a quarter period each at two periods, and as many up, a quarter of full
+// scale each. The times are under every other line.
 SCOPE_DIVISIONS :: 8
 SCOPE_AXIS_PIXELS :: 2 // the line through zero
 
@@ -149,8 +150,8 @@ draw_scope_screen :: proc(
     draw_scope_trace(self, rect, scope, beam, beam_color)
 }
 
-// The graticule's lines, width wide, SCOPE_DIVISIONS apart across and up. The middle one up is where the second
-// period starts, the one through zero across is the caller's axis.
+// The graticule's lines, width wide, SCOPE_DIVISIONS apart across and up. At two periods the middle one up is
+// where the second starts, the one through zero across is the caller's axis.
 draw_scope_graticule :: proc(rect: gfx.Rect, grid_color: gfx.Color, width: f32) {
     faint := grid_color
     faint.a /= 2
@@ -163,7 +164,7 @@ draw_scope_graticule :: proc(rect: gfx.Rect, grid_color: gfx.Color, width: f32) 
         gfx.draw_rect({rect.x, middle + offset}, {rect.width, width}, faint)
     }
 
-    // Across, a quarter period apart
+    // Across, an eighth of the sweep apart
     for division in 1 ..< SCOPE_DIVISIONS {
         gfx.draw_rect({rect.x + rect.width * f32(division) / SCOPE_DIVISIONS, rect.y}, {width, rect.height}, faint)
     }
@@ -176,7 +177,7 @@ draw_scope_time_labels :: proc(rect: gfx.Rect, scope: ^core.Scope, background: g
 
     INSET :: 8
     font := pixel_fonts.label_small
-    span_ms := f32(core.SCOPE_PERIODS / scope.freq_hz * 1000)
+    span_ms := f32(f64(scope.periods) / scope.freq_hz * 1000)
     step_ms := 2 * span_ms / SCOPE_DIVISIONS
     decimals := 0 if step_ms >= 10 else (1 if step_ms >= 1 else 2)
     for division := 0; division <= SCOPE_DIVISIONS; division += 2 {

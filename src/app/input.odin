@@ -48,10 +48,12 @@ follow_input :: proc(app: ^App) {
     input := &app.input
     capture := input.capture
 
-    // Picked since the last frame, the list's own pick is listed
+    // Picked since the last frame, the list's own pick is listed. Its channels aren't the last one's, it starts
+    // on their average.
     if input.device_index != input.listed {
         picked := picked_device(input)
         set_input_device(app.config, "" if picked == audio.SYSTEM_DEFAULT else audio.device_name(capture, picked))
+        app.config.input_channel = audio.MIX_CHANNELS
         input.listed = input.device_index
         app.unsaved = true
     }
@@ -80,6 +82,12 @@ follow_input :: proc(app: ^App) {
 
     if input.restart || picked_device(input) != capture.active_device {
         switch_input(app)
+    }
+
+    // The channel picked on the input's sheet, measured afresh like another input
+    if app.config.input_channel != audio.input_channel(capture) {
+        audio.set_input_channel(capture, app.config.input_channel)
+        reset_input_measurements(app)
     }
 }
 
@@ -140,9 +148,14 @@ switch_input :: proc(app: ^App) {
 
     // Nothing of the previous input's carries over
     audio.switch_device(app.input.capture, picked_device(&app.input))
+    reset_input_measurements(app)
+    match_input_rate(app)
+}
+
+// What was measured of the input before, another input or another of its channels starts over
+reset_input_measurements :: proc(app: ^App) {
     reset_measurement(&app.measurement)
     reset_spectrum_display(&app.strobe_area.spectrum)
-    match_input_rate(app)
 }
 
 // The measurements at the rate the input opened at, their windows and filters sized for it. Only a new rate

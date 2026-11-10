@@ -30,6 +30,10 @@ DECIMATE_CHUNK :: 2048
 SYSTEM_DEFAULT :: -1
 NOT_LISTED :: -2
 
+// The input's channel measured, counted from 1 like an interface's inputs, or this for all of them averaged,
+// see set_input_channel
+MIX_CHANNELS :: 0
+
 register_audio_node :: proc(self: ^Capture, node: ^core.AudioCaptureNode) {
     append(&self.nodes, node)
 }

@@ -19,6 +19,7 @@ package app
 
 import "core:strings"
 
+import "../audio"
 import "../core"
 
 
@@ -97,6 +98,13 @@ TRACE_RANGE_STEPS_CENTS :: [2]f32{25, 50}
 // The spectrum's window, as many of the detector's: 85, 170 and 340 ms at 48 kHz. Longer, two partials closer
 // together come apart and a pluck takes longer to show, the power is averaged over as long.
 SPECTRUM_WINDOW_STEPS :: [3]f32{1, 2, 4}
+
+// The Gain of the scope and of the lamp, each its own: the wave drawn from as high as its loudness says to four
+// times as high, a quarter a step. A hum at half the height fills it at 200%, a louder note runs off the
+// screen, on the lamp its crest is lit wider.
+SCOPE_GAIN_MIN :: 1
+SCOPE_GAIN_MAX :: 4
+SCOPE_GAIN_STEP :: 0.25
 
 // The scope's beam, see draw_scope_screen
 ScopeBeam :: enum {
@@ -199,6 +207,13 @@ Config :: struct {
     lamp_lowpass:                 bool,
     // the scope over time or round a circle, tapping it flips them
     scope_sweep:                  core.ScopeSweep,
+    // how many periods of the strobe's frequency the scope shows across or round the circle, 1 to
+    // core.SCOPE_MAX_PERIODS, the lamp always core.SCOPE_PERIODS
+    scope_periods:                int,
+    // the scope's wave this many times as high as its loudness says, SCOPE_GAIN_MIN to SCOPE_GAIN_MAX, and the
+    // lamp's the same way
+    scope_gain:                   f32,
+    lamp_gain:                    f32,
     // the scope view keeps the first few partials of the wave and drops the fine wiggles above them
     scope_lowpass:                bool,
     // how many periods of the strobe's frequency the scope's sweeps are averaged over, the lamp's persistence
@@ -225,6 +240,10 @@ Config :: struct {
     // The input picked by its name, "" follows the system's default. One that isn't connected waits for it
     // on the default. Owned by the config, see set_input_device.
     input_device:                 string,
+    // its channel measured, counted from 1, or audio.MIX_CHANNELS for all of them averaged. A device without
+    // as many averages them and the pick stays for the one it was made on, another device picked by hand
+    // starts on the average.
+    input_channel:                int,
 
     // --- Window ---
 
@@ -270,6 +289,9 @@ config_defaults :: Config {
     lamp_shape                   = .SPLIT,
     lamp_lowpass                 = true,
     scope_sweep                  = .TIME,
+    scope_periods                = core.SCOPE_PERIODS,
+    scope_gain                   = 1,
+    lamp_gain                    = 1,
     scope_lowpass                = true,
     // Short, 16 ms at A4: the noise and the circle's step at its top where a changing wave doesn't close smooth
     // out, and the line follows a string being tuned. Off, the line steps there whenever the wave changes in a
@@ -285,6 +307,7 @@ config_defaults :: Config {
 
     // --- Input ---
     input_device                 = "",
+    input_channel                = audio.MIX_CHANNELS,
 
     // --- Window ---
     window_size                  = {},
@@ -305,7 +328,7 @@ reset_config :: proc(config: ^Config) {
     config.preset_transposes = kept.preset_transposes
     config.note_offset_counts, config.note_offset_notes = kept.note_offset_counts, kept.note_offset_notes
     config.note_offset_cents = kept.note_offset_cents
-    config.input_device = kept.input_device
+    config.input_device, config.input_channel = kept.input_device, kept.input_channel
     config.unlock_free_s = kept.unlock_free_s
 }
 

@@ -63,6 +63,22 @@ Capture :: struct {
     // The rate is known once the input opened, the app opens it again then and the measurements follow it
     rate_changed:   bool,
     samples:        [DECIMATE_CHUNK]f32,
+
+    // Kept as it's picked, the browser hands over one channel, see channel_count
+    channel:        int,
+}
+
+// The page asks the browser for one channel, see strobie.js
+channel_count :: proc(self: ^Capture) -> int {
+    return 1
+}
+
+set_input_channel :: proc(self: ^Capture, channel: int) {
+    self.channel = channel
+}
+
+input_channel :: proc(self: ^Capture) -> int {
+    return self.channel
 }
 
 device_count :: proc(self: ^Capture) -> i32 {

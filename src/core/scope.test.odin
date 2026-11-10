@@ -504,6 +504,99 @@ test_scope_average_lowpass :: proc(t: ^testing.T) {
 }
 
 @(test)
+test_scope_lamp_on_the_loudness_scale :: proc(t: ^testing.T) {
+    // From above, the lamp is the scope's fixed scale: a crest at the top of the screen is its brightest, 1,
+    // and a trough at the bottom its darkest as it is, -1. A sine at SCOPE_LOUD_DBFS fills the height, half
+    // rectified it lights 0 to 1 too. 24 dB quieter it's drawn at half the height and its crest lights half,
+    // at a gain of 2 it's full again.
+    FREQ :: 220.0
+    QUIETER_DB :: 24
+
+    highest_and_lowest :: proc(amplitude, gain: f32, shape: ScopeShape) -> (highest, lowest: f32) {
+        scope := scope_test_init(FREQ)
+        defer destroy_scope(&scope)
+        scope.persistence_s = 18 / FREQ
+        scope.height_gain = gain
+
+        samples: [SCOPE_TEST_FRAME]f32
+        for _ in 0 ..< 30 {
+            scope_test_sine(samples[:], FREQ, scope.sample_clock)
+            for &sample in samples {
+                sample *= amplitude
+            }
+            audio_capture_write(&scope, samples[:])
+            update_scope(&scope)
+        }
+
+        heights, _ := scope_from_above(&scope, shape)
+        highest, lowest = heights[0], heights[0]
+        for height in heights {
+            highest, lowest = max(highest, height), min(lowest, height)
+        }
+        return
+    }
+
+    loud := f32(math.pow(10, f64(SCOPE_LOUD_DBFS) / 20))
+    quiet := f32(math.pow(10, f64(SCOPE_LOUD_DBFS - QUIETER_DB) / 20))
+
+    crest, trough := highest_and_lowest(loud, 1, .RAW_WAVEFORM)
+    testing.expectf(t, abs(crest - 1) < 0.03 && abs(trough + 1) < 0.03, "as it is: crest %v, trough %v", crest, trough)
+
+    crest, trough = highest_and_lowest(loud, 1, .HALF_RECTIFIED)
+    testing.expectf(t, abs(crest - 1) < 0.03 && trough == 0, "half rectified: crest %v, trough %v", crest, trough)
+
+    crest, _ = highest_and_lowest(quiet, 1, .HALF_RECTIFIED)
+    testing.expectf(t, abs(crest - 0.5) < 0.03, "%v dB quieter: crest %v", QUIETER_DB, crest)
+
+    crest, _ = highest_and_lowest(quiet, 2, .HALF_RECTIFIED)
+    testing.expectf(t, abs(crest - 1) < 0.03, "%v dB quieter at a gain of 2: crest %v", QUIETER_DB, crest)
+}
+
+@(test)
+test_scope_periods_and_gain :: proc(t: ^testing.T) {
+    // An in tune sine averaged at 1, 3 and 4 periods across: the line is that many periods of the sine, and at
+    // a gain of 2 twice as high as the loudness draws it
+    FREQ :: 250.0
+    AMP :: 0.25
+    GAIN :: 2
+
+    for periods in ([]int{1, 3, 4}) {
+        scope := scope_test_init(FREQ)
+        defer destroy_scope(&scope)
+        set_scope_periods(&scope, periods)
+        scope.height_gain = GAIN
+        scope.persistence_s = 18 / FREQ
+        scope.average_sweeps = true
+
+        samples: [SCOPE_TEST_FRAME]f32
+        for _ in 0 ..< 60 {
+            scope_test_sine(samples[:], FREQ, scope.sample_clock)
+            for &sample in samples {
+                sample *= AMP
+            }
+            audio_capture_write(&scope, samples[:])
+            update_scope(&scope)
+        }
+
+        points: [dynamic][2]f32
+        defer delete(points)
+        scope_trace(&scope, &points)
+
+        // In rows, the AC coupling leads by about one, and as much more as the gain draws it higher
+        height := AMP / f64(scope.level)
+        worst: f64 = 0
+        for point in points {
+            expected := 0.5 - 0.5 * SCOPE_FILL * height * math.sin(math.TAU * f64(periods) * f64(point.x))
+            worst = max(worst, abs(f64(point.y) - expected) * f64(scope.rows))
+        }
+        testing.expectf(t, worst < 2 * GAIN, "%v periods: %v rows off the sine", periods, worst)
+
+        loudness_height := AMP / f64(loudness_level(AMP))
+        testing.expectf(t, abs(height - GAIN * loudness_height) < 0.02, "%v periods: height %v", periods, height)
+    }
+}
+
+@(test)
 test_scope_circle_ends_apart_when_detuned :: proc(t: ^testing.T) {
     // Round the circle the average runs on past its start as the wave went on, not bent into its start: a
     // turn on, an in tune note is where it started, one 31 cents sharp where the next sweep starts, as far on as

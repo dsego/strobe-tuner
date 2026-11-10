@@ -224,7 +224,7 @@ draw_input_sheet :: proc(app: ^App, layout: Layout, reading: Reading) {
     }
 
     sheet_layout, swiped := begin_sheet(sheet, INPUT_ROWS, layout)
-    close := gui_audio_input(sheet_layout, input, &sheets.open_dropdown)
+    close := gui_audio_input(sheet_layout, input, &app.config.input_channel, &sheets.open_dropdown)
     grab_sheet(sheet, sheet_layout)
 
     if close || sheet_dismissed(sheet_layout, swiped) {

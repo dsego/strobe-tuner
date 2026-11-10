@@ -280,6 +280,13 @@ feed_scope :: proc(app: ^App, strobe_shows: bool) {
         core.set_scope_sweep(scope, sweep)
     }
 
+    // The scope view's periods, the lamp's two stripes, and each one's gain
+    sweep_periods := config.scope_periods if type == .SCOPE else core.SCOPE_PERIODS
+    if scope.periods != sweep_periods {
+        core.set_scope_periods(scope, sweep_periods)
+    }
+    scope.height_gain = config.scope_gain if type == .SCOPE else config.lamp_gain
+
     // In periods of the strobe's frequency, the smear and the waver per cent look the same on every note. The
     // scope view is the sweeps averaged over its own span, the lamp's screen fades over the lamp's.
     periods := config.scope_averaging_periods if config.strobe_display_type == .SCOPE else config.screen_persistence_periods

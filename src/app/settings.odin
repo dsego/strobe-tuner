@@ -33,7 +33,7 @@ SEGMENT_WIDTH :: 60
 SETTINGS_ROWS :: 7
 
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
-DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 5, .SCOPE = 4, .TRACE = 2, .LAMP = 3, .SPECTRUM = 4}
+DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 5, .SCOPE = 6, .TRACE = 2, .LAMP = 4, .SPECTRUM = 4}
 
 // For the longer labels of the display's options
 WIDE_SEGMENT_WIDTH :: 80
@@ -93,6 +93,7 @@ Dropdown :: enum {
     NONE,
     DISPLAY,
     INPUT,
+    CHANNEL, // the input's
     INSTRUMENT, // the instrument's sheet, what's tuned to, a built-in instrument or a preset
     PRESET_INSTRUMENT,
     TUNING,
@@ -403,6 +404,15 @@ gui_scope_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
 
     // Tapping the scope flips it too
     gui_settings_segmented(sheet_layout, &row, "Sweep", SWEEP_LABELS, &config.scope_sweep)
+
+    // How many periods across or round the circle, fewer show the wave's shape wider
+    labels := PERIODS_LABELS
+    periods_index := config.scope_periods - 1
+    if gui_settings_segmented(sheet_layout, &row, "Periods", labels[:], &periods_index) {
+        config.scope_periods = periods_index + 1
+    }
+
+    gui_gain_row(sheet_layout, &row, &config.scope_gain)
     gui_settings_segmented(sheet_layout, &row, "Low-pass", {"Off", "On"}, &config.scope_lowpass)
 
     // How many sweeps the beam is drawn through, the noise cancels out over more and a detuned note smears
@@ -410,6 +420,31 @@ gui_scope_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
 
     // The averaged sweeps as a solid line or an analog scope's phosphor, bright where the beam lingers
     gui_settings_segmented(sheet_layout, &row, "Beam", {"Solid", "Phosphor"}, &config.scope_beam, WIDE_SEGMENT_WIDTH)
+}
+
+// The scope's periods, 1 to core.SCOPE_MAX_PERIODS
+PERIODS_LABELS :: [core.SCOPE_MAX_PERIODS]cstring{"1", "2", "3", "4"}
+
+// The scope's or the lamp's Gain, a quarter at a time, as a percentage like a player's volume over 100%. A
+// double click puts it back to 100%.
+gui_gain_row :: proc(sheet_layout: SheetLayout, row: ^int, gain: ^f32) {
+    widest: f32
+    for step := f32(SCOPE_GAIN_MIN); step <= SCOPE_GAIN_MAX; step += SCOPE_GAIN_STEP {
+        widest = max(widest, measure_label(pixel_fonts.label, gain_text(step), 1).x)
+    }
+    rect := settings_row(sheet_layout, row^, "Gain", stepper_width(widest))
+    row^ += 1
+
+    steps, reset := gui_stepper_buttons(rect, gain_text(gain^))
+    if reset {
+        gain^ = SCOPE_GAIN_MIN
+    }
+
+    gain^ = clamp(gain^ + steps * SCOPE_GAIN_STEP, SCOPE_GAIN_MIN, SCOPE_GAIN_MAX)
+
+    gain_text :: proc(gain: f32) -> cstring {
+        return fmt.ctprintf("%.0f%%", 100 * gain)
+    }
 }
 
 gui_trace_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
@@ -424,6 +459,9 @@ gui_lamp_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
     // The positive half of the wave like a mechanical strobe's lamp, the wave as it is, or both halves split.
     // Tapping the lamp goes round them too.
     gui_settings_segmented(sheet_layout, &row, "Rectifier", RECTIFIER_LABELS, &config.lamp_shape)
+
+    // Over 100% the crests are cut off at the top of the screen and their stripes lit wider
+    gui_gain_row(sheet_layout, &row, &config.lamp_gain)
     gui_persistence_row(sheet_layout, &row, PERSISTENCE_LABEL, &config.screen_persistence_periods)
     gui_settings_segmented(sheet_layout, &row, "Low-pass", {"Off", "On"}, &config.lamp_lowpass)
 }
@@ -652,8 +690,12 @@ track_count_and_top :: proc(config: ^Config) -> (count, top: int) {
 
 
 // The input's sheet, opened by tapping its level on the main screen. A phone routes the input itself, built-in
-// mic, headset or an audio interface, it has no picker.
-INPUT_ROWS :: 4 when gfx.MOBILE else 5
+// mic, headset or an audio interface, it has no picker and no channels.
+INPUT_ROWS :: 4 when gfx.MOBILE else 6
+
+// The input's channels listed, an interface's usual 8 or 16 inputs. Further down the menu would run off the
+// window, those channels are averaged.
+MAX_LISTED_CHANNELS :: 16
 
 // The input's levels on its sheet, held a moment to be read, see INPUT_STATS_HOLD_S
 InputStats :: struct {
@@ -665,10 +707,10 @@ InputStats :: struct {
 // How long the levels on the input's sheet stay before the next ones, they change every frame
 INPUT_STATS_HOLD_S :: 0.25
 
-// The picker, the rate the input runs at and what's measured of it, and how far its level is over the
-// background. The capture's device rate is the device's own, its sample rate what's measured after a fast
-// one's decimation. Returns close when ✕ is tapped.
-gui_audio_input :: proc(sheet_layout: SheetLayout, input: ^AudioInput, open: ^Dropdown) -> (close: bool) {
+// The picker and the channel measured, the rate the input runs at and what's measured of it, and how far its
+// level is over the background. The capture's device rate is the device's own, its sample rate what's measured
+// after a fast one's decimation. Returns close when ✕ is tapped.
+gui_audio_input :: proc(sheet_layout: SheetLayout, input: ^AudioInput, channel: ^int, open: ^Dropdown) -> (close: bool) {
     capture := input.capture
     device_rate, sample_rate, stats := capture.device_rate, capture.sample_rate, input.stats
 
@@ -680,13 +722,24 @@ gui_audio_input :: proc(sheet_layout: SheetLayout, input: ^AudioInput, open: ^Dr
     close = draw_sheet_header(sheet_layout, "Input", fmt.ctprintf("%s", device_name))
     row := 0
 
-    // The picker's row, its menu opens down over the rows under it and is drawn after them
+    // The picker's and the channel's rows, their menus open down over the rows under them and are drawn after
+    // them. Device's over Channel's.
     picker: gfx.Rect
-    when gfx.MOBILE do _ = picker // a phone has the one microphone
+    channels: [dynamic]GuiOption
+    channel_rect: gfx.Rect
+    when gfx.MOBILE do _, _, _ = picker, channels, channel_rect // a phone has the one microphone
 
     when !gfx.MOBILE {
         picker = settings_row(sheet_layout, row, "Device", 240)
         row += 1
+
+        channels = channel_options(capture)
+        if len(channels) > 1 {
+            channel_rect = settings_row(sheet_layout, row, "Channel", dropdown_width(channels[:]))
+            row += 1
+        } else {
+            value_row(sheet_layout, &row, "Channel", "Mono" if audio.device_count(capture) > 0 else "-")
+        }
     }
 
     // Never resampled. A fast one is halved to what's measured, a slow one can't hold the high partials.
@@ -709,12 +762,35 @@ gui_audio_input :: proc(sheet_layout: SheetLayout, input: ^AudioInput, open: ^Dr
     value_row(sheet_layout, &row, "SNR", decibels(stats.snr_db, "dB"))
 
     when !gfx.MOBILE {
+        // One the device doesn't have is averaged and shows as Mix, the pick stays for the device it was made on
+        // until another one is picked
+        if len(channels) > 1 {
+            shown := channel^ if channel^ < len(channels) else audio.MIX_CHANNELS
+            picked := shown
+            gui_settings_dropdown(open, .CHANNEL, channel_rect, channels[:], &picked, down = true)
+            if picked != shown {
+                channel^ = picked
+            }
+        }
+
         if len(input.devices) > 0 {
             gui_settings_dropdown(open, .INPUT, picker, input.devices[:], &input.device_index, left_pad = 36, down = true)
             draw_centered_icon(ICON_MICROPHONE, {picker.x + 12, picker.y, ICON_SIZE, picker.height}, icon_color)
         }
     }
     return
+
+    // Mix, then the device's channels by number, each option's index its channel. One without a device or with
+    // a single channel, nothing to pick.
+    channel_options :: proc(capture: ^audio.Capture) -> [dynamic]GuiOption {
+        options := make([dynamic]GuiOption, context.temp_allocator)
+        count := min(audio.channel_count(capture), MAX_LISTED_CHANNELS)
+        append(&options, GuiOption{audio.MIX_CHANNELS, "Mix"})
+        for number in 1 ..= count {
+            append(&options, GuiOption{i32(number), fmt.tprintf("%d", number)})
+        }
+        return options
+    }
 
     // A row of a value to read, right aligned like the controls
     value_row :: proc(sheet_layout: SheetLayout, row: ^int, label, text: cstring, color := text_color_white) {

@@ -21,8 +21,9 @@
     An oscilloscope with its sweep synced to the reference period and a screen that remembers.
 
     The sweep: a sample's place across the screen is its index on the sample clock times the reference
-    frequency, only the fraction. It starts over every couple of reference periods, so an in tune note
-    is drawn over itself and stands still, a detuned one drifts sideways by the phase it slips.
+    frequency, only the fraction. It starts over every few reference periods, two unless the scope's Periods
+    setting picks 1 to 4, so an in tune note is drawn over itself and stands still, a detuned one drifts
+    sideways by the phase it slips.
 
     The screen: cells that keep how long the beam stayed in them and fade, like phosphor. A slow drift
     stays sharp and a fast one smears, which is what the eye does with a real one. Without persistence
@@ -49,11 +50,11 @@
     doesn't move when it's turned on. It cancels the 12th partial and its multiples exactly, the 3rd keeps
     81% and the 6th 41%. The lamp's tracks take the wave as it comes, their upper partials would fade.
 
-    Circle: the sweep goes round instead of across, the same two reference periods a turn, anticlockwise
+    Circle: the sweep goes round instead of across, the same reference periods a turn, anticlockwise
     from the top, the wave out from a ring halfway at its zero, its crests to the outside and its troughs
-    in to the middle. A sine draws two lobes that meet in the middle, every partial bumps and dips them.
-    It's the line over time bent round, narrower the nearer the middle. An in tune note stands still, a
-    detuned one spins by half the phase it slips, clockwise when sharp like the wheel. It's square,
+    in to the middle. Over two periods a sine draws two lobes that meet in the middle, every partial bumps and
+    dips them. It's the line over time bent round, narrower the nearer the middle. An in tune note stands
+    still, a detuned one spins by the phase it slips over the periods, clockwise when sharp like the wheel. It's square,
     as wide as the screen is high, the crests reach out past the square to the screen's sides.
 
  -------------------------------------------------------------------------------------------------*/
@@ -65,12 +66,15 @@ import "core:math"
 import "core:slice"
 
 
-SCOPE_PERIODS :: 2 // reference periods across the screen, and round the circle
+// Reference periods across the screen and round the circle, the lamp's two stripes. The scope view picks 1 to
+// SCOPE_MAX_PERIODS, see set_scope_periods.
+SCOPE_PERIODS :: 2
+SCOPE_MAX_PERIODS :: 4
 SCOPE_FILL :: 0.9 // how much of the height a full scale sample takes
 SCOPE_CHUNK_SIZE :: 4096
 SCOPE_MAX_BEAM_DOTS :: 256 // between two samples
 SCOPE_MAX_FADE_GAIN :: 1e15 // divided back into the cells at this, far under an f32's range, see sweep_samples
-SCOPE_SWEEP_MAX_SAMPLES :: 24576 // two periods of a 16 Hz note at 192 kHz
+SCOPE_SWEEP_MAX_SAMPLES :: 49152 // SCOPE_MAX_PERIODS of a 16 Hz note at 192 kHz
 // The samples kept, and the average's bins, for a sweep and the circle's overlap past it with room over
 SCOPE_TRACE_MAX_SAMPLES :: 2 * SCOPE_SWEEP_MAX_SAMPLES
 SCOPE_CURVE_SAMPLES :: 3 // the beam's curve to a sample runs through this many before it, see move_beam
@@ -113,8 +117,8 @@ ScopeShape :: enum {
 
 // What moves the beam across the screen
 ScopeSweep :: enum {
-    TIME, // two reference periods across, the wave over time
-    CIRCLE, // round, two reference periods a turn
+    TIME, // the reference periods across, the wave over time
+    CIRCLE, // round, the reference periods a turn
 }
 
 // The circle's ring at the wave's zero, from its middle to its outside. Halfway, a full scale sample reaches
@@ -153,6 +157,9 @@ Scope :: struct {
     using node:          AudioCaptureNode,
     freq_hz:             f64,
     sweep:               ScopeSweep,
+    periods:             int, // of the reference across the screen and round the circle, see set_scope_periods
+    // The scope's Gain setting, the wave drawn this many times as high as its loudness says, see follow_level
+    height_gain:         f32,
     lowpass:             bool, // the scope view's or the lamp's, see the top of the file
     lowpass_filter:      ScopeLowpass,
 
@@ -221,6 +228,8 @@ Scope :: struct {
 
 init_scope :: proc(columns, rows: int, sample_rate: f32 = DEFAULT_SAMPLE_RATE) -> (self: Scope) {
     init_audio_capture_node(&self, sample_rate)
+    self.periods = SCOPE_PERIODS
+    self.height_gain = 1
     self.columns = columns
     self.rows = rows
     self.screen = make([]f32, columns * rows)
@@ -267,7 +276,7 @@ destroy_scope :: proc(self: ^Scope) {
 // Starts with a dark screen at the new reference frequency
 set_scope_freq :: proc(self: ^Scope, freq_hz: f64) {
     self.freq_hz = freq_hz
-    self.step = freq_hz / (f64(self.sample_rate) * SCOPE_PERIODS)
+    self.step = freq_hz / (f64(self.sample_rate) * f64(self.periods))
 
     length := f64(self.sample_rate) / (freq_hz * SCOPE_LOWPASS_HARMONIC) if freq_hz > 0 else 1
     self.lowpass_filter.length = clamp(int(math.round(length)), 1, SCOPE_LOWPASS_MAX_LENGTH)
@@ -362,6 +371,12 @@ restart_beam :: proc(self: ^Scope) {
 // one's
 set_scope_sweep :: proc(self: ^Scope, sweep: ScopeSweep) {
     self.sweep = sweep
+    set_scope_freq(self, self.freq_hz)
+}
+
+// The reference periods a sweep holds, 1 to SCOPE_MAX_PERIODS. Starts with a dark screen like another sweep.
+set_scope_periods :: proc(self: ^Scope, periods: int) {
+    self.periods = clamp(periods, 1, SCOPE_MAX_PERIODS)
     set_scope_freq(self, self.freq_hz)
 }
 
@@ -721,7 +736,7 @@ scope_trace :: proc(self: ^Scope, points: ^[dynamic][2]f32) {
 // The newest sweep that's all in, round the circle with its overlap, from its start like a triggered
 // oscilloscope's: where its samples start in the history, how many, the first one's clock as it's drawn, and
 // the sweep's start. They run from the curve's before the sample ahead of the start to the one after the first
-// past the end. Up to a sweep behind the newest sample, two periods, under a frame from B2 up. Ended at the
+// past the end. Up to a sweep behind the newest sample, at two periods under a frame from B2 up. Ended at the
 // newest sample instead, the line started wherever that fell, and where it came round to the sample a sweep
 // before it, a note that's off or changing stepped: a break wandering about the screen. False while the history
 // doesn't reach back to its start.
@@ -811,7 +826,7 @@ begin_samples :: proc(self: ^Scope, samples: []f32) -> (clock: i64, ok: bool) {
     if self.step <= 0 || len(samples) == 0 do return
 
     // What the screen shows: the persistence, and at least SCOPE_PEAK_MIN_PERIODS
-    window := max(SCOPE_PEAK_MIN_PERIODS / SCOPE_PERIODS / self.step, self.persistence_s * f64(self.sample_rate))
+    window := max(SCOPE_PEAK_MIN_PERIODS / f64(self.periods) / self.step, self.persistence_s * f64(self.sample_rate))
     self.block_length = max(int(math.round(window / SCOPE_PEAK_BLOCKS)), 1)
     self.peak_release = f32(math.exp(-1 / (SCOPE_PEAK_RELEASE_S * f64(self.sample_rate))))
 
@@ -820,10 +835,11 @@ begin_samples :: proc(self: ^Scope, samples: []f32) -> (clock: i64, ok: bool) {
 }
 
 // The level the screen's height is scaled to, by the input's peak with the newest sample, see loudness_level.
-// The peak is up at once, the wave would clip, and glides down, a step would jump the picture.
+// The peak is up at once, the wave would clip, and glides down, a step would jump the picture. The Gain draws
+// it higher, a lower level, louder notes run off the screen.
 follow_level :: proc(self: ^Scope, sample: f32) {
     self.peak = max(follow_screen_peak(self, abs(sample)), self.peak * self.peak_release)
-    self.level = loudness_level(self.peak)
+    self.level = loudness_level(self.peak) / self.height_gain
 }
 
 // The level a peak is drawn at: SCOPE_LOUD_DBFS and louder fills the screen, every dB quieter is a step

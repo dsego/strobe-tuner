@@ -24,6 +24,7 @@ import "core:slice"
 import "core:strconv"
 import "core:strings"
 
+import "../audio"
 import "../core"
 
 // From the standard OS path, e.g. ~/Library/Application Support/<APP_NAME>/config.ini on macOS, see
@@ -75,6 +76,14 @@ load_config :: proc() -> Config {
     if config.scope_averaging_periods != 0 {
         config.scope_averaging_periods = clamp(config.scope_averaging_periods, 1, 1000)
     }
+
+    // No periods would be no sweep, more than the scope keeps samples for would run off its history
+    config.scope_periods = clamp(config.scope_periods, 1, core.SCOPE_MAX_PERIODS)
+    config.scope_gain = clamp(config.scope_gain, SCOPE_GAIN_MIN, SCOPE_GAIN_MAX)
+    config.lamp_gain = clamp(config.lamp_gain, SCOPE_GAIN_MIN, SCOPE_GAIN_MAX)
+
+    // Under the average there's no channel, one past the device's is averaged too, see audio.set_input_channel
+    config.input_channel = max(config.input_channel, audio.MIX_CHANNELS)
 
     // A spectrum window of 0 would have nothing to transform
     window_steps := SPECTRUM_WINDOW_STEPS

@@ -22,6 +22,7 @@ package audio
 import "base:intrinsics"
 import "base:runtime"
 import "core:fmt"
+import "core:math"
 import "core:slice"
 import "core:strings"
 
@@ -35,6 +36,9 @@ IOS :: #config(IOS, false)
 
 MACOS :: ODIN_OS == .Darwin && !IOS
 ANDROID :: ODIN_PLATFORM_SUBTARGET == .Android
+
+// The picked channel of a device with more is copied here in pieces this long, see write_channel_to_nodes
+CHANNEL_CHUNK :: 2048
 
 
 Capture :: struct {
@@ -51,6 +55,12 @@ Capture :: struct {
     sample_rate:        f32,
     decimator:          core.Decimator,
     decimate_chunk:     [DECIMATE_CHUNK]f32,
+
+    // The device's channels as it opened, a phone's one, and the one measured or MIX_CHANNELS. Set from the
+    // main loop and read on miniaudio's thread, see write_channel_to_nodes.
+    channels:           int,
+    channel:            int,
+    channel_chunk:      [CHANNEL_CHUNK]f32,
 
     // Set from miniaudio's thread when an iOS audio interruption (a call, Siri, an alarm) is over.
     // miniaudio stops the device when one begins but doesn't start it again.
@@ -143,7 +153,11 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
 
     config := ma.device_config_init(.capture)
     config.capture.format = .f32
-    config.capture.channels = 1
+
+    // Every channel the desktop's device has, one is picked or they're averaged, see write_channel_to_nodes.
+    // Asked for one, miniaudio's conversion to mono averages them, a guitar in an interface's first input
+    // 6 dB quieter with the second one's hiss. A phone's one input is the system's to route.
+    config.capture.channels = 1 when IOS || ANDROID else 0
 
     // The device's own rate. Asked for another, miniaudio interpolates between the samples, and the images
     // that leaves of a note land near its partials and light the strobe's tracks for them.
@@ -183,6 +197,7 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
     }
 
     set_input_rate(self, f32(self.device.capture.internalSampleRate))
+    self.channels = int(self.device.capture.channels)
     self.device_open = true
 
     fmt.println("Opened input stream")
@@ -319,10 +334,50 @@ switch_device :: proc(self: ^Capture, device_index: i32) {
     }
 }
 
+// The open input's channels, one without an input
+channel_count :: proc(self: ^Capture) -> int {
+    return self.channels if self.device_open else 1
+}
+
+// The channel measured from here on, counted from 1, or MIX_CHANNELS. One the device doesn't have is averaged
+// like MIX_CHANNELS, a pick kept for another device.
+set_input_channel :: proc(self: ^Capture, channel: int) {
+    intrinsics.atomic_store(&self.channel, channel)
+}
+
+input_channel :: proc(self: ^Capture) -> int {
+    return intrinsics.atomic_load(&self.channel)
+}
+
 stream_callback :: proc "c" (device: ^ma.device, output, input: rawptr, frame_count: u32) {
     context = runtime.default_context()
     self := cast(^Capture)device.pUserData
-    write_to_nodes(self, slice.from_ptr(cast([^]f32)input, int(frame_count)))
+    channels := int(device.capture.channels)
+    frames := slice.from_ptr(cast([^]f32)input, int(frame_count) * channels)
+    if channels == 1 {
+        write_to_nodes(self, frames)
+    } else {
+        write_channel_to_nodes(self, frames, channels)
+    }
+}
+
+// The picked channel of the frames to every node, or the frames' channels averaged, a piece at a time. From
+// the audio thread.
+write_channel_to_nodes :: proc(self: ^Capture, frames: []f32, channels: int) {
+    picked := intrinsics.atomic_load(&self.channel)
+    if picked < 1 || picked > channels {
+        picked = MIX_CHANNELS
+    }
+
+    frame_count := len(frames) / channels
+    for start := 0; start < frame_count; start += CHANNEL_CHUNK {
+        chunk := self.channel_chunk[:min(CHANNEL_CHUNK, frame_count - start)]
+        for &sample, offset in chunk {
+            frame := frames[(start + offset) * channels:][:channels]
+            sample = math.sum(frame) / f32(channels) if picked == MIX_CHANNELS else frame[picked - 1]
+        }
+        write_to_nodes(self, chunk)
+    }
 }
 
 // Following the system default to another device, miniaudio keeps the rate the input opened at and
