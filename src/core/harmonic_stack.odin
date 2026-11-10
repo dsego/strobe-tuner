@@ -91,8 +91,8 @@ HARMONICS_BASS_WINDOWS :: 2
 
 // The pitch the tuner follows keeps its stack against a harmonic or an undertone of it while it scores this
 // much of the best, a steady octave beats one that flips, even the wrong one. For a few detections after a low
-// note stepped the bass window spans both and its stack comes apart, the short window's 3rd or 5th harmonic won
-// and was taken for the note. A note an octave up scores about two thirds of its own over the followed one's
+// note stepped the lower spectrum spans both and its stack comes apart, the upper spectrum's 3rd or 5th harmonic
+// won and was taken for the note. A note an octave up scores about two thirds of its own over the followed one's
 // even harmonics and gets through. E.g. -define:HARMONICS_HOLD_RATIO=n
 HARMONICS_HOLD_RATIO :: #config(HARMONICS_HOLD_RATIO, 0.8)
 
@@ -106,12 +106,12 @@ HARMONICS_HOLD_RATIO :: #config(HARMONICS_HOLD_RATIO, 0.8)
 HARMONICS_PHASE_STEADY :: #config(HARMONICS_PHASE_STEADY, true)
 
 
-// The stack in two transforms of the latest samples, the better of the two, see run_harmonic_stack
+// The stack in two spectra of the latest samples, the better of the two, see run_harmonic_stack
 HarmonicStack :: struct {
-    short:     StackTransform, // the detector's window, the candidates from HARMONICS_BASS_HZ up
-    bass:      StackTransform, // HARMONICS_BASS_WINDOWS of it, the candidates under, up to bass_top_hz
-    harmonics: [HARMONICS_COUNT]StackPeak, // the note's stack, each harmonic's peak, 0 Hz for none
-    score_db:  f32, // the latest detection's, see run_harmonic_stack
+    upper_spectrum: StackTransform, // the detector's window, the candidates from HARMONICS_BASS_HZ up
+    lower_spectrum: StackTransform, // HARMONICS_BASS_WINDOWS of it, the candidates under, up to lower_top_hz
+    harmonics:      [HARMONICS_COUNT]StackPeak, // the note's stack, each harmonic's peak, 0 Hz for none
+    score_db:       f32, // the latest detection's, see run_harmonic_stack
 }
 
 // A window's spectrum, the peaks in it and the best stack of them the detection before
@@ -137,10 +137,10 @@ StackPeak :: struct {
     over_db: f32, // over the background
 }
 
-// The detector's window, the bass transform's is HARMONICS_BASS_WINDOWS of it
+// The detector's window, the lower spectrum's is HARMONICS_BASS_WINDOWS of it
 init_harmonic_stack :: proc(window: int, sample_rate: f32) -> (self: HarmonicStack) {
-    self.short = init_stack_transform(window, sample_rate)
-    self.bass = init_stack_transform(HARMONICS_BASS_WINDOWS * window, sample_rate)
+    self.upper_spectrum = init_stack_transform(window, sample_rate)
+    self.lower_spectrum = init_stack_transform(HARMONICS_BASS_WINDOWS * window, sample_rate)
     return
 }
 
@@ -158,8 +158,8 @@ init_stack_transform :: proc(window: int, sample_rate: f32) -> (self: StackTrans
 }
 
 destroy_harmonic_stack :: proc(self: ^HarmonicStack) {
-    destroy_stack_transform(&self.short)
-    destroy_stack_transform(&self.bass)
+    destroy_stack_transform(&self.upper_spectrum)
+    destroy_stack_transform(&self.lower_spectrum)
 }
 
 destroy_stack_transform :: proc(self: ^StackTransform) {
@@ -173,12 +173,12 @@ destroy_stack_transform :: proc(self: ^StackTransform) {
 }
 
 // The best stack's fundamental from lowest_hz up, 0 for none, and its harmonics' dB over their background
-// summed, weighted down the stack: the bass transform's under HARMONICS_BASS_HZ or the short one's over it,
-// whichever scores more. The samples are the bass window's, the short one is the latest of them. The peaks are
-// looked for up to top_hz, the detector's low-pass, and a stack's fundamental may be up there too: the detector
-// tells a pitch over its notes from a note, a D8 sine taken only as far as C8 read D7, its 2nd harmonic.
-// followed_hz is the pitch the tuner follows, 0 for none, see HARMONICS_HOLD_RATIO. hop is the new samples since
-// the detection before, 0 if not known, see HARMONICS_PHASE_STEADY.
+// summed, weighted down the stack: the lower spectrum's under HARMONICS_BASS_HZ or the upper one's over it,
+// whichever scores more. The samples are the lower spectrum's window, the upper one's is the latest of them.
+// The peaks are looked for up to top_hz, the detector's low-pass, and a stack's fundamental may be up there
+// too: the detector tells a pitch over its notes from a note, a D8 sine taken only as far as C8 read D7, its
+// 2nd harmonic. followed_hz is the pitch the tuner follows, 0 for none, see HARMONICS_HOLD_RATIO. hop is the
+// new samples since the detection before, 0 if not known, see HARMONICS_PHASE_STEADY.
 run_harmonic_stack :: proc(
     self: ^HarmonicStack,
     samples: []f32,
@@ -188,39 +188,39 @@ run_harmonic_stack :: proc(
 ) -> (
     freq, score_db: f32,
 ) {
-    bass_top := min(bass_top_hz(), top_hz)
-    short_freq, short_db := best_note(&self.short, samples, max(lowest_hz, HARMONICS_BASS_HZ), max(f32), top_hz, hop)
-    bass_freq, bass_db := best_note(&self.bass, samples, lowest_hz, HARMONICS_BASS_HZ, bass_top, hop)
+    lower_top := min(lower_top_hz(), top_hz)
+    upper_freq, upper_db := best_note(&self.upper_spectrum, samples, max(lowest_hz, HARMONICS_BASS_HZ), max(f32), top_hz, hop)
+    lower_freq, lower_db := best_note(&self.lower_spectrum, samples, lowest_hz, HARMONICS_BASS_HZ, lower_top, hop)
 
-    // The bass note only over the short one's in the bass transform too, its peaks stand further over their
+    // The lower note only over the upper one's in the lower spectrum too, its peaks stand further over their
     // background there: a bass's C2 read C1 and a ukulele's Bb2 a third of it now and then, a stack with every
-    // other or every third harmonic outscoring the whole one in the short transform. And only a strong one: a
+    // other or every third harmonic outscoring the whole one in the upper spectrum. And only a strong one: a
     // song's chords made up stacks under them, an F#1 under F#2 and C#3 and a B0 under B1, at up to 58 dB, a bass
-    // guitar's E1 to G1 scored 160 and more. Without it a ukulele's Bb4 let go into the room's rumble, the bass
-    // transform's Bb0, Eb1, B0 and D1 at 20 to 40 dB outscored its fade and lit the tuner with nothing playing.
-    short_in_bass, _ := score_stack(self.bass.peaks[:], short_freq, bass_top)
-    bass_wins := bass_db >= HARMONICS_HIGH_DB && bass_db > short_db && bass_db > short_in_bass
+    // guitar's E1 to G1 scored 160 and more. Without it a ukulele's Bb4 let go into the room's rumble, the lower
+    // spectrum's Bb0, Eb1, B0 and D1 at 20 to 40 dB outscored its fade and lit the tuner with nothing playing.
+    upper_in_lower, _ := score_stack(self.lower_spectrum.peaks[:], upper_freq, lower_top)
+    lower_wins := lower_db >= HARMONICS_HIGH_DB && lower_db > upper_db && lower_db > upper_in_lower
 
-    // The short note stepped down in the bass transform, to a third or a half of it under HARMONICS_BASS_HZ: the
-    // short one can't go there, and a low note's harmonics are too close together in it to step from. A B0 with a
-    // weak fundamental in noise read B1 in every other detection, its B1 scoring as much as the B0 in the bass
-    // transform, and the short transform's own B1 15 to 30 dB. Only a strong one, like the bass note. Only from
-    // a short note under bass_top: over it the bass transform has none of its harmonics, it scores nothing there
-    // and any bass peaks under it passed as its own.
+    // The upper note stepped down in the lower spectrum, to a third or a half of it under HARMONICS_BASS_HZ: the
+    // upper one can't go there, and a low note's harmonics are too close together in it to step from. A B0 with a
+    // weak fundamental in noise read B1 in every other detection, its B1 scoring as much as the B0 in the lower
+    // spectrum, and the upper spectrum's own B1 15 to 30 dB. Only a strong one, like the lower note. Only from
+    // an upper note under lower_top: over it the lower spectrum has none of its harmonics, it scores nothing there
+    // and any lower peaks under it passed as its own.
     under: f32
-    if short_freq < bass_top {
-        under = step_down_to_note(self.bass.peaks[:], short_freq, short_in_bass, lowest_hz, bass_top)
+    if upper_freq < lower_top {
+        under = step_down_to_note(self.lower_spectrum.peaks[:], upper_freq, upper_in_lower, lowest_hz, lower_top)
     }
-    under_db, _ := score_stack(self.bass.peaks[:], under, bass_top)
-    short_steps_under := under > 0 && under < HARMONICS_BASS_HZ && under_db >= HARMONICS_HIGH_DB
+    under_db, _ := score_stack(self.lower_spectrum.peaks[:], under, lower_top)
+    upper_steps_under := under > 0 && under < HARMONICS_BASS_HZ && under_db >= HARMONICS_HIGH_DB
 
-    note := &self.short
-    freq, score_db = short_freq, short_db
-    if bass_wins {
-        note, freq, score_db = &self.bass, bass_freq, bass_db
+    note := &self.upper_spectrum
+    freq, score_db = upper_freq, upper_db
+    if lower_wins {
+        note, freq, score_db = &self.lower_spectrum, lower_freq, lower_db
     }
-    if short_steps_under {
-        note, freq, score_db = &self.bass, under, under_db
+    if upper_steps_under {
+        note, freq, score_db = &self.lower_spectrum, under, under_db
     }
 
     // A harmonic or an undertone of the followed pitch, the stack is tried at the followed pitch too and kept
@@ -229,7 +229,7 @@ run_harmonic_stack :: proc(
     held_hz, related := followed_pitch_from(freq, followed_hz)
     if related {
         held := stack_transform_at(self, held_hz)
-        held_top := bass_top if held == &self.bass else top_hz
+        held_top := lower_top if held == &self.lower_spectrum else top_hz
         held_db, held_freq := score_stack(held.peaks[:], held_hz, held_top)
         if held_freq > 0 && held_db >= HARMONICS_HOLD_RATIO * score_db {
             note, freq, score_db = held, held_freq, held_db
@@ -262,14 +262,14 @@ best_note :: proc(self: ^StackTransform, samples: []f32, from_hz, below_hz, top_
     return
 }
 
-// The bass transform's peaks go as far as a candidate's 10th harmonic under HARMONICS_BASS_HZ
-bass_top_hz :: proc() -> f32 {
+// The lower spectrum's peaks go as far as a candidate's 10th harmonic under HARMONICS_BASS_HZ
+lower_top_hz :: proc() -> f32 {
     return freq_at_cents(HARMONICS_COUNT * HARMONICS_BASS_HZ, harmonic_tolerance(HARMONICS_COUNT))
 }
 
-// The transform the stack looks at freq in, the bass one up to bass_top_hz
+// The spectrum the stack looks at freq in, the lower one up to lower_top_hz
 stack_transform_at :: proc(self: ^HarmonicStack, freq: f32) -> ^StackTransform {
-    return &self.bass if freq < bass_top_hz() else &self.short
+    return &self.lower_spectrum if freq < lower_top_hz() else &self.upper_spectrum
 }
 
 // Each of the fundamental's first harmonics up to top_hz, the peak score_stack counts for it, 0 Hz for none

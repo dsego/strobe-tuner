@@ -122,8 +122,8 @@ test_harmonics_blend_like_whole_wave :: proc(t: ^testing.T) {
 // A low saw's harmonics are close together and each stands about as far over its background, see
 // HARMONICS_PEAKS_PER_OCTAVE: the 40 most prominent of all were any of them, and an A1 saw read C#5, its 10th,
 // on some of the detections. Under HARMONICS_BASS_HZ the detector's window doesn't part them at all, B0 and E1
-// had no stack. Every detection once the bass window is full. A low square's odd harmonics are a stack of their
-// own from each of them and it still reads its 7th now and then, see HARMONICS_DIVISORS.
+// had no stack. Every detection once the lower spectrum's window is full. A low square's odd harmonics are a
+// stack of their own from each of them and it still reads its 7th now and then, see HARMONICS_DIVISORS.
 @(test)
 test_harmonics_low_saws :: proc(t: ^testing.T) {
     for fundamental in ([]f32{30.87, 41.2, 55}) {

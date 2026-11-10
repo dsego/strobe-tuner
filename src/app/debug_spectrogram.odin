@@ -78,7 +78,7 @@ record_debug_column :: proc(
     shown: core.Note,
     sample_rate: f32,
 ) {
-    if stack.short.top_bin <= 1 do return
+    if stack.upper_spectrum.top_bin <= 1 do return
 
     low, high := f32(SPECTRUM_LOW_HZ), core.pitch_lowpass_hz(sample_rate)
     for &value, row in self.prominence[self.next] {
@@ -234,7 +234,7 @@ stack_level_between :: proc(stack: ^core.HarmonicStack, from_hz, to_hz: f32) -> 
 draw_stack_plot :: proc(rect: gfx.Rect, stack: ^core.HarmonicStack, pitch: core.PitchInfo, sample_rate: f32, font: gfx.Font) {
     RANGE_DB :: 60 // from the loudest down, the background stays in it
 
-    if stack.short.top_bin <= 1 do return
+    if stack.upper_spectrum.top_bin <= 1 do return
 
     // Each pixel's, see stack_level_between
     low, high := f32(SPECTRUM_LOW_HZ), core.pitch_lowpass_hz(sample_rate)
@@ -268,7 +268,7 @@ draw_stack_plot :: proc(rect: gfx.Rect, stack: ^core.HarmonicStack, pitch: core.
     gfx.draw_polyline(levels, 1, gfx.WHITE)
 
     // Each transform's where it's drawn
-    for transform in ([2]^core.StackTransform{&stack.bass, &stack.short}) {
+    for transform in ([2]^core.StackTransform{&stack.lower_spectrum, &stack.upper_spectrum}) {
         for peak in transform.peaks {
             if core.stack_transform_at(stack, peak.freq) != transform do continue
 
