@@ -28,9 +28,11 @@ import "../gfx"
 BLOOM_STRENGTH :: 0.2
 
 // The stripes shaped from the sine, off a hard square wave. Motion blur averages the pattern over its
-// movement since the previous frame, it reduces shimmer when it spins fast.
+// movement since the previous frame, so a fast track doesn't alias: vernier's outer track still shows around
+// 25 cents off, half a stripe a frame at 120 Hz, and from 16 cents at 60 Hz, and turns the wrong way without
+// it. The noisy tail it used to gray fades by the slots now. -define:MOTION_BLUR=false to try without it.
 STROBE_BLUR :: true
-MOTION_BLUR :: true
+MOTION_BLUR :: #config(MOTION_BLUR, true)
 
 StrobeDisplay :: struct {
     background:      gfx.Color,
