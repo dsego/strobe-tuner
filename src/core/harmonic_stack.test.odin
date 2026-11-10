@@ -33,13 +33,13 @@ test_harmonics_notes :: proc(t: ^testing.T) {
             partials := 5 if freq < 100 else 1
             pitch := detect_test_note(freq, partials, sample_rate, .HARMONICS)
             note := freq_to_note(freq)
-            testing.expectf(t, pitch.is_strong_pitch && pitch.detected_note.cents == note.cents, "%v Hz at %v Hz: %v", freq, sample_rate, pitch)
+            testing.expectf(t, pitch.is_clear_tone && pitch.detected_note.cents == note.cents, "%v Hz at %v Hz: %v", freq, sample_rate, pitch)
         }
     }
 
     // Up to C8 like the ruler, a sine over it is its own fundamental and no note, not a harmonic of one under it
     d8 := detect_test_note(4698.64, partials = 1, method = .HARMONICS)
-    testing.expectf(t, d8.is_weak_pitch && !d8.is_tonal, "D8: %v", d8)
+    testing.expectf(t, !d8.is_tonal, "D8: %v", d8)
 }
 
 // A weak fundamental under a loud 2nd partial, like a low string, and none at all: the fundamental's note,
@@ -51,26 +51,26 @@ test_harmonics_fundamental :: proc(t: ^testing.T) {
         missing := detect_samples_with(fundamental, {0, 0.4, 0.2, 0.1, 0.1}, 0)
 
         note := freq_to_note(fundamental)
-        testing.expectf(t, weak.is_strong_pitch && weak.detected_note.cents == note.cents, "%v Hz weak fundamental: %v", fundamental, weak)
-        testing.expectf(t, missing.is_strong_pitch && missing.detected_note.cents == note.cents, "%v Hz no fundamental: %v", fundamental, missing)
+        testing.expectf(t, weak.is_clear_tone && weak.detected_note.cents == note.cents, "%v Hz weak fundamental: %v", fundamental, weak)
+        testing.expectf(t, missing.is_clear_tone && missing.detected_note.cents == note.cents, "%v Hz no fundamental: %v", fundamental, missing)
     }
 }
 
 // Eight harmonics 20 dB over white noise: the whole wave is only about 4 dB over it, its clarity 0.72 is a
-// medium one and not a strong pitch, where the stack stands out. The noise alone is no note.
+// medium one and not a clear tone, where the stack stands out. The noise alone is no note.
 @(test)
 test_harmonics_in_noise :: proc(t: ^testing.T) {
     harmonics := []f32{0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01}
 
     stack := detect_samples_with(225, harmonics, 0.026)
-    testing.expectf(t, stack.is_strong_pitch && note_name(stack.detected_note) == "A3", "the stack in noise: %v", stack)
+    testing.expectf(t, stack.is_clear_tone && note_name(stack.detected_note) == "A3", "the stack in noise: %v", stack)
 
     wave := detect_samples_with(225, harmonics, 0.026, .WAVE)
     wave_medium := wave.clarity < PITCH_CLARITY_HIGH && note_name(wave.detected_note) == "A3"
     testing.expectf(t, wave_medium, "the whole wave in noise: %v", wave)
 
     noise := detect_samples_with(225, {}, 0.026)
-    testing.expectf(t, noise.is_weak_pitch, "the noise alone: %v", noise)
+    testing.expectf(t, !noise.is_tonal, "the noise alone: %v", noise)
 }
 
 // A generated wave's digital silence lets everything stand out, a triangle's aliases 90 dB down made up a
@@ -89,7 +89,7 @@ test_harmonics_generated_waves :: proc(t: ^testing.T) {
 
     for samples, name in ([2][]f32{triangle, square}) {
         pitch := detect_test_samples(samples, method = .HARMONICS)
-        testing.expectf(t, pitch.is_strong_pitch && note_name(pitch.detected_note) == "A2", "%v: %v", name, pitch)
+        testing.expectf(t, pitch.is_clear_tone && note_name(pitch.detected_note) == "A2", "%v: %v", name, pitch)
     }
 }
 

@@ -595,7 +595,7 @@ case_label :: proc(test_case: Case) -> string {
 // the strobe holds it
 show_detection :: proc(label: string, start: int, pitch: core.PitchInfo, note_target: core.NoteTarget, strobe_shows: bool) {
     detected := core.note_name(pitch.detected_note) if pitch.detected_freq > 0 else "-"
-    strength := " strong" if pitch.is_strong_pitch else " weak" if pitch.is_weak_pitch else ""
+    strength := " clear" if pitch.is_clear_tone else "" if pitch.is_tonal else " weak"
     shown := core.note_name(note_target.target_note) if note_target.active else "none"
     fmt.eprintfln(
         "  %v at %.2fs: pitch %.1f Hz %v%v, %v shown%v",

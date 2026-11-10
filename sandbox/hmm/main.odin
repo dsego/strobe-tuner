@@ -38,6 +38,7 @@ UNVOICED_STAY :: 0.9
 sharpness := 8.0 // clarity raised to this, 0.99 is 0.92 and 0.9 is 0.43
 LATER_PEAK :: 0.5 // each further NSDF peak, a guess at a multiple of the period, counts this much less
 WEAK_SNR :: 0.1 // under the SNR threshold the notes are this much less likely
+MIN_SNR_DB :: 2 // the threshold, the tuner's gate when this was written
 
 Belief :: [STATES]f64
 
@@ -75,7 +76,7 @@ hmm_step :: proc(belief: ^Belief, peaks: []core.Vec2, snr_db: f32) {
         emission[index] = max(emission[index], weight_now * likelihood)
         best = max(best, likelihood)
     }
-    if snr_db < core.PITCH_MIN_SNR_DB {
+    if snr_db < MIN_SNR_DB {
         for state in 0 ..< core.NOTE_COUNT do emission[state] *= WEAK_SNR
     }
     emission[UNVOICED] = max(1 - best, 0.05)

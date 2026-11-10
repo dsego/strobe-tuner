@@ -74,7 +74,7 @@ update_note_target :: proc(self: ^NoteTarget, pitch: PitchInfo, strobe_hears := 
     // a semitone flat, flipped from one to the other and the strobe's tracks and the scope started over.
     pitch := pitch
     held, has_held := self.detected_note.?
-    if has_held && !pitch.is_weak_pitch && !holds_note(held, pitch.detected_note) {
+    if has_held && pitch.is_tonal && !holds_note(held, pitch.detected_note) {
         held_freq := freq_at_cents(held.frequency, note_offset_cents(self, held))
         if abs(cents_deviation(pitch.detected_freq, held_freq)) <= NOTE_HOLD_CENTS {
             pitch.detected_note = held
@@ -114,7 +114,7 @@ update_note_target :: proc(self: ^NoteTarget, pitch: PitchInfo, strobe_hears := 
         }
     }
 
-    if pitch.is_weak_pitch && !strobe_hears {
+    if !pitch.is_tonal && !strobe_hears {
         self.active, self.following = false, false
     }
 

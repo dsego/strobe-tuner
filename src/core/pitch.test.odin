@@ -62,14 +62,14 @@ test_mains_hum :: proc(t: ^testing.T) {
     for mains_hz in MAINS_HZ {
         hum := detect_test_note(mains_hz)
         when MAINS_HUM {
-            testing.expectf(t, hum.is_weak_pitch && !hum.is_strong_pitch && !hum.is_tonal, "%v Hz hum: %v", mains_hz, hum)
+            testing.expectf(t, !hum.is_clear_tone && !hum.is_tonal, "%v Hz hum: %v", mains_hz, hum)
         } else {
-            testing.expectf(t, hum.is_strong_pitch && hum.is_tonal, "%v Hz hum: %v", mains_hz, hum)
+            testing.expectf(t, hum.is_clear_tone && hum.is_tonal, "%v Hz hum: %v", mains_hz, hum)
         }
     }
     for note_hz in ([]f32{49.0, 61.74}) {
         note := detect_test_note(note_hz)
-        testing.expectf(t, note.is_strong_pitch && note.is_tonal, "%v Hz note: %v", note_hz, note)
+        testing.expectf(t, note.is_clear_tone && note.is_tonal, "%v Hz note: %v", note_hz, note)
     }
 }
 
@@ -77,10 +77,10 @@ test_mains_hum :: proc(t: ^testing.T) {
 @(test)
 test_highest_note :: proc(t: ^testing.T) {
     c8 := detect_test_note(4186.01, partials = 1)
-    testing.expectf(t, c8.is_strong_pitch && c8.is_tonal, "C8: %v", c8)
+    testing.expectf(t, c8.is_clear_tone && c8.is_tonal, "C8: %v", c8)
 
     d8 := detect_test_note(4698.64, partials = 1)
-    testing.expectf(t, d8.is_weak_pitch && !d8.is_strong_pitch && !d8.is_tonal, "D8: %v", d8)
+    testing.expectf(t, !d8.is_clear_tone && !d8.is_tonal, "D8: %v", d8)
 }
 
 // The input's own rate, no resampling: the piano's ends at 44.1 kHz and a headset's 16 kHz, a decimated
@@ -94,10 +94,10 @@ test_pitch_at_input_rates :: proc(t: ^testing.T) {
             pitch := detect_test_note(freq, partials = 5 if freq < 100 else 1, sample_rate = sample_rate)
             cents := cents_deviation(pitch.detected_freq, freq)
             if sample_rate >= LOW_SAMPLE_RATE {
-                testing.expectf(t, pitch.is_strong_pitch && abs(cents) < 1, "%v Hz at %v Hz: %v cents, %v", freq, sample_rate, cents, pitch)
+                testing.expectf(t, pitch.is_clear_tone && abs(cents) < 1, "%v Hz at %v Hz: %v cents, %v", freq, sample_rate, cents, pitch)
             } else {
                 note := freq_to_note(freq)
-                testing.expectf(t, !pitch.is_weak_pitch && pitch.detected_note.cents == note.cents, "%v Hz at %v Hz: %v", freq, sample_rate, pitch)
+                testing.expectf(t, pitch.is_tonal && pitch.detected_note.cents == note.cents, "%v Hz at %v Hz: %v", freq, sample_rate, pitch)
             }
         }
     }

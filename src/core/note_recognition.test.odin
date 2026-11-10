@@ -20,23 +20,23 @@ package core
 import "core:testing"
 
 
-// The tests' detections, 20 a second, strong or weak
+// The tests' detections, 20 a second, strong or not tonal
 test_detection :: proc(freq: f32, strong := true) -> PitchInfo {
     return {
         fresh = true,
         elapsed_s = 0.05,
         detected_freq = freq,
         detected_note = freq_to_note(freq),
-        is_strong_pitch = strong,
-        is_weak_pitch = !strong,
+        is_clear_tone = strong,
+        is_tonal = strong,
         shortest_period = true,
     }
 }
 
-// A medium clarity detection, neither strong nor weak
+// A medium clarity detection, tonal but not strong
 test_medium_detection :: proc(freq: f32) -> PitchInfo {
     pitch := test_detection(freq, strong = false)
-    pitch.is_weak_pitch = false
+    pitch.is_tonal = true
     return pitch
 }
 

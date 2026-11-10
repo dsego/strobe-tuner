@@ -82,14 +82,14 @@ recognize_note :: proc(self: ^NoteRecognition, pitch: PitchInfo, confirmed_hz: f
     confirmed = seen && self.candidate_s >= confirm_s && self.settled
 
     held := seen && self.run_s >= self.confirm_s
-    strong = pitch.is_strong_pitch || (!pitch.is_weak_pitch && held)
+    strong = pitch.is_clear_tone || (pitch.is_tonal && held)
     return
 }
 
 // Times consecutive detections of the same note. Only for new measurements.
 time_detection :: proc(self: ^NoteRecognition, pitch: PitchInfo) {
     switch {
-    case pitch.is_weak_pitch:
+    case !pitch.is_tonal:
         self.candidate_note = nil
     case !holds_note(self.candidate_note, pitch.detected_note):
         self.candidate_note = pitch.detected_note

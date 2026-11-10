@@ -522,10 +522,10 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo) {
     } else {
         stat(fmt.ctprintf("Clarity %.3f", pitch.clarity), {500, 10}, large = true)
     }
-    if pitch.is_strong_pitch {
-        stat("strong", {600, 10}, gfx.ORANGE, large = true)
+    if pitch.is_clear_tone {
+        stat("clear", {600, 10}, gfx.ORANGE, large = true)
     }
-    if pitch.is_weak_pitch {
+    if !pitch.is_tonal {
         stat("weak", {600, 10}, gfx.PURPLE, large = true)
     }
 

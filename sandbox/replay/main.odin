@@ -125,7 +125,7 @@ main :: proc() {
         next_print = t + PRINT_EVERY_MS / 1000.0
         was_active = note_target.active
 
-        kind := "strong" if pitch.is_strong_pitch else "weak" if pitch.is_weak_pitch else "-"
+        kind := "clear" if pitch.is_clear_tone else "-" if pitch.is_tonal else "weak"
         note := "-"
         if pitch.detected_freq > 0 do note = core.note_name(pitch.detected_note)
         // From the strobe's note, to compare with the tracks

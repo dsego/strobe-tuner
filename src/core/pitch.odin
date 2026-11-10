@@ -31,8 +31,8 @@ PITCH_WINDOW_S :: #config(PITCH_WINDOW_S, 0.085)
 // (41 Hz) loses its fundamental here, it's still found from its harmonics.
 PITCH_HIGHPASS_HZ :: 60
 
-// A strong pitch is this clear at least and this far over the noise floor, a weak one less clear than
-// PITCH_CLARITY_LOW. Clarity is about the share of the window's power repeating at the period: at 0.9 the rest
+// A pitch is tonal from PITCH_CLARITY_LOW, a clear tone from PITCH_CLARITY_HIGH.
+// Clarity is about the share of the window's power repeating at the period: at 0.9 the rest
 // together had to be 10 dB under the note, at 0.8 7 dB. A hum glides and its low notes are less clear, 0.83 in
 // the 2nd octave and 0.96 in the 4th: at 0.9 a 2nd octave hum lit 10% of the time, at 0.8 69%. A crowd is a
 // large share of the power: voices in a playground lit 17% of the time at 0.8, 46% at 0.7, where the harmonic
@@ -41,7 +41,6 @@ PITCH_HIGHPASS_HZ :: 60
 // sometimes the period it shares with the song's bass, C#2 for C#3. E.g. -define:PITCH_CLARITY_LOW=n
 PITCH_CLARITY_LOW :: #config(PITCH_CLARITY_LOW, 0.7)
 PITCH_CLARITY_HIGH :: 0.98
-PITCH_MIN_SNR_DB :: 2
 
 // The same for the Harmonics method, its stack's dB over the background summed, see HarmonicStack. A song
 // alone lighting is fine, it's tonal, a note played or hummed over it should win. A hum close to a sine has few
@@ -66,10 +65,6 @@ PitchMethod :: enum {
 // it misses. -define:PITCH_HARMONICS=false to start with WAVE, e.g. in the sandbox tools.
 PITCH_HARMONICS :: #config(PITCH_HARMONICS, true)
 DEFAULT_PITCH_METHOD :: PitchMethod.HARMONICS when PITCH_HARMONICS else PitchMethod.WAVE
-
-// A strong pitch stays strong down to this far under PITCH_MIN_SNR_DB, so a decaying note doesn't flicker
-// between strong and weak around the threshold
-SNR_HYSTERESIS_DB :: 1.5
 
 // Mains hum repeats as steadily as a held note, and the grid holds it to a few cents of 50 or 60 Hz where
 // no note is tuned: G1 +35 ¢, A♯1 +50 ¢, B1 -49 ¢. It's the background, a string tuned through it loses
@@ -103,8 +98,7 @@ PitchDetector :: struct {
     // Only here, the strobe's tracks are narrow and the scope wants the wave as it is.
     highpass:       Biquad,
     lowpass:        Biquad,
-    noise_floor:    NoiseFloor, // of the RMS
-    snr_db:         f32,
+    noise_floor:    NoiseFloor, // of the RMS, for the input sheet
     pitch_standard: f32, // A4, detected notes are named against it
     stack_shown:    bool, // the harmonic stack runs with the WAVE method too, something shows it
 }
@@ -122,10 +116,9 @@ PitchInfo :: struct {
     rms:             f32,
     rms_dbfs:        f32,
     err_cents:       f32,
-    is_strong_pitch: bool,
-    is_weak_pitch:   bool,
+    is_clear_tone:   bool, // tonal and clear
     is_tonal:        bool, // a pitch whatever its level, medium clarity or more, the noise floors don't learn it as the background
-    snr_db:          f32,
+    snr_db:          f32, // the RMS over the noise floor, the input sheet shows it, it decides nothing
     noise_floor:     f32,
     followed_hz:     f32, // the pitch the tuner followed after this detection, 0 for none, see update_note_target
 }
@@ -218,7 +211,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     min_freq := freq_at_cents(self.pitch_standard, LOWEST_NOTE * 100 - 50)
     max_freq := freq_at_cents(self.pitch_standard, HIGHEST_NOTE * 100 + 50)
 
-    // Medium clear or more, and clear enough for a strong pitch
+    // Medium clear or more, and clear enough for a clear tone
     tonal, clear: bool
 
     switch self.method {
@@ -271,8 +264,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
     // A pitch is a note, not the background, even before the floor knows how loud that is. A voice or a
     // muddied string can be one, noise doesn't repeat that well.
     info.is_tonal = in_range && tonal && !mains
-    self.snr_db = update_noise_floor(&self.noise_floor, info.rms, dt, is_tonal = info.is_tonal)
-    info.snr_db = self.snr_db
+    info.snr_db = update_noise_floor(&self.noise_floor, info.rms, dt, is_tonal = info.is_tonal)
     info.noise_floor = self.noise_floor.level
 
     // No peak gives 0 Hz, which has no note
@@ -281,15 +273,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
         info.err_cents = cents_deviation(info.detected_freq, info.detected_note.frequency)
     }
 
-    weak_snr_db: f32 = PITCH_MIN_SNR_DB - SNR_HYSTERESIS_DB
-    strong_snr_db: f32 = weak_snr_db if prev_info.is_strong_pitch else PITCH_MIN_SNR_DB
-
-    info.is_strong_pitch = info.is_tonal && clear && info.snr_db >= strong_snr_db
-    info.is_weak_pitch =
-        mains ||
-        !in_range ||
-        !tonal ||
-        info.snr_db < weak_snr_db
+    info.is_clear_tone = info.is_tonal && clear
 
     return info
 }
