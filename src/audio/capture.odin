@@ -200,7 +200,7 @@ open_stream_on_active_device :: proc(self: ^Capture) -> bool {
     self.channels = int(self.device.capture.channels)
     self.device_open = true
 
-    fmt.println("Opened input stream")
+    fmt.printfln("Opened input stream, channels: %v", self.channels)
 
     return true
 }

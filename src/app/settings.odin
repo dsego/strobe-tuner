@@ -734,12 +734,8 @@ gui_audio_input :: proc(sheet_layout: SheetLayout, input: ^AudioInput, channel: 
         row += 1
 
         channels = channel_options(capture)
-        if len(channels) > 1 {
-            channel_rect = settings_row(sheet_layout, row, "Channel", dropdown_width(channels[:]))
-            row += 1
-        } else {
-            value_row(sheet_layout, &row, "Channel", "Mono" if audio.device_count(capture) > 0 else "-")
-        }
+        channel_rect = settings_row(sheet_layout, row, "Channel", dropdown_width(channels[:]))
+        row += 1
     }
 
     // Never resampled. A fast one is halved to what's measured, a slow one can't hold the high partials.
@@ -764,13 +760,11 @@ gui_audio_input :: proc(sheet_layout: SheetLayout, input: ^AudioInput, channel: 
     when !gfx.MOBILE {
         // One the device doesn't have is averaged and shows as Mix, the pick stays for the device it was made on
         // until another one is picked
-        if len(channels) > 1 {
-            shown := channel^ if channel^ < len(channels) else audio.MIX_CHANNELS
-            picked := shown
-            gui_settings_dropdown(open, .CHANNEL, channel_rect, channels[:], &picked, down = true)
-            if picked != shown {
-                channel^ = picked
-            }
+        shown := channel^ if channel^ < len(channels) else audio.MIX_CHANNELS
+        picked := shown
+        gui_settings_dropdown(open, .CHANNEL, channel_rect, channels[:], &picked, down = true)
+        if picked != shown {
+            channel^ = picked
         }
 
         if len(input.devices) > 0 {
@@ -780,8 +774,8 @@ gui_audio_input :: proc(sheet_layout: SheetLayout, input: ^AudioInput, channel: 
     }
     return
 
-    // Mix, then the device's channels by number, each option's index its channel. One without a device or with
-    // a single channel, nothing to pick.
+    // Mix, then the device's channels by number, each option's index its channel. Always a menu, a single
+    // channel's too: a row that turns into a value and back with the device was harder to find.
     channel_options :: proc(capture: ^audio.Capture) -> [dynamic]GuiOption {
         options := make([dynamic]GuiOption, context.temp_allocator)
         count := min(audio.channel_count(capture), MAX_LISTED_CHANNELS)
