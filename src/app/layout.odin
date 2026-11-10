@@ -36,7 +36,6 @@ Layout :: struct {
     ruler:          gfx.Rect,
     gauge:          [2]f32, // under the ruler's note, the middle of its top, see draw_cents_gauge
     measurements:   [2]f32, // the top middle of the readout, see draw_measurements
-    stats:          [2]f32,
     lock:           [2]f32, // the middle of the button
     display_picker: [2]f32, // its left edge and middle, see gui_pick_display
     level_meter:    [2]f32, // left of the icon, top of the bar
@@ -155,7 +154,6 @@ compute_layout :: proc(window: [2]f32, safe: gfx.Rect, offsets: bool) -> (layout
         layout.panel = {safe.x, strobe_bottom, safe.width, safe.y + safe.height - strobe_bottom}
     }
 
-    layout.stats = {layout.panel.x + PANEL_PADDING + 131, layout.panel.y + 80}
     panel_layout(&layout, offsets)
     return
 }

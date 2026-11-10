@@ -490,9 +490,14 @@ draw_note_controls :: proc(app: ^App, layout: Layout, reading: Reading, menu_com
     }
 }
 
-// The noise floor under the input's level bar, and on the right the pitch detection's latest detection, its
-// NSDF or its harmonic stack, over the stack's spectrogram
+// The noise floor under the input's level bar, and on the right the strobe's base band, the input's levels and
+// the pitch detection's latest detection, its NSDF or its harmonic stack, over the stack's spectrogram
 draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo) {
+    // Top right, past the stack's score and clear of the panel's note, a row each for the band and the input
+    STATS_TOP_LEFT :: [2]f32{720, 6}
+    STATS_COLUMN :: [2]f32{110, 0}
+    STATS_ROW :: [2]f32{0, 15}
+
     stat :: proc(text: cstring, position: [2]f32, color := text_color_white, large := false) {
         font := pixel_fonts.label_large if large else pixel_fonts.label_small
         gfx.draw_text(font.font, text, position, 16 if large else 12, 0, color)
@@ -505,12 +510,12 @@ draw_debug_stats :: proc(app: ^App, layout: Layout, pitch: core.PitchInfo) {
     gfx.draw_rect(bar, {LEVEL_BAR_WIDTH + floor_level, 3}, gfx.PURPLE)
 
     base_band := app.measurement.strobe_lock_in.bands[0]
-    stat(fmt.ctprintf("Band level %.2f", base_band.slat_level), layout.stats)
-    stat(fmt.ctprintf("Band lit %.2f", base_band.visibility), layout.stats + {0, 15})
-    stat(fmt.ctprintf("Band drift %.1f", base_band.drift_cents), layout.stats + {0, 30})
-    stat(fmt.ctprintf("RMS %.1f", pitch.rms_dbfs), layout.stats + {130, 0})
-    stat(fmt.ctprintf("NF %.1f", floor_level), layout.stats + {130, 15})
-    stat(fmt.ctprintf("SNR %.1f", pitch.snr_db), layout.stats + {130, 30})
+    stat(fmt.ctprintf("Band level %.2f", base_band.slat_level), STATS_TOP_LEFT)
+    stat(fmt.ctprintf("Band lit %.2f", base_band.visibility), STATS_TOP_LEFT + STATS_COLUMN)
+    stat(fmt.ctprintf("Band drift %.1f", base_band.drift_cents), STATS_TOP_LEFT + 2 * STATS_COLUMN)
+    stat(fmt.ctprintf("RMS %.1f", pitch.rms_dbfs), STATS_TOP_LEFT + STATS_ROW)
+    stat(fmt.ctprintf("NF %.1f", floor_level), STATS_TOP_LEFT + STATS_ROW + STATS_COLUMN)
+    stat(fmt.ctprintf("SNR %.1f", pitch.snr_db), STATS_TOP_LEFT + STATS_ROW + 2 * STATS_COLUMN)
 
     if app.measurement.pitch_detector.method == .HARMONICS {
         stat(fmt.ctprintf("Stack %.1f dB", pitch.harmonics_db), {480, 10}, large = true)
