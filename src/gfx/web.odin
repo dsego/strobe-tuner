@@ -390,20 +390,20 @@ upload_vertices :: proc() {
 // Each render target with its own clear, before the canvas draws them
 draw_render_targets :: proc() {
     gl.BindFramebuffer(gl.FRAMEBUFFER, gpu.framebuffer)
-    for pass, pass_index in gpu.frame.passes {
-        if !pass.offscreen || pass.target == {} do continue
+    for draws, draws_index in gpu.frame.target_draws {
+        if !draws.offscreen || draws.target == {} do continue
 
-        commands := pass_commands(pass_index)
-        if len(commands) == 0 && pass.clear == nil do continue
+        commands := target_commands(draws_index)
+        if len(commands) == 0 && draws.clear == nil do continue
 
-        gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, pass.target, 0)
-        gl.Viewport(0, 0, i32(pass.target_size.x), i32(pass.target_size.y))
-        clear, has_clear := pass.clear.?
+        gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, draws.target, 0)
+        gl.Viewport(0, 0, i32(draws.target_size.x), i32(draws.target_size.y))
+        clear, has_clear := draws.clear.?
         if has_clear {
-            clear_target(clear, pass.target_size)
+            clear_target(clear, draws.target_size)
         }
 
-        replay_commands(commands, pass.target_size, pass.offset, pass.zoom, flipped = true)
+        replay_commands(commands, draws.target_size, draws.offset, draws.zoom, flipped = true)
     }
 
     // Not left attached, a texture drawn into the canvas next would be both
@@ -411,17 +411,17 @@ draw_render_targets :: proc() {
     gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
 }
 
-// Every window pass into the canvas
+// All the window's draws into the canvas
 draw_window :: proc() {
     size := [2]f32{f32(window.pixels.x), f32(window.pixels.y)}
     zoom := window.pixel_ratio * window.ui_scale
 
     gl.Viewport(0, 0, window.pixels.x, window.pixels.y)
     clear_target(gpu.drawing.clear, size)
-    for pass, pass_index in gpu.frame.passes {
-        if pass.offscreen do continue
+    for draws, draws_index in gpu.frame.target_draws {
+        if draws.offscreen do continue
 
-        replay_commands(pass_commands(pass_index), size, {}, zoom, flipped = false)
+        replay_commands(target_commands(draws_index), size, {}, zoom, flipped = false)
     }
 }
 

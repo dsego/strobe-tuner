@@ -572,31 +572,31 @@ acquire_swapchain :: proc(command_buffer: ^sdl.GPUCommandBuffer) -> (swapchain: 
 // between each render target would move the full screen through memory every time. The window is
 // never sampled, and each target is finished before the window draws it, the order stays right.
 draw_render_targets :: proc(command_buffer: ^sdl.GPUCommandBuffer) {
-    for pass, pass_index in gpu.frame.passes {
-        if !pass.offscreen || pass.target == nil do continue
+    for draws, draws_index in gpu.frame.target_draws {
+        if !draws.offscreen || draws.target == nil do continue
 
-        commands := pass_commands(pass_index)
-        if len(commands) == 0 && pass.clear == nil do continue
+        commands := target_commands(draws_index)
+        if len(commands) == 0 && draws.clear == nil do continue
 
         // The draws cover all of it, or go on over what it holds
         color_target := sdl.GPUColorTargetInfo {
-            texture  = pass.target,
-            load_op  = .LOAD if pass.keep else .DONT_CARE,
+            texture  = draws.target,
+            load_op  = .LOAD if draws.keep else .DONT_CARE,
             store_op = .STORE,
         }
-        clear, has_clear := pass.clear.?
+        clear, has_clear := draws.clear.?
         if has_clear {
             normalized := normalize_color(clear)
             color_target.clear_color = {normalized.r, normalized.g, normalized.b, normalized.a}
             color_target.load_op = .CLEAR
         }
-        render_pass := begin_render_pass(command_buffer, &color_target, pass.target_size)
-        replay_commands(command_buffer, render_pass, commands, .TARGET, pass.target_size, pass.offset, pass.zoom)
+        render_pass := begin_render_pass(command_buffer, &color_target, draws.target_size)
+        replay_commands(command_buffer, render_pass, commands, .TARGET, draws.target_size, draws.offset, draws.zoom)
         sdl.EndGPURenderPass(render_pass)
     }
 }
 
-// Every window pass into the swapchain, size in pixels
+// All the window's draws into the swapchain in one render pass, size in pixels
 draw_window :: proc(command_buffer: ^sdl.GPUCommandBuffer, swapchain: ^sdl.GPUTexture, size: [2]f32) {
     // Drawing points to the swapchain's pixels: the display's density and the UI scale
     logical_w: i32
@@ -611,10 +611,10 @@ draw_window :: proc(command_buffer: ^sdl.GPUCommandBuffer, swapchain: ^sdl.GPUTe
         store_op    = .STORE,
     }
     render_pass := begin_render_pass(command_buffer, &color_target, size)
-    for pass, pass_index in gpu.frame.passes {
-        if pass.offscreen do continue
+    for draws, draws_index in gpu.frame.target_draws {
+        if draws.offscreen do continue
 
-        replay_commands(command_buffer, render_pass, pass_commands(pass_index), .WINDOW, size, {}, zoom)
+        replay_commands(command_buffer, render_pass, target_commands(draws_index), .WINDOW, size, {}, zoom)
     }
     sdl.EndGPURenderPass(render_pass)
 }

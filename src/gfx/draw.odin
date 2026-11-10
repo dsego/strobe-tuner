@@ -17,9 +17,9 @@
 package gfx
 
 // What both backends share: drawing only records vertices and draw commands, the backend's end_frame
-// uploads the vertices in one go and replays the commands. Every begin/end_render_target splits the frame
-// into another render pass. SDL3 GPU in sdl.odin, WebGL2 in web.odin, each with its own TextureHandle, Gpu
-// and Window.
+// uploads the vertices in one go and replays the commands. Every begin/end_render_target starts the draws
+// into another target, see TargetDraws. SDL3 GPU in sdl.odin, WebGL2 in web.odin, each with its own
+// TextureHandle, Gpu and Window.
 
 import "core:math/linalg"
 import "core:mem"
@@ -71,7 +71,10 @@ DrawCommand :: struct {
     vertex_count: u32,
 }
 
-Pass :: struct {
+// The draws from first_command up to the next TargetDraws' first, all into one target: the window, or a
+// render target. The offscreen ones each go to the GPU as a render pass of their own, the window's together
+// in one, see draw_render_targets.
+TargetDraws :: struct {
     offscreen:     bool, // into a render target, not the window
     target:        TextureHandle, // the render target's, none for one that couldn't be made: its draws are dropped
     target_size:   [2]f32, // in pixels
@@ -86,7 +89,7 @@ Pass :: struct {
 GpuFrame :: struct {
     vertices:     [dynamic]Vertex,
     commands:     [dynamic]DrawCommand,
-    passes:       [dynamic]Pass,
+    target_draws: [dynamic]TargetDraws,
     uniform_data: [dynamic]u8,
 }
 
@@ -106,7 +109,7 @@ MAX_TARGET_DEPTH :: 4
 
 // Where drawing was when a render target began, and its scissor
 OuterTarget :: struct {
-    pass:    Pass,
+    draws:   TargetDraws,
     scissor: Maybe(Rect),
 }
 
@@ -142,7 +145,7 @@ clear_frame_input :: proc() {
 begin_frame :: proc(clear: Color) {
     clear_dynamic_array(&gpu.frame.vertices)
     clear_dynamic_array(&gpu.frame.commands)
-    clear_dynamic_array(&gpu.frame.passes)
+    clear_dynamic_array(&gpu.frame.target_draws)
     clear_dynamic_array(&gpu.frame.uniform_data)
     gpu.drawing = {
         program = .SPRITE,
@@ -150,25 +153,25 @@ begin_frame :: proc(clear: Color) {
         clear   = clear,
     }
 
-    begin_window_pass()
+    begin_window_draws()
 }
 
 // The frame's lists, once the GPU is done with them
 delete_frame :: proc() {
     delete(gpu.frame.vertices)
     delete(gpu.frame.commands)
-    delete(gpu.frame.passes)
+    delete(gpu.frame.target_draws)
     delete(gpu.frame.uniform_data)
 }
 
-// The draw commands recorded between this pass's start and the next one's
-pass_commands :: proc(pass_index: int) -> []DrawCommand {
+// The draw commands recorded between these target draws' start and the next ones'
+target_commands :: proc(draws_index: int) -> []DrawCommand {
     last_command := len(gpu.frame.commands)
-    if pass_index + 1 < len(gpu.frame.passes) {
-        last_command = gpu.frame.passes[pass_index + 1].first_command
+    if draws_index + 1 < len(gpu.frame.target_draws) {
+        last_command = gpu.frame.target_draws[draws_index + 1].first_command
     }
 
-    return gpu.frame.commands[gpu.frame.passes[pass_index].first_command:last_command]
+    return gpu.frame.commands[gpu.frame.target_draws[draws_index].first_command:last_command]
 }
 
 // A scissor in drawing coordinates as the target's pixels, none is all of it
@@ -326,12 +329,12 @@ begin_render_target :: proc(
 ) {
     assert(gpu.drawing.depth < MAX_TARGET_DEPTH)
 
-    gpu.drawing.outer[gpu.drawing.depth] = {gpu.frame.passes[len(gpu.frame.passes) - 1], gpu.drawing.scissor}
+    gpu.drawing.outer[gpu.drawing.depth] = {gpu.frame.target_draws[len(gpu.frame.target_draws) - 1], gpu.drawing.scissor}
     gpu.drawing.depth += 1
     gpu.drawing.scissor = nil
     append(
-        &gpu.frame.passes,
-        Pass {
+        &gpu.frame.target_draws,
+        TargetDraws {
             offscreen = true,
             target = target.texture.handle,
             target_size = render_target_size(target),
@@ -344,22 +347,22 @@ begin_render_target :: proc(
 }
 
 // Back to drawing where it was before begin_render_target, the window or the target this one began inside,
-// over what's there already. The offscreen passes are drawn in order, the outer target's draws after this
+// over what's there already. The offscreen draws go to the GPU in order, the outer target's draws after this
 // one can draw it.
 end_render_target :: proc() {
     gpu.drawing.depth -= 1
     outer := gpu.drawing.outer[gpu.drawing.depth]
     gpu.drawing.scissor = outer.scissor
-    if !outer.pass.offscreen {
-        begin_window_pass()
+    if !outer.draws.offscreen {
+        begin_window_draws()
         return
     }
 
-    resumed := outer.pass
+    resumed := outer.draws
     resumed.clear = nil
     resumed.keep = true
     resumed.first_command = len(gpu.frame.commands)
-    append(&gpu.frame.passes, resumed)
+    append(&gpu.frame.target_draws, resumed)
 }
 
 draw_render_target :: proc(target: RenderTarget, dest: Rect, tint := WHITE) {
@@ -367,8 +370,8 @@ draw_render_target :: proc(target: RenderTarget, dest: Rect, tint := WHITE) {
     draw_texture(target.texture, {0, 0, size.x, size.y}, dest, tint)
 }
 
-begin_window_pass :: proc() {
-    append(&gpu.frame.passes, Pass{zoom = 1, first_command = len(gpu.frame.commands)})
+begin_window_draws :: proc() {
+    append(&gpu.frame.target_draws, TargetDraws{zoom = 1, first_command = len(gpu.frame.commands)})
 }
 
 push_quad :: proc(texture: TextureHandle, dest: Rect, uv0, uv1: [2]f32, color: Color) {
@@ -400,8 +403,8 @@ push_vertices :: proc(texture: TextureHandle, vertices: []Vertex) {
     }
     append(&gpu.frame.vertices, ..vertices)
 
-    pass := gpu.frame.passes[len(gpu.frame.passes) - 1]
-    if len(gpu.frame.commands) > pass.first_command {
+    draws := gpu.frame.target_draws[len(gpu.frame.target_draws) - 1]
+    if len(gpu.frame.commands) > draws.first_command {
         last := &gpu.frame.commands[len(gpu.frame.commands) - 1]
         if last.program == command.program &&
            last.blend == command.blend &&
