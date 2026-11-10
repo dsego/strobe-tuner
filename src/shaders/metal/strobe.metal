@@ -69,6 +69,12 @@ constant float DIM_AMOUNT = 0.65;
 constant float TRACK_GAP = 4.0;
 
 
+// The stripes' sine at a pixel goes by this angle
+static float stripe_angle(float freq, float phase, float time, float time_stretch, float period_count)
+{
+    return period_count * (freq * TAU * (time * time_stretch) + phase);
+}
+
 static float generate_signal(
     float freq,
     float phase,
@@ -79,10 +85,8 @@ static float generate_signal(
     float period_count,
     bool strobe_blur
 ) {
-    time = time * time_stretch;
-
     float value = 0.0;
-    float sinewave = sin(period_count * (freq * TAU * time + phase));
+    float sinewave = sin(stripe_angle(freq, phase, time, time_stretch, period_count));
 
     if (strobe_blur) {
         value = amplitude * sinewave;
@@ -97,9 +101,32 @@ static float generate_signal(
     return value;
 }
 
+// The stripes' running total from angle 0, the clipped sine of generate_signal at full height added up. It
+// climbs over the lit half of a period and comes back down over the dark half, a whole period adds up to
+// nothing. clip_angle is where the sine reaches full brightness and turns flat, 0 for a square wave.
+static float stripe_integral(float angle, float amplitude, float clip_angle)
+{
+    const float HALF_PERIOD = 0.5 * TAU;
+
+    angle -= TAU * floor(angle / TAU);
+    bool dark = angle >= HALF_PERIOD;
+    float within = dark ? angle - HALF_PERIOD : angle;
+
+    // The sine rising to the clip, flat at full brightness, then falling from it
+    float rise = min(within, clip_angle);
+    float plateau = clamp(within, clip_angle, HALF_PERIOD - clip_angle);
+    float fall = max(within, HALF_PERIOD - clip_angle);
+    float total = amplitude * (1.0 - cos(rise)) + (plateau - clip_angle) - amplitude * (cos(clip_angle) + cos(fall));
+
+    // The dark half takes back what the lit half added
+    float lit_half = 2.0 * amplitude * (1.0 - cos(clip_angle)) + HALF_PERIOD - 2.0 * clip_angle;
+    return dark ? lit_half - total : total;
+}
+
 // Average the signal over the phase swept since the previous frame, like a camera shutter would.
 // Without it the pattern aliases (wagon wheel effect) and shimmers once it moves close to
-// half a period per frame.
+// half a period per frame. Exactly: the stripes' running total now less the one a frame ago, over the
+// sweep, see stripe_integral.
 static float generate_blurred_signal(
     float freq,
     float phase,
@@ -111,9 +138,11 @@ static float generate_blurred_signal(
     float period_count,
     bool strobe_blur
 ) {
-    // Radians of the pattern swept during one frame
-    float sweep = abs(period_count * phase_step);
+    // Radians of the pattern swept during one frame, signed, and how far
+    float pattern_step = period_count * phase_step;
+    float sweep = abs(pattern_step);
 
+    // Barely moving, the two running totals would be too close to tell apart in a float
     if (sweep < 0.05) {
         return generate_signal(freq, phase, amplitude, visibility, time, time_stretch, period_count, strobe_blur);
     }
@@ -123,25 +152,28 @@ static float generate_blurred_signal(
         return 0.5;
     }
 
-    // ~24 samples per period is enough to keep the average smooth even for the hard edged square wave
-    const int MAX_SAMPLES = 24;
-    int sample_count = int(clamp(ceil(sweep * float(MAX_SAMPLES) / TAU), 2.0, float(MAX_SAMPLES)));
-
-    float sum = 0.0;
-    for (int index = 0; index < MAX_SAMPLES; index += 1) {
-        if (index >= sample_count) break;
-
-        float progress = (float(index) + 0.5) / float(sample_count);
-        sum += generate_signal(
-            freq, phase - progress * phase_step, amplitude, visibility, time, time_stretch, period_count, strobe_blur
-        );
+    // The sine turns flat where it clips at full brightness. A square wave is flat from the start, as high
+    // as the amplitude lets it.
+    float clip_angle = 0.25 * TAU;
+    float height = 1.0;
+    if (!strobe_blur) {
+        clip_angle = 0.0;
+        height = min(amplitude, 1.0);
+    } else if (amplitude > 1.0) {
+        clip_angle = asin(1.0 / amplitude);
     }
-    float value = sum / float(sample_count);
 
-    // Ease the last bit of contrast out, so the pattern doesn't pop when the sweep crosses a full period
-    float fade = 1.0 - smoothstep(0.75 * TAU, TAU, sweep);
+    // Brought within a period before the step is taken off, on the outer tracks the angle is thousands of
+    // radians, too coarse in a float for the difference of the totals
+    float angle = stripe_angle(freq, phase, time, time_stretch, period_count);
+    angle -= TAU * floor(angle / TAU);
 
-    return mix(0.5, value, fade);
+    float swept = stripe_integral(angle, amplitude, clip_angle) -
+        stripe_integral(angle - pattern_step, amplitude, clip_angle);
+    float value = visibility * height * swept / pattern_step;
+
+    // convert from range -1..1 to 0..1
+    return 0.5 * value + 0.5;
 }
 
 static float draw_curved_track(float thickness, float outer_radius, float feathering, float radial_position)
