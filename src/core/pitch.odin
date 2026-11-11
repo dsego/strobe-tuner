@@ -86,6 +86,14 @@ DETECTIONS_PER_SECOND :: 60
 // E.g. -define:PITCH_LOWPASS_HZ=n
 PITCH_LOWPASS_HZ :: #config(PITCH_LOWPASS_HZ, 5000)
 
+// A pluck is a block of new samples this much louder than the window before them, the harmonic stack's windows
+// start there, see HARMONICS_ONSET_WINDOW. E.g. -define:PITCH_ONSET_DB=n
+PITCH_ONSET_DB :: #config(PITCH_ONSET_DB, 6)
+PITCH_ONSET_BLOCK :: 64 // samples, 1.3 ms at 48 kHz
+
+// No pluck since the windows were last full
+NO_ONSET :: 1 << 30
+
 // Under this rate a Bluetooth headset's microphone, 16 or 24 kHz, the app warns that high notes and the
 // partials over Nyquist are out of reach
 LOW_SAMPLE_RATE :: 44_100
@@ -191,6 +199,29 @@ reset_pitch_detector :: proc(self: ^PitchDetector) {
     reset_biquad(&self.highpass)
     reset_biquad(&self.lowpass)
     reset_noise_floor(&self.noise_floor)
+    self.stack.since_onset = NO_ONSET
+}
+
+// The latest pluck into the stack's since_onset, the samples since it: the first block of the read samples
+// PITCH_ONSET_DB over the loudest block of the window before them, and over MIN_NOISE_FLOOR. Over the window's
+// own level a low note's peaky wave was a pluck every period, A0's five partials one every 36 ms. elapsed came
+// in, read of them kept.
+find_onset :: proc(self: ^PitchDetector, read, elapsed: int) {
+    self.stack.since_onset = min(self.stack.since_onset + elapsed, NO_ONSET)
+
+    new_start := len(self.samples) - read
+    level_before: f32 = 0
+    for start := max(new_start - len(self.window), 0); start + PITCH_ONSET_BLOCK <= new_start; start += PITCH_ONSET_BLOCK {
+        level_before = max(level_before, calculate_rms(self.samples[start:start + PITCH_ONSET_BLOCK]))
+    }
+    jump := math.pow(10, f32(PITCH_ONSET_DB) / 20)
+    for start := new_start; start + PITCH_ONSET_BLOCK <= len(self.samples); start += PITCH_ONSET_BLOCK {
+        level := calculate_rms(self.samples[start:start + PITCH_ONSET_BLOCK])
+        if level > MIN_NOISE_FLOOR && level > jump * level_before {
+            self.stack.since_onset = len(self.samples) - start
+            return
+        }
+    }
 }
 
 // Takes the previous detection to repeat when there are no new samples, the NoteTarget keeps the history and
@@ -206,6 +237,10 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
         stale := prev_info
         stale.fresh = false
         return stale
+    }
+
+    when HARMONICS_ONSET_WINDOW {
+        find_onset(self, read, int(elapsed))
     }
 
     info.measured = true

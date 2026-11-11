@@ -131,6 +131,16 @@ HARMONICS_HOLD_RATIO :: #config(HARMONICS_HOLD_RATIO, 0.8)
 // 4 a frame later. -define:HARMONICS_PHASE_STEADY=false to leave it out.
 HARMONICS_PHASE_STEADY :: #config(HARMONICS_PHASE_STEADY, true)
 
+// Each transform's window starts at the latest pluck until it's full, see PITCH_ONSET_DB: a window ending now
+// holds a pluck only at its newest end, where the taper weighs least, and the low harmonics smeared out of their
+// tolerance, a guitar's G3 read G5 and D5 for its first 50 ms. From this many ms after the pluck, the window as
+// it is before: a low guitar string's fundamental and octave are apart in about 40, from 20 a square 40 cents
+// over D2 read the wrong note. On the recordings the guitar's notes were right 10 ms sooner and the Strat's 20,
+// the bass's slowest tenth 90 ms, and its wrong notes at the pluck went from 34 detections to 2.
+// E.g. -define:HARMONICS_ONSET_WINDOW=false, -define:HARMONICS_ONSET_MIN_MS=n
+HARMONICS_ONSET_WINDOW :: #config(HARMONICS_ONSET_WINDOW, true)
+HARMONICS_ONSET_MIN_MS :: #config(HARMONICS_ONSET_MIN_MS, 40)
+
 
 // The stack in two spectra of the latest samples, the better of the two, see run_harmonic_stack
 HarmonicStack :: struct {
@@ -138,11 +148,13 @@ HarmonicStack :: struct {
     lower_spectrum: StackTransform, // HARMONICS_BASS_WINDOWS of it, the candidates under, up to lower_top_hz
     harmonics:      [HARMONICS_COUNT]StackPeak, // the note's stack, each harmonic's peak, 0 Hz for none
     score_db:       f32, // the latest detection's, see run_harmonic_stack
+    since_onset:    int, // samples since the latest pluck, see HARMONICS_ONSET_WINDOW
 }
 
 // A window's spectrum, the peaks in it and the best stack of them the detection before
 StackTransform :: struct {
     spectrum:    WindowedSpectrum, // the latest samples under a Hann taper
+    used:        int, // of them, the window's or the ones since a pluck, see HARMONICS_ONSET_WINDOW
     bin_hz:      f32,
     top_bin:     int, // the highest one looked at, the levels and the background are the latest up to it
     levels:      []f32, // dB of each bin from a full scale sine's
@@ -167,11 +179,13 @@ StackPeak :: struct {
 init_harmonic_stack :: proc(window: int, sample_rate: f32) -> (self: HarmonicStack) {
     self.upper_spectrum = init_stack_transform(window, sample_rate)
     self.lower_spectrum = init_stack_transform(HARMONICS_BASS_WINDOWS * window, sample_rate)
+    self.since_onset = NO_ONSET
     return
 }
 
 init_stack_transform :: proc(window: int, sample_rate: f32) -> (self: StackTransform) {
     self.spectrum = init_windowed_spectrum(window)
+    self.used = window
     self.bin_hz = sample_rate / f32(self.spectrum.fft_size)
     self.levels = make([]f32, len(self.spectrum.spectrum))
     self.background = make([]f32, len(self.spectrum.spectrum))
@@ -221,8 +235,9 @@ run_harmonic_stack :: proc(
     if highest_hz > 0 do peaks_top = min(peaks_top, freq_at_cents(2 * highest_hz, harmonic_tolerance(2)))
 
     lower_top := min(lower_top_hz(), top_hz)
-    upper_freq, upper_db := best_note(&self.upper_spectrum, samples, max(lowest_hz, HARMONICS_BASS_HZ), max(f32), top_hz, peaks_top, hop)
-    lower_freq, lower_db := best_note(&self.lower_spectrum, samples, lowest_hz, HARMONICS_BASS_HZ, lower_top, lower_top, hop)
+    upper_from := max(lowest_hz, HARMONICS_BASS_HZ)
+    upper_freq, upper_db := best_note(&self.upper_spectrum, samples, upper_from, max(f32), top_hz, peaks_top, hop, self.since_onset)
+    lower_freq, lower_db := best_note(&self.lower_spectrum, samples, lowest_hz, HARMONICS_BASS_HZ, lower_top, lower_top, hop, self.since_onset)
 
     // The lower note only over the upper one's in the lower spectrum too, its peaks stand further over their
     // background there: a bass's C2 read C1 and a ukulele's Bb2 a third of it now and then, a stack with every
@@ -282,10 +297,33 @@ run_harmonic_stack :: proc(
 // The best stack in the transform of the latest samples, a candidate from from_hz to under below_hz, its
 // harmonics up to top_hz and its peaks up to peaks_top_hz, see HARMONICS_SECOND_REACH, and the note under it, see
 // step_down_to_note. hop is the new samples since the detection before.
-best_note :: proc(self: ^StackTransform, samples: []f32, from_hz, below_hz, top_hz, peaks_top_hz: f32, hop := 0) -> (freq, score_db: f32) {
+best_note :: proc(
+    self: ^StackTransform,
+    samples: []f32,
+    from_hz, below_hz, top_hz, peaks_top_hz: f32,
+    hop := 0,
+    since_onset := max(int),
+) -> (
+    freq, score_db: f32,
+) {
     window := len(self.spectrum.samples)
     copy(self.spectrum.samples, samples[len(samples) - window:])
-    run_windowed_spectrum(&self.spectrum, self.bins)
+
+    // Only the samples since a pluck while they're fewer than the window, see HARMONICS_ONSET_WINDOW. Their
+    // phase goes on from a window growing, not sliding, see phase_steadiness.
+    self.used = window
+    when HARMONICS_ONSET_WINDOW {
+        sample_rate := self.bin_hz * f32(self.spectrum.fft_size)
+        if since_onset < window && f32(since_onset) >= HARMONICS_ONSET_MIN_MS * sample_rate / 1000 {
+            self.used = since_onset
+        }
+    }
+    if self.used < window {
+        run_windowed_spectrum_newest(&self.spectrum, self.used, self.bins)
+        self.has_previous = false
+    } else {
+        run_windowed_spectrum(&self.spectrum, self.bins)
+    }
 
     self.top_bin = min(int(peaks_top_hz / self.bin_hz), len(self.levels) - 2)
     measure_stack_background(self, top_hz)
@@ -487,8 +525,9 @@ measure_stack_background :: proc(self: ^StackTransform, top_hz: f32) {
     span := len(self.around) / 2
     used := min(top_bin + span + 1, len(self.levels))
 
-    // The first bin packs DC and Nyquist, see square_spectrum, it's under the highpass anyway
-    full_scale_db := 20 * math.log10(self.spectrum.full_scale)
+    // The first bin packs DC and Nyquist, see square_spectrum, it's under the highpass anyway. A full scale
+    // sine's bin is a quarter of the samples used.
+    full_scale_db := 20 * math.log10(f32(self.used) / 4)
     self.levels[0] = -200
     for bin in 1 ..< used {
         self.levels[bin] = 10 * math.log10(max(real(self.spectrum.spectrum[bin]), 1e-20)) - full_scale_db
@@ -564,8 +603,8 @@ find_stack_peaks :: proc(self: ^StackTransform, lowest_hz: f32, hop := 0) {
     first := max(int(freq_at_cents(lowest_hz, -HARMONICS_TOLERANCE_CENTS) / self.bin_hz), 1)
     collect_stack_peaks(self, first, hop)
 
-    // The transform is zero padded, a bin of the window is two of its
-    drop_sidelobes(&self.peaks, 2 * self.bin_hz)
+    // The transform is zero padded, a bin of the window is two of its, of fewer samples since a pluck more
+    drop_sidelobes(&self.peaks, 2 * self.bin_hz * f32(len(self.spectrum.samples)) / f32(self.used))
     keep_most_prominent(&self.peaks, lowest_hz)
 }
 

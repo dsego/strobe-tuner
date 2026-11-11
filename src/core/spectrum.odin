@@ -80,3 +80,22 @@ run_windowed_spectrum :: proc(self: ^WindowedSpectrum, bins: []complex64 = nil) 
 
     square_spectrum(self.spectrum)
 }
+
+// Like run_windowed_spectrum over only the newest used samples, under a Hann taper as long as them, the older
+// ones left out. Still at the window's end, a partial's phase goes on as a whole window's does.
+run_windowed_spectrum_newest :: proc(self: ^WindowedSpectrum, used: int, bins: []complex64 = nil) {
+    start := len(self.samples) - used
+    mem.zero_slice(self.padded[:start])
+    for index in start ..< len(self.samples) {
+        weight := 0.5 * (1 - math.cos(math.TAU * f64(index - start) / f64(used)))
+        self.padded[index] = self.samples[index] * f32(weight)
+    }
+
+    mem.zero_slice(self.padded[len(self.samples):])
+    fft.run_quad(&self.plan, self.padded, self.spectrum)
+    if bins != nil {
+        copy(bins, self.spectrum)
+    }
+
+    square_spectrum(self.spectrum)
+}
