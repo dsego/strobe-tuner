@@ -78,6 +78,22 @@ test_note_target_lights_the_note_heard :: proc(t: ^testing.T) {
     testing.expect(t, same.active)
 }
 
+// Locked, the strobe hearing the note lights it with only weak detections, a piano's top keys too short to
+// detect. Unlocked it doesn't, the note comes from the detections.
+@(test)
+test_note_target_locked_lights_when_strobe_hears :: proc(t: ^testing.T) {
+    target := init_note_target(A2_HZ, 440, 0.1)
+    toggle_note_lock(&target)
+    update_note_target(&target, test_detection(A2_HZ, strong = false), strobe_hears = false)
+    testing.expect(t, !target.active)
+    update_note_target(&target, test_detection(A2_HZ, strong = false), strobe_hears = true)
+    testing.expect(t, target.active)
+
+    unlocked := init_note_target(A2_HZ, 440, 0.1)
+    update_note_target(&unlocked, test_detection(A2_HZ, strong = false), strobe_hears = true)
+    testing.expect(t, !unlocked.active)
+}
+
 // Medium clarity detections follow a note once they've held steady, not before
 @(test)
 test_note_target_holds_between_notes :: proc(t: ^testing.T) {

@@ -121,6 +121,14 @@ update_note_target :: proc(self: ^NoteTarget, pitch: PitchInfo, strobe_hears := 
         }
     }
 
+    // Locked, the strobe hearing the note lights it, the detections needn't find it: a piano's top keys are too
+    // short and faint for a strong one, and a locked C8 stayed dark while its strobe track stood lit and read
+    // -2 cents. Unlocked, the note to tune comes from the detections.
+    if self.locked && strobe_hears && !self.active {
+        self.active = true
+        self.lit_ms = 0
+    }
+
     if !pitch.is_tonal && !strobe_hears {
         self.active, self.following = false, false
     }

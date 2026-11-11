@@ -36,6 +36,8 @@ PITCH_STANDARD :: f32(#config(PITCH_STANDARD, 440))
 SHOW_LEVELS :: #config(SHOW_LEVELS, false)
 // -define:SHOW_STACK=true prints the harmonic stack's peaks under each detection, see print_stack
 SHOW_STACK :: #config(SHOW_STACK, false)
+// -define:LOCK_NOTE=C8 holds that note like the app's note lock, the strobe on it whatever is detected
+LOCK_NOTE :: #config(LOCK_NOTE, "")
 // The partial whose track the readout prefers, -define:READOUT_PARTIAL=2 like the Readout setting's 2×
 READOUT_PARTIAL :: f32(#config(READOUT_PARTIAL, 1))
 
@@ -61,7 +63,19 @@ main :: proc() {
 
     detector := core.init_pitch_detector(PITCH_STANDARD, sample_rate)
     defer core.destroy_pitch_detector(&detector)
-    note_target := core.init_note_target(110, PITCH_STANDARD)
+    target_hz: f32 = 110
+    when LOCK_NOTE != "" {
+        locked_note, parsed := core.parse_note(LOCK_NOTE, PITCH_STANDARD)
+        if !parsed {
+            fmt.eprintln("Can't read the note", LOCK_NOTE)
+            os.exit(1)
+        }
+        target_hz = locked_note.frequency
+    }
+    note_target := core.init_note_target(target_hz, PITCH_STANDARD)
+    when LOCK_NOTE != "" {
+        core.toggle_note_lock(&note_target)
+    }
 
     // The strobe tracks, following the target note like in the app
     intervals := INTERVALS
