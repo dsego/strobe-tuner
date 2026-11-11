@@ -34,6 +34,8 @@ PITCH_STANDARD :: f32(#config(PITCH_STANDARD, 440))
 // -define:SHOW_LEVELS=true prints each track's level and envelope in dBFS, and how long it fitted, what the
 // readout picks its track by, see core.strobe_readout_track
 SHOW_LEVELS :: #config(SHOW_LEVELS, false)
+// -define:SHOW_STACK=true prints the harmonic stack's peaks under each detection, see print_stack
+SHOW_STACK :: #config(SHOW_STACK, false)
 // The partial whose track the readout prefers, -define:READOUT_PARTIAL=2 like the Readout setting's 2×
 READOUT_PARTIAL :: f32(#config(READOUT_PARTIAL, 1))
 
@@ -180,7 +182,32 @@ main :: proc() {
         fmt.println()
         jitter_squares = {}
         jitter_frames = 0
+
+        when SHOW_STACK do print_stack(&detector.stack, sample_rate)
     }
+}
+
+// The upper spectrum's peaks low to high, each its Hz, note, level and dB over the background, and which of the
+// note's harmonics it is. Then the loudest peak's score as a note of its own next to the note's, a high note's
+// one partial taken for a harmonic of a note under it.
+print_stack :: proc(stack: ^core.HarmonicStack, sample_rate: f32) {
+    peaks := stack.upper_spectrum.peaks[:]
+    loudest: core.StackPeak
+    fmt.print("    peaks:")
+    for peak in peaks {
+        note := core.note_name(core.freq_to_note(peak.freq, PITCH_STANDARD))
+        fmt.printf("  %.0f %v %.0fdB %.1f", peak.freq, note, peak.level, peak.over_db)
+        for harmonic, index in stack.harmonics {
+            if harmonic.freq == peak.freq do fmt.printf(" =%v×", index + 1)
+        }
+        if loudest.freq == 0 || peak.level > loudest.level do loudest = peak
+    }
+    fmt.println()
+
+    if loudest.freq == 0 do return
+
+    own, _ := core.score_stack(peaks, loudest.freq, core.pitch_lowpass_hz(sample_rate))
+    fmt.printfln("    the loudest, %.0f Hz, as its own note scores %.1f, the note %.1f", loudest.freq, own, stack.score_db)
 }
 
 // The whole file as mono at its own rate, after lead_in_s of silence. A fast one decimated like the app's

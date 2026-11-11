@@ -82,7 +82,8 @@ DETECTIONS_PER_SECOND :: 60
 
 // The pitch detection hears up to here, above C8 (4186 Hz). Hiss and pick noise over it only blur the
 // period, the strobe still gets the whole band. A slow input's under its Nyquist, see pitch_lowpass_hz.
-PITCH_LOWPASS_HZ :: 5000
+// E.g. -define:PITCH_LOWPASS_HZ=n
+PITCH_LOWPASS_HZ :: #config(PITCH_LOWPASS_HZ, 5000)
 
 // Under this rate a Bluetooth headset's microphone, 16 or 24 kHz, the app warns that high notes and the
 // partials over Nyquist are out of reach
@@ -226,7 +227,8 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
         clear = info.clarity >= PITCH_CLARITY_HIGH
 
         if self.stack_shown {
-            run_harmonic_stack(&self.stack, self.samples, min_freq, pitch_lowpass_hz(self.sample_rate), hop = int(elapsed))
+            top_hz := pitch_lowpass_hz(self.sample_rate)
+            run_harmonic_stack(&self.stack, self.samples, min_freq, top_hz, hop = int(elapsed), highest_hz = max_freq)
         }
 
     case .HARMONICS:
@@ -238,6 +240,7 @@ run_pitch_detection :: proc(self: ^PitchDetector, prev_info: PitchInfo) -> Pitch
             top_hz,
             prev_info.followed_hz,
             int(elapsed),
+            max_freq,
         )
 
         // The stack's own fundamental, no multiple of a period to guess at

@@ -36,10 +36,17 @@ HARMONICS_BACKGROUND_HZ :: 190
 HARMONICS_BACKGROUND_STEP_HZ :: 47
 HARMONICS_QUARTER_DB :: 5.41
 
+// Over the top, see HARMONICS_SECOND_REACH, the background is worked out this many steps apart, as far apart as
+// the bins either side of it reach: only the top notes' 2nd harmonics are looked for there, and every 47 Hz up
+// to 10 kHz doubled the stack's time. With this and the peaks only up to C8's 2nd harmonic it takes 15 to 25%
+// longer than without the reach, the recordings and the generated tones read the same.
+HARMONICS_BACKGROUND_STEPS_OVER_TOP :: 4
+
 // The background no lower than this under the loudest peak, a microphone's own noise is closer under a note.
 // Over a generated tone's digital silence a partial 90 dB down stood out as far as a loud one: a triangle wave's
 // aliases made up a stack of their own and read Bb4 for A2. Over HARMONICS_HIGH_DB, a sine stays strong.
-HARMONICS_RANGE_DB :: 70
+// E.g. -define:HARMONICS_RANGE_DB=n
+HARMONICS_RANGE_DB :: #config(HARMONICS_RANGE_DB, 70)
 
 // A peak this far over its background is one, the rest is the background's own ripple
 HARMONICS_PEAK_DB :: 6
@@ -71,6 +78,15 @@ HARMONICS_WEIGHT :: 0.84
 HARMONICS_TOLERANCE_CENTS :: 30
 HARMONICS_STRETCH_CENTS :: 3
 
+// A candidate's 2nd harmonic counts up to this many times the top, the others up to the top: from E♭7 up a
+// note's 2nd harmonic is over the detector's low-pass and the note was a single peak, a note under it with faint
+// peaks for its other harmonics outscored it, a sped-up sample's B7 and C8 read A4 and B♭4. The low-pass is a
+// gentle slope, a peak over it stands as far over its background. Only the 2nd: counting every harmonic up to
+// 10 kHz took a square's E♭4 to B5, its 3rd harmonic's odd harmonics reaching higher than its own ten. The
+// sample's B7 and C8 read right, the Salamander piano's A7 lit long enough to be measured and passed, the rest
+// of it, the recordings and the generated tones as before. E.g. -define:HARMONICS_SECOND_REACH=1 for none
+HARMONICS_SECOND_REACH :: #config(HARMONICS_SECOND_REACH, 2)
+
 // A low string's loud 3rd harmonic outscored its own stack at the attack, the fundamental and the 2nd still weak
 // there: A1 read E3 and G2 read D4. A third or a half of the best is the note when its own harmonics, the ones the
 // best doesn't have, add up to this percentage of the best's score. A note's own third or half finds only noise
@@ -79,6 +95,16 @@ HARMONICS_STRETCH_CENTS :: 3
 // ukulele's G3 and G#3 a few detections under theirs. E.g. -define:HARMONICS_OWN_PERCENT=n
 HARMONICS_OWN_PERCENT :: #config(HARMONICS_OWN_PERCENT, 30)
 HARMONICS_DIVISORS :: [2]int{3, 2}
+
+// The spectrum's loudest peak is the note when it's one of the best note's harmonics over the fundamental and
+// each of the others is this far under it: one loud partial and faint peaks for the rest. A piano's E♭7 has one
+// partial under the low-pass, and B4 took it as its 5th harmonic and the faint peaks of other strings ringing
+// along, 30 to 50 dB under it, as its 2nd, 3rd and 6th, and outscored it. On a Salamander piano from A0 to A7,
+// 51 of 392 runs failed instead of 63 and E♭7 none of its 12, the other recordings and the generated tones as
+// before. At 15 its A1 read A2, its 2nd harmonic 15 to 20 dB over the others, at 30 E♭7 failed 6 runs again.
+// The others' power together 10 or 13 dB under it took a ukulele's B♭4 and a bass's A♭1 an octave up, their
+// fundamental weak and the rest weaker. E.g. -define:HARMONICS_STEP_UP_DB=n
+HARMONICS_STEP_UP_DB :: #config(HARMONICS_STEP_UP_DB, 20)
 
 // A note under this has its harmonics closer together than the detector's window can part: 41 Hz apart at E1,
 // and a peak under the Hann taper is 4 of the window's 11.7 Hz bins wide at 48 kHz. Saws at B0 and E1 stood so
@@ -178,19 +204,25 @@ destroy_stack_transform :: proc(self: ^StackTransform) {
 // The peaks are looked for up to top_hz, the detector's low-pass, and a stack's fundamental may be up there
 // too: the detector tells a pitch over its notes from a note, a D8 sine taken only as far as C8 read D7, its
 // 2nd harmonic. followed_hz is the pitch the tuner follows, 0 for none, see HARMONICS_HOLD_RATIO. hop is the
-// new samples since the detection before, 0 if not known, see HARMONICS_PHASE_STEADY.
+// new samples since the detection before, 0 if not known, see HARMONICS_PHASE_STEADY. highest_hz is the highest
+// note's, the peaks over top_hz go up to its 2nd harmonic, 0 for as far as HARMONICS_SECOND_REACH goes.
 run_harmonic_stack :: proc(
     self: ^HarmonicStack,
     samples: []f32,
     lowest_hz, top_hz: f32,
     followed_hz: f32 = 0,
     hop := 0,
+    highest_hz: f32 = 0,
 ) -> (
     freq, score_db: f32,
 ) {
+    // C8's 2nd harmonic, 8.8 kHz at A4 = 440 Hz with the tuner's half a semitone over it, not 10 kHz
+    peaks_top := harmonic_top(2, top_hz)
+    if highest_hz > 0 do peaks_top = min(peaks_top, freq_at_cents(2 * highest_hz, harmonic_tolerance(2)))
+
     lower_top := min(lower_top_hz(), top_hz)
-    upper_freq, upper_db := best_note(&self.upper_spectrum, samples, max(lowest_hz, HARMONICS_BASS_HZ), max(f32), top_hz, hop)
-    lower_freq, lower_db := best_note(&self.lower_spectrum, samples, lowest_hz, HARMONICS_BASS_HZ, lower_top, hop)
+    upper_freq, upper_db := best_note(&self.upper_spectrum, samples, max(lowest_hz, HARMONICS_BASS_HZ), max(f32), top_hz, peaks_top, hop)
+    lower_freq, lower_db := best_note(&self.lower_spectrum, samples, lowest_hz, HARMONICS_BASS_HZ, lower_top, lower_top, hop)
 
     // The lower note only over the upper one's in the lower spectrum too, its peaks stand further over their
     // background there: a bass's C2 read C1 and a ukulele's Bb2 a third of it now and then, a stack with every
@@ -236,20 +268,27 @@ run_harmonic_stack :: proc(
         }
     }
 
+    // One loud partial is its own note, not one of a note's under it, the held one too. The score stays, like
+    // the step down's.
+    if note == &self.upper_spectrum {
+        freq = step_up_to_loudest(note.peaks[:], freq, top_hz)
+    }
+
     self.harmonics = stack_harmonics(note.peaks[:], freq, top_hz)
     self.score_db = score_db
     return
 }
 
-// The best stack in the transform of the latest samples, a candidate from from_hz to under below_hz, its peaks
-// up to top_hz, and the note under it, see step_down_to_note. hop is the new samples since the detection before.
-best_note :: proc(self: ^StackTransform, samples: []f32, from_hz, below_hz, top_hz: f32, hop := 0) -> (freq, score_db: f32) {
+// The best stack in the transform of the latest samples, a candidate from from_hz to under below_hz, its
+// harmonics up to top_hz and its peaks up to peaks_top_hz, see HARMONICS_SECOND_REACH, and the note under it, see
+// step_down_to_note. hop is the new samples since the detection before.
+best_note :: proc(self: ^StackTransform, samples: []f32, from_hz, below_hz, top_hz, peaks_top_hz: f32, hop := 0) -> (freq, score_db: f32) {
     window := len(self.spectrum.samples)
     copy(self.spectrum.samples, samples[len(samples) - window:])
     run_windowed_spectrum(&self.spectrum, self.bins)
 
-    self.top_bin = min(int(top_hz / self.bin_hz), len(self.levels) - 2)
-    measure_stack_background(self)
+    self.top_bin = min(int(peaks_top_hz / self.bin_hz), len(self.levels) - 2)
+    measure_stack_background(self, top_hz)
     find_stack_peaks(self, from_hz, hop)
     when HARMONICS_PHASE_STEADY {
         copy(self.previous_bins, self.bins)
@@ -279,11 +318,20 @@ stack_harmonics :: proc(peaks: []StackPeak, fundamental, top_hz: f32) -> (harmon
     for &peak, index in harmonics {
         harmonic := index + 1
         target := f32(harmonic) * fundamental
-        if target > top_hz do break
+        if target > harmonic_top(harmonic, top_hz) do break
 
         peak, _ = matching_peak(peaks, target, harmonic_tolerance(harmonic))
     }
     return
+}
+
+// How high the harmonic counts, see HARMONICS_SECOND_REACH. Over the detector's low-pass only: the lower
+// spectrum's top is where its candidates' 10th harmonics end, and an A4 held there took A5 as its 2nd harmonic
+// and kept a piano's A5 an octave down.
+harmonic_top :: proc(harmonic: int, top_hz: f32) -> f32 {
+    if harmonic != 2 || top_hz <= lower_top_hz() do return top_hz
+
+    return HARMONICS_SECOND_REACH * top_hz
 }
 
 // How far a harmonic's peak may be from it, see HARMONICS_TOLERANCE_CENTS
@@ -386,6 +434,36 @@ step_down_to_note :: proc(peaks: []StackPeak, freq, score_db, lowest_hz, top_hz:
     return freq
 }
 
+// The note at the loudest of the peaks when it's one of freq's harmonics over the fundamental and each of freq's
+// others is HARMONICS_STEP_UP_DB under it, freq when not. The loudest of the peaks, not the one freq's harmonic
+// counts: a piano's unison strings put a weaker peak beside the partial, and B4 took that one as its 5th.
+step_up_to_loudest :: proc(peaks: []StackPeak, freq, top_hz: f32) -> f32 {
+    if freq <= 0 do return freq
+
+    // Of the peaks up to the top, the ones over it count only as 2nd harmonics
+    loudest: StackPeak
+    for peak in peaks {
+        if peak.freq <= top_hz && (loudest.freq == 0 || peak.level > loudest.level) do loudest = peak
+    }
+    if loudest.freq == 0 do return freq
+
+    harmonic := int(math.round(loudest.freq / freq))
+    if harmonic < 2 || harmonic > HARMONICS_COUNT do return freq
+    if abs(cents_deviation(loudest.freq, f32(harmonic) * freq)) > harmonic_tolerance(harmonic) do return freq
+
+    for other in 1 ..= HARMONICS_COUNT {
+        target := f32(other) * freq
+        if target > harmonic_top(other, top_hz) do break
+        if other == harmonic do continue
+
+        peak, _ := matching_peak(peaks, target, harmonic_tolerance(other))
+        if peak.freq > 0 && loudest.level - peak.level < HARMONICS_STEP_UP_DB do return freq
+    }
+
+    _, partial := score_stack(peaks, loudest.freq, top_hz)
+    return partial
+}
+
 // A third or a half of freq that's the note: its own harmonics, the ones freq doesn't have, add up to
 // HARMONICS_OWN_PERCENT of the best stack's score
 note_under :: proc(peaks: []StackPeak, freq, score_db, lowest_hz, top_hz: f32) -> (lower: f32, found: bool) {
@@ -402,9 +480,9 @@ note_under :: proc(peaks: []StackPeak, freq, score_db, lowest_hz, top_hz: f32) -
     return 0, false
 }
 
-// The levels up to the top bin and the background around each, see HARMONICS_BACKGROUND_HZ. From a full scale
-// sine's, a longer window's bins are larger, the two transforms' levels read alike.
-measure_stack_background :: proc(self: ^StackTransform) {
+// The levels up to the top bin and the background around each, see HARMONICS_BACKGROUND_HZ, further apart over
+// top_hz. From a full scale sine's, a longer window's bins are larger, the two transforms' levels read alike.
+measure_stack_background :: proc(self: ^StackTransform, top_hz: f32) {
     top_bin := self.top_bin
     span := len(self.around) / 2
     used := min(top_bin + span + 1, len(self.levels))
@@ -426,10 +504,12 @@ measure_stack_background :: proc(self: ^StackTransform) {
     levels := self.levels[:used]
     range_floor := slice.max(levels[1:top_bin]) - HARMONICS_RANGE_DB
     step := max(int(HARMONICS_BACKGROUND_STEP_HZ / self.bin_hz), 1)
+    wide_from := int(top_hz / self.bin_hz)
     below_bin := 0
     below := max(background_at(levels, self.around, 0), range_floor)
     for below_bin < top_bin {
-        above_bin := min(below_bin + step, top_bin)
+        bin_step := step if below_bin < wide_from else HARMONICS_BACKGROUND_STEPS_OVER_TOP * step
+        above_bin := min(below_bin + bin_step, top_bin)
         above := max(background_at(levels, self.around, above_bin), range_floor)
         for bin in below_bin ..= above_bin {
             self.background[bin] = math.lerp(below, above, f32(bin - below_bin) / f32(above_bin - below_bin))
@@ -555,7 +635,8 @@ under_sidelobes :: proc(louder: []StackPeak, peak: StackPeak, window_bin_hz: f32
 keep_most_prominent :: proc(peaks: ^[dynamic]StackPeak, lowest_hz: f32) {
     slice.sort_by(peaks[:], proc(first, second: StackPeak) -> bool {return first.over_db > second.over_db})
 
-    // The detector's low-pass is 7.5 octaves over A0, the peaks just under it count in the first
+    // The upper spectrum's peaks go up to 10 kHz, 7.6 octaves over its lowest candidate's 50 Hz, the lower
+    // spectrum's to 517 Hz, 4.3 octaves over A0's. The peaks past the last octave count in it.
     kept_in_octave: [8]int
     kept := 0
     for peak in peaks {
@@ -571,9 +652,10 @@ keep_most_prominent :: proc(peaks: ^[dynamic]StackPeak, lowest_hz: f32) {
     slice.sort_by(peaks[:], proc(first, second: StackPeak) -> bool {return first.freq < second.freq})
 }
 
-// A candidate's first harmonics up to top_hz, each the most prominent peak close enough to it, see
-// HARMONICS_TOLERANCE_CENTS: their dB over the background summed, weighted down the stack, and the fundamental
-// they agree on, each harmonic's peak over its number weighted by the peak's power times its number squared.
+// A candidate's first harmonics up to top_hz, its 2nd further, see HARMONICS_SECOND_REACH, each the most
+// prominent peak close enough to it, see HARMONICS_TOLERANCE_CENTS: their dB over the background summed,
+// weighted down the stack, and the fundamental they agree on, each harmonic's peak over its number weighted by
+// the peak's power times its number squared.
 // That's how much each partial pulls the whole wave's period: the correlation's peak is where their slopes
 // cancel, and a partial's slope there is its power times its frequency times how far off it is. So the Blend
 // readout reads the same mix of a string's sharp partials either way, an electric guitar's and a bass's low
@@ -600,7 +682,7 @@ score_stack :: proc(
         if score_to_beat > 0 && score_db + weights_left * most_db <= score_to_beat do return 0, 0
 
         target := f32(harmonic) * candidate
-        if target > top_hz do break
+        if target > harmonic_top(harmonic, top_hz) do break
 
         skipped := skip_multiples_of > 0 && harmonic % skip_multiples_of == 0
         if !skipped {

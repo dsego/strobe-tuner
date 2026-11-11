@@ -56,7 +56,9 @@ SPECTRUM_HOLD_DB :: 2
 // -define:SPECTRUM_AVERAGE_WINDOWS=n to try another
 SPECTRUM_AVERAGE_WINDOWS :: #config(SPECTRUM_AVERAGE_WINDOWS, 0.25)
 
-SPECTRUM_LOW_HZ :: 40
+// The plot's left edge and the debug spectrogram's bottom, under the detector's lowest: A0 half a semitone flat at
+// the lowest Concert A, 23.7 Hz. At 40, A0 to D♯1 were off it. -define:SPECTRUM_LOW_HZ=n to try another
+SPECTRUM_LOW_HZ :: #config(SPECTRUM_LOW_HZ, 23)
 SPECTRUM_FLOOR_DB :: -120 // dBFS, under any input's noise
 
 // The plot's bottom and top, over the noise and as the level

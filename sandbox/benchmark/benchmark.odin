@@ -67,6 +67,7 @@ main :: proc() {
         window := core.pitch_window(SAMPLERATE)
         bass_window := core.HARMONICS_BASS_WINDOWS * window
         lowest_hz := core.freq_at_cents(440, core.LOWEST_NOTE * 100 - 50)
+        highest_hz := core.freq_at_cents(440, core.HIGHEST_NOTE * 100 + 50)
         top_hz := core.pitch_lowpass_hz(SAMPLERATE)
 
         nsdf := core.init_nsdf(2 * window, SAMPLERATE)
@@ -117,7 +118,7 @@ main :: proc() {
             stopwatch = {}
             time.stopwatch_start(&stopwatch)
             for _ in 0 ..< ITERATIONS {
-                freq, _ := core.run_harmonic_stack(&stack, signal.samples, lowest_hz, top_hz)
+                freq, _ := core.run_harmonic_stack(&stack, signal.samples, lowest_hz, top_hz, highest_hz = highest_hz)
                 sink += freq
             }
             time.stopwatch_stop(&stopwatch)
