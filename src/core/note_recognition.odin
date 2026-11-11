@@ -50,11 +50,13 @@ SETTLED_CENTS :: 5
 // 50 ms later, a fifth isn't a harmonic and doesn't wait. E.g. -define:NOTE_HARMONIC_SWITCH_S=n
 NOTE_HARMONIC_SWITCH_S :: #config(NOTE_HARMONIC_SWITCH_S, 0.1)
 
-// From dark and for this long after a note lit from dark, a clear detection confirms its note at once, a
-// harmonic of the lit one too: a pluck's first detections are of it, strays come while it rings. The harmonic
-// stack's first reads of a pluck are often its harmonics, the low ones smeared in the window's tapered newest
-// samples, and a run of 50 ms began only once the note's own came: a guitar's G3 read G5 and D5 first and lit
-// 50 ms after the whole wave's. E.g. -define:NOTE_ATTACK_MS=n, -define:NOTE_QUICK_ATTACK=false for none.
+// From dark and for this long after a note lit from dark, two clear detections of a note in a row, settled,
+// confirm it, a harmonic of the lit one too: a pluck's first detections are of it, strays come while it rings.
+// The harmonic stack's first reads of a pluck are often its harmonics, the low ones smeared in the window's
+// tapered newest samples, and a run of 50 ms began only once the note's own came: a guitar's G3 read G5 and D5
+// first and lit 50 ms after the whole wave's. The first alone lit a guitar's octave for a detection or two before
+// the note, and a square 45 cents under A1 read 51 under on its first and stayed A♭1. E.g. -define:NOTE_ATTACK_MS=n,
+// -define:NOTE_QUICK_ATTACK=false for none.
 NOTE_ATTACK_MS :: #config(NOTE_ATTACK_MS, 150)
 NOTE_QUICK_ATTACK :: #config(NOTE_QUICK_ATTACK, true)
 
@@ -86,7 +88,8 @@ recognize_note :: proc(self: ^NoteRecognition, pitch: PitchInfo, confirmed_hz: f
     if is_harmonic_or_undertone(pitch.detected_freq, confirmed_hz) {
         confirm_s = max(confirm_s, NOTE_HARMONIC_SWITCH_S)
     }
-    if quick && pitch.is_clear_tone {
+    // From its second detection, the first is no measure of whether it settled
+    if quick && pitch.is_clear_tone && self.candidate_s > 0 {
         confirm_s = 0
     }
 

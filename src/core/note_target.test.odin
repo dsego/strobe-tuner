@@ -52,12 +52,14 @@ test_note_target_switches_note :: proc(t: ^testing.T) {
     testing.expect_value(t, target.target_note.name, 'E')
 }
 
-// From dark a clear detection lights its note at once, a medium one once its run is confirmed, and the target
-// from before isn't shown while it's on its way. The target's own note lights at once.
+// From dark two clear detections of a note in a row light it, a medium one once its run is confirmed, and the
+// target from before isn't shown while it's on its way. The target's own note lights at once.
 @(test)
 test_note_target_lights_the_note_heard :: proc(t: ^testing.T) {
     // 0.1 s is 3 detections 0.05 s apart
     target := init_note_target(E2_HZ, 440, 0.1)
+    testing.expect(t, !update_note_target(&target, test_detection(A2_HZ)))
+    testing.expect(t, !target.active)
     testing.expect(t, update_note_target(&target, test_detection(A2_HZ)))
     testing.expect(t, target.active)
     testing.expect_value(t, target.target_note.name, 'A')
@@ -144,8 +146,11 @@ test_note_target_pitch_standard :: proc(t: ^testing.T) {
 // in it at once: a pluck's first reads of its octave settle on its note.
 @(test)
 test_note_target_follows_octave :: proc(t: ^testing.T) {
-    attack := init_note_target(A2_HZ, 440, 0)
+    attack := init_note_target(E2_HZ, 440, 0.1)
     update_note_target(&attack, test_detection(A3_HZ))
+    update_note_target(&attack, test_detection(A3_HZ))
+    testing.expect_value(t, attack.target_note.octave, 3)
+    testing.expect(t, !update_note_target(&attack, test_detection(A2_HZ)))
     testing.expect(t, update_note_target(&attack, test_detection(A2_HZ)))
     testing.expect_value(t, attack.target_note.octave, 2)
 
