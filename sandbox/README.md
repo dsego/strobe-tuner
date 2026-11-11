@@ -11,7 +11,7 @@ Still build against the app's core, run with `odin run sandbox/<folder>`:
 
 - `benchmark`: what the strobe's and the pitch detection's transforms cost a frame, run it with `-o:speed -microarch:native`.
 - `replay`: a recording through the pitch detection, what it makes of it over time.
-- `hmm`: a hidden Markov model over the NSDF peaks next to the tuner's rules, scored on a recording.
+- `hmm`: a hidden Markov model over the NSDF (MPM) peaks next to the tuner's rules, scored on a recording.
 - `step_response`: a tone stepping a few cents, how long the stripes and the readout take to follow, run it with `-o:speed`.
 - `interpolate`, `perf`, `recursive_dft`, `sweep`, `pattern`, and the loose `ewma.odin`, `fir_filter.odin` and `moving_avg.odin`: smaller experiments from along the way.
 

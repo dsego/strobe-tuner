@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 520" width="1100" height="520" role="img" aria-labelledby="title desc">
   <title id="title">Strobie pitch detection</title>
-  <desc id="desc">A ukulele's E5 at the pluck, its body thumping near 215 Hz as loud as the note, read two ways. The harmonic stack: the spectrum over log frequency with the background under it, a quarter of the bins around each point. E5's seven harmonics under 5 kHz stand far over their background and add up, weighted 1, 0.84, 0.71 and on down the stack. The thump is a broad hump whose background rises with it, under 6 dB over it, so it's no peak and adds nothing. A side peak of the window next to a partial moves its phase at the partial's frequency and not its own, and is left out. The whole wave, the NSDF after McLeod: the curve over lags in periods of E5 peaks at every period, and with the thump the wave repeats every three of them, so the peak at three periods stands highest. The first over a share of the highest is picked, three periods, 220 Hz, A3, a third of the note, for the first 0.15 s.</desc>
+  <desc id="desc">A ukulele's E5 at the pluck, its body thumping near 215 Hz as loud as the note, read two ways. The harmonic stack: the spectrum over log frequency with the background under it, a quarter of the bins around each point. E5's seven harmonics under 5 kHz stand far over their background and add up, weighted 1, 0.84, 0.71 and on down the stack. The thump is a broad hump whose background rises with it, under 6 dB over it, so it's no peak and adds nothing. A side peak of the window next to a partial moves its phase at the partial's frequency and not its own, and is left out. The whole wave, the NSDF (MPM) after McLeod: the curve over lags in periods of E5 peaks at every period, and with the thump the wave repeats every three of them, so the peak at three periods stands highest. The first over a share of the highest is picked, three periods, 220 Hz, A3, a third of the note, for the first 0.15 s.</desc>
   <style>
     text { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #111; }
     .bg { fill: #fff; }
@@ -91,7 +91,7 @@
   <!-- The whole wave -->
   <rect class="frame" x="570" y="30" width="520" height="480"/>
   <path class="frame" d="M570,30 H806 V42 L798,50 H570 Z"/>
-  <text class="tab" x="578" y="45">the whole wave: the NSDF, McLeod's</text>
+  <text class="tab" x="578" y="45">the whole wave: NSDF (MPM)</text>
   <text class="sub" x="1070" y="72" text-anchor="end">the same pluck, the period it repeats with</text>
 
   <line class="zero" x1="630" y1="200" x2="1060" y2="200"/>
