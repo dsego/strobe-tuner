@@ -106,6 +106,22 @@ path to real VoiceOver support later.
 SDL3 is the one renderer now, it brings what the desktop is missing: text input, dropped files, open
 dialogs and a resizable window. Linux hasn't run it on real hardware yet.
 
+## Scroll to change the note
+
+The desktop's swipe on the ruler: a mouse wheel or two fingers on a trackpad. Today it's ← and → for a note
+or a string and ↑ and ↓ for an octave, which few find.
+
+- Only over the ruler, a trackpad's leftover glide or a scroll meant for another window would retune the
+  strobe. The settings' steppers take the wheel only over themselves already.
+- Either direction moves the notes, the ruler going with the fingers like a swipe, strings in string mode,
+  and the note it lands on locked like a swipe's.
+- A notch a note. A trackpad's movement adds up into steps like the steppers' and the web build's, a flick
+  moves a few notes and not ten.
+- Octaves, chromatic only: scrolling over the big note name, up an octave up, or Shift + scroll over the
+  ruler. The note name is easier to find, Shift keeps it in one place.
+- `gfx` reads only the vertical wheel, two fingers left and right need the horizontal one too, on SDL and
+  the web build.
+
 ## Pitch detection
 
 The pitch detection only names the note, the strobe's lock-in measures it. NSDF stays, it finds the
