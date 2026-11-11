@@ -28,6 +28,7 @@ NoteTarget :: struct {
     detected_note:       Maybe(Note), // the last confirmed detection, none before the first
     locked:              bool,
     active:              bool, // the target's note is lit, until the detections turn weak
+    lit_ms:              f32, // since it lit from dark, see NOTE_ATTACK_MS
     following:           bool, // a strong pitch is followed, lit or on its way to it, see followed_hz in PitchInfo
     pitch:               PitchInfo, // the latest detection
     last_good_pitch:     PitchInfo, // the latest strong detection
@@ -84,13 +85,18 @@ update_note_target :: proc(self: ^NoteTarget, pitch: PitchInfo, strobe_hears := 
     self.pitch = pitch
 
     // A harmonic of the confirmed note waits longer, see NOTE_HARMONIC_SWITCH_S. Not of the latest strong
-    // detection, the harmonic was one on its first.
+    // detection, the harmonic was one on its first. From dark and through the attack a clear detection confirms
+    // at once, see NOTE_ATTACK_MS, the harmonic doesn't wait.
+    if self.active && pitch.fresh {
+        self.lit_ms += 1000 * pitch.elapsed_s
+    }
+    attack := NOTE_QUICK_ATTACK && (!self.active || self.lit_ms < NOTE_ATTACK_MS)
     confirmed_hz: f32 = 0
     lit, has_lit := self.detected_note.?
-    if has_lit && self.active {
+    if has_lit && self.active && !attack {
         confirmed_hz = lit.frequency
     }
-    strong, confirmed := recognize_note(&self.recognition, pitch, confirmed_hz)
+    strong, confirmed := recognize_note(&self.recognition, pitch, confirmed_hz, quick = attack)
     if strong {
         if confirmed {
             retune = follow_detected_note(self, pitch.detected_note)
@@ -109,8 +115,9 @@ update_note_target :: proc(self: ^NoteTarget, pitch: PitchInfo, strobe_hears := 
         // target from before, the previous note, for a frame or two. It's followed from the first, its harmonics
         // held against it on the way: a square's 5th and its note took turns and neither held long enough.
         self.following = true
-        if self.active || confirmed || target_stays(self, pitch.detected_note) {
+        if !self.active && (confirmed || target_stays(self, pitch.detected_note)) {
             self.active = true
+            self.lit_ms = 0
         }
     }
 

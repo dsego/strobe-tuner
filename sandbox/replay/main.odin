@@ -179,6 +179,8 @@ main :: proc() {
                 )
             }
         }
+        // The note the app shows, the target's while lit
+        fmt.printf("  shown %v", core.note_name(note_target.target_note) if note_target.active else "-")
         fmt.println()
         jitter_squares = {}
         jitter_frames = 0

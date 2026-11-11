@@ -24,8 +24,9 @@ import "core:slice"
 // Tuned on test recordings with the sandbox tools, not in the settings
 
 // The window, 4096 samples at 48 kHz, a power of 2 at least this long at any rate. The FFT is twice as long.
-// E.g. -define:PITCH_WINDOW_S=0.17 for 8192.
-PITCH_WINDOW_S :: #config(PITCH_WINDOW_S, 0.085)
+// E.g. -define:PITCH_WINDOW_MS=170 for 8192.
+PITCH_WINDOW_MS :: #config(PITCH_WINDOW_MS, 85)
+PITCH_WINDOW_S :: PITCH_WINDOW_MS / 1000.0
 
 // Under A0 (27.5 Hz), it takes out DC and the rumble under the notes, A0 loses 1 dB. At 60 Hz a bass's E1 lost
 // 7 dB of its fundamental, and sandbox/recordings' Eb1, its fundamental 46 dB under its strongest harmonic, read an

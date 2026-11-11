@@ -23,37 +23,53 @@ import "core:testing"
 // A guitar in standard tuning, E2 A2 D3 G3 B3 E4 in semitones from A4
 GUITAR_STRINGS :: [?]int{-29, -24, -19, -14, -10, -5}
 
-// A recognized note retunes the strobe, a weak detection in between starts the count again
+// The note lit and held past its attack, a switch from it waits for its run again, see NOTE_ATTACK_MS
+light_past_attack :: proc(target: ^NoteTarget, freq: f32) {
+    for !target.active || target.lit_ms < NOTE_ATTACK_MS {
+        update_note_target(target, test_detection(freq))
+    }
+}
+
+// From a note lit past its attack a recognized note retunes the strobe, a weak detection in between starts the
+// count again
 @(test)
 test_note_target_switches_note :: proc(t: ^testing.T) {
     // 0.1 s is 3 detections 0.05 s apart
     target := init_note_target(E2_HZ, 440, 0.1)
+    light_past_attack(&target, E2_HZ)
     testing.expect(t, !update_note_target(&target, test_detection(A2_HZ)))
     testing.expect(t, !update_note_target(&target, test_detection(A2_HZ)))
     testing.expect(t, update_note_target(&target, test_detection(A2_HZ)))
     testing.expect_value(t, target.target_note.name, 'A')
 
+    // Medium detections, a clear one from dark would light at once
     target = init_note_target(E2_HZ, 440, 0.1)
-    update_note_target(&target, test_detection(A2_HZ))
-    update_note_target(&target, test_detection(A2_HZ))
+    light_past_attack(&target, E2_HZ)
+    update_note_target(&target, test_medium_detection(A2_HZ))
+    update_note_target(&target, test_medium_detection(A2_HZ))
     update_note_target(&target, test_detection(A2_HZ, strong = false))
-    testing.expect(t, !update_note_target(&target, test_detection(A2_HZ)))
+    testing.expect(t, !update_note_target(&target, test_medium_detection(A2_HZ)))
     testing.expect_value(t, target.target_note.name, 'E')
 }
 
-// From dark another note lights once it's confirmed, the target from before isn't shown while it's on its way. The
-// target's own note lights at once.
+// From dark a clear detection lights its note at once, a medium one once its run is confirmed, and the target
+// from before isn't shown while it's on its way. The target's own note lights at once.
 @(test)
 test_note_target_lights_the_note_heard :: proc(t: ^testing.T) {
     // 0.1 s is 3 detections 0.05 s apart
     target := init_note_target(E2_HZ, 440, 0.1)
-    update_note_target(&target, test_detection(A2_HZ))
-    testing.expect(t, !target.active)
-    update_note_target(&target, test_detection(A2_HZ))
-    testing.expect(t, !target.active)
-    update_note_target(&target, test_detection(A2_HZ))
+    testing.expect(t, update_note_target(&target, test_detection(A2_HZ)))
     testing.expect(t, target.active)
     testing.expect_value(t, target.target_note.name, 'A')
+
+    medium := init_note_target(E2_HZ, 440, 0.1)
+    update_note_target(&medium, test_medium_detection(A2_HZ))
+    testing.expect(t, !medium.active)
+    update_note_target(&medium, test_medium_detection(A2_HZ))
+    testing.expect(t, !medium.active)
+    update_note_target(&medium, test_medium_detection(A2_HZ))
+    testing.expect(t, medium.active)
+    testing.expect_value(t, medium.target_note.name, 'A')
 
     same := init_note_target(E2_HZ, 440, 0.1)
     update_note_target(&same, test_detection(E2_HZ))
@@ -124,11 +140,17 @@ test_note_target_pitch_standard :: proc(t: ^testing.T) {
 }
 
 // The strobe follows an octave either way while a note is followed, e.g. a slur down to the note whose
-// octave the strobe was on. After NOTE_HARMONIC_SWITCH_S, 0.1 s is 3 detections 0.05 s apart.
+// octave the strobe was on. Past the attack after NOTE_HARMONIC_SWITCH_S, 0.1 s is 3 detections 0.05 s apart,
+// in it at once: a pluck's first reads of its octave settle on its note.
 @(test)
 test_note_target_follows_octave :: proc(t: ^testing.T) {
+    attack := init_note_target(A2_HZ, 440, 0)
+    update_note_target(&attack, test_detection(A3_HZ))
+    testing.expect(t, update_note_target(&attack, test_detection(A2_HZ)))
+    testing.expect_value(t, attack.target_note.octave, 2)
+
     target := init_note_target(A2_HZ, 440, 0)
-    update_note_target(&target, test_detection(A2_HZ))
+    light_past_attack(&target, A2_HZ)
 
     testing.expect(t, !update_note_target(&target, test_detection(A2_HZ / 2)))
     update_note_target(&target, test_detection(A2_HZ / 2))
@@ -222,7 +244,9 @@ test_note_target_note_offset :: proc(t: ^testing.T) {
     steady := readout_pitch(&target)
     testing.expect(t, abs(steady.err_cents) < 0.01)
 
-    // The octave isn't tuned flat, the strobe moves there untouched after NOTE_HARMONIC_SWITCH_S, 3 detections
+    // The octave isn't tuned flat, the strobe moves there untouched, past the attack after
+    // NOTE_HARMONIC_SWITCH_S, 3 detections
+    light_past_attack(&target, freq_at_cents(A2_HZ, -10))
     update_note_target(&target, test_detection(A3_HZ))
     update_note_target(&target, test_detection(A3_HZ))
     testing.expect(t, update_note_target(&target, test_detection(A3_HZ)))

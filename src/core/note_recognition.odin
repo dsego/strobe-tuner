@@ -50,6 +50,14 @@ SETTLED_CENTS :: 5
 // 50 ms later, a fifth isn't a harmonic and doesn't wait. E.g. -define:NOTE_HARMONIC_SWITCH_S=n
 NOTE_HARMONIC_SWITCH_S :: #config(NOTE_HARMONIC_SWITCH_S, 0.1)
 
+// From dark and for this long after a note lit from dark, a clear detection confirms its note at once, a
+// harmonic of the lit one too: a pluck's first detections are of it, strays come while it rings. The harmonic
+// stack's first reads of a pluck are often its harmonics, the low ones smeared in the window's tapered newest
+// samples, and a run of 50 ms began only once the note's own came: a guitar's G3 read G5 and D5 first and lit
+// 50 ms after the whole wave's. E.g. -define:NOTE_ATTACK_MS=n, -define:NOTE_QUICK_ATTACK=false for none.
+NOTE_ATTACK_MS :: #config(NOTE_ATTACK_MS, 150)
+NOTE_QUICK_ATTACK :: #config(NOTE_QUICK_ATTACK, true)
+
 // Whether the optional note is this note, by its cents from A4
 holds_note :: proc(optional: Maybe(Note), note: Note) -> bool {
     held, ok := optional.?
@@ -67,8 +75,9 @@ holds_note :: proc(optional: Maybe(Note), note: Note) -> bool {
 // the stack, and the recordings, the generated tones and noise alone read the same.
 //
 // confirmed_hz is the confirmed note's while it's lit, 0 for none, a harmonic of it is confirmed after
-// NOTE_HARMONIC_SWITCH_S instead.
-recognize_note :: proc(self: ^NoteRecognition, pitch: PitchInfo, confirmed_hz: f32 = 0) -> (strong, confirmed: bool) {
+// NOTE_HARMONIC_SWITCH_S instead. quick, from dark or in the attack, a clear detection is confirmed at once, see
+// NOTE_ATTACK_MS.
+recognize_note :: proc(self: ^NoteRecognition, pitch: PitchInfo, confirmed_hz: f32 = 0, quick := false) -> (strong, confirmed: bool) {
     if pitch.fresh {
         time_detection(self, pitch)
     }
@@ -76,6 +85,9 @@ recognize_note :: proc(self: ^NoteRecognition, pitch: PitchInfo, confirmed_hz: f
     confirm_s := self.confirm_s
     if is_harmonic_or_undertone(pitch.detected_freq, confirmed_hz) {
         confirm_s = max(confirm_s, NOTE_HARMONIC_SWITCH_S)
+    }
+    if quick && pitch.is_clear_tone {
+        confirm_s = 0
     }
 
     seen := holds_note(self.candidate_note, pitch.detected_note)
