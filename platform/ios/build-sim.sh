@@ -1,12 +1,13 @@
 #!/usr/bin/env sh
-# Build the SDL renderer for the iOS simulator, install it on a simulator and run it with the console attached.
+# Build the SDL renderer for the iOS simulator, install it on every booted simulator and run it, with the console
+# attached on one of them. Switching between an iPhone and an iPad window shows the same build.
 #
 # The native libraries (miniaudio, stb) are rebuilt for the simulator once, into external/ios-sim, SDL3 is
 # built there, patched for the simulator, by just sdl ios-sim. Odin only emits an object file, clang links it
 # into the app bundle.
 #
-#   IOS_SIM=<udid or name>   simulator to use, defaults to the booted one or the first available iPhone
-#   IOS_SIM_FAMILY=iPad      the first available iPad instead, booted or not, see just dev ipad
+#   IOS_SIM=<udid or name>   only this simulator, defaults to a booted iPhone or else the first available one
+#   IOS_SIM_FAMILY=iPad      the console on a booted iPad or else the first available one, see just dev ipad
 
 set -eu
 
@@ -130,9 +131,8 @@ codesign --force --sign - --timestamp=none "$APP"
 UDID_PATTERN='[0-9A-F]\{8\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{4\}-[0-9A-F]\{12\}'
 FAMILY=${IOS_SIM_FAMILY:-iPhone}
 DEVICE=${IOS_SIM:-}
-# Asked for a family, a booted phone isn't it
-if [ -z "$DEVICE" ] && [ -z "${IOS_SIM_FAMILY:-}" ]; then
-    DEVICE=$(xcrun simctl list devices booted | grep -o "$UDID_PATTERN" | head -1)
+if [ -z "$DEVICE" ]; then
+    DEVICE=$(xcrun simctl list devices booted | grep "$FAMILY" | grep -o "$UDID_PATTERN" | head -1)
 fi
 if [ -z "$DEVICE" ]; then
     DEVICE=$(xcrun simctl list devices available | grep "$FAMILY" | grep -o "$UDID_PATTERN" | head -1)
@@ -145,6 +145,17 @@ fi
 xcrun simctl boot "$DEVICE" 2>/dev/null || true
 # The simulator's window: Simulator.app up to Xcode 26, DeviceHub from Xcode 27
 open -b com.apple.iphonesimulator 2>/dev/null || open -b com.apple.dt.Devices
+
+# The other booted simulators get the build too, their apps run without the console
+if [ -z "${IOS_SIM:-}" ]; then
+    xcrun simctl list devices booted | grep "$UDID_PATTERN" | grep -v "$DEVICE" | while read -r line; do
+        other=$(echo "$line" | grep -o "$UDID_PATTERN")
+        echo "Updating ${line%% ($other*}"
+        xcrun simctl install "$other" "$APP"
+        xcrun simctl launch --terminate-running-process "$other" "$BUNDLE_ID" > /dev/null
+    done
+fi
+
 xcrun simctl install "$DEVICE" "$APP"
 echo "Launching, Ctrl+C to detach"
 xcrun simctl launch --console-pty --terminate-running-process "$DEVICE" "$BUNDLE_ID"

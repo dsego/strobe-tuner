@@ -32,8 +32,8 @@ sdl platform:
 #   (none) debug build, needs SDL3 (brew install sdl3)
 #   stats  with the signal stats and NSDF plots
 #   unlock with the unlock's reminder and a pretend store, 10 s free and a reminder every 15 s
-#   ios    on the iOS simulator, the first run builds the native deps into external/ios-sim
-#   ipad   on an iPad simulator
+#   ios    on every booted iOS simulator, the console on an iPhone, the first run builds the native deps into external/ios-sim
+#   ipad   the same with the console on an iPad
 dev target="": setup
     #!/usr/bin/env sh
     case "{{target}}" in
