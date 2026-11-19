@@ -537,11 +537,15 @@ fit_label :: proc(font: PixelFont, text: string, width: f32) -> cstring {
 }
 
 
+// Under this the cents to a hundredth take a tenth's four digits, from 9.995 they'd round up to 10.00. The
+// readout and the tracks' cents, see HUNDREDTHS_SPIN_RATE.
+HUNDREDTHS_UNDER_CENTS :: 9.995
+
 // Two columns, Hz and cents, dashes when there's nothing to show. pos is the top middle of the gutter, Hz
 // before it and the cents column after it. The values are right aligned in tabular digits, so the decimal
 // point stays put and the digits don't shift as they change. The sign of the cents hangs to the left of the
-// number.
-draw_measurements :: proc(pos: [2]f32, hz, cents: f32, shown: bool, active: bool) {
+// number. hundredths reads the cents to a hundredth under 10, see HUNDREDTHS_SPIN_RATE.
+draw_measurements :: proc(pos: [2]f32, hz, cents: f32, shown: bool, active: bool, hundredths := false) {
     color := text_color_white if active else text_color_muted
     value := pixel_fonts.readout
 
@@ -557,13 +561,17 @@ draw_measurements :: proc(pos: [2]f32, hz, cents: f32, shown: bool, active: bool
     }
 
     // A semitone or more off the cents don't fit the column, the gauge shows how many semitones it is. From
-    // 99.95 they'd round up to 100.0.
+    // 99.95 they'd round up to 100.0. From 10 on hundredths read to a tenth again.
     cents_shown := shown && abs(cents) < 99.95
-    cents_str := fmt.ctprintf("%.1f", abs(cents)) if cents_shown else "-"
+    cents_str: cstring = "-"
+    if cents_shown {
+        to_hundredth := hundredths && abs(cents) < HUNDREDTHS_UNDER_CENTS
+        cents_str = fmt.ctprintf("%.2f", abs(cents)) if to_hundredth else fmt.ctprintf("%.1f", abs(cents))
+    }
 
     // No sign on a rounded zero
     sign: cstring = "-" if cents < 0 else "+"
-    signed := cents_shown && cents_str != "0.0"
+    signed := cents_shown && cents_str != "0.0" && cents_str != "0.00"
 
     hz_right := pos + {-READOUT_GUTTER / 2, 0}
 

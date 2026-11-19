@@ -43,6 +43,7 @@ load_config :: proc() -> Config {
     for field in fields {
         read_value(rawptr(uintptr(&config) + field.offset), field.type, section[field.name])
     }
+    read_renamed(&config, section)
 
     // Hand edited out of range, the tuner would have no note to start on
     config.pitch_standard = clamp(config.pitch_standard, PITCH_STANDARD_MIN, PITCH_STANDARD_MAX)
@@ -58,6 +59,10 @@ load_config :: proc() -> Config {
     // A readout time of 0 would fit the newest chunk alone and a negative one blow the fit up
     fit_steps := READOUT_FIT_STEPS_S
     config.readout_fit_s = clamp(config.readout_fit_s, fit_steps[0], fit_steps[len(fit_steps) - 1])
+
+    // A spin rate of 0 would stand the strobe still and a negative one turn it the wrong way
+    spin_steps := STROBE_SPIN_RATE_STEPS
+    config.strobe_spin_rate = clamp(config.strobe_spin_rate, spin_steps[0], spin_steps[len(spin_steps) - 1])
 
     // An offset past the settings' own moves the strobe's target to another note, it stands still there
     for &preset in config.note_offset_cents {
@@ -106,6 +111,13 @@ load_config :: proc() -> Config {
     }
 
     return config
+}
+
+// Settings saved under an older name. Spin rate was strobe_fast, a switch to 200%.
+read_renamed :: proc(config: ^Config, section: map[string]string) {
+    if len(section["strobe_spin_rate"]) == 0 && strings.trim_space(section["strobe_fast"]) == "true" {
+        config.strobe_spin_rate = 2
+    }
 }
 
 // A value as %v writes it into the field or element at ptr: an enum by its name, a float, an integer, a bool,

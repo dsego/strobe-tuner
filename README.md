@@ -19,7 +19,7 @@ Strobie is coming to the App Store for Mac and iPhone. [Try it in your browser](
 - Harmonic mode: shows the partials of the detected note on up to 5 strobe tracks.
 - Track settings: tap a track to choose its partial (1× to 8×, or the fifth at 1½×), move its target by up to ±50 cents (e.g. for a stretched octave) and change its spin rate.
 - Vernier mode: a geared mode that shows the same fundamental frequency in each band, but with increasing sensitivity.
-- Spin rate: 200% spins the strobe twice as fast per cent, for the final adjustment.
+- Spin rate: 200% and 400% spin the strobe two and four times as fast per cent, for the final adjustment. At 400% the readout's and the tracks' cents go to a hundredth under 10 cents.
 - Readout: hertz and cents to a tenth, of the fundamental's track, the 2×'s, or a blend, the whole wave like most tuners. A guitar or piano string is stiff, so its partials run a little sharp and the three read a few cents apart, see [Readout](#readout).
 - Readout speed: how long the cents average, 400 ms evens out a vibrato, 150 ms follows a string being tuned sooner.
 - Five displays, a menu under the strobe picks one, see [Displays](#displays):

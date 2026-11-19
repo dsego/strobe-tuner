@@ -50,12 +50,25 @@ TRACK_PARTIALS :: [?]f32{1, 1.5, 2, 3, 4, 5, 6, 7, 8}
 TRACK_OFFSET_MAX_CENTS :: 50
 TRACK_OFFSET_STEP_CENTS :: 0.5
 
-// Strobe speeds per cent of detuning, fast spins 2× faster for the final adjustment
+// The strobe's speed per cent of detuning at a Spin rate of 100%. A cent off, the 1× track drifts a stripe in
+// 8.8 s on every note, as a strobe disc's does on a G3.
 STROBE_SPEED :: 0.025
-STROBE_SPEED_FAST :: 0.05
+
+// The Spin rate setting's steps on top of STROBE_SPEED, the faster ones for the final adjustment. At 400% a
+// tenth of a cent drifts the 1× track a stripe in 22 s and the 4× one in 5.5 s. A bass's shake and a string
+// settling after the pluck spin as much faster.
+STROBE_SPIN_RATE_STEPS :: [3]f32{1, 2, 4}
+
+// From this Spin rate the readout's and the tracks' cents go to a hundredth, for the final adjustment on a
+// steady tone. The accuracy stays a tenth's, see sandbox/accuracy.
+HUNDREDTHS_SPIN_RATE :: 4
+
+reads_hundredths :: proc(config: ^Config) -> bool {
+    return config.strobe_spin_rate >= HUNDREDTHS_SPIN_RATE
+}
 
 strobe_speed :: proc(config: ^Config) -> f32 {
-    return STROBE_SPEED_FAST if config.strobe_fast else STROBE_SPEED
+    return STROBE_SPEED * config.strobe_spin_rate
 }
 
 // A track's own spin rate on top of the strobe's, its sheet's Spin rate
@@ -174,8 +187,8 @@ Config :: struct {
     // per track, harmonic mode: on top of strobe_speed, 1 leaves it as is
     strobe_speeds:                [core.MAX_BANDS]f32,
 
-    // The Spin rate setting, 200% turns at STROBE_SPEED_FAST per cent of detuning instead of STROBE_SPEED
-    strobe_fast:                  bool,
+    // The Spin rate setting, the strobe turns at this many times STROBE_SPEED, see STROBE_SPIN_RATE_STEPS
+    strobe_spin_rate:             f32,
 
     // The Readout speed setting, how long the readout's fit through the phase averages, see READOUT_FIT_STEPS_S
     readout_fit_s:                f32,
@@ -274,7 +287,7 @@ config_defaults :: Config {
     strobe_intervals             = {1, 2, 4, 0, 0},
     strobe_offsets_cents         = {0, 0, 0, 0, 0},
     strobe_speeds                = {1, 1, 1, 1, 1},
-    strobe_fast                  = false,
+    strobe_spin_rate             = 1,
     readout_fit_s                = core.READOUT_FIT_S,
     readout_source               = .FUNDAMENTAL,
 

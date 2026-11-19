@@ -387,8 +387,9 @@ gui_strobe_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) -
         changes += {.RETUNE}
     }
 
-    // 200% spins twice as fast per cent, for the final adjustment
-    if gui_settings_segmented(sheet_layout, &row, "Spin rate", {"100%", "200%"}, &config.strobe_fast, WIDE_SEGMENT_WIDTH) {
+    // 200% and 400% spin two and four times as fast per cent, for the final adjustment
+    spin_labels := []cstring{"100%", "200%", "400%"}
+    if gui_steps(sheet_layout, &row, "Spin rate", spin_labels, &config.strobe_spin_rate, STROBE_SPIN_RATE_STEPS) {
         changes += {.SPEED}
     }
 

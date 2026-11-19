@@ -66,3 +66,25 @@ test_read_value :: proc(t: ^testing.T) {
     testing.expect_value(t, loaded.strobe_mode, saved.strobe_mode)
     testing.expect_value(t, loaded.preset, saved.preset)
 }
+
+// The 200% switch from before Spin rate had steps loads as 200%, a saved step wins over it
+@(test)
+test_read_renamed :: proc(t: ^testing.T) {
+    // The ini's lines as load_config reads them, the name and the value
+    read :: proc(lines: ..[2]string) -> f32 {
+        section: map[string]string
+        defer delete(section)
+        for line in lines {
+            section[line[0]] = line[1]
+        }
+
+        config := config_defaults
+        read_value(&config.strobe_spin_rate, type_info_of(f32), section["strobe_spin_rate"])
+        read_renamed(&config, section)
+        return config.strobe_spin_rate
+    }
+
+    testing.expect_value(t, read({"strobe_fast", "true"}), 2)
+    testing.expect_value(t, read({"strobe_fast", "false"}), 1)
+    testing.expect_value(t, read({"strobe_fast", "true"}, {"strobe_spin_rate", "4"}), 4)
+}

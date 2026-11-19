@@ -39,6 +39,7 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu_comma
         reading.steady.err_cents,
         reading.readout_shown,
         app.measurement.note_target.active,
+        hundredths = reads_hundredths(config),
     )
 
     // Opens on the settings, not the display's options it was closed on

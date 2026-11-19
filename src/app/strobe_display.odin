@@ -380,11 +380,13 @@ draw_track_label :: proc(
     // How far off this partial is, once its fit has a reading since the pluck and only as far out as the readout
     // reads, another note leaking into a locked note's track is no reading of the partial. The fit stops as the
     // stripes fade, its last reading stays, muted with the dark track until the next pluck or note. Right
-    // aligned on the decimal point like the readout, the digits don't shift as the value changes.
+    // aligned on the decimal point like the readout, the digits don't shift as the value changes. To a
+    // hundredth under 10 like the readout, see HUNDREDTHS_SPIN_RATE.
     if config.show_band_cents && band.rate_time_s > 0 && abs(band.err_cents) <= core.READOUT_RANGE_CENTS {
         font := pixel_fonts.band_label
         width := measure_label(font, "-00.0").x
-        text := fmt.ctprintf("%+.1f", band.err_cents)
+        to_hundredth := reads_hundredths(config) && abs(band.err_cents) < HUNDREDTHS_UNDER_CENTS
+        text := fmt.ctprintf("%+.2f", band.err_cents) if to_hundredth else fmt.ctprintf("%+.1f", band.err_cents)
         position := [2]f32{upright.x + TRACK_CENTS_INSET + width, label_y}
         if turned {
             position = {label_x + 0.5 * width, pane.y + pane.height - TRACK_CENTS_INSET - label_height}
