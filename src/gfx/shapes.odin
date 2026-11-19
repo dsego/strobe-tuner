@@ -121,6 +121,36 @@ draw_line :: proc(start, end: [2]f32, thickness: f32, color: Color) {
     )
 }
 
+// A line from start to end whose sides fade to clear over feather, its ends cut square like draw_line's.
+// Drawn piece by piece a jagged line keeps its corners, where a polyline's joints pinch a sharp spike thin
+// toward its tip.
+draw_soft_line :: proc(start, end: [2]f32, thickness, feather: f32, color: Color) {
+    if start == end do return
+
+    normal := line_normal(start, end)
+    half := 0.5 * thickness
+    inner := max(half - feather, 0)
+    edge := Color{color.r, color.g, color.b, 0}
+
+    // Across the line from one edge to the other, clear, solid, solid and clear
+    across := [4]f32{-half, -inner, inner, half}
+    colors := [4]Color{edge, color, color, edge}
+    for band in 0 ..< 3 {
+        near, far := normal * across[band], normal * across[band + 1]
+        push_vertices(
+            gpu.white.handle,
+            {
+                {start + near, {0, 0}, colors[band]},
+                {end + near, {0, 0}, colors[band]},
+                {end + far, {0, 0}, colors[band + 1]},
+                {start + near, {0, 0}, colors[band]},
+                {end + far, {0, 0}, colors[band + 1]},
+                {start + far, {0, 0}, colors[band + 1]},
+            },
+        )
+    }
+}
+
 // The unit normal of the line from start to end, to its left on the screen, none for a point
 line_normal :: proc(start, end: [2]f32) -> [2]f32 {
     direction := linalg.normalize0(end - start)

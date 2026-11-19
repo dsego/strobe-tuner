@@ -43,6 +43,11 @@ import "../gfx"
 // -define:SPECTRUM_GLOW_ALPHA=n to try another
 SPECTRUM_GLOW_ALPHA :: #config(SPECTRUM_GLOW_ALPHA, 48)
 
+// The curve's line and glow fade to clear at their edges, the fill under it follows the line in slanted
+// strips. Hard-edged, the steep peaks came out as staircases and the stepped fill poked out beside them.
+// -define:SPECTRUM_SOFT_LINE=false draws the hard-edged ones to compare.
+SPECTRUM_SOFT_LINE :: #config(SPECTRUM_SOFT_LINE, true)
+
 // How long the curve takes to follow, a time constant, up and down alike: the noise high up holds still
 // instead of boiling. -define:SPECTRUM_SMOOTHING_S=n to try another, 0 is off.
 SPECTRUM_SMOOTHING_S :: #config(SPECTRUM_SMOOTHING_S, 0.1)
@@ -428,7 +433,7 @@ spectrum_column_db :: proc(shown: []f32, from, to, floor: f32) -> f32 {
 }
 
 // The measurement grid behind the curve, a line up at each octave's C and across at each of levels in dB,
-// filled solid under it so they stay behind. The curve a thin line over a soft glow, both polylines.
+// filled solid under it so they stay behind. The curve a thin line over a soft glow, see SPECTRUM_SOFT_LINE.
 draw_spectrum_plot :: proc(
     plot: gfx.Rect,
     points: [][2]f32,
@@ -451,10 +456,6 @@ draw_spectrum_plot :: proc(
     fill := lerp_color(background, line_color, 0.2)
     fill.a = 255
     bottom := plot.y + plot.height
-    for index in 0 ..< len(points) - 1 {
-        point := points[index]
-        gfx.draw_rect({point.x, point.y}, {points[index + 1].x - point.x, bottom - point.y}, fill)
-    }
 
     // Thinner than the trace's, a spectrum is jagged and the fill under it carries the shape. The glow is
     // two strips, the narrow one over the wide one for a softer edge.
@@ -462,11 +463,39 @@ draw_spectrum_plot :: proc(
     LINE_WIDTH :: 1.2
     glow := line_color
     glow.a = SPECTRUM_GLOW_ALPHA
-    gfx.draw_polyline(points, 2 * GLOW_RADIUS, glow)
-    gfx.draw_polyline(points, GLOW_RADIUS, glow)
 
-    for index in 1 ..< len(points) {
-        gfx.draw_line(points[index - 1], points[index], LINE_WIDTH, line_color)
+    when SPECTRUM_SOFT_LINE {
+        // Each piece of the curve down to the bottom in two triangles, its top along the line
+        for index in 1 ..< len(points) {
+            left, right := points[index - 1], points[index]
+            gfx.draw_triangle(left, right, {right.x, bottom}, fill)
+            gfx.draw_triangle(left, {right.x, bottom}, {left.x, bottom}, fill)
+        }
+
+        // The glow's strips fade over their whole half width
+        glow_colors := make([]gfx.Color, len(points), context.temp_allocator)
+        slice.fill(glow_colors, glow)
+        gfx.draw_soft_polyline(points, glow_colors, 2 * GLOW_RADIUS, GLOW_RADIUS)
+        gfx.draw_soft_polyline(points, glow_colors, GLOW_RADIUS, GLOW_RADIUS / 2)
+
+        // The line fades over its last pixel either side, a pixel wider so it weighs what the hard one did.
+        // In pieces like it: as a polyline its joints pinched the steep sides of a peak to a needle.
+        feather := 1 / gfx.dpi_scale()
+        for index in 1 ..< len(points) {
+            gfx.draw_soft_line(points[index - 1], points[index], LINE_WIDTH + feather, feather, line_color)
+        }
+    } else {
+        for index in 0 ..< len(points) - 1 {
+            point := points[index]
+            gfx.draw_rect({point.x, point.y}, {points[index + 1].x - point.x, bottom - point.y}, fill)
+        }
+
+        gfx.draw_polyline(points, 2 * GLOW_RADIUS, glow)
+        gfx.draw_polyline(points, GLOW_RADIUS, glow)
+
+        for index in 1 ..< len(points) {
+            gfx.draw_line(points[index - 1], points[index], LINE_WIDTH, line_color)
+        }
     }
 }
 
