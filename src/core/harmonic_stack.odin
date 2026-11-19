@@ -31,8 +31,8 @@ import "core:slice"
 // The background around a bin, a quarter of the bins this far either side: a low note's partials and their
 // lobes take up more than half of them, the quarter falls between. A noise's bins are spread exponentially,
 // their quarter is 0.288 of their mean, HARMONICS_QUARTER_DB under it. Worked out every few Hz and drawn
-// straight between, like the spectrum display's.
-HARMONICS_BACKGROUND_HZ :: 190
+// straight between, like the spectrum display's. E.g. -define:HARMONICS_BACKGROUND_HZ=n
+HARMONICS_BACKGROUND_HZ :: #config(HARMONICS_BACKGROUND_HZ, 190)
 HARMONICS_BACKGROUND_STEP_HZ :: 47
 HARMONICS_QUARTER_DB :: 5.41
 
