@@ -74,8 +74,8 @@ gui_level_meter :: proc(position: [2]f32, pitch: core.PitchInfo, sample_rate: f3
     icon_y := f32(LEVEL_METER_HEIGHT - ICON_SIZE) / 2
     draw_icon(ICON_MICROPHONE, position + {0, icon_y}, icon_color)
 
-    // A slow input, a Bluetooth headset's microphone at 16 or 24 kHz, gets a warning before the icon. The high
-    // notes and the partials over its Nyquist are out of reach, their tracks show empty.
+    // A slow input, a Bluetooth headset's microphone at 16 kHz, gets a warning before the icon. The top notes'
+    // octaves are out of reach, their 2× tracks show empty.
     if sample_rate > 0 && sample_rate < core.LOW_SAMPLE_RATE {
         draw_icon(ICON_WARNING, position + {-ICON_SIZE - WARNING_GAP, icon_y}, warning_color)
     }

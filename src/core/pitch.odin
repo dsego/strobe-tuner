@@ -94,9 +94,10 @@ PITCH_ONSET_BLOCK :: 64 // samples, 1.3 ms at 48 kHz
 // No pluck since the windows were last full
 NO_ONSET :: 1 << 30
 
-// Under this rate a Bluetooth headset's microphone, 16 or 24 kHz, the app warns that high notes and the
-// partials over Nyquist are out of reach
-LOW_SAMPLE_RATE :: 44_100
+// Under this rate the top note's octave is over the strobe's highest band, its 2× track shows empty and the app
+// warns: a Bluetooth headset's microphone at 16 kHz, a phone line's 8 kHz. At 24 or 32 kHz only the top notes'
+// 4× and higher go, like 48 kHz's 8× from F7 up.
+LOW_SAMPLE_RATE :: 2 * 4186.01 / MAX_BAND_NORM_FREQ // C8's 2nd partial at A4 = 440 Hz, 18.6 kHz
 
 
 PitchDetector :: struct {

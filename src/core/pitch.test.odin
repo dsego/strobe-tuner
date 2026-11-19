@@ -88,12 +88,14 @@ test_highest_note :: proc(t: ^testing.T) {
 // cents off. The note is still right, the strobe reads the cents.
 @(test)
 test_pitch_at_input_rates :: proc(t: ^testing.T) {
+    EXACT_SAMPLE_RATE :: 44_100 // from here on C8 has 10 samples a period and reads within a cent
+
     for sample_rate in ([]f32{16_000, 24_000, 44_100, 48_000, 64_000}) {
         for freq in ([]f32{27.5, 110, 4186.01}) {
             // A0 with its harmonics like a low string's, a sine alone reads it too
             pitch := detect_test_note(freq, partials = 5 if freq < 100 else 1, sample_rate = sample_rate)
             cents := cents_deviation(pitch.detected_freq, freq)
-            if sample_rate >= LOW_SAMPLE_RATE {
+            if sample_rate >= EXACT_SAMPLE_RATE {
                 testing.expectf(t, pitch.is_clear_tone && abs(cents) < 1, "%v Hz at %v Hz: %v cents, %v", freq, sample_rate, cents, pitch)
             } else {
                 note := freq_to_note(freq)
