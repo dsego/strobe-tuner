@@ -15,6 +15,7 @@
 #+build !js
 package app
 
+import "core:math"
 import "core:testing"
 
 import "../core"
@@ -40,4 +41,38 @@ test_vernier_keeps_its_own_tracks :: proc(t: ^testing.T) {
     config.strobe_mode = .HARMONIC
     set_strobe_tracks(&measurement, &config)
     testing.expect_value(t, len(measurement.strobe_lock_in.bands), 5)
+}
+
+// A low B whose fundamental is too weak to hear rings on its 2× track, the readout's, and the track hears it
+// whatever the note recognition makes of the rest. Once only another note plays, it doesn't.
+@(test)
+test_readout_track_hears :: proc(t: ^testing.T) {
+    B0 := core.freq_at_cents(440, -4600)
+    intervals := []f32{1, 2, 4}
+    measurement: Measurement
+    measurement.readout_track = -1
+    measurement.strobe_lock_in = core.init_strobe_lock_in(B0, intervals, .HARMONIC)
+    defer core.destroy_strobe_lock_in(measurement.strobe_lock_in)
+    core.set_strobe_lock_in_freq(measurement.strobe_lock_in, B0, 440, STROBE_SPEED, 2, .HARMONIC)
+
+    // 3 s of a sine at 60 frames a second, followed like the app's readout does
+    clock := 0
+    play :: proc(measurement: ^Measurement, freq: f32, clock: ^int) {
+        frame: [core.DEFAULT_SAMPLE_RATE / 60]f32
+        for _ in 0 ..< 3 * 60 {
+            for &sample in frame {
+                sample = 0.3 * math.sin(math.TAU * freq * f32(clock^) / core.DEFAULT_SAMPLE_RATE)
+                clock^ += 1
+            }
+            core.audio_capture_write(measurement.strobe_lock_in, frame[:])
+            core.run_phase_detection(measurement.strobe_lock_in)
+            measurement.readout_track, _ = core.strobe_readout_track(measurement.strobe_lock_in, measurement.readout_track, 1)
+        }
+    }
+
+    play(&measurement, core.freq_at_cents(2 * B0, -3.5), &clock)
+    testing.expect(t, readout_track_hears(&measurement), "the low B's 2× partial on its track")
+
+    play(&measurement, core.freq_at_cents(440, -100), &clock)
+    testing.expect(t, !readout_track_hears(&measurement), "only an A♭4")
 }

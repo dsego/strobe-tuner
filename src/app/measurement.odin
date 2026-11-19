@@ -143,7 +143,9 @@ measure :: proc(app: ^App) -> (reading: Reading) {
 
     ready := follow_note(measurement, config, reading.pitch)
 
-    out_of_range := core.out_of_range(&measurement.note_target)
+    // Locked, the note recognition naming another note doesn't take the readout while the locked note still rings
+    // on its track, a bass's low B under a partial or a hum named as a note of its own
+    out_of_range := core.out_of_range(&measurement.note_target) && !readout_track_hears(measurement)
     reading.steady, reading.readout_shown = readout_reading(measurement, config, ready, out_of_range)
     hold_readout(measurement, &reading, out_of_range)
 
@@ -204,6 +206,16 @@ readout_reading :: proc(
     // The trace carries on along the track the readout followed, see traced_cents
     measurement.traced_track = measurement.readout_track
     return
+}
+
+// The readout's track lit on its own partial, the note it's tuned to rings there whatever the detections read.
+// As its stripes fade out it doesn't, see core.strobe_shows_note.
+readout_track_hears :: proc(measurement: ^Measurement) -> bool {
+    if measurement.readout_track < 0 do return false
+
+    lock_in := measurement.strobe_lock_in
+    band := lock_in.bands[measurement.readout_track]
+    return core.hears_note(band, lock_in.band_cents) && core.band_half_lit(band)
 }
 
 // Lit, the readout is the track's as it measures. Dark, it keeps the last one shown: the track goes on

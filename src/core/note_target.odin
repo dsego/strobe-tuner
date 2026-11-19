@@ -338,8 +338,9 @@ target_freq :: proc(self: ^NoteTarget) -> f32 {
 }
 
 // Another note is played than a locked one. The gauge measures it from the locked note like a string, the
-// strobe's tracks have nothing to measure: one still fitted on the locked note would read it as it was. A
-// string's readout carries on however far off it is.
+// strobe's tracks have nothing to measure: one still fitted on the locked note would read it as it was. The app
+// keeps the readout while the locked note's own track still hears it, see measure. A string's readout carries
+// on however far off it is.
 out_of_range :: proc(self: ^NoteTarget) -> bool {
     detected, has_detected := self.detected_note.?
     if self.string_count > 0 || !has_detected do return false
