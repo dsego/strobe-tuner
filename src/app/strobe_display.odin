@@ -87,6 +87,18 @@ CURVED_TRACK_DROP :: 10
 // Between the tracks, a track is this much thinner than band_height, as in the strobe shader
 STROBE_TRACK_GAP :: 4
 
+// Curved tracks start this far down from the strobe's top. Five go up nearly to the top: the arcs drop towards the
+// sides and the 1× track's label would land under the strobe's bottom, here it's about as far from the bottom as
+// the outer arc is from the top at the desktop's width. -define:CURVED_FIVE_TRACKS_TOP to try others.
+CURVED_TRACKS_TOP :: 32
+CURVED_FIVE_TRACKS_TOP :: f32(#config(CURVED_FIVE_TRACKS_TOP, -2))
+
+// The wheel's dark hub and its rings, and how far out three rings reach. A fourth and a fifth ring stay inside
+// that, the hub gets smaller.
+WHEEL_HUB_RADIUS :: 64
+WHEEL_RING_WIDTH :: 26
+WHEEL_RADIUS :: WHEEL_HUB_RADIUS + 3 * WHEEL_RING_WIDTH
+
 // The desktop tracks' circle and how much of it shows across the window
 DESKTOP_TRACKS_RADIUS :: 440.0
 DESKTOP_TRACKS_PERIODS :: 12.0
@@ -150,8 +162,12 @@ strobe_geometry :: proc(shape: StrobeShape, rect: gfx.Rect, scale: f32, band_cou
 
     switch shape {
     case .WHEEL:
-        geometry.curvature_radius = 90 * scale
-        geometry.band_height = 26 * scale
+        // Turned in a pane wider than tall, the strobe's depth runs across the pane and its height is less, the
+        // whole wheel shrinks to fit that
+        fit := min(1, rect.width / (scale * STROBE_HEIGHT))
+        innermost := min(WHEEL_HUB_RADIUS + WHEEL_RING_WIDTH, WHEEL_RADIUS - WHEEL_RING_WIDTH * f32(band_count - 1))
+        geometry.curvature_radius = innermost * scale * fit
+        geometry.band_height = WHEEL_RING_WIDTH * scale * fit
 
         // Centred in the strobe however many rings it has, the outer ring's top drops in from geometry.y
         outer_radius := geometry.curvature_radius + geometry.band_height * f32(band_count - 1)
@@ -164,7 +180,7 @@ strobe_geometry :: proc(shape: StrobeShape, rect: gfx.Rect, scale: f32, band_cou
         geometry.density = geometry.period_count / DESKTOP_TRACKS_PERIODS
         return
     case .CURVED:
-        geometry.y += 32 * scale
+        geometry.y += (CURVED_FIVE_TRACKS_TOP if band_count > 4 else CURVED_TRACKS_TOP) * scale
         geometry.band_height = (50 if band_count > 3 else 66) * scale
     case .FLAT:
         geometry.band_height = scale * STROBE_HEIGHT / f32(max(band_count, 1))
@@ -602,16 +618,16 @@ tracks_went_stale :: proc(self: ^StrobeDisplay, mode: core.StrobeMode) -> bool {
     return stale
 }
 
-// The quad a track is drawn in, order counted from the top. Down to where the arc ends, it drops towards the
-// sides. The inner edge meets the sides of the strobe on a wide arc, a narrow one like the wheel is a whole
-// ring.
+// The quad a track is drawn in, order counted from the top. A curved track's arc drops towards the sides, down
+// to where its inner edge meets the sides of the strobe, a narrow arc is a whole ring. A wheel's ring is always
+// whole, one wider than the strobe comes back in below the middle.
 track_bounds :: proc(geometry: StrobeGeometry, strobe_rect: gfx.Rect, order: int, curvature_radius: f32) -> [4]f32 {
     band_height := geometry.band_height
     band_y := geometry.y + band_height * f32(order)
     half_width := strobe_rect.width / 2
     inner_radius := curvature_radius - band_height
     arc_height := 2 * curvature_radius
-    if inner_radius > half_width {
+    if geometry.shape == .CURVED && inner_radius > half_width {
         arc_height = curvature_radius - math.sqrt(inner_radius * inner_radius - half_width * half_width)
     }
     height := min(strobe_rect.y + strobe_rect.height - band_y, arc_height + 4)
