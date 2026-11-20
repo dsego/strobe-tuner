@@ -183,6 +183,7 @@ open_audio_input :: proc(app: ^App) {
 
 close_audio_input :: proc(app: ^App) {
     delete(app.input.default_label)
+    delete(app.input.menu_titles)
     delete(app.input.devices)
     audio.destroy(app.input.capture)
 }

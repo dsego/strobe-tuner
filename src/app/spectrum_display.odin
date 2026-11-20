@@ -240,8 +240,7 @@ update_spectrum_display :: proc(self: ^SpectrumDisplay, windows: f32) {
         for &value, index in around {
             value = levels[start + index * stride]
         }
-        slice.sort(around)
-        return around[len(around) / 2]
+        return core.select_nth(around, len(around) / 2)
     }
 
     below_bin := 0

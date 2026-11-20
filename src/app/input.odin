@@ -17,6 +17,7 @@
 package app
 
 import "core:fmt"
+import "core:strings"
 
 import "../audio"
 import "../gfx"
@@ -34,6 +35,7 @@ AudioInput :: struct {
     refresh:       bool, // the list is made again, see follow_input
     default_label: string, // the list's first input, see build_input_list
     menu:          int, // the Input menu, see setup_os_menu_bar
+    menu_titles:   string, // of its items, a line each, see build_input_list
     restart:       bool, // opens the input again, after the background or an interruption
     missing_s:     f32, // since the picked input was last looked for, see MISSING_INPUT_POLL_S
     stats:         InputStats, // on its sheet, held INPUT_STATS_HOLD_S
@@ -61,6 +63,11 @@ follow_input :: proc(app: ^App) {
     if audio.devices_changed(capture) {
         input.refresh = true
         input.restart = true
+    }
+
+    // The microphone may have been allowed or turned off in the system's settings meanwhile
+    if gfx.came_to_front() {
+        audio.recheck_microphone()
     }
 
     missing := app.config.input_device != "" && audio.find_device(capture, app.config.input_device) == audio.SYSTEM_DEFAULT
@@ -132,7 +139,18 @@ build_input_list :: proc(input: ^AudioInput, wanted_name: string) {
         append(&items, gfx.MenuItem{title = "No Input Found"})
     }
 
-    gfx.set_menu_items(input.menu, items[:])
+    // Replaced only when they changed. While a picked input is gone the list is made again every
+    // MISSING_INPUT_POLL_S, mostly the same, and the menu bar laid the menu out again each time.
+    titles := strings.builder_make(context.temp_allocator)
+    for item in items {
+        strings.write_string(&titles, string(item.title))
+        strings.write_byte(&titles, '\n')
+    }
+    if strings.to_string(titles) != input.menu_titles {
+        gfx.set_menu_items(input.menu, items[:])
+        delete(input.menu_titles)
+        input.menu_titles = strings.clone(strings.to_string(titles))
+    }
 
     // Checked already, the menu may be opening now and show before the next frame's update_os_menu_bar
     if len(input.devices) > 0 && input.device_index < MAX_INPUT_COMMANDS {

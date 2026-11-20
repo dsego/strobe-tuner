@@ -180,3 +180,6 @@ allow_microphone :: proc() {
 microphone_denied :: proc() -> bool {
     return input_state() == .DENIED
 }
+
+// The input's state is the browser's answer, nothing is kept
+recheck_microphone :: proc() {}

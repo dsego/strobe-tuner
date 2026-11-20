@@ -69,6 +69,7 @@ Window :: struct {
     ui_scale:   f32, // the window's points per drawing point, see set_ui_scale
     quit:       bool,
     background: bool, // set by watch_app_events, on whichever thread SDL pushes the event from
+    to_front:   bool, // came back to the front since came_to_front last asked
 }
 
 // The desktop window dragged to another size or a menu open, see live_resize_frames
@@ -374,6 +375,8 @@ should_close :: proc() -> bool {
         case .MOUSE_WHEEL:
             // Undo natural scrolling, scrolling up always means up
             input.wheel += -event.wheel.y if event.wheel.direction == .FLIPPED else event.wheel.y
+        case .WINDOW_FOCUS_GAINED, .DID_ENTER_FOREGROUND:
+            window.to_front = true
         }
     }
     live_resize.polling = false
@@ -404,6 +407,9 @@ wait_for_foreground :: proc() {
 
     // Not a frame that took as long as the app was away
     clock.last_counter = sdl.GetPerformanceCounter()
+
+    // The events that said so were taken here, should_close doesn't see them
+    window.to_front = true
 }
 
 // A desktop window minimized or covered by other windows, nothing of it would show
@@ -422,6 +428,17 @@ wait_while_hidden :: proc() {
 
     // Not a frame that took as long as the window was hidden
     clock.last_counter = sdl.GetPerformanceCounter()
+
+    // The window's focus may have come back while it waited here, should_close doesn't see that event
+    window.to_front = true
+}
+
+// Whether the app came back to the front since the last call: its window got the focus, or it shows again after
+// it was hidden or in the background. Once each time, the next call is false until it happens again.
+came_to_front :: proc() -> bool {
+    came := window.to_front
+    window.to_front = false
+    return came
 }
 
 // SDL traps Android's back button and sends it as a key, see init. What the system does with it
@@ -683,7 +700,10 @@ replay_commands :: proc(
 
 // The rest of the frame at the limited rate, counted from the start of the frame in should_close.
 // A little short of it, the swapchain waits for the vsync that ends it, a sleep a touch too long
-// would miss that one and hold the frame on screen a refresh longer.
+// would miss that one and hold the frame on screen a refresh longer. One sleep, the margin covers
+// one that runs long: SDL's precise delay sleeps a millisecond at a time and spins on the clock to
+// the end, at the idle rate the main thread woke 25 times a frame and the app used half the CPU it
+// does at the full rate.
 // Not from the drag's loop, its timer paces the frames, see live_resize_frames
 wait_for_max_fps :: proc() {
     VSYNC_MARGIN_S :: 0.002
@@ -692,7 +712,7 @@ wait_for_max_fps :: proc() {
     elapsed := f64(sdl.GetPerformanceCounter() - clock.last_counter) / f64(sdl.GetPerformanceFrequency())
     remaining := 1 / f64(clock.max_fps) - elapsed - VSYNC_MARGIN_S
     if remaining > 0 {
-        sdl.DelayPrecise(u64(remaining * 1e9))
+        sdl.DelayNS(u64(remaining * 1e9))
     }
 }
 

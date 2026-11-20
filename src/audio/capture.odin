@@ -423,8 +423,32 @@ allow_microphone :: proc() {
     }
 }
 
-// iOS and the Mac give a denied microphone a silent input, nothing fails
+// iOS and the Mac give a denied microphone a silent input, nothing fails. Their answer is kept until
+// recheck_microphone: asking goes to the system's privacy service and waits for its reply, and twice a frame it
+// kept that service at 64% of a core on a Mac. The answer only changes while the system's prompt or its settings
+// are in front of the app.
 microphone_denied :: proc() -> bool {
+    when IOS || MACOS {
+        if kept_microphone_denied == nil {
+            kept_microphone_denied = ask_microphone_denied()
+        }
+        return kept_microphone_denied.? or_else false
+    } else when ANDROID {
+        return intrinsics.atomic_load(&microphone_permission) == .DENIED
+    } else {
+        return false
+    }
+}
+
+// The system's answer, nil until microphone_denied asks again
+kept_microphone_denied: Maybe(bool)
+
+// The app came back to the front, the microphone may have been allowed or turned off in the meantime
+recheck_microphone :: proc() {
+    kept_microphone_denied = nil
+}
+
+ask_microphone_denied :: proc() -> bool {
     when IOS {
         // AVAudioSessionRecordPermissionDenied, 'deny'
         DENIED :: 0x64656e79
@@ -436,8 +460,6 @@ microphone_denied :: proc() -> bool {
         DENIED :: 2
         status := intrinsics.objc_send(int, AVCaptureDevice, "authorizationStatusForMediaType:", AVMediaTypeAudio)
         return status == RESTRICTED || status == DENIED
-    } else when ANDROID {
-        return intrinsics.atomic_load(&microphone_permission) == .DENIED
     } else {
         return false
     }

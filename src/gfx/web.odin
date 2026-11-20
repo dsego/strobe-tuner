@@ -365,6 +365,10 @@ window_hidden :: proc() -> bool {
 
 wait_while_hidden :: proc() {}
 
+came_to_front :: proc() -> bool {
+    return false
+}
+
 system_back :: proc() {}
 
 live_resize_frames :: proc(frame: proc(data: rawptr), data: rawptr) {}
