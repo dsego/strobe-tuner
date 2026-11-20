@@ -58,14 +58,15 @@ STROBE_MAX_SCALE :: 2.4
 STROBE_CUTOUT :: 0.0
 
 PANEL_PADDING :: 16
-PANEL_MIN_WIDTH :: 424 // the column beside the strobe at its narrowest, the readout's labels clear the display picker and the level meter
+PANEL_MIN_WIDTH :: 424 // a tablet's column beside the strobe at its narrowest in its drawing points, see ui_scale
 
 // The controls and a sheet's rows at their widest, PANEL_PADDING inside, centred in a wider panel. A tablet
 // held upright has the panel the whole window across, a label at one edge with its control at the other
-// would be a reach apart. The desktop window is 488 and never reaches it, nor does a tablet's landscape
-// column at 430 to 455 in its drawing points, see ui_scale. A tablet held upright is 595 to 683 across.
-PANEL_MAX_WIDTH :: 600
-STROBE_MIN_WIDTH :: 360 // a phone's, the narrowest the strobe gets
+// would be a reach apart. A tablet held upright is 595 to 683 across, its landscape column 430 to 455 in its
+// drawing points, see ui_scale. The desktop's controls follow the window's corners until the panel goes
+// beside the strobe, see compute_layout, a mouse has no reach.
+PANEL_MAX_WIDTH :: 600 when gfx.MOBILE else 2 * STROBE_MIN_WIDTH
+STROBE_MIN_WIDTH :: 360 // a phone's, the narrowest the strobe and the panel get
 DESKTOP_HEIGHT :: 620 // the window, as wide as the strobe, most of the strobe shows above the settings
 WINDOW_MIN_SIZE :: [2]i32{STROBE_MIN_WIDTH, DESKTOP_HEIGHT} // the desktop window shrinks to a phone's width and stretches for the panel beside the strobe
 LEVEL_METER_WIDTH :: 80 // the microphone icon and the bar after it
@@ -121,9 +122,9 @@ ui_scale :: proc(window: [2]f32, current: f32) -> f32 {
 
 // offsets is a preset's, room for the note's offset under the gauge
 compute_layout :: proc(window: [2]f32, safe: gfx.Rect, offsets: bool) -> (layout: Layout) {
-    // Beside the strobe when the window is wider than tall and half of it is a column for the panel, under
-    // it otherwise
-    layout.beside = safe.width > safe.height && safe.width >= 2 * PANEL_MIN_WIDTH
+    // Beside the strobe when the window is wider than tall and its halves are no narrower than a phone, the
+    // narrowest the panel and its sheets are laid out for, under it otherwise
+    layout.beside = safe.width > safe.height && safe.width >= 2 * STROBE_MIN_WIDTH
 
     // The disc is the desktop's at the strobe's scale, the strobe the whole window across, or cut down to
     // the desktop's proportions, see STROBE_CUTOUT

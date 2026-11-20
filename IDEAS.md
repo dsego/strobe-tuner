@@ -404,8 +404,9 @@ phone's width beside the turned strobe is the portrait panel's box, 367 by 372 o
 393 by 380 upright, so its rows lay out unchanged.
 
 - The rule: beside when wider than tall, the halves equal with the panel at least `STROBE_MIN_WIDTH`.
-  367 each on a 15 or 16 Pro, 416 on a Pro Max, an SE's panel 360 with a 307 strobe. A desktop window
-  720 to 848 wide and wider than tall goes beside too.
+  367 each on a 15 or 16 Pro, 416 on a Pro Max, an SE's panel 360 with a 307 strobe. `compute_layout`
+  has the equal halves since 2026-11-20, from 720 wide; the SE's 667 needs the panel held at 360 with
+  the strobe narrower.
 - The strobe shows about the same share of its arcs as upright, 58% against 65%.
 - The sheets are the work, 393 tall and they don't scroll. The settings, a track's and the input's
   fit, the Strobe options' 8 rows are about 40 over and fit with rows shrunk to 38.
