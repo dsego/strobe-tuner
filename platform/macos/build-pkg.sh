@@ -120,9 +120,11 @@ APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-i
 TEAM_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.team-identifier' "$OUT/profile.plist")
 BUNDLE_ID=${APP_ID#*.}
 plutil -replace CFBundleIdentifier -string "$BUNDLE_ID" "$APP/Contents/Info.plist"
-# -X leaves the extended attributes behind: a downloaded profile has the browser's com.apple.quarantine, which
-# App Store Connect turns down in an app (91109)
+# A downloaded profile has the browser's com.apple.quarantine, which App Store Connect turns down in an app
+# (91109). cp -X leaves the other extended attributes behind, but macOS carries the quarantine over anyway, xattr
+# clears it.
 cp -X "$MAC_PROFILE" "$APP/Contents/embedded.provisionprofile"
+xattr -c "$APP/Contents/embedded.provisionprofile"
 
 # The sandbox and microphone entitlements, plus the app and team ids the profile allows
 cp "$ROOT/platform/macos/app.entitlements" "$OUT/entitlements.plist"

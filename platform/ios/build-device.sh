@@ -169,9 +169,11 @@ plutil -create xml1 "$ACKNOWLEDGEMENTS"
 plutil -insert PreferenceSpecifiers -json '[{"Type": "PSGroupSpecifier"}]' "$ACKNOWLEDGEMENTS"
 plutil -insert PreferenceSpecifiers.0.FooterText -string "$(cat "$ROOT/assets/Acknowledgements.txt")" "$ACKNOWLEDGEMENTS"
 
-# -X leaves the extended attributes behind: a downloaded profile has the browser's com.apple.quarantine, which
-# App Store Connect turns down in an app (91109)
+# A downloaded profile has the browser's com.apple.quarantine, which App Store Connect turns down in an app
+# (91109). cp -X leaves the other extended attributes behind, but macOS carries the quarantine over anyway, xattr
+# clears it.
 cp -X "$IOS_PROFILE" "$APP/embedded.mobileprovision"
+xattr -c "$APP/embedded.mobileprovision"
 
 # Only development profiles allow attaching a debugger
 if [ "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$OUT/profile.plist" 2>/dev/null)" = true ]; then
