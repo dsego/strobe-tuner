@@ -103,6 +103,7 @@ The first run clones the dependencies into `external/` and compiles them; later 
 | `just build` | Optimized build for this machine, written to `build/strobie`. |
 | `just app` | The Mac app as `build/macos/Strobie.app`, signed ad hoc to run on this Mac. Needs Xcode for the icon. |
 | `just pkg` | Signed build for the Mac App Store, see `platform/macos/build-pkg.sh`. SDL is linked statically. |
+| `just release` | `just ipa` and `just pkg` for App Store Connect, selling the unlock, with the App Store profiles in the repo's root. Starts from an empty `build/ios-device` and `build/macos`. |
 | `just test` | Unit tests of the pitch detection and strobe code. |
 | `just accuracy` | Plays generated tones, with and without noise, through the tuner and checks the note and that the readout is within 1¢. `just accuracy full` covers every note at three concert pitches. |
 | `just recordings` | Shifts your recordings in `sandbox/samples` (not in the repo) by known amounts of cents, plays them through the tuner, and checks that the readout follows the shift. Each file holds one note and is named like `strat_E2.wav`. `just recordings <folder> csv` reads another folder and writes CSV. |

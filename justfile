@@ -66,6 +66,26 @@ app: setup
 pkg: setup
     sh platform/macos/build-pkg.sh
 
+# The profiles default to Strobie_iOS_App_Store.mobileprovision and Strobie_Mac_App_Store.provisionprofile in the
+# repo's root, which git ignores. The scripts don't empty the app bundles, so it stops if an earlier build's are
+# still there: anything left in them would ship.
+# The App Store's .ipa and .pkg, selling the unlock, for Transporter: [IOS_PROFILE=<path>] [MAC_PROFILE=<path>] just release
+release: setup
+    #!/usr/bin/env sh
+    set -eu
+    for old in build/ios-device/Payload build/macos/*.app; do
+        if [ -e "$old" ]; then
+            echo "$old is from an earlier build, trash build/ios-device and build/macos first"
+            exit 1
+        fi
+    done
+    export UNLOCK=storekit
+    IOS_PROFILE="${IOS_PROFILE:-Strobie_iOS_App_Store.mobileprovision}" sh platform/ios/build-device.sh
+    MAC_PROFILE="${MAC_PROFILE:-Strobie_Mac_App_Store.provisionprofile}" sh platform/macos/build-pkg.sh
+    commit="$(git rev-parse --short HEAD)"
+    git diff --quiet HEAD || commit="$commit with uncommitted changes"
+    echo "Built from $commit, upload build/ios-device/StrobeTuner.ipa and build/macos/*.pkg with Transporter"
+
 # The web build in build/web, served on http://localhost:8000 by platform/web/serve.py
 web: setup
     mkdir -p build/web
