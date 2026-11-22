@@ -27,9 +27,11 @@ APP_NAME :: "Strobie"
 // Show the signal stats and NSDF plots, e.g. `odin run app -debug -define:DEBUG_STATS=true`
 DEBUG_STATS :: #config(DEBUG_STATS, false)
 
-// The version and build from the Info.plist, e.g. "2.0 (1)", the bundle scripts pass it in. Shown after the
-// settings' title.
-VERSION :: #config(VERSION, "dev")
+// The App Store's version from the Info.plist, e.g. "2.0", without the build number, the bundle scripts pass it
+// in. Shown after the settings' title. Odin reads a bare 2.0 as a number, so the scripts pass it in quotes,
+// which Odin keeps: they come off here. The web build's dev-20261122 and the default come as they are.
+VERSION_DEFINE :: #config(VERSION, "dev")
+VERSION :: VERSION_DEFINE[1:len(VERSION_DEFINE) - 1] when len(VERSION_DEFINE) >= 2 && VERSION_DEFINE[0] == '"' else VERSION_DEFINE
 
 // With nothing to show the screen updates less often, it saves the battery of a tuner left open, see App.quiet_time
 IDLE_AFTER_S :: 2

@@ -22,8 +22,10 @@ NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$ROOT/platform/macos/In
 APP="$OUT/$NAME.app"
 PKG="$OUT/$NAME.pkg"
 MIN_MACOS=26.0
-# Shown after the settings' title, e.g. "2.0 (1)", the About panel reads it from the Info.plist
-VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/platform/macos/Info.plist") ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$ROOT/platform/macos/Info.plist"))"
+# Shown after the settings' title, the App Store's version alone, e.g. "2.0". The About panel reads the version
+# and the build number from the Info.plist, "Version 2.0 (1)". Odin gets it in quotes, a bare 2.0 would be a
+# number.
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/platform/macos/Info.plist")"
 
 MODE=${1:-pkg}
 
@@ -63,7 +65,7 @@ odin build "$ROOT/src/app" \
     -use-single-module \
     -target:darwin_arm64 \
     -minimum-os-version:$MIN_MACOS \
-    -define:VERSION="$VERSION" \
+    -define:VERSION="\"$VERSION\"" \
     ${UNLOCK:+"-define:UNLOCK=$UNLOCK"} \
     -o:speed \
     -out:"$OUT/app.o"
@@ -80,6 +82,7 @@ $CC \
     -framework CoreMedia \
     -framework CoreVideo \
     -framework Cocoa \
+    -framework CoreGraphics \
     -weak_framework UniformTypeIdentifiers \
     -framework IOKit \
     -framework ForceFeedback \

@@ -17,8 +17,9 @@ OUT="$ROOT/build/ios-sim"
 APP="$OUT/StrobeTuner.app"
 BUNDLE_ID=app.strobie
 MIN_IOS=26.0
-# Shown after the settings' title and in the Settings app, e.g. "2.0 (1)"
-VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/platform/ios/Info.plist") ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$ROOT/platform/ios/Info.plist"))"
+# Shown after the settings' title and in the Settings app, the App Store's version alone, e.g. "2.0". Odin
+# gets it in quotes, a bare 2.0 would be a number.
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/platform/ios/Info.plist")"
 TARGET="arm64-apple-ios$MIN_IOS-simulator"
 
 ODIN_ROOT=$(odin root)
@@ -71,7 +72,7 @@ odin build "$ROOT/src/app" \
     -subtarget:iphonesimulator \
     -minimum-os-version:$MIN_IOS \
     -define:IOS=true \
-    -define:VERSION="$VERSION" \
+    -define:VERSION="\"$VERSION\"" \
     ${UNLOCK:+"-define:UNLOCK=$UNLOCK"} \
     -debug \
     -out:"$OUT/app.o"

@@ -219,6 +219,7 @@ init_gpu :: proc() -> bool {
     }
     _ = sdl.SetGPUSwapchainParameters(gpu.device, window.handle, .SDR, .VSYNC)
     gpu.window_format = sdl.GetGPUSwapchainTextureFormat(gpu.device, window.handle)
+    use_display_p3()
 
     if !create_shaders() || !create_pipelines() || !create_sampler() do return false
 
