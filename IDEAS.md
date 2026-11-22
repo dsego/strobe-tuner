@@ -266,27 +266,45 @@ and not a preset:
 
     target = equal temperament note at concert A
            + temperament offset of the note name
-           + the preset's offset of the exact note or string
+           + the preset's offset of the exact note
 
-- Loaded from a `.scl` file, nothing to edit. Equal temperament plus a few built in (Pythagorean,
-  1/4-comma meantone, Werckmeister III, Vallotti, just).
-- Saved with the setup, so a harpsichord preset and a guitar keep their own. On a guitar it tunes
-  the open strings, a chromatic setup gets every note.
-- The main screen shows the temperament's name, the note's offset under the letter stays the
-  preset's own offset only.
+Planned on 2026-11-22:
+
+- A Temperament row on the instrument sheet for Chromatic, where Transpose is, like a stringed
+  instrument's capo row: the temperament's name and its key, the note it's built on. Meantone on C
+  and meantone on D tune different notes pure.
+- Only on Chromatic. A stringed or custom instrument's few notes have their own cents in a preset
+  already, a sweetened guitar or a handpan is that, and a temperament on top would be two sources for
+  one number. Not next to Concert A either: concert A is the ensemble's, a temperament the
+  instrument's. In a baroque group everyone is at A415 and only the harpsichord is in Werckmeister,
+  the guitar's frets stay equal.
+- Saved with the setup like Transpose, a chromatic preset keeps its own, so a harpsichord is one tap.
+- Concert A stays concert A: the table is turned so A has no offset and the other notes move around
+  it.
+- Built in first, no file handling: Equal, Pythagorean, 1/4-comma and 1/6-comma meantone,
+  Werckmeister III, Kirnberger III, Vallotti and Young, each a table of 12 cents on C that the key
+  turns.
+- `.scl` files later, if someone asks: the parsing, a file picker on the iPhone and a file dropped on
+  the Mac window. The file's contents are copied into the config, not its path, iOS doesn't keep access
+  to a file and a file on the desktop moves. A step's offset is its cents from the 1/1 less 100 a step.
+  Only 12-note scales with a 2/1 octave load, anything else is turned away with a message.
 - The readout and the strobe measure from the tempered target, 0 is in tune.
-- The note names, the ruler and the detection stay on the equal tempered grid in `src/core/note.odin`,
-  the offsets are all under 50 cents so the nearest note is still the right one. The temperament
-  is one more term in `note_offset_cents`, `tuner_target_freq` and `tuner_cents` both go through it.
-- Only 12-note scales with a 2/1 octave load, anything else is turned away with a message.
-- The file's contents are copied into the config, not its path, iOS doesn't keep access to a file
-  and a file on the desktop moves.
+- The main screen shows the temperament's name with the setup's in the bottom left corner.
+- The note names, the ruler and the detection stay on the equal tempered grid in `src/core/note.odin`.
+  A tempered note has to stay nearer its own note than the next one, under 50 cents with a preset's
+  offset on top. With A at 0 the built-in ones stay within 21 cents, the widest is 1/4-comma
+  meantone's Eb on C. The preset editor's ±25 cents (`NOTE_OFFSET_MAX_CENTS`) is only its sliders'
+  range, the temperament doesn't go through it.
+- In the code it's one more term in `active_note_offsets`, which fills `NoteTarget.offsets_cents`.
+  `target_freq`, `readout_cents` and the held note's frequency all read those through
+  `note_offset_cents`.
 
 Open:
 
-- A `.scl` file has no root and no tie to A. Normalize so A has no offset and concert A stays
-  concert A, and pick the root key (which note is the scale's 1/1) on the setup?
-- `pitch.odin` measures `err_cents` from the untempered note, the readout's comes from `tuner_cents`
+- Under the letter, the preset's offset alone as planned on 2026-11-06, or the tempered note's whole
+  offset, what the strobe is tuned to? `main_screen.odin` reads `note_offset_cents`, which would give
+  the whole one.
+- `pitch.odin` measures `err_cents` from the untempered note, the readout's comes from `readout_cents`
   with the offset taken off. Check that nothing shown reads the pitch detection's once a temperament
   is set.
 
