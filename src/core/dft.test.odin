@@ -51,6 +51,31 @@ test_comb_rejects_partials :: proc(t: ^testing.T) {
     }
 }
 
+// A DC offset alone on the input subtracts to nothing, whatever the constant. The least bit left over would stand
+// still in a track, a partial its own frequency flat, see determine_band_phases.
+@(test)
+test_dft_takes_out_a_dc_offset :: proc(t: ^testing.T) {
+    WINDOW :: 1001 // not a whole number of lanes
+    freq: f32 = 110
+
+    dft: SingleFreqDFT
+    defer destroy_dft(&dft)
+
+    set_dft_freq(&dft, freq / DEFAULT_SAMPLE_RATE, gamma_comb_window(WINDOW, DEFAULT_SAMPLE_RATE / freq))
+    dfts := [1]^SingleFreqDFT{&dft}
+
+    samples := make([]f32, dft.window_size, context.temp_allocator)
+    for offset in ([]f32{-1.0 / 128, 0.0123456, 0.7}) {
+        for &sample in samples {
+            sample = offset
+        }
+
+        leak := run_single_dft(&dft, samples)
+        run_single_dfts(dfts[:], samples, window_mean(samples))
+        testing.expectf(t, dft.dft == 0, "an offset of %v left %v, %v with it in", offset, dft.dft, leak)
+    }
+}
+
 @(test)
 test_blackman_response_db :: proc(t: ^testing.T) {
     testing.expect(t, blackman_response_db(0) == 0)

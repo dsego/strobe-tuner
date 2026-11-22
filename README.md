@@ -187,6 +187,8 @@ The strobe is driven by a lock-in amplifier (a heterodyne). A single-bin DFT tun
 
 Every track's window is sized for a band 70 cents wide around the fundamental, which is about 0.22 s at 110 Hz. The window is gamma shaped and weighted toward the newest samples, like an analog lock-in's low-pass filter, so the measured phase is about 60 ms old instead of half the window's length. The window is also smoothed with a box one period of the note long (two periods for a fifth). The box acts as a comb filter whose nulls fall on the note's other partials.
 
+The average of the newest window is subtracted from the samples before the DFTs, which removes a DC offset on the input. Left in, a DC offset is all a track hears in a quiet moment, and the track reads it as a sound an octave or more flat, so after a pluck it took about a second to show the note.
+
 If the phase were measured once per frame, a partial more than half the frame rate off the track would alias (30 Hz at 60 fps). So the phase is measured every quarter period of the note through the frame's new samples, and the frame's advance is the sum of the steps between these measurements, each step taken the shortest way round. Every measurement is against the same reference on the sample clock, so the steps telescope and no error builds up from frame to frame.
 
 <img src="docs/phase-hops.svg" alt="One frame of a track: the reference runs on the absolute sample clock, a window a hop apart through the frame's new samples each gives a phase against it, and the steps between them add up to the newest phase minus the previous frame's plus the full turns, which a single measurement a frame loses.">

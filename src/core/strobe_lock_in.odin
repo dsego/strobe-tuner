@@ -502,11 +502,16 @@ determine_band_phases :: proc(self: ^StrobeLockIn, bands: []^PhaseBand) {
     // rate turns over that long instead of the shortest way.
     first_hop := f64(self.available - span + span / hops)
 
+    // The input's DC offset, taken off every window. Leaked into a track, a constant reads as a partial the track's
+    // own frequency flat: in a quiet moment it was all a track heard, its drift read an octave flat and it took a
+    // second after a pluck to hear the note. Once a frame from the newest window, an offset holds steady.
+    dc_offset := window_mean(self.sample_buffer[self.buffer_len - window_size:self.buffer_len])
+
     phase_advances: [MAX_BANDS]f64
     for hop in 1 ..= hops {
         // Up to the newest samples, i.e. the end of the buffer
         window_end := self.buffer_len - span + span * hop / hops
-        run_single_dfts(dfts[:len(bands)], self.sample_buffer[window_end - window_size:window_end])
+        run_single_dfts(dfts[:len(bands)], self.sample_buffer[window_end - window_size:window_end], dc_offset)
 
         window_start := self.sample_clock - i64(self.buffer_len - window_end) - i64(window_size)
         for band, index in bands {
