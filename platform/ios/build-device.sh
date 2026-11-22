@@ -169,7 +169,9 @@ plutil -create xml1 "$ACKNOWLEDGEMENTS"
 plutil -insert PreferenceSpecifiers -json '[{"Type": "PSGroupSpecifier"}]' "$ACKNOWLEDGEMENTS"
 plutil -insert PreferenceSpecifiers.0.FooterText -string "$(cat "$ROOT/assets/Acknowledgements.txt")" "$ACKNOWLEDGEMENTS"
 
-cp "$IOS_PROFILE" "$APP/embedded.mobileprovision"
+# -X leaves the extended attributes behind: a downloaded profile has the browser's com.apple.quarantine, which
+# App Store Connect turns down in an app (91109)
+cp -X "$IOS_PROFILE" "$APP/embedded.mobileprovision"
 
 # Only development profiles allow attaching a debugger
 if [ "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$OUT/profile.plist" 2>/dev/null)" = true ]; then

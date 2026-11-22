@@ -24,6 +24,11 @@
     </array>
     <key>MinimumOSVersion</key>
     <string>26.0</string>
+    <!-- Every iOS 26 device is arm64, but App Store Connect turns down a 64-bit binary without it (90502) -->
+    <key>UIRequiredDeviceCapabilities</key>
+    <array>
+        <string>arm64</string>
+    </array>
     <!-- iPhone and iPad. The layout follows the window's size, see compute_layout, an iPad turns and
          splits the screen with another app, iPadOS 26 dropped the full-screen opt-out. -->
     <key>UIDeviceFamily</key>
