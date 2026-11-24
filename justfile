@@ -80,11 +80,13 @@ release: setup
         fi
     done
     export UNLOCK=storekit
+    BUILD_NUMBER="$(sh platform/build-number.sh)"
+    export BUILD_NUMBER
     IOS_PROFILE="${IOS_PROFILE:-Strobie_iOS_App_Store.mobileprovision}" sh platform/ios/build-device.sh
     MAC_PROFILE="${MAC_PROFILE:-Strobie_Mac_App_Store.provisionprofile}" sh platform/macos/build-pkg.sh
     commit="$(git rev-parse --short HEAD)"
     git diff --quiet HEAD || commit="$commit with uncommitted changes"
-    echo "Built from $commit, upload build/ios-device/StrobeTuner.ipa and build/macos/*.pkg with Transporter"
+    echo "Built $BUILD_NUMBER from $commit, upload build/ios-device/StrobeTuner.ipa and build/macos/*.pkg with Transporter"
 
 # The web build in build/web, served on http://localhost:8000 by platform/web/serve.py
 web: setup

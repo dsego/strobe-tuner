@@ -23,9 +23,11 @@ APP="$OUT/$NAME.app"
 PKG="$OUT/$NAME.pkg"
 MIN_MACOS=26.0
 # Shown after the settings' title, the App Store's version alone, e.g. "2.0". The About panel reads the version
-# and the build number from the Info.plist, "Version 2.0 (1)". Odin gets it in quotes, a bare 2.0 would be a
-# number.
+# and the build number from the Info.plist, "Version 2.0 (20261124.825)". Odin gets it in quotes, a bare 2.0
+# would be a number.
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/platform/macos/Info.plist")"
+# just release passes the same one to the iPhone's build
+BUILD_NUMBER=${BUILD_NUMBER:-$(sh "$ROOT/platform/build-number.sh")}
 
 MODE=${1:-pkg}
 
@@ -98,6 +100,7 @@ $CC \
     -o "$APP/Contents/MacOS/app.bin"
 
 cp "$ROOT/platform/macos/Info.plist" "$APP/Contents/Info.plist"
+plutil -replace CFBundleVersion -string "$BUILD_NUMBER" "$APP/Contents/Info.plist"
 cp "$ROOT/platform/macos/Credits.rtf" "$APP/Contents/Resources/"
 cp "$ROOT/assets/Acknowledgements.txt" "$APP/Contents/Resources/"
 # The icon, actool compiles Icon Composer's file into Assets.car, with an .icns for macOS before 26, and names

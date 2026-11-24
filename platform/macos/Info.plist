@@ -12,6 +12,7 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>2.0</string>
+	<!-- The build scripts write the build's time in its place, see platform/build-number.sh -->
 	<key>CFBundleVersion</key>
 	<string>2</string>
 	<key>LSApplicationCategoryType</key>

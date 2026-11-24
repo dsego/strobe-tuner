@@ -24,6 +24,8 @@ MIN_IOS=26.0
 # Shown after the settings' title and in the Settings app, the App Store's version alone, e.g. "2.0". The
 # build number is TestFlight's to show. Odin gets it in quotes, a bare 2.0 would be a number.
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/platform/ios/Info.plist")"
+# just release passes the same one to the Mac's build
+BUILD_NUMBER=${BUILD_NUMBER:-$(sh "$ROOT/platform/build-number.sh")}
 TARGET="arm64-apple-ios$MIN_IOS"
 
 ODIN_ROOT=$(odin root)
@@ -122,6 +124,7 @@ APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier'
 BUNDLE_ID=${APP_ID#*.}
 
 cp "$ROOT/platform/ios/Info.plist" "$APP/Info.plist"
+plutil -replace CFBundleVersion -string "$BUILD_NUMBER" "$APP/Info.plist"
 # A wildcard profile (<team id>.*) signs any bundle id, keep the one in Info.plist
 case "$BUNDLE_ID" in
     *'*'*) BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist") ;;
