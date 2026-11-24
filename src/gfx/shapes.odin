@@ -231,20 +231,38 @@ draw_soft_polyline :: proc(points: [][2]f32, colors: []Color, thickness, feather
         return
     }
 
-    // Across the line from one edge to the other, clear, solid, solid and clear
-    rows :: proc(point, side: [2]f32, color: Color, inner, half: f32) -> [4]Vertex {
-        edge := transparent(color)
+    // Across the line at a point from one edge to the other, clear, solid, solid and clear. The inside of a
+    // turn tighter than the line is wide is cut short where it would cross itself, see polyline_turn, as faded
+    // as the line is there. Folded over its own edge, a wide glow's faded rows piled up in specks inside the
+    // tips of the scope's lobes, squeezed into the room they faded to clear there and left a dark one.
+    rows :: proc(points: [][2]f32, index: int, closed: bool, color: Color, inner, half: f32) -> [4]Vertex {
+        side := polyline_side(points, index, closed)
+        inside, room := polyline_turn(points, index, closed)
+
+        // The minus side's and the plus side's: how far it's solid, how far its edge and the edge's color
+        solid := [2]f32{inner, inner}
+        reach := [2]f32{half, half}
+        edges := [2]Color{transparent(color), transparent(color)}
+        if room < half {
+            cut := 1 if linalg.dot(side, inside) > 0 else 0
+            solid[cut] = min(inner, room)
+            reach[cut] = room
+            fade := f32(1) if room <= inner else 1 - (room - inner) / (half - inner)
+            edges[cut].a = u8(math.round(f32(color.a) * fade))
+        }
+
+        point := points[index]
         return {
-            {point - side * half, {0, 0}, edge},
-            {point - side * inner, {0, 0}, color},
-            {point + side * inner, {0, 0}, color},
-            {point + side * half, {0, 0}, edge},
+            {point - side * reach[0], {0, 0}, edges[0]},
+            {point - side * solid[0], {0, 0}, color},
+            {point + side * solid[1], {0, 0}, color},
+            {point + side * reach[1], {0, 0}, edges[1]},
         }
     }
 
-    previous := rows(points[0], polyline_side(points, 0, closed), colors[0], inner, half)
+    previous := rows(points, 0, closed, colors[0], inner, half)
     for index in 1 ..= last {
-        current := rows(points[index], polyline_side(points, index, closed), colors[index], inner, half)
+        current := rows(points, index, closed, colors[index], inner, half)
         for band in 0 ..< 3 {
             push_vertices(
                 gpu.white.handle,
@@ -257,6 +275,38 @@ draw_soft_polyline :: proc(points: [][2]f32, colors: []Color, thickness, feather
 
     round_end(points[0], linalg.normalize0(points[0] - points[1]), colors[0], inner, half)
     round_end(points[last], linalg.normalize0(points[last] - points[last - 1]), colors[last], inner, half)
+}
+
+// Which way a line turns at a point, toward its inside, and how far either side of it the inside can reach
+// before its edge crosses itself: the edges of two pieces meet tan(turn / 2) of that along each, at most halfway
+// along the shorter, about the curve's radius on a smooth line. Straight, at an open line's ends or beside a
+// piece too short to have a direction, any width fits. Closed, the neighbors wrap as in polyline_side.
+polyline_turn :: proc(points: [][2]f32, index: int, closed := false) -> (inside: [2]f32, room: f32) {
+    MIN_PIECE :: 1e-3 // points
+
+    last := len(points) - 1
+    previous, next := max(index - 1, 0), min(index + 1, last)
+    if closed && last >= 2 {
+        if index == 0 {
+            previous = last - 1
+        }
+        if index == last {
+            next = 1
+        }
+    }
+
+    before := points[index] - points[previous]
+    after := points[next] - points[index]
+    before_length, after_length := linalg.length(before), linalg.length(after)
+    if before_length < MIN_PIECE || after_length < MIN_PIECE do return {}, math.F32_MAX
+
+    before /= before_length
+    after /= after_length
+    cosine := clamp(linalg.dot(before, after), -1, 1)
+    half_turn_tangent := math.sqrt((1 - cosine) / max(1 + cosine, 1e-6))
+    inside = after - before
+    room = 0.5 * min(before_length, after_length) / max(half_turn_tangent, 1e-6)
+    return
 }
 
 // The offset either side at a point of a line a half width of one across, along the bisector of its two

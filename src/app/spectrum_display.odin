@@ -441,7 +441,7 @@ draw_spectrum_plot :: proc(
     range: [2]f32,
     line_color, band_color, background: gfx.Color,
 ) {
-    // A pixel wide, like the scope's graticule
+    // A pixel wide
     grid := band_color
     grid.a = 70
     hairline := 1 / gfx.dpi_scale()

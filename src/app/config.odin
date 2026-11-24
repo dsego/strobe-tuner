@@ -218,6 +218,9 @@ Config :: struct {
     lamp_shape:                   core.ScopeShape,
     // the lamp's own low-pass, the scope's filter: the room's hiss and the fine wiggles out of the stripes
     lamp_lowpass:                 bool,
+    // a line across the middle of the lamp with the scope's lines across as marks, to see the stripes drift
+    // against
+    lamp_grid:                    bool,
     // the scope over time or round a circle, tapping it flips them
     scope_sweep:                  core.ScopeSweep,
     // how many periods of the strobe's frequency the scope shows across or round the circle, 1 to
@@ -301,6 +304,7 @@ config_defaults :: Config {
     screen_persistence_periods   = 18,
     lamp_shape                   = .SPLIT,
     lamp_lowpass                 = true,
+    lamp_grid                    = false,
     scope_sweep                  = .TIME,
     scope_periods                = core.SCOPE_PERIODS,
     scope_gain                   = 1,

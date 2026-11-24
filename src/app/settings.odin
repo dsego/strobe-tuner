@@ -33,7 +33,7 @@ SEGMENT_WIDTH :: 60
 SETTINGS_ROWS :: 7
 
 // The rows of each display's options page, see gui_strobe_display_options and the others after it
-DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 5, .SCOPE = 6, .TRACE = 2, .LAMP = 4, .SPECTRUM = 4}
+DISPLAY_OPTION_ROWS :: [StrobeDisplayType]int{.STROBE = 5, .SCOPE = 6, .TRACE = 2, .LAMP = 5, .SPECTRUM = 4}
 
 // For the longer labels of the display's options
 WIDE_SEGMENT_WIDTH :: 80
@@ -465,6 +465,9 @@ gui_lamp_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {
     gui_gain_row(sheet_layout, &row, &config.lamp_gain)
     gui_persistence_row(sheet_layout, &row, PERSISTENCE_LABEL, &config.screen_persistence_periods)
     gui_settings_segmented(sheet_layout, &row, "Low-pass", {"Off", "On"}, &config.lamp_lowpass)
+
+    // A line across the middle, marks where each period starts and halfway through it, notches at the quarters
+    gui_settings_segmented(sheet_layout, &row, "Grid", {"Off", "On"}, &config.lamp_grid)
 }
 
 gui_spectrum_display_options :: proc(sheet_layout: SheetLayout, config: ^Config) {

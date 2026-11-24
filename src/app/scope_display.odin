@@ -51,11 +51,25 @@ SCOPE_GLOW_THICKNESS :: 4 * SCOPE_TRACE_THICKNESS // points
 // The beam is a thin line and its bloom is spread thin, it's added this many times over
 SCOPE_BLOOM_PASSES :: #config(SCOPE_BLOOM_PASSES, 3)
 
-// The graticule over time, fixed like an oscilloscope's, its times change with the note and the periods:
-// SCOPE_DIVISIONS across the sweep, a quarter period each at two periods, and as many up, a quarter of full
-// scale each. The times are under every other line.
-SCOPE_DIVISIONS :: 8
-SCOPE_AXIS_PIXELS :: 2 // the line through zero
+// The graticule over time, in periods of the strobe's frequency like the sweep, its times change with the note:
+// a line where each period starts and halfway through it, a notch across zero at the quarters, and up a line
+// every quarter of full scale, all as faint and SCOPE_GRID_PIXELS wide. Lines at the quarters would be 16
+// across a phone at four periods.
+SCOPE_GRID_PIXELS :: #config(SCOPE_GRID_PIXELS, 2)
+SCOPE_AXIS_PIXELS :: 2 // the line through zero, brighter
+// The notches' length in points, a little longer than the trace's. -define:SCOPE_QUARTER_NOTCHES=false draws
+// faint lines at the quarters instead.
+SCOPE_NOTCH :: f32(#config(SCOPE_NOTCH, 18))
+SCOPE_QUARTER_NOTCHES :: #config(SCOPE_QUARTER_NOTCHES, true)
+
+// The lamp's Grid, a line across the middle and the scope's lines across it as marks this long in points, the
+// quarters' notches as the scope's: still marks to see the stripes drift against. The lamp's height is no
+// level, there are no lines up. -define:LAMP_MARK=1000 draws them all the way up like the scope's.
+LAMP_MARK :: f32(#config(LAMP_MARK, 36))
+// In the screen's background color, the only one darker than the darkest stripe, blended this much over them
+// to soften it. 1 was a black line, 0.35 too faint. A little wider than the scope's.
+LAMP_MARK_OPACITY :: #config(LAMP_MARK_OPACITY, 0.5)
+LAMP_MARK_PIXELS :: #config(LAMP_MARK_PIXELS, 3)
 
 // What the scope's and the lamp's views keep from one frame to the next
 ScopeDisplay :: struct {
@@ -104,6 +118,16 @@ draw_scope_display :: proc(self: ^ScopeDisplay, targets: ^GlowTargets, scope: ^c
     if config.strobe_display_type == .LAMP {
         heights, dwell := core.scope_from_above(scope, config.lamp_shape)
         draw_lamp(rect, heights, scope.depths, dwell, config.lamp_shape, beam_color, dark_color)
+
+        // See LAMP_MARK
+        if config.lamp_grid {
+            marks := self.background
+            marks.a = u8(math.round(LAMP_MARK_OPACITY * 255))
+            width := LAMP_MARK_PIXELS / gfx.dpi_scale()
+            middle := rect.y + rect.height / 2
+            gfx.draw_rect({rect.x, middle - width / 2}, {rect.width, width}, marks)
+            draw_period_lines(rect, scope.periods, marks, width, min(LAMP_MARK, rect.height))
+        }
     } else {
         draw_scope_screen(self, rect, scope, config.scope_beam, beam_color, dark_color)
         draw_scope_time_labels(rect, scope, self.background)
@@ -138,10 +162,8 @@ draw_scope_screen :: proc(
         }
         gfx.draw_polyline(points[:], SCOPE_GRID_THICKNESS, grid_color, closed = true)
     } else {
-        // The graticule faint and a pixel wide, the line through zero brighter and SCOPE_AXIS_PIXELS wide. Where
-        // the second period starts isn't a round time, a line there stood beside the graticule's.
         hairline := 1 / gfx.dpi_scale()
-        draw_scope_graticule(rect, grid_color, hairline)
+        draw_scope_graticule(rect, scope.periods, grid_color, SCOPE_GRID_PIXELS * hairline)
 
         axis := SCOPE_AXIS_PIXELS * hairline
         gfx.draw_rect({rect.x, rect.y + (rect.height - axis) / 2}, {rect.width, axis}, grid_color)
@@ -150,44 +172,62 @@ draw_scope_screen :: proc(
     draw_scope_trace(self, rect, scope, beam, beam_color)
 }
 
-// The graticule's lines, width wide, SCOPE_DIVISIONS apart across and up. At two periods the middle one up is
-// where the second starts, the one through zero across is the caller's axis.
-draw_scope_graticule :: proc(rect: gfx.Rect, grid_color: gfx.Color, width: f32) {
+// The graticule's lines, width wide and centered on their places, up and across the periods of the sweep, see
+// SCOPE_NOTCH. The one through zero across is the caller's axis.
+draw_scope_graticule :: proc(rect: gfx.Rect, periods: int, grid_color: gfx.Color, width: f32) {
     faint := grid_color
     faint.a /= 2
 
     // Up, a quarter of full scale apart
     middle := rect.y + rect.height / 2
-    for quarter in 1 ..= SCOPE_DIVISIONS / 2 {
-        offset := 0.5 * core.SCOPE_FILL * rect.height * f32(quarter) / (SCOPE_DIVISIONS / 2)
-        gfx.draw_rect({rect.x, middle - offset}, {rect.width, width}, faint)
-        gfx.draw_rect({rect.x, middle + offset}, {rect.width, width}, faint)
+    for quarter in 1 ..= 4 {
+        offset := 0.5 * core.SCOPE_FILL * rect.height * f32(quarter) / 4
+        gfx.draw_rect({rect.x, middle - offset - width / 2}, {rect.width, width}, faint)
+        gfx.draw_rect({rect.x, middle + offset - width / 2}, {rect.width, width}, faint)
     }
 
-    // Across, an eighth of the sweep apart
-    for division in 1 ..< SCOPE_DIVISIONS {
-        gfx.draw_rect({rect.x + rect.width * f32(division) / SCOPE_DIVISIONS, rect.y}, {width, rect.height}, faint)
+    draw_period_lines(rect, periods, faint, width, rect.height)
+}
+
+// Across the middle, a line length long where each period starts and halfway through it and a notch at the
+// quarters, width wide and centered on their places. The sweep's ends are the screen's edges. The scope's
+// graticule and the lamp's Grid.
+draw_period_lines :: proc(rect: gfx.Rect, periods: int, color: gfx.Color, width, length: f32) {
+    middle := rect.y + rect.height / 2
+    quarter_width := rect.width / f32(4 * periods)
+    for quarter in 1 ..< 4 * periods {
+        x := rect.x + f32(quarter) * quarter_width - width / 2
+        start_or_halfway := quarter % 2 == 0
+
+        if start_or_halfway || !SCOPE_QUARTER_NOTCHES {
+            gfx.draw_rect({x, middle - length / 2}, {width, length}, color)
+        } else {
+            gfx.draw_rect({x, middle - SCOPE_NOTCH / 2}, {width, SCOPE_NOTCH}, color)
+        }
     }
 }
 
-// The milliseconds under every other line of the graticule along the bottom, from 0 at the right where the
-// sweep's time starts, see the top of the file. Over time only, on pills, the beam can be there.
+// The milliseconds along the bottom under every half period's line, from 0 at the right where the sweep's
+// time starts, see the top of the file. At three periods and four they'd crowd a phone, they're under every
+// period's line instead. Over time only, on pills, the beam can be there.
 draw_scope_time_labels :: proc(rect: gfx.Rect, scope: ^core.Scope, background: gfx.Color) {
     if scope.sweep != .TIME || scope.freq_hz <= 0 do return
 
     INSET :: 8
     font := pixel_fonts.label_small
-    span_ms := f32(f64(scope.periods) / scope.freq_hz * 1000)
-    step_ms := 2 * span_ms / SCOPE_DIVISIONS
+    halves := 2 * scope.periods
+    halves_per_label := 1 if scope.periods <= core.SCOPE_PERIODS else 2
+    half_ms := f32(500 / scope.freq_hz)
+    step_ms := f32(halves_per_label) * half_ms
     decimals := 0 if step_ms >= 10 else (1 if step_ms >= 1 else 2)
-    for division := 0; division <= SCOPE_DIVISIONS; division += 2 {
+    for half := 0; half <= halves; half += halves_per_label {
         text: cstring = "0 ms"
-        if division > 0 {
-            text = fmt.ctprintf("%.*f ms", decimals, span_ms * f32(division) / SCOPE_DIVISIONS)
+        if half > 0 {
+            text = fmt.ctprintf("%.*f ms", decimals, f32(half) * half_ms)
         }
 
         size := measure_label(font, text)
-        line := rect.x + rect.width * (1 - f32(division) / SCOPE_DIVISIONS)
+        line := rect.x + rect.width * (1 - f32(half) / f32(halves))
         x := clamp(line - size.x / 2, rect.x + INSET, rect.x + rect.width - size.x - INSET)
         position := [2]f32{x, rect.y + rect.height - size.y - INSET}
         draw_spectrum_label_pill({position.x, position.y, size.x, size.y}, background, 0.6)
