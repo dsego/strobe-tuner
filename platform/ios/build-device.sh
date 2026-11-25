@@ -8,7 +8,8 @@
 #   IOS_SIGN_IDENTITY=<name>  signing certificate, defaults to the one in the keychain the profile was made for,
 #                             else "Apple Development" for a development profile (e.g. a free Personal Team)
 #                             and "Apple Distribution" for an Ad Hoc one
-#   IOS_DEVICE=<name or udid> installs and launches the app on this iPhone or iPad, needs Developer Mode on it
+#   IOS_DEVICE=<name or udid> installs the app on this iPhone or iPad, needs Developer Mode on it. It isn't
+#                             launched, its icon starts it as a user would, with the microphone prompt.
 #
 # An Ad Hoc .ipa also installs without Developer Mode, by dragging it onto the iPhone in Finder.
 # An App Store profile makes an .ipa for App Store Connect, upload it with the Transporter app.
@@ -212,5 +213,5 @@ echo "Built $IPA ($BUNDLE_ID)"
 
 if [ -n "${IOS_DEVICE:-}" ]; then
     xcrun devicectl device install app --device "$IOS_DEVICE" "$APP"
-    xcrun devicectl device process launch --device "$IOS_DEVICE" "$BUNDLE_ID"
+    echo "Installed on $IOS_DEVICE, start it from its icon"
 fi
