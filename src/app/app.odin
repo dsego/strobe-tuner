@@ -105,7 +105,7 @@ run_app :: proc(config: ^Config) {
 new_app :: proc(config: ^Config) -> App {
     return {
         config = config,
-        measurement = {readout_track = -1, traced_track = -1},
+        measurement = {readout_track = {index = -1}, traced_track = -1},
         sheets = {unlock = {until_next_s = UNLOCK_REMINDER_S}},
     }
 }
@@ -405,7 +405,7 @@ apply_config :: proc(app: ^App, changes: ConfigChanges) {
     // Another readout picks its track again, the reading held was the other one's
     if .READOUT in changes {
         set_readout_speed(measurement, config)
-        measurement.readout_track, measurement.traced_track = -1, -1
+        measurement.readout_track, measurement.traced_track = {index = -1}, -1
         measurement.held_readout = {}
     }
 }

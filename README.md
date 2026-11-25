@@ -198,7 +198,7 @@ The phase is rescaled so that every note spins at the same rate per cent of detu
 
 #### Readout
 
-The cents readout follows one strobe track, the fundamental's by default. A string is stiff, so its partials run sharp of whole multiples (by a few cents on a wound guitar string), and every track reads its own cents. The chosen track is read whenever its stripes are fully lit, however weak the partial is; otherwise the loudest fully lit octave track takes over.
+The cents readout follows one strobe track, the fundamental's by default. A string is stiff, so its partials run sharp of whole multiples (by a few cents on a wound guitar string), and every track reads its own cents. The chosen track is read whenever its stripes are fully lit, however weak the partial is; otherwise the loudest fully lit octave track is. The readout stays on that track until the next pluck. When its stripes fade, the readout keeps its last reading in gray, even while another partial still rings, until they're fully lit again. A ukulele's fundamental can die away first, and moving on to its 2nd partial made the readout jump 8¢.
 
 The Readout setting chooses what the readout, the gauge and the trace show:
 - 1×: the fundamental's track.

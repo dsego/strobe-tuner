@@ -50,7 +50,7 @@ test_readout_track_hears :: proc(t: ^testing.T) {
     B0 := core.freq_at_cents(440, -4600)
     intervals := []f32{1, 2, 4}
     measurement: Measurement
-    measurement.readout_track = -1
+    measurement.readout_track = {index = -1}
     measurement.strobe_lock_in = core.init_strobe_lock_in(B0, intervals, .HARMONIC)
     defer core.destroy_strobe_lock_in(measurement.strobe_lock_in)
     core.set_strobe_lock_in_freq(measurement.strobe_lock_in, B0, 440, STROBE_SPEED, 2, .HARMONIC)
@@ -66,7 +66,7 @@ test_readout_track_hears :: proc(t: ^testing.T) {
             }
             core.audio_capture_write(measurement.strobe_lock_in, frame[:])
             core.run_phase_detection(measurement.strobe_lock_in)
-            measurement.readout_track, _ = core.strobe_readout_track(measurement.strobe_lock_in, measurement.readout_track, 1)
+            core.strobe_readout_track(measurement.strobe_lock_in, &measurement.readout_track, 1)
         }
     }
 

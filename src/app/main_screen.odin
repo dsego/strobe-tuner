@@ -32,13 +32,13 @@ draw_main_screen :: proc(app: ^App, layout: Layout, reading: Reading, menu_comma
     draw_note_controls(app, layout, reading, menu_command)
 
     // The strobe's reading or the whole wave's, none before a track settled, and nothing to measure on another note
-    // than a locked one. The gauge points the way without one.
+    // than a locked one. The gauge points the way without one. Gray once it's the last one held.
     draw_measurements(
         layout.measurements,
         reading.steady.detected_freq,
         reading.steady.err_cents,
         reading.readout_shown,
-        app.measurement.note_target.active,
+        !reading.readout_held,
         hundredths = reads_hundredths(config),
     )
 

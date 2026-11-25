@@ -35,15 +35,20 @@ band_half_lit :: proc(band: PhaseBand) -> bool {
 READOUT_RANGE_CENTS :: NOTE_HOLD_CENTS
 READOUT_SETTLE_S :: 0.05 // the track's fit since the pluck before the readout follows it
 
+// The track the readout follows, see strobe_readout_track
+ReadoutTrack :: struct {
+    index: int, // the strobe track, -1 for none
+    ready: bool, // fitted a little since the pluck, until then the readout is the pitch detection's
+    faded: bool, // its stripes faded, the readout keeps its last reading until they're fully lit or a pluck
+}
+
 // The track the readout follows, the chosen partial's, the fundamental's or the 2nd's, while it's clean enough to
 // read, fully lit, however far under the other partials. Otherwise the loudest octave partial's that
-// is. The partials read a few cents apart, so once its track is ready the readout stays on it and keeps its last
-// reading as it fades, until a pluck or another note starts the tracks over. Only a track still fully lit takes
-// the readout on when the held one's stripes fade, e.g. a low string's fundamental dies down first. Only an
-// octave track reads out, its cents from its partial are the note's. -1 for none.
-//
-// ready once its track has fitted a little since the pluck, until then the readout is the pitch detection's.
-strobe_readout_track :: proc(self: ^StrobeLockIn, current: int, partial: f32 = 1) -> (track: int, ready: bool) {
+// is. The partials read a few cents apart, so once its track is ready the readout stays on it until a pluck or
+// another note starts the tracks over. As its stripes fade it's faded and keeps its last reading, also while
+// another partial still rings: a ukulele's fundamental dies down first and its 2nd partial read 8 cents sharper,
+// the readout jumped. Only an octave track reads out, its cents from its partial are the note's.
+strobe_readout_track :: proc(self: ^StrobeLockIn, readout: ^ReadoutTrack, partial: f32 = 1) {
     settled :: proc(band: PhaseBand) -> bool {
         return band.rate_time_s >= READOUT_SETTLE_S
     }
@@ -59,20 +64,28 @@ strobe_readout_track :: proc(self: ^StrobeLockIn, current: int, partial: f32 = 1
     pick_again := loudest >= 0 && self.bands[loudest].onset
     pick_again ||= chosen >= 0 && just_settled(self, self.bands[chosen])
 
-    // Held, unless a pluck brings another track to pick or the held one's stripes fade while another's are lit.
-    // Half faded as they're drawn, eased: a partial's level flickers through a frame or two.
+    // Held, unless a pluck brings another track to pick. Faded once its stripes are half faded as they're drawn,
+    // eased: a partial's level flickers through a frame or two. Read again once they're fully lit, as a track is
+    // picked: a fundamental fading in the noise came back over half for a moment, and a note bent half a semitone
+    // grays its track as it goes and is lit again without a pluck.
+    current := readout.index
     held := current >= 0 && current < len(self.bands) && measures_band(self, current) && settled(self.bands[current])
     if held && !pick_again {
-        faded := !band_half_lit(self.bands[current])
-        if !faded || loudest < 0 do return current, true
-
-        return loudest, settled(self.bands[loudest])
+        band := self.bands[current]
+        if !band_half_lit(band) do readout.faded = true
+        if band_fully_lit(band) do readout.faded = false
+        readout.ready = true
+        return
     }
 
-    if loudest < 0 do return -1, false
+    readout.faded = false
+    if loudest < 0 {
+        readout.index, readout.ready = -1, false
+        return
+    }
 
-    track = chosen if chosen >= 0 else loudest
-    return track, settled(self.bands[track])
+    readout.index = chosen if chosen >= 0 else loudest
+    readout.ready = settled(self.bands[readout.index])
 }
 
 // The loudest track the readout can follow and the partial's, -1 for none. The loudest by level at the envelope,

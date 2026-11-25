@@ -35,8 +35,8 @@ Measurement :: struct {
     strobe_lock_in: ^core.StrobeLockIn,
     scope:          core.Scope, // of the scope and the lamp display types
 
-    readout_track:  int, // the strobe track the readout follows, see core.strobe_readout_track
-    held_readout:   HeldReadout, // the last one shown while the note was lit, see measure
+    readout_track:  core.ReadoutTrack, // the strobe track the readout follows, see core.strobe_readout_track
+    held_readout:   HeldReadout, // the last one shown while the note was lit and its track wasn't faded
     traced_track:   int, // the track the readout followed, the trace stays on it while its stripes show
 }
 
@@ -45,9 +45,10 @@ Reading :: struct {
     pitch:         core.PitchInfo, // the latest detection
     steady:        core.PitchInfo, // the readout, the strong detections averaged, or a track's
     readout_shown: bool, // the readout has a reading, none before a track settled, see measure
+    readout_held:  bool, // it's the last one, the note went dark or the strobe's track faded, see hold_readout
 }
 
-// The readout as the note went dark
+// The readout as the note went dark or its track faded
 HeldReadout :: struct {
     shown: bool,
     freq:  f32,
@@ -124,7 +125,7 @@ reset_measurement :: proc(measurement: ^Measurement) {
     core.reset_pitch_detector(&measurement.pitch_detector)
     core.reset_strobe_lock_in(measurement.strobe_lock_in)
     core.reset_scope(&measurement.scope)
-    measurement.readout_track, measurement.traced_track = -1, -1
+    measurement.readout_track, measurement.traced_track = {index = -1}, -1
     measurement.held_readout = {}
 }
 
@@ -147,7 +148,7 @@ measure :: proc(app: ^App) -> (reading: Reading) {
     // on its track, a bass's low B under a partial or a hum named as a note of its own
     out_of_range := core.out_of_range(&measurement.note_target) && !readout_track_hears(measurement)
     reading.steady, reading.readout_shown = readout_reading(measurement, config, ready, out_of_range)
-    hold_readout(measurement, &reading, out_of_range)
+    hold_readout(measurement, config, &reading, out_of_range)
 
     cents, light := traced_cents(measurement, config, reading, out_of_range)
     note := measurement.note_target.target_note.cents
@@ -167,7 +168,8 @@ measure :: proc(app: ^App) -> (reading: Reading) {
 follow_note :: proc(measurement: ^Measurement, config: ^Config, pitch: core.PitchInfo) -> (ready: bool) {
     lock_in := measurement.strobe_lock_in
     partial: f32 = 2 if config.readout_source == .OCTAVE else 1
-    measurement.readout_track, ready = core.strobe_readout_track(lock_in, measurement.readout_track, partial)
+    core.strobe_readout_track(lock_in, &measurement.readout_track, partial)
+    ready = measurement.readout_track.ready
     if core.update_note_target(&measurement.note_target, pitch, core.strobe_shows_note(lock_in)) {
         retune(measurement, config)
         ready = false
@@ -195,43 +197,47 @@ readout_reading :: proc(
     }
 
     lock_in := measurement.strobe_lock_in
+    track := measurement.readout_track.index
     shown = ready && !out_of_range
-    shown &&= abs(lock_in.bands[measurement.readout_track].err_cents) <= core.READOUT_RANGE_CENTS
+    shown &&= abs(lock_in.bands[track].err_cents) <= core.READOUT_RANGE_CENTS
     if !shown do return
 
-    band := lock_in.bands[measurement.readout_track]
+    band := lock_in.bands[track]
     steady.detected_freq = core.freq_at_cents(steady.detected_freq, band.err_cents - steady.err_cents)
     steady.err_cents = band.err_cents
 
     // The trace carries on along the track the readout followed, see traced_cents
-    measurement.traced_track = measurement.readout_track
+    measurement.traced_track = track
     return
 }
 
 // The readout's track lit on its own partial, the note it's tuned to rings there whatever the detections read.
 // As its stripes fade out it doesn't, see core.strobe_shows_note.
 readout_track_hears :: proc(measurement: ^Measurement) -> bool {
-    if measurement.readout_track < 0 do return false
+    track := measurement.readout_track.index
+    if track < 0 do return false
 
     lock_in := measurement.strobe_lock_in
-    band := lock_in.bands[measurement.readout_track]
+    band := lock_in.bands[track]
     return core.hears_note(band, lock_in.band_cents) && core.band_half_lit(band)
 }
 
 // Lit, the readout is the track's as it measures. Dark, it keeps the last one shown: the track goes on
-// measuring whatever passes through its band, the room's noise would read as a wandering pitch. Another
-// note starts over, see retune, and so does another note than a locked one, the reading is of that note
-// no more.
-hold_readout :: proc(measurement: ^Measurement, reading: ^Reading, out_of_range: bool) {
+// measuring whatever passes through its band, the room's noise would read as a wandering pitch. Its track
+// faded while another partial still rings, it keeps it too, see core.strobe_readout_track. Another note
+// starts over, see retune, and so does another note than a locked one, the reading is of that note no more.
+hold_readout :: proc(measurement: ^Measurement, config: ^Config, reading: ^Reading, out_of_range: bool) {
     held, steady := &measurement.held_readout, &reading.steady
-    if measurement.note_target.active {
-        if reading.readout_shown {
-            held^ = {true, steady.detected_freq, steady.err_cents}
-        }
-        if out_of_range {
-            held^ = {}
-        }
-    } else {
+    active := measurement.note_target.active
+    faded := measurement.readout_track.faded && config.readout_source != .BLEND
+    if active && out_of_range {
+        held^ = {}
+    } else if active && !faded && reading.readout_shown {
+        held^ = {true, steady.detected_freq, steady.err_cents}
+    }
+
+    reading.readout_held = !active || faded
+    if reading.readout_held {
         reading.readout_shown = held.shown
         steady.detected_freq, steady.err_cents = held.freq, held.cents
     }

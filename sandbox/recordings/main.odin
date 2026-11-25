@@ -629,8 +629,7 @@ play :: proc(recording: []f32, sample_rate: f32, pitch_standard: f32) -> (detect
     }
     retune(strobe, note_target.target_note.frequency, pitch_standard)
 
-    readout_track := -1
-    readout_ready := false
+    readout_track := core.ReadoutTrack{index = -1}
     retuned_s := f32(-1)
     frame_samples := int(sample_rate) / FPS
     for start := 0; start + frame_samples <= len(samples); start += frame_samples {
@@ -640,10 +639,10 @@ play :: proc(recording: []f32, sample_rate: f32, pitch_standard: f32) -> (detect
         core.audio_capture_write(strobe, frame)
         pitch := core.run_pitch_detection(&detector, note_target.pitch)
         core.run_phase_detection(strobe)
-        readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
+        core.strobe_readout_track(strobe, &readout_track)
         if core.update_note_target(&note_target, pitch, core.strobe_shows_note(strobe)) {
             retune(strobe, note_target.target_note.frequency, pitch_standard)
-            readout_ready = false
+            readout_track.ready = false
             retuned_s = time_s
         }
         if !pitch.fresh do continue
@@ -655,8 +654,10 @@ play :: proc(recording: []f32, sample_rate: f32, pitch_standard: f32) -> (detect
             retuned    = retuned_s >= 0 && time_s - retuned_s <= NULL_HOLD_S,
             note_cents = note_target.target_note.cents,
         }
-        if readout_ready && abs(strobe.bands[readout_track].err_cents) <= core.READOUT_RANGE_CENTS {
-            band := strobe.bands[readout_track]
+        // Its track faded the app keeps the last reading, it's not read again
+        readable := readout_track.ready && !readout_track.faded
+        if readable && abs(strobe.bands[readout_track.index].err_cents) <= core.READOUT_RANGE_CENTS {
+            band := strobe.bands[readout_track.index]
             detection.read = true
             detection.cents = f32(note_target.target_note.cents) + band.err_cents
             detection.read_on = band.interval

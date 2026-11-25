@@ -544,9 +544,10 @@ HUNDREDTHS_UNDER_CENTS :: 9.995
 // Two columns, Hz and cents, dashes when there's nothing to show. pos is the top middle of the gutter, Hz
 // before it and the cents column after it. The values are right aligned in tabular digits, so the decimal
 // point stays put and the digits don't shift as they change. The sign of the cents hangs to the left of the
-// number. hundredths reads the cents to a hundredth under 10, see HUNDREDTHS_SPIN_RATE.
-draw_measurements :: proc(pos: [2]f32, hz, cents: f32, shown: bool, active: bool, hundredths := false) {
-    color := text_color_white if active else text_color_muted
+// number. hundredths reads the cents to a hundredth under 10, see HUNDREDTHS_SPIN_RATE. Gray unless live, a
+// reading held as it was.
+draw_measurements :: proc(pos: [2]f32, hz, cents: f32, shown: bool, live: bool, hundredths := false) {
+    color := text_color_white if live else text_color_muted
     value := pixel_fonts.readout
 
     // The labels stay in the background, the values and the note are what's read

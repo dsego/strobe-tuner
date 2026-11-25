@@ -119,22 +119,23 @@ run_tuner :: proc(samples: []f32) -> (run: Run) {
     frame_time := f32(FRAME_SAMPLES) / SAMPLERATE
     wrap := f32(core.STROBE_PHASE_WRAP)
 
-    readout_track := -1
-    readout_ready := false
+    readout_track := core.ReadoutTrack{index = -1}
     for start := 0; start + FRAME_SAMPLES <= len(samples); start += FRAME_SAMPLES {
         frame := samples[start:start + FRAME_SAMPLES]
         core.audio_capture_write(&detector, frame)
         core.audio_capture_write(strobe, frame)
         pitch := core.run_pitch_detection(&detector, note_target.pitch)
         core.run_phase_detection(strobe)
-        readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
+        core.strobe_readout_track(strobe, &readout_track)
         if core.update_note_target(&note_target, pitch, core.strobe_shows_note(strobe)) {
             retune(strobe, note_target.target_note.frequency)
-            readout_ready = false
+            readout_track.ready = false
         }
 
+        // Faded, the app keeps the last reading
+        readable := readout_track.ready && !readout_track.faded
         append(&run.times_s, f32(start + FRAME_SAMPLES - LEAD_IN_S * SAMPLERATE) / SAMPLERATE)
-        append(&run.readout_cents, strobe.bands[readout_track].err_cents if readout_ready else math.nan_f32())
+        append(&run.readout_cents, strobe.bands[readout_track.index].err_cents if readable else math.nan_f32())
 
         // As of the newest sample, without the app's guess ahead to the screen's frame, see
         // core.strobe_phase_ahead

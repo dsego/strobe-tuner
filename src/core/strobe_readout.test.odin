@@ -31,6 +31,13 @@ test_readout_track :: proc(t: ^testing.T) {
         band.slat_level, band.visibility = lit, lit
     }
 
+    // Picked afresh, none followed before
+    pick :: proc(self: ^StrobeLockIn, partial: f32 = 1) -> (readout: ReadoutTrack) {
+        readout.index = -1
+        strobe_readout_track(self, &readout, partial)
+        return
+    }
+
     self := init_strobe_lock_in(123.47, {1, 2, 4}, .HARMONIC)
     defer destroy_strobe_lock_in(self)
 
@@ -44,48 +51,61 @@ test_readout_track :: proc(t: ^testing.T) {
         light(&band, 1)
         band.envelope = level(levels_db[index])
     }
-    track, ready := strobe_readout_track(self, -1)
-    testing.expect_value(t, track, 0)
-    testing.expect(t, ready)
+    readout := pick(self)
+    testing.expect_value(t, readout.index, 0)
+    testing.expect(t, readout.ready)
+    testing.expect(t, !readout.faded)
 
     // A faint partial's level wobbling isn't a pluck
     self.bands[2].onset = true
-    track, _ = strobe_readout_track(self, track)
-    testing.expect_value(t, track, 0)
+    strobe_readout_track(self, &readout)
+    testing.expect_value(t, readout.index, 0)
     self.bands[2].onset = false
 
-    // The fundamental dies down while the 2nd harmonic still rings, the readout goes on with that one
+    // The fundamental dies down while the 2nd harmonic still rings, the readout stays on it and keeps its last
+    // reading
     light(&self.bands[0], 0.25)
-    track, ready = strobe_readout_track(self, track)
-    testing.expect_value(t, track, 1)
-    testing.expect(t, ready)
+    strobe_readout_track(self, &readout)
+    testing.expect_value(t, readout.index, 0)
+    testing.expect(t, readout.ready)
+    testing.expect(t, readout.faded)
 
-    // It doesn't take the readout back as it comes up again, only a pluck picks again
+    // It stays faded as it comes up over half for a moment, and reads again once it's fully lit
+    light(&self.bands[0], 0.75)
+    strobe_readout_track(self, &readout)
+    testing.expect(t, readout.faded)
     light(&self.bands[0], 1)
-    track, _ = strobe_readout_track(self, track)
-    testing.expect_value(t, track, 1)
+    strobe_readout_track(self, &readout)
+    testing.expect_value(t, readout.index, 0)
+    testing.expect(t, !readout.faded)
+
+    // A pluck picks again, faded or not, the 2nd harmonic while the fundamental isn't fully lit
+    light(&self.bands[0], 0.25)
+    strobe_readout_track(self, &readout)
+    light(&self.bands[0], 0.75)
     self.bands[1].onset = true
-    track, _ = strobe_readout_track(self, track)
-    testing.expect_value(t, track, 0)
+    strobe_readout_track(self, &readout)
+    testing.expect_value(t, readout.index, 1)
+    testing.expect(t, !readout.faded)
     self.bands[1].onset = false
 
     // A fundamental under its noise gives way to the loudest partial over it
     light(&self.bands[0], 0.25)
-    track, _ = strobe_readout_track(self, -1)
-    testing.expect_value(t, track, 1)
+    readout = pick(self)
+    testing.expect_value(t, readout.index, 1)
 
     // After a retune the 2nd harmonic is readable first and takes the readout, the quieter fundamental still
     // under the pluck's noise. Once its track settles it takes over.
     self.available = 800
     self.bands[0].rate_time_s = 0
-    track, ready = strobe_readout_track(self, -1)
-    testing.expect_value(t, track, 1)
-    testing.expect(t, ready)
+    readout = pick(self)
+    testing.expect_value(t, readout.index, 1)
+    testing.expect(t, readout.ready)
     light(&self.bands[0], 1)
     self.bands[0].rate_time_s = READOUT_SETTLE_S + 0.001
-    track, ready = strobe_readout_track(self, track)
-    testing.expect_value(t, track, 0)
-    testing.expect(t, ready)
+    strobe_readout_track(self, &readout)
+    testing.expect_value(t, readout.index, 0)
+    testing.expect(t, readout.ready)
 
     // A twelfth isn't an octave, it never reads out however loud, not even with the fundamental under its noise
     set_strobe_lock_in_tracks(self, {1, 3}, {0, 0}, {1, 1})
@@ -96,12 +116,10 @@ test_readout_track :: proc(t: ^testing.T) {
         light(&band, 1)
         band.envelope = level(-30 if index == 0 else -10)
     }
-    track, _ = strobe_readout_track(self, -1)
-    testing.expect_value(t, track, 0)
+    testing.expect_value(t, pick(self).index, 0)
 
     light(&self.bands[0], 0.25)
-    track, _ = strobe_readout_track(self, -1)
-    testing.expect_value(t, track, -1)
+    testing.expect_value(t, pick(self).index, -1)
 
     // The 2nd partial chosen reads out though the fundamental is louder, the loudest while it's under its noise
     set_strobe_lock_in_tracks(self, {1, 2, 4}, {0, 0, 0}, {1, 1, 1})
@@ -112,12 +130,10 @@ test_readout_track :: proc(t: ^testing.T) {
         light(&band, 1)
         band.envelope = level(-20 if index == 0 else -40)
     }
-    track, _ = strobe_readout_track(self, -1, 2)
-    testing.expect_value(t, track, 1)
+    testing.expect_value(t, pick(self, 2).index, 1)
 
     light(&self.bands[1], 0.25)
-    track, _ = strobe_readout_track(self, -1, 2)
-    testing.expect_value(t, track, 0)
+    testing.expect_value(t, pick(self, 2).index, 0)
 }
 
 // sandbox/accuracy's C8 in tune going 55 cents sharp, in noise 20 dB under it, and its loop: 2 s of the noise, 3 s

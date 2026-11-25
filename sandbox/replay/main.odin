@@ -92,8 +92,7 @@ main :: proc() {
 
     next_print: f32 = 0
     was_active := false
-    readout_track := -1
-    readout_ready := false
+    readout_track := core.ReadoutTrack{index = -1}
     frame_samples := int(sample_rate) / FPS
 
     // How differently each frame's stripes move from the frame before, in stripes, over √2 like
@@ -113,11 +112,11 @@ main :: proc() {
         pitch := core.run_pitch_detection(&detector, note_target.pitch)
         core.run_phase_detection(strobe)
         // Like the app's readout, and the strobe keeps the note lit while it shows it
-        readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track, READOUT_PARTIAL)
+        core.strobe_readout_track(strobe, &readout_track, READOUT_PARTIAL)
         retuned := core.update_note_target(&note_target, pitch, core.strobe_shows_note(strobe))
         if retuned {
             retune(strobe, note_target.target_note.frequency)
-            readout_ready = false
+            readout_track.ready = false
         }
 
         // A retune starts the tracks over, their steps from before mean nothing
@@ -160,12 +159,17 @@ main :: proc() {
             kind,
             "active" if note_target.active else "-",
         )
-        // None until a track settles, like the app's
+        // None until a track settles, like the app's. Its track faded, the app keeps the last reading in gray.
         readout := "-"
-        if readout_ready && abs(strobe.bands[readout_track].err_cents) <= core.READOUT_RANGE_CENTS {
+        if readout_track.ready {
             // The note the app names, the target's
-            band := strobe.bands[readout_track]
-            readout = fmt.tprintf("%+.1f¢ %v× %v", band.err_cents, band.interval, core.note_name(note_target.target_note))
+            band := strobe.bands[readout_track.index]
+            name := core.note_name(note_target.target_note)
+            if readout_track.faded {
+                readout = fmt.tprintf("held %v× %v", band.interval, name)
+            } else if abs(band.err_cents) <= core.READOUT_RANGE_CENTS {
+                readout = fmt.tprintf("%+.1f¢ %v× %v", band.err_cents, band.interval, name)
+            }
         }
         fmt.printf("%-13v ", readout)
         // How lit the stripes are and the slots' level this frame, see core.update_band_levels. The desktop's stripes

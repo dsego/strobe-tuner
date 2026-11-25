@@ -254,8 +254,7 @@ run_case :: proc(test_case: Case) -> (result: Result) {
     retune(strobe, note_target.target_note.frequency, test_case.pitch_standard)
 
     measure_from := len(samples) - int(MEASURE_S * SAMPLERATE)
-    readout_track := -1
-    readout_ready := false
+    readout_track := core.ReadoutTrack{index = -1}
     label := case_label(test_case)
     traced := SHOW_CASE != "" && strings.contains(label, SHOW_CASE)
 
@@ -270,11 +269,11 @@ run_case :: proc(test_case: Case) -> (result: Result) {
         core.audio_capture_write(strobe, frame)
         pitch := core.run_pitch_detection(&detector, note_target.pitch)
         core.run_phase_detection(strobe)
-        readout_track, readout_ready = core.strobe_readout_track(strobe, readout_track)
+        core.strobe_readout_track(strobe, &readout_track)
         strobe_shows := core.strobe_shows_note(strobe)
         if core.update_note_target(&note_target, pitch, strobe_shows) {
             retune(strobe, note_target.target_note.frequency, test_case.pitch_standard)
-            readout_ready = false
+            readout_track.ready = false
         }
         if traced && pitch.fresh && start >= tone_start {
             show_detection(label, start, pitch, note_target, strobe_shows)
@@ -304,12 +303,13 @@ run_case :: proc(test_case: Case) -> (result: Result) {
             }
         }
 
-        // The strobe's track, none until one settled, like src/app/app.odin
-        if !readout_ready || abs(strobe.bands[readout_track].err_cents) > core.READOUT_RANGE_CENTS {
+        // The strobe's track, none until one settled, like src/app/app.odin. Faded, the app keeps the last reading.
+        readable := readout_track.ready && !readout_track.faded
+        if !readable || abs(strobe.bands[readout_track.index].err_cents) > core.READOUT_RANGE_CENTS {
             result.unread += 1
             continue
         }
-        error_cents := strobe.bands[readout_track].err_cents - test_case.offset_cents
+        error_cents := strobe.bands[readout_track.index].err_cents - test_case.offset_cents
         if abs(error_cents) > abs(result.worst_cents) do result.worst_cents = error_cents
     }
     return
